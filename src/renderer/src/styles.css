@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 33% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --primary: 220 83% 52%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 214 32% 91%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 214 38% 95%;
+  --muted-foreground: 219 15% 42%;
+  --accent: 220 94% 96%;
+  --accent-foreground: 220 83% 38%;
+  --destructive: 0 78% 58%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 32% 89%;
+  --input: 214 32% 89%;
+  --ring: 220 83% 52%;
+  --sidebar: 214 68% 12%;
+  --sidebar-foreground: 213 32% 92%;
+  --sidebar-muted: 215 22% 68%;
+  --sidebar-active: 217 88% 54%;
+  --sidebar-border: 214 36% 22%;
+  --success: 139 47% 91%;
+  --success-foreground: 142 56% 28%;
+  --warning: 217 91% 94%;
+  --warning-foreground: 220 83% 46%;
+  --radius: 0.75rem;
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    min-width: 1100px;
+    font-family: Inter, Segoe UI, system-ui, sans-serif;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+}
