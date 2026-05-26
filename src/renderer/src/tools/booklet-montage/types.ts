@@ -6,7 +6,9 @@ export type PaperSizeOption = 'A4' | 'A3' | 'SRA3' | 'custom'
 
 export type PaperOrientation = 'portrait' | 'landscape'
 
-export type BookletScaleMode = 'fit' | 'fill' | 'stretch'
+export type BookletScaleMode = 'fit' | 'original' | 'stretch'
+
+export type BookletViewMode = 'montage' | 'sheet' | '3d'
 
 export type ExportImageFormat = 'png' | 'jpg'
 
@@ -39,9 +41,6 @@ export interface SheetSettings {
   outputMode: 'front-back-pairs'
   customWidthMm: number
   customHeightMm: number
-  marginMm: number
-  gapMm: number
-  bleedMm: number
   scaleMode: BookletScaleMode
   cropMarks: boolean
   registrationMarks: boolean

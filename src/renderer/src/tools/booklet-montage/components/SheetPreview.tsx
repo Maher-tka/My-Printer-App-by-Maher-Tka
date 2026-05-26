@@ -1,17 +1,22 @@
-import { Badge } from '@/components/ui/badge'
-import type { BookletPage, BookletSheet, BookletSlot, Rect, SheetSettings } from '../types'
+import type { BookletPage, BookletSheet, BookletSide, BookletSlot, Rect, SheetSettings } from '../types'
 import { getBookletSlotRects, getPrintSizeMm } from '../lib/printSizes'
 
 interface SheetPreviewProps {
   sheets: BookletSheet[]
   settings: SheetSettings
   pageCountIsValid: boolean
+  viewMode: 'montage' | 'sheet'
+  selectedSideKey: string | null
+  onSelectSide: (sideKey: string) => void
 }
 
 export function SheetPreview({
   sheets,
   settings,
-  pageCountIsValid
+  pageCountIsValid,
+  viewMode,
+  selectedSideKey,
+  onSelectSide
 }: SheetPreviewProps): JSX.Element {
   if (sheets.length === 0) {
     return (
@@ -32,30 +37,41 @@ export function SheetPreview({
     )
   }
 
+  const sides = sheets.flatMap((sheet) => [sheet.front, sheet.back])
+  const selectedSide =
+    sides.find((side) => getSideKey(side) === selectedSideKey) ?? sides[0]
+
+  if (viewMode === 'sheet') {
+    return <DetailedSidePreview side={selectedSide} settings={settings} />
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      {sheets.map((sheet) => (
-        <div key={sheet.sheetNumber} className="rounded-lg border bg-card p-4">
-          <div className="mb-3 flex items-center justify-between gap-4">
-            <h3 className="font-semibold">Sheet {sheet.sheetNumber}</h3>
-            <Badge variant="secondary">Front / Back</Badge>
-          </div>
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <SidePreview side={sheet.front} settings={settings} />
-            <SidePreview side={sheet.back} settings={settings} />
-          </div>
-        </div>
+    <div className="max-h-[calc(100vh-260px)] min-h-[560px] overflow-auto rounded-lg border bg-slate-100/70 p-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4">
+        {sides.map((side) => (
+          <SidePreview
+            key={getSideKey(side)}
+            side={side}
+            settings={settings}
+            selected={getSideKey(side) === selectedSideKey}
+            onSelect={() => onSelectSide(getSideKey(side))}
+          />
       ))}
+      </div>
     </div>
   )
 }
 
 function SidePreview({
   side,
-  settings
+  settings,
+  selected,
+  onSelect
 }: {
-  side: BookletSheet['front']
+  side: BookletSide
   settings: SheetSettings
+  selected: boolean
+  onSelect: () => void
 }): JSX.Element {
   const rawPaperSize = getPrintSizeMm(settings)
   const paperSize = {
@@ -65,13 +81,19 @@ function SidePreview({
   const slots = getPreviewSlots(paperSize, settings)
 
   return (
-    <div className="rounded-md border bg-muted/30 p-3">
+    <button
+      type="button"
+      className={`rounded-md border bg-card p-3 text-left shadow-sm transition hover:border-primary/50 ${
+        selected ? 'border-primary ring-2 ring-primary/20' : ''
+      }`}
+      onClick={onSelect}
+    >
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-sm font-semibold">
-          {side.side === 'front' ? 'Front' : 'Back'}
+          Sheet {side.sheetNumber} {side.side === 'front' ? 'Front' : 'Back'}
         </span>
         <span className="text-xs text-muted-foreground">
-          {paperSize.widthMm} x {paperSize.heightMm} mm
+          {side.left.pageNumber} | {side.right.pageNumber}
         </span>
       </div>
       <div
@@ -84,7 +106,7 @@ function SidePreview({
         <PreviewSlot slot={side.left} rect={slots.left} paperSize={paperSize} />
         <PreviewSlot slot={side.right} rect={slots.right} paperSize={paperSize} />
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -93,7 +115,7 @@ function getPreviewSlots(
   settings: SheetSettings
 ): { left: Rect; right: Rect } {
   try {
-    return getBookletSlotRects(paperSize, settings.marginMm, settings.gapMm)
+    return getBookletSlotRects(paperSize)
   } catch {
     return {
       left: { x: 0, y: 0, width: paperSize.widthMm / 2, height: paperSize.heightMm },
@@ -107,14 +129,66 @@ function getPreviewSlots(
   }
 }
 
+function DetailedSidePreview({
+  side,
+  settings
+}: {
+  side: BookletSide
+  settings: SheetSettings
+}): JSX.Element {
+  const rawPaperSize = getPrintSizeMm(settings)
+  const paperSize = {
+    widthMm: Math.max(rawPaperSize.widthMm, 1),
+    heightMm: Math.max(rawPaperSize.heightMm, 1)
+  }
+  const slots = getPreviewSlots(paperSize, settings)
+
+  return (
+    <div className="grid min-h-[560px] grid-cols-1 gap-4 rounded-lg border bg-slate-100/70 p-4 xl:grid-cols-[minmax(0,1fr)_260px]">
+      <div
+        className="relative mx-auto w-full max-w-[920px] overflow-hidden rounded-sm border bg-white shadow-md"
+        style={{
+          aspectRatio: `${paperSize.widthMm} / ${paperSize.heightMm}`
+        }}
+      >
+        <PreviewSlot slot={side.left} rect={slots.left} paperSize={paperSize} large />
+        <PreviewSlot slot={side.right} rect={slots.right} paperSize={paperSize} large />
+      </div>
+      <div className="flex flex-col gap-3 rounded-md border bg-card p-4">
+        <div>
+          <p className="text-sm text-muted-foreground">Selected sheet</p>
+          <h3 className="text-lg font-semibold">
+            Sheet {side.sheetNumber} {side.side === 'front' ? 'Front' : 'Back'}
+          </h3>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <InfoBlock label="Left page" value={side.left.pageNumber} />
+          <InfoBlock label="Right page" value={side.right.pageNumber} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InfoBlock({ label, value }: { label: string; value: number }): JSX.Element {
+  return (
+    <div className="rounded-md border bg-muted/30 p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold">{value}</p>
+    </div>
+  )
+}
+
 function PreviewSlot({
   slot,
   rect,
-  paperSize
+  paperSize,
+  large = false
 }: {
   slot: BookletSlot
   rect: Rect
   paperSize: { widthMm: number; heightMm: number }
+  large?: boolean
 }): JSX.Element {
   const page = slot.page
   const style = {
@@ -130,11 +204,15 @@ function PreviewSlot({
       style={style}
     >
       <PageArtwork page={page} />
-      <div className="absolute left-2 top-2 rounded bg-white/90 px-2 py-1 text-xs font-bold shadow-sm">
+      <div className={`absolute left-2 top-2 rounded bg-white/90 px-2 py-1 font-bold shadow-sm ${large ? 'text-sm' : 'text-xs'}`}>
         Page {slot.pageNumber}
       </div>
     </div>
   )
+}
+
+function getSideKey(side: BookletSide): string {
+  return `${side.sheetNumber}-${side.side}`
 }
 
 function PageArtwork({ page }: { page: BookletPage }): JSX.Element {

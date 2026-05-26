@@ -73,9 +73,6 @@ function testPrintSizes(): void {
     outputMode: 'front-back-pairs',
     customWidthMm: 500,
     customHeightMm: 700,
-    marginMm: 8,
-    gapMm: 4,
-    bleedMm: 0,
     scaleMode: 'fit',
     cropMarks: true,
     registrationMarks: false,
@@ -119,12 +116,12 @@ function testScaleModes(): void {
     width: 50,
     height: 50
   }, 'fit scale mode')
-  expectEqual(getPlacement(naturalSize, targetRect, 'fill'), {
-    x: 0,
-    y: -25,
-    width: 100,
-    height: 100
-  }, 'fill scale mode')
+  expectEqual(getPlacement(naturalSize, targetRect, 'original'), {
+    x: 25,
+    y: 0,
+    width: 50,
+    height: 50
+  }, 'original scale mode when page is larger than target')
   expectEqual(getPlacement(naturalSize, targetRect, 'stretch'), targetRect, 'stretch scale mode')
 }
 

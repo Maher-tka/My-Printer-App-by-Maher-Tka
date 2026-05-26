@@ -1,4 +1,5 @@
 import { ArrowLeft } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -8,12 +9,12 @@ import {
   CardTitle
 } from '@/components/ui/card'
 import type { AppRoute } from '@/types/navigation'
-import { ExportPanel } from './components/ExportPanel'
-import { FileImporter } from './components/FileImporter'
+import { Booklet3DPreview } from './components/Booklet3DPreview'
+import { BookletToolbar } from './components/BookletToolbar'
 import { PageManager } from './components/PageManager'
 import { SheetPreview } from './components/SheetPreview'
-import { SheetSettingsPanel } from './components/SheetSettingsPanel'
 import { useBookletMontage } from './hooks/useBookletMontage'
+import type { BookletViewMode } from './types'
 
 interface BookletMontagePageProps {
   onNavigate: (route: AppRoute) => void
@@ -23,6 +24,12 @@ export function BookletMontagePage({
   onNavigate
 }: BookletMontagePageProps): JSX.Element {
   const montage = useBookletMontage()
+  const [viewMode, setViewMode] = useState<BookletViewMode>('montage')
+  const sideKeys = useMemo(
+    () => montage.sheets.flatMap((sheet) => [`${sheet.sheetNumber}-front`, `${sheet.sheetNumber}-back`]),
+    [montage.sheets]
+  )
+  const [selectedSideKey, setSelectedSideKey] = useState<string | null>(null)
   const importIsBusy =
     montage.importProgress.phase === 'reading' ||
     montage.importProgress.phase === 'loading-page' ||
@@ -35,8 +42,17 @@ export function BookletMontagePage({
     montage.exportProgress.phase === 'saving-file'
   const canExport = montage.sheets.length > 0 && !exportIsBusy && !importIsBusy
 
+  useEffect(() => {
+    if (sideKeys.length === 0) {
+      setSelectedSideKey(null)
+      return
+    }
+
+    setSelectedSideKey((current) => (current && sideKeys.includes(current) ? current : sideKeys[0]))
+  }, [sideKeys])
+
   return (
-    <div className="mx-auto flex max-w-[1560px] flex-col gap-5">
+    <div className="mx-auto flex max-w-[1680px] flex-col gap-5">
       <Button
         variant="ghost"
         className="w-fit"
@@ -48,7 +64,7 @@ export function BookletMontagePage({
       </Button>
 
       <Card>
-        <CardHeader className="flex-row items-start justify-between gap-4">
+        <CardHeader className="flex-row items-start justify-between gap-4 pb-4">
           <div className="flex flex-col gap-1.5">
             <CardTitle className="text-xl">Booklet Montage</CardTitle>
             <CardDescription>
@@ -60,32 +76,29 @@ export function BookletMontagePage({
             Local-first: no cloud processing
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
-            <aside className="flex flex-col gap-5">
-              <FileImporter
-                importProgress={montage.importProgress}
-                isBusy={importIsBusy || exportIsBusy}
-                onImportPdf={montage.importPdfFiles}
-                onImportImages={montage.importImages}
-                onCancelImport={montage.cancelImport}
-                onClear={montage.clearProject}
-              />
-              <SheetSettingsPanel
-                settings={montage.settings}
-                onChange={montage.updateSettings}
-              />
-              <ExportPanel
-                exportProgress={montage.exportProgress}
-                canExport={canExport}
-                isBusy={importIsBusy || exportIsBusy}
-                onExportPdf={montage.exportPdf}
-                onExportImages={montage.exportImages}
-                onCancelExport={montage.cancelExport}
-              />
-            </aside>
+        <CardContent className="flex flex-col gap-4">
+          <BookletToolbar
+            settings={montage.settings}
+            viewMode={viewMode}
+            blanksNeeded={montage.blanksNeeded}
+            canExport={canExport}
+            isBusy={importIsBusy || exportIsBusy}
+            importProgress={montage.importProgress}
+            exportProgress={montage.exportProgress}
+            onImportPdf={montage.importPdfFiles}
+            onImportImages={montage.importImages}
+            onCancelImport={montage.cancelImport}
+            onCancelExport={montage.cancelExport}
+            onClear={montage.clearProject}
+            onSettingsChange={montage.updateSettings}
+            onAutoAddBlankPages={montage.autoAddBlankPages}
+            onExportPdf={montage.exportPdf}
+            onExportImages={montage.exportImages}
+            onViewModeChange={setViewMode}
+          />
 
-            <section className="grid grid-cols-1 gap-5 2xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
+            <aside className="min-w-0">
               <PageManager
                 pages={montage.pages}
                 blanksNeeded={montage.blanksNeeded}
@@ -95,17 +108,29 @@ export function BookletMontagePage({
                 onMovePage={montage.movePage}
                 onDeletePage={montage.deletePage}
               />
-              <div className="flex flex-col gap-4">
+            </aside>
+            <section className="min-w-0">
+              <div className="flex min-w-0 flex-col gap-4">
                 {montage.error && (
                   <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
                     {montage.error}
                   </div>
                 )}
-                <SheetPreview
-                  sheets={montage.sheets}
-                  settings={montage.settings}
-                  pageCountIsValid={montage.pageCountIsValid}
-                />
+                {viewMode === '3d' ? (
+                  <Booklet3DPreview pages={montage.pages} />
+                ) : (
+                  <SheetPreview
+                    sheets={montage.sheets}
+                    settings={montage.settings}
+                    pageCountIsValid={montage.pageCountIsValid}
+                    viewMode={viewMode}
+                    selectedSideKey={selectedSideKey}
+                    onSelectSide={(sideKey) => {
+                      setSelectedSideKey(sideKey)
+                      setViewMode('sheet')
+                    }}
+                  />
+                )}
               </div>
             </section>
           </div>

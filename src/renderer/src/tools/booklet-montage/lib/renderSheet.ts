@@ -147,7 +147,10 @@ export function getPlacement(
 
   const widthScale = targetRect.width / naturalSize.width
   const heightScale = targetRect.height / naturalSize.height
-  const scale = scaleMode === 'fill' ? Math.max(widthScale, heightScale) : Math.min(widthScale, heightScale)
+  const scale =
+    scaleMode === 'original'
+      ? Math.min(1, widthScale, heightScale)
+      : Math.min(widthScale, heightScale)
   const width = naturalSize.width * scale
   const height = naturalSize.height * scale
 

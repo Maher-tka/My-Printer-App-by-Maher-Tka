@@ -6,6 +6,9 @@ export const PRINT_SIZES_MM: Record<Exclude<PaperSizeOption, 'custom'>, SizeMm> 
   SRA3: { widthMm: 320, heightMm: 450 }
 }
 
+export const INTERNAL_PAGE_MARGIN_MM = 8
+export const INTERNAL_PAGE_GAP_MM = 4
+
 export interface SheetLayoutMm {
   paperSize: SizeMm
   trimSlots: {
@@ -32,23 +35,22 @@ export function getPrintSizeMm(settings: SheetSettings): SizeMm {
 
 export function getSheetLayoutMm(settings: SheetSettings): SheetLayoutMm {
   const paperSize = getPrintSizeMm(settings)
-  const trimSlots = getBookletSlotRects(paperSize, settings.marginMm, settings.gapMm)
-  const bleedMm = Math.max(0, settings.bleedMm)
+  const trimSlots = getBookletSlotRects(paperSize)
 
   return {
     paperSize,
     trimSlots,
     renderSlots: {
-      left: expandRect(trimSlots.left, bleedMm, paperSize),
-      right: expandRect(trimSlots.right, bleedMm, paperSize)
+      left: trimSlots.left,
+      right: trimSlots.right
     }
   }
 }
 
 export function getBookletSlotRects(
   size: SizeMm,
-  marginMm: number,
-  gapMm: number
+  marginMm = INTERNAL_PAGE_MARGIN_MM,
+  gapMm = INTERNAL_PAGE_GAP_MM
 ): { left: Rect; right: Rect } {
   const safeMargin = Math.max(0, marginMm)
   const safeGap = Math.max(0, gapMm)
@@ -86,24 +88,12 @@ export function validatePrintSettings(settings: SheetSettings): string[] {
     }
   }
 
-  if (!isNonNegativeFiniteNumber(settings.marginMm)) {
-    errors.push('Margin must be 0 mm or greater.')
-  }
-
-  if (!isNonNegativeFiniteNumber(settings.gapMm)) {
-    errors.push('Gap must be 0 mm or greater.')
-  }
-
-  if (!isNonNegativeFiniteNumber(settings.bleedMm)) {
-    errors.push('Bleed must be 0 mm or greater.')
-  }
-
   if (errors.length > 0) {
     return errors
   }
 
   try {
-    getBookletSlotRects(getPrintSizeMm(settings), settings.marginMm, settings.gapMm)
+    getBookletSlotRects(getPrintSizeMm(settings))
   } catch (error) {
     errors.push(error instanceof Error ? error.message : 'Invalid paper layout settings.')
   }
@@ -120,24 +110,6 @@ export function orientPrintSize(size: SizeMm, orientation: PaperOrientation): Si
     : { widthMm: height, heightMm: width }
 }
 
-function expandRect(rect: Rect, amountMm: number, bounds: SizeMm): Rect {
-  const x = Math.max(0, rect.x - amountMm)
-  const y = Math.max(0, rect.y - amountMm)
-  const right = Math.min(bounds.widthMm, rect.x + rect.width + amountMm)
-  const top = Math.min(bounds.heightMm, rect.y + rect.height + amountMm)
-
-  return {
-    x,
-    y,
-    width: Math.max(right - x, 1),
-    height: Math.max(top - y, 1)
-  }
-}
-
 function isPositiveFiniteNumber(value: number): boolean {
   return Number.isFinite(value) && value > 0
-}
-
-function isNonNegativeFiniteNumber(value: number): boolean {
-  return Number.isFinite(value) && value >= 0
 }
