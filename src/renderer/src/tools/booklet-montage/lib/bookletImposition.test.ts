@@ -5,7 +5,13 @@ import {
 } from './bookletImposition'
 import { getPrintSizeMm, validatePrintSettings } from './printSizes'
 import { getPlacement } from './renderSheet'
-import type { SheetSettings } from '../types'
+import { naturalSortFileNames } from './naturalSort'
+import {
+  normalizeCurrentOrder,
+  reorderPagesByDrag,
+  resetToOriginalOrder
+} from './pageOrdering'
+import type { BookletPage, SheetSettings } from '../types'
 
 interface TestPage {
   label: string
@@ -45,6 +51,16 @@ function testEightPages(): void {
   expectEqual(sideLabels(sheets[1].back), 'P4,P5', '8 pages sheet 2 back')
 }
 
+function testEightPagesRtl(): void {
+  const sheets = generateBookletSheets(pages(8), 'rtl')
+
+  expectEqual(sheets.length, 2, '8 pages RTL sheet count')
+  expectEqual(sideLabels(sheets[0].front), 'P1,P8', '8 pages RTL sheet 1 front')
+  expectEqual(sideLabels(sheets[0].back), 'P7,P2', '8 pages RTL sheet 1 back')
+  expectEqual(sideLabels(sheets[1].front), 'P3,P6', '8 pages RTL sheet 2 front')
+  expectEqual(sideLabels(sheets[1].back), 'P5,P4', '8 pages RTL sheet 2 back')
+}
+
 function testTwelvePages(): void {
   const sheets = generateBookletSheets(pages(12))
 
@@ -74,6 +90,7 @@ function testPrintSizes(): void {
     customWidthMm: 500,
     customHeightMm: 700,
     scaleMode: 'fit',
+    readingDirection: 'ltr',
     cropMarks: true,
     registrationMarks: false,
     exportQuality: 'standard'
@@ -125,11 +142,75 @@ function testScaleModes(): void {
   expectEqual(getPlacement(naturalSize, targetRect, 'stretch'), targetRect, 'stretch scale mode')
 }
 
+function testNaturalImageSorting(): void {
+  expectEqual(
+    naturalSortFileNames(['1.jpg', '10.jpg', '2.jpg', 'page_3.png', 'page_11.png']),
+    ['1.jpg', '2.jpg', '10.jpg', 'page_3.png', 'page_11.png'],
+    'natural image filename sorting'
+  )
+}
+
+function testDragOrderDrivesImposition(): void {
+  const sourcePages = bookletPages(4)
+  const reordered = reorderPagesByDrag(sourcePages, 'page-3', 'page-2')
+  const sheets = generateBookletSheets(reordered)
+
+  expectEqual(
+    reordered.map((page) => page.label),
+    ['P1', 'P3', 'P2', 'P4'],
+    'manual drag page order'
+  )
+  expectEqual(sideLabels(sheets[0].front), 'P4,P1', 'manual order front imposition')
+  expectEqual(sideLabels(sheets[0].back), 'P3,P2', 'manual order back imposition')
+}
+
+function testResetOriginalOrder(): void {
+  const [page1, page2, page3, page4] = bookletPages(4)
+  const blank = createBlankPage(1)
+  const mixedOrder = normalizeCurrentOrder([page1, page3, blank, page2, page4])
+
+  expectEqual(
+    resetToOriginalOrder(mixedOrder, 'keep').map((page) => page.label),
+    ['P1', 'P2', 'P3', 'P4', 'Blank Page'],
+    'reset original order and keep blanks'
+  )
+  expectEqual(
+    resetToOriginalOrder(mixedOrder, 'remove').map((page) => page.label),
+    ['P1', 'P2', 'P3', 'P4'],
+    'reset original order and remove blanks'
+  )
+}
+
+function bookletPages(count: number): BookletPage[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `page-${index + 1}`,
+    kind: 'pdf',
+    sourceType: 'pdf',
+    sourceId: 'source-1',
+    sourceName: 'test.pdf',
+    sourceFileName: 'test.pdf',
+    sourcePageIndex: index,
+    originalPageNumber: index + 1,
+    currentOrderIndex: index,
+    originalOrderIndex: index,
+    importBatchId: 'batch-1',
+    importBatchIndex: index,
+    label: `P${index + 1}`,
+    displayName: `PDF Page ${index + 1}`,
+    widthMm: 210,
+    heightMm: 297
+  }))
+}
+
 testFourPages()
 testEightPages()
+testEightPagesRtl()
 testTwelvePages()
 testAutoBlankCount()
 testPrintSizes()
 testScaleModes()
+testNaturalImageSorting()
+testDragOrderDrivesImposition()
+testResetOriginalOrder()
 
-console.log('Booklet tests passed: imposition, auto blanks, print sizes, and scale modes.')
+console.log('Booklet tests passed: imposition, auto blanks, print sizes, scale modes, sorting, and page ordering.')

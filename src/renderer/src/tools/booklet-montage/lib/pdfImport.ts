@@ -19,9 +19,9 @@ interface PdfImportOptions {
   signal?: AbortSignal
 }
 
-const THUMBNAIL_MAX_WIDTH = 120
-const THUMBNAIL_MAX_HEIGHT = 160
-const THUMBNAIL_QUALITY = 0.58
+const THUMBNAIL_MAX_WIDTH = 300
+const THUMBNAIL_MAX_HEIGHT = 420
+const THUMBNAIL_QUALITY = 0.72
 const PDF_IMPORT_BATCH_SIZE = 6
 const LARGE_PDF_SIZE_BYTES = 50 * 1024 * 1024
 const LARGE_PDF_PAGE_COUNT = 50
@@ -95,9 +95,17 @@ export async function importPdfFile(
         pages.push({
           id: createStableId('page'),
           kind: 'pdf',
+          sourceType: 'pdf',
           sourceId,
           sourceName: file.name,
+          sourceFileName: file.name,
           sourcePageIndex: pageNumber - 1,
+          originalPageNumber: pageNumber,
+          currentOrderIndex: pageNumber - 1,
+          originalOrderIndex: pageNumber - 1,
+          importBatchId: sourceId,
+          importBatchIndex: pageNumber - 1,
+          label: `PDF Page ${pageNumber}`,
           displayName: `${file.name} - Page ${pageNumber}`,
           thumbnailUrl,
           widthMm: pointsToMm(viewport.width),

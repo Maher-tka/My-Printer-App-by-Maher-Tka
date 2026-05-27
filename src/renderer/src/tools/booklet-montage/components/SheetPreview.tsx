@@ -1,35 +1,80 @@
-import type { BookletPage, BookletSheet, BookletSide, BookletSlot, Rect, SheetSettings } from '../types'
+import { ArrowLeft, Palette } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import type {
+  BookletPage,
+  BookletSheet,
+  BookletSide,
+  BookletSlot,
+  EmptySheetBoardItem,
+  Rect,
+  SheetBoardPosition,
+  SheetBoardState,
+  SheetSettings
+} from '../types'
 import { getBookletSlotRects, getPrintSizeMm } from '../lib/printSizes'
+import {
+  SHEET_BOARD_CARD,
+  getBoardCanvasSize,
+  getSideKey
+} from '../lib/sheetLayoutState'
+import { ColorPickerPopover } from './ColorPickerPopover'
+import { DraggableSheetCard } from './DraggableSheetCard'
+import { EmptySheetCard } from './EmptySheetCard'
+import { SheetHoverActions } from './SheetHoverActions'
 
 interface SheetPreviewProps {
   sheets: BookletSheet[]
   settings: SheetSettings
   pageCountIsValid: boolean
-  viewMode: 'montage' | 'sheet'
-  selectedSideKey: string | null
-  onSelectSide: (sideKey: string) => void
+  selectedItemId: string | null
+  inspectedItemId: string | null
+  boardState: SheetBoardState
+  onInspectItem: (itemId: string) => void
+  onCloseInspect: () => void
+  onMoveItem: (itemId: string, position: SheetBoardPosition) => void
+  onDeleteItem: (itemId: string) => void
+  onDuplicateItem: (itemId: string) => void
+  onEmptySheetColorChange: (itemId: string, colorHex: string) => void
 }
 
 export function SheetPreview({
   sheets,
   settings,
   pageCountIsValid,
-  viewMode,
-  selectedSideKey,
-  onSelectSide
+  selectedItemId,
+  inspectedItemId,
+  boardState,
+  onInspectItem,
+  onCloseInspect,
+  onMoveItem,
+  onDeleteItem,
+  onDuplicateItem,
+  onEmptySheetColorChange
 }: SheetPreviewProps): JSX.Element {
-  if (sheets.length === 0) {
+  const [colorPickerItemId, setColorPickerItemId] = useState<string | null>(null)
+  const sideMap = new Map(
+    sheets.flatMap((sheet) => [
+      [getSideKey(sheet.front), sheet.front] as const,
+      [getSideKey(sheet.back), sheet.back] as const
+    ])
+  )
+  const visibleItems = boardState.items.filter(
+    (item) => item.kind === 'empty-sheet' || sideMap.has(item.sideKey)
+  )
+
+  if (visibleItems.length === 0) {
     return (
-      <div className="grid min-h-[360px] place-items-center rounded-lg border border-dashed bg-muted/35 p-8 text-center">
+      <div className="grid min-h-[420px] place-items-center rounded-lg border border-dashed bg-muted/35 p-8 text-center">
         <div className="max-w-md">
-          <h3 className="text-lg font-semibold">No imposed sheets yet</h3>
+          <h3 className="text-lg font-semibold">No sheets on the board yet</h3>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Import pages and make the total page count divisible by 4 to generate a
-            2D booklet preview.
+            Import pages for booklet sheets or add an empty sheet as a workspace placeholder.
           </p>
           {!pageCountIsValid && (
             <p className="mt-3 text-sm font-semibold text-amber-700">
-              Add blank pages before preview/export.
+              Add blank pages before booklet preview/export.
             </p>
           )}
         </div>
@@ -37,62 +82,160 @@ export function SheetPreview({
     )
   }
 
-  const sides = sheets.flatMap((sheet) => [sheet.front, sheet.back])
-  const selectedSide =
-    sides.find((side) => getSideKey(side) === selectedSideKey) ?? sides[0]
+  const inspectedItem = inspectedItemId
+    ? visibleItems.find((item) => item.id === inspectedItemId)
+    : null
 
-  if (viewMode === 'sheet') {
-    return <DetailedSidePreview side={selectedSide} settings={settings} />
+  if (inspectedItem) {
+    if (inspectedItem.kind === 'empty-sheet') {
+      return (
+        <DetailedPreviewShell onClose={onCloseInspect}>
+          <DetailedEmptySheetPreview
+            item={inspectedItem}
+            recentColors={boardState.recentColors}
+            colorPickerOpen={colorPickerItemId === inspectedItem.id}
+            onColorOpen={() => setColorPickerItemId(inspectedItem.id)}
+            onColorClose={() => setColorPickerItemId(null)}
+            onColorChange={(colorHex) => onEmptySheetColorChange(inspectedItem.id, colorHex)}
+          />
+        </DetailedPreviewShell>
+      )
+    }
+
+    const side = sideMap.get(inspectedItem.sideKey)
+
+    return side ? (
+      <DetailedPreviewShell onClose={onCloseInspect}>
+        <DetailedSidePreview side={side} settings={settings} />
+      </DetailedPreviewShell>
+    ) : (
+      <div className="grid min-h-[420px] place-items-center rounded-lg border border-dashed bg-muted/35 p-8 text-center">
+        <p className="text-sm text-muted-foreground">Selected sheet is no longer available.</p>
+      </div>
+    )
   }
 
+  const boardSize = getBoardCanvasSize(visibleItems)
+
   return (
-    <div className="max-h-[calc(100vh-260px)] min-h-[560px] overflow-auto rounded-lg border bg-slate-100/70 p-4">
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4">
-        {sides.map((side) => (
-          <SidePreview
-            key={getSideKey(side)}
-            side={side}
-            settings={settings}
-            selected={getSideKey(side) === selectedSideKey}
-            onSelect={() => onSelectSide(getSideKey(side))}
-          />
-      ))}
+    <div className="max-h-[calc(100vh-245px)] min-h-[620px] overflow-auto rounded-lg border bg-[linear-gradient(0deg,rgba(148,163,184,0.16)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.16)_1px,transparent_1px)] bg-[length:24px_24px] p-4">
+      <div
+        className="relative"
+        style={{
+          minWidth: Math.max(boardSize.width, SHEET_BOARD_CARD.width + SHEET_BOARD_CARD.padding * 2),
+          minHeight: Math.max(boardSize.height, 560)
+        }}
+      >
+        {visibleItems.map((item) => {
+          const selected = item.id === selectedItemId || item.id === inspectedItemId
+
+          if (item.kind === 'empty-sheet') {
+            return (
+              <DraggableSheetCard
+                key={item.id}
+                itemId={item.id}
+                position={item.position}
+                selected={selected}
+                onSelect={() => onInspectItem(item.id)}
+                onPositionChange={onMoveItem}
+              >
+                <EmptySheetCard
+                  item={item}
+                  recentColors={boardState.recentColors}
+                  colorPickerOpen={colorPickerItemId === item.id}
+                  onInspect={() => onInspectItem(item.id)}
+                  onDelete={() => onDeleteItem(item.id)}
+                  onDuplicate={() => onDuplicateItem(item.id)}
+                  onToggleColorPicker={() =>
+                    setColorPickerItemId((current) => (current === item.id ? null : item.id))
+                  }
+                  onCloseColorPicker={() => setColorPickerItemId(null)}
+                  onColorChange={(colorHex) => onEmptySheetColorChange(item.id, colorHex)}
+                />
+              </DraggableSheetCard>
+            )
+          }
+
+          const side = sideMap.get(item.sideKey)
+
+          if (!side) {
+            return null
+          }
+
+          return (
+            <DraggableSheetCard
+              key={item.id}
+              itemId={item.id}
+              position={item.position}
+              selected={selected}
+              onSelect={() => onInspectItem(item.id)}
+              onPositionChange={onMoveItem}
+            >
+              <BookletSideCard
+                side={side}
+                settings={settings}
+                onInspect={() => onInspectItem(item.id)}
+                onDelete={() => onDeleteItem(item.id)}
+                onDuplicate={() => onDuplicateItem(item.id)}
+              />
+            </DraggableSheetCard>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-function SidePreview({
+function DetailedPreviewShell({
+  children,
+  onClose
+}: {
+  children: ReactNode
+  onClose: () => void
+}): JSX.Element {
+  return (
+    <div className="flex flex-col gap-3">
+      <Button type="button" variant="outline" className="w-fit" onClick={onClose}>
+        <ArrowLeft data-icon="inline-start" />
+        Back to Montage Board
+      </Button>
+      {children}
+    </div>
+  )
+}
+
+function BookletSideCard({
   side,
   settings,
-  selected,
-  onSelect
+  onInspect,
+  onDelete,
+  onDuplicate
 }: {
   side: BookletSide
   settings: SheetSettings
-  selected: boolean
-  onSelect: () => void
+  onInspect: () => void
+  onDelete: () => void
+  onDuplicate: () => void
 }): JSX.Element {
   const rawPaperSize = getPrintSizeMm(settings)
   const paperSize = {
     widthMm: Math.max(rawPaperSize.widthMm, 1),
     heightMm: Math.max(rawPaperSize.heightMm, 1)
   }
-  const slots = getPreviewSlots(paperSize, settings)
+  const slots = getPreviewSlots(paperSize)
 
   return (
-    <button
-      type="button"
-      className={`rounded-md border bg-card p-3 text-left shadow-sm transition hover:border-primary/50 ${
-        selected ? 'border-primary ring-2 ring-primary/20' : ''
-      }`}
-      onClick={onSelect}
-    >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold">
+    <div className="relative h-[300px] rounded-md bg-card p-3">
+      <SheetHoverActions
+        onInspect={onInspect}
+        onDelete={onDelete}
+        onDuplicate={onDuplicate}
+      />
+      <div className="mb-2 flex items-center justify-between gap-2 pr-36">
+        <span className="truncate text-sm font-semibold">
           Sheet {side.sheetNumber} {side.side === 'front' ? 'Front' : 'Back'}
         </span>
-        <span className="text-xs text-muted-foreground">
+        <span className="shrink-0 text-xs text-muted-foreground">
           {side.left.pageNumber} | {side.right.pageNumber}
         </span>
       </div>
@@ -100,20 +243,17 @@ function SidePreview({
         className="relative mx-auto overflow-hidden rounded-sm border bg-white shadow-sm"
         style={{
           aspectRatio: `${paperSize.widthMm} / ${paperSize.heightMm}`,
-          maxHeight: 280
+          maxHeight: 236
         }}
       >
         <PreviewSlot slot={side.left} rect={slots.left} paperSize={paperSize} />
         <PreviewSlot slot={side.right} rect={slots.right} paperSize={paperSize} />
       </div>
-    </button>
+    </div>
   )
 }
 
-function getPreviewSlots(
-  paperSize: { widthMm: number; heightMm: number },
-  settings: SheetSettings
-): { left: Rect; right: Rect } {
+function getPreviewSlots(paperSize: { widthMm: number; heightMm: number }): { left: Rect; right: Rect } {
   try {
     return getBookletSlotRects(paperSize)
   } catch {
@@ -141,7 +281,7 @@ function DetailedSidePreview({
     widthMm: Math.max(rawPaperSize.widthMm, 1),
     heightMm: Math.max(rawPaperSize.heightMm, 1)
   }
-  const slots = getPreviewSlots(paperSize, settings)
+  const slots = getPreviewSlots(paperSize)
 
   return (
     <div className="grid min-h-[560px] grid-cols-1 gap-4 rounded-lg border bg-slate-100/70 p-4 xl:grid-cols-[minmax(0,1fr)_260px]">
@@ -165,6 +305,56 @@ function DetailedSidePreview({
           <InfoBlock label="Left page" value={side.left.pageNumber} />
           <InfoBlock label="Right page" value={side.right.pageNumber} />
         </div>
+      </div>
+    </div>
+  )
+}
+
+function DetailedEmptySheetPreview({
+  item,
+  recentColors,
+  colorPickerOpen,
+  onColorOpen,
+  onColorClose,
+  onColorChange
+}: {
+  item: EmptySheetBoardItem
+  recentColors: string[]
+  colorPickerOpen: boolean
+  onColorOpen: () => void
+  onColorClose: () => void
+  onColorChange: (colorHex: string) => void
+}): JSX.Element {
+  return (
+    <div className="grid min-h-[560px] grid-cols-1 gap-4 rounded-lg border bg-slate-100/70 p-4 xl:grid-cols-[minmax(0,1fr)_260px]">
+      <div
+        className="relative mx-auto w-full max-w-[920px] rounded-sm border shadow-md"
+        style={{
+          aspectRatio: '297 / 210',
+          backgroundColor: item.colorHex
+        }}
+      />
+      <div className="relative flex flex-col gap-3 rounded-md border bg-card p-4">
+        <div>
+          <p className="text-sm text-muted-foreground">Selected sheet</p>
+          <h3 className="text-lg font-semibold">{item.label}</h3>
+        </div>
+        <div className="rounded-md border bg-muted/30 p-3">
+          <p className="text-xs text-muted-foreground">Background color</p>
+          <p className="mt-1 text-lg font-semibold">{item.colorHex}</p>
+        </div>
+        <Button type="button" variant="outline" onClick={onColorOpen}>
+          <Palette data-icon="inline-start" />
+          Color
+        </Button>
+        {colorPickerOpen && (
+          <ColorPickerPopover
+            colorHex={item.colorHex}
+            recentColors={recentColors}
+            onChange={onColorChange}
+            onClose={onColorClose}
+          />
+        )}
       </div>
     </div>
   )
@@ -209,10 +399,6 @@ function PreviewSlot({
       </div>
     </div>
   )
-}
-
-function getSideKey(side: BookletSide): string {
-  return `${side.sheetNumber}-${side.side}`
 }
 
 function PageArtwork({ page }: { page: BookletPage }): JSX.Element {

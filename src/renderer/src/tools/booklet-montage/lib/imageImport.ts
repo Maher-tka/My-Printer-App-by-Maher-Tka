@@ -1,12 +1,13 @@
 import type { ImportedPagesResult, ImportProgress } from '../types'
 import { createStableId } from './bookletImposition'
 import { assertNotCanceled, releasePageThumbnails, resetCanvas, yieldToUi } from './memoryCleanup'
+import { naturalSortFiles } from './naturalSort'
 import { canvasToThumbnailBlob, getOrCreateThumbnailUrl } from './thumbnailCache'
 import { pixelsToMm } from './units'
 
 const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png'])
-const THUMBNAIL_MAX_SIZE = 160
-const THUMBNAIL_QUALITY = 0.62
+const THUMBNAIL_MAX_SIZE = 360
+const THUMBNAIL_QUALITY = 0.72
 
 interface ImageImportOptions {
   signal?: AbortSignal
@@ -17,7 +18,7 @@ export async function importImageFiles(
   onProgress: (progress: ImportProgress) => void,
   options: ImageImportOptions = {}
 ): Promise<ImportedPagesResult> {
-  const imageFiles = files.filter(isSupportedImageFile)
+  const imageFiles = naturalSortFiles(files.filter(isSupportedImageFile))
 
   if (imageFiles.length !== files.length) {
     throw new Error('Only JPG and PNG image files are supported.')
@@ -59,9 +60,17 @@ export async function importImageFiles(
       pages.push({
         id: createStableId('page'),
         kind: 'image' as const,
+        sourceType: 'image' as const,
         sourceId,
         sourceName: file.name,
+        sourceFileName: file.name,
         sourcePageIndex: 0,
+        originalPageNumber: index + 1,
+        currentOrderIndex: index,
+        originalOrderIndex: index,
+        importBatchId: sourceId,
+        importBatchIndex: index,
+        label: file.name,
         displayName: file.name,
         thumbnailUrl: imageInfo.thumbnailUrl,
         widthMm: pixelsToMm(imageInfo.width),

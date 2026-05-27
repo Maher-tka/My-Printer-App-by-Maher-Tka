@@ -8,7 +8,9 @@ export type PaperOrientation = 'portrait' | 'landscape'
 
 export type BookletScaleMode = 'fit' | 'original' | 'stretch'
 
-export type BookletViewMode = 'montage' | 'sheet' | '3d'
+export type BookletReadingDirection = 'ltr' | 'rtl'
+
+export type BookletViewMode = 'sheet' | 'montage' | 'book'
 
 export type ExportImageFormat = 'png' | 'jpg'
 
@@ -26,9 +28,17 @@ export interface BookletSource {
 export interface BookletPage {
   id: string
   kind: BookletPageKind
+  sourceType: BookletPageKind
   sourceId?: string
   sourceName?: string
+  sourceFileName?: string
   sourcePageIndex?: number
+  originalPageNumber?: number
+  currentOrderIndex: number
+  originalOrderIndex: number
+  importBatchId: string
+  importBatchIndex: number
+  label: string
   displayName: string
   thumbnailUrl?: string
   widthMm: number
@@ -42,6 +52,7 @@ export interface SheetSettings {
   customWidthMm: number
   customHeightMm: number
   scaleMode: BookletScaleMode
+  readingDirection: BookletReadingDirection
   cropMarks: boolean
   registrationMarks: boolean
   exportQuality: ExportQuality
@@ -99,6 +110,40 @@ export interface BookletSheet<TPage = BookletPage> {
   sheetNumber: number
   front: BookletSide<TPage>
   back: BookletSide<TPage>
+}
+
+export interface SheetBoardPosition {
+  x: number
+  y: number
+}
+
+export interface SheetBoardBaseItem {
+  id: string
+  position: SheetBoardPosition
+}
+
+export interface BookletSideBoardItem extends SheetBoardBaseItem {
+  kind: 'booklet-side'
+  sideKey: string
+}
+
+export interface EmptySheetBoardItem extends SheetBoardBaseItem {
+  kind: 'empty-sheet'
+  label: string
+  colorHex: string
+}
+
+export type SheetBoardItem = BookletSideBoardItem | EmptySheetBoardItem
+
+export interface SheetBoardState {
+  items: SheetBoardItem[]
+  recentColors: string[]
+}
+
+export interface EmptyMontageSheet {
+  id: string
+  label: string
+  colorHex: string
 }
 
 export interface SizeMm {

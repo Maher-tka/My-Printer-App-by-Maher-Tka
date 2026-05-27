@@ -1,10 +1,12 @@
 import type {
   BookletSheet,
   BookletSource,
+  EmptyMontageSheet,
   ExportImageFormat,
   ExportProgress,
   SheetSettings
 } from '../types'
+import { normalizeHex } from './colorUtils'
 import { assertExportCanStart } from './exportPdf'
 import { assertCanvasWithinLimit, assertNotCanceled, resetCanvas, yieldToUi } from './memoryCleanup'
 import { getSheetLayoutMm } from './printSizes'
@@ -25,6 +27,7 @@ export interface ExportedImage {
 
 interface ExportImagesOptions {
   signal?: AbortSignal
+  emptySheets?: EmptyMontageSheet[]
   onImage?: (image: ExportedImage) => Promise<void> | void
 }
 
@@ -40,21 +43,23 @@ export async function exportBookletImages(
   options: ExportImagesOptions = {}
 ): Promise<ExportedImage[]> {
   const signal = options.signal
+  const emptySheets = options.emptySheets ?? []
 
   assertNotCanceled(signal)
-  assertExportCanStart(sheets, settings)
+  assertExportCanStart(sheets, settings, emptySheets.length)
 
   const sides = flattenSheetSides(sheets)
-  const totalSides = sides.length
+  const totalPages = sides.length + emptySheets.length
   const layout = getSheetLayoutMm(settings)
   const dpi = settings.exportQuality === 'high' ? HIGH_EXPORT_DPI : STANDARD_EXPORT_DPI
   const assets = createCanvasRenderAssets(sources)
   const exported: ExportedImage[] = []
+  let renderedCount = 0
 
   onProgress({
     phase: 'preparing-pages',
     current: 0,
-    total: totalSides,
+    total: totalPages,
     message: 'Preparing pages for image export'
   })
 
@@ -64,9 +69,9 @@ export async function exportBookletImages(
 
       onProgress({
         phase: 'rendering-page',
-        current: exported.length,
-        total: totalSides,
-        message: `Rendering page ${exported.length + 1} of ${totalSides}: sheet ${side.sheetNumber} ${side.side}`
+        current: renderedCount,
+        total: totalPages,
+        message: `Rendering page ${renderedCount + 1} of ${totalPages}: sheet ${side.sheetNumber} ${side.side}`
       })
 
       const canvas = document.createElement('canvas')
@@ -99,15 +104,68 @@ export async function exportBookletImages(
         } else {
           exported.push(image)
         }
+
+        renderedCount += 1
       } finally {
         resetCanvas(canvas)
       }
 
       onProgress({
         phase: 'rendering-page',
-        current: exported.length,
-        total: totalSides,
-        message: `Rendered page ${exported.length} of ${totalSides}`
+        current: renderedCount,
+        total: totalPages,
+        message: `Rendered page ${renderedCount} of ${totalPages}`
+      })
+
+      await yieldToUi()
+    }
+
+    for (const emptySheet of emptySheets) {
+      assertNotCanceled(signal)
+
+      onProgress({
+        phase: 'rendering-page',
+        current: renderedCount,
+        total: totalPages,
+        message: `Rendering page ${renderedCount + 1} of ${totalPages}: ${emptySheet.label}`
+      })
+
+      const canvas = document.createElement('canvas')
+      const context = canvas.getContext('2d')
+
+      if (!context) {
+        throw new Error('Could not create a canvas context for empty sheet image export.')
+      }
+
+      try {
+        canvas.width = mmToPixels(layout.paperSize.widthMm, dpi)
+        canvas.height = mmToPixels(layout.paperSize.heightMm, dpi)
+        assertCanvasWithinLimit(canvas.width, canvas.height, 'exporting empty montage sheets as images')
+        context.fillStyle = normalizeHex(emptySheet.colorHex) ?? '#FFFFFF'
+        context.fillRect(0, 0, canvas.width, canvas.height)
+
+        const blob = await canvasToBlob(canvas, format, settings.exportQuality)
+        const image = {
+          blob,
+          fileName: getEmptySheetFileName(renderedCount - sides.length + 1, format)
+        }
+
+        if (options.onImage) {
+          await options.onImage(image)
+        } else {
+          exported.push(image)
+        }
+
+        renderedCount += 1
+      } finally {
+        resetCanvas(canvas)
+      }
+
+      onProgress({
+        phase: 'rendering-page',
+        current: renderedCount,
+        total: totalPages,
+        message: `Rendered page ${renderedCount} of ${totalPages}`
       })
 
       await yieldToUi()
@@ -117,6 +175,10 @@ export async function exportBookletImages(
   }
 
   return exported
+}
+
+function getEmptySheetFileName(index: number, extension: string): string {
+  return `booklet_empty_sheet_${String(index).padStart(3, '0')}.${extension}`
 }
 
 function canvasToBlob(

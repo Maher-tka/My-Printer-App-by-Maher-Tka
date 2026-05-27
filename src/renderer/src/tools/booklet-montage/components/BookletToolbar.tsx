@@ -1,12 +1,14 @@
 import {
-  Box,
+  BookOpen,
   CircleStop,
+  Files,
   FileDown,
   FileImage,
   FileText,
   Grid2X2,
   ImageDown,
-  Layers3,
+  LayoutGrid,
+  Plus,
   RotateCcw
 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -17,6 +19,7 @@ import type {
   BookletViewMode,
   ExportProgress,
   ImportProgress,
+  BookletReadingDirection,
   PaperOrientation,
   PaperSizeOption,
   SheetSettings
@@ -27,6 +30,7 @@ interface BookletToolbarProps {
   settings: SheetSettings
   viewMode: BookletViewMode
   blanksNeeded: number
+  hasBoardItems: boolean
   canExport: boolean
   isBusy: boolean
   importProgress: ImportProgress
@@ -38,6 +42,8 @@ interface BookletToolbarProps {
   onClear: () => void
   onSettingsChange: (settings: Partial<SheetSettings>) => void
   onAutoAddBlankPages: () => void
+  onAddEmptySheet: () => void
+  onResetSheetLayout: () => void
   onExportPdf: () => void
   onExportImages: (format: 'png' | 'jpg') => void
   onViewModeChange: (viewMode: BookletViewMode) => void
@@ -45,21 +51,26 @@ interface BookletToolbarProps {
 
 const paperOptions: PaperSizeOption[] = ['A4', 'A3', 'SRA3', 'custom']
 const orientationOptions: PaperOrientation[] = ['portrait', 'landscape']
+const readingDirectionOptions: Array<{ value: BookletReadingDirection; label: string }> = [
+  { value: 'ltr', label: 'LTR' },
+  { value: 'rtl', label: 'RTL / Arabic' }
+]
 const scaleOptions: Array<{ value: BookletScaleMode; label: string }> = [
   { value: 'fit', label: 'Fit' },
   { value: 'original', label: 'Original' },
   { value: 'stretch', label: 'Stretch' }
 ]
 const viewModes: Array<{ value: BookletViewMode; label: string; icon: typeof Grid2X2 }> = [
-  { value: 'montage', label: 'Montage', icon: Grid2X2 },
-  { value: 'sheet', label: 'Sheet', icon: Box },
-  { value: '3d', label: '3D', icon: Layers3 }
+  { value: 'sheet', label: 'Sheet Mode', icon: Files },
+  { value: 'montage', label: 'Montage Mode', icon: Grid2X2 },
+  { value: 'book', label: '3D Book Mode', icon: BookOpen }
 ]
 
 export function BookletToolbar({
   settings,
   viewMode,
   blanksNeeded,
+  hasBoardItems,
   canExport,
   isBusy,
   importProgress,
@@ -71,6 +82,8 @@ export function BookletToolbar({
   onClear,
   onSettingsChange,
   onAutoAddBlankPages,
+  onAddEmptySheet,
+  onResetSheetLayout,
   onExportPdf,
   onExportImages,
   onViewModeChange
@@ -133,6 +146,20 @@ export function BookletToolbar({
           ))}
         </ToolbarSelect>
 
+        <ToolbarSelect
+          label="Reading"
+          value={settings.readingDirection}
+          onChange={(value) =>
+            onSettingsChange({ readingDirection: value as BookletReadingDirection })
+          }
+        >
+          {readingDirectionOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </ToolbarSelect>
+
         {settings.paperSize === 'custom' && (
           <>
             <ToolbarNumber
@@ -187,6 +214,23 @@ export function BookletToolbar({
         >
           Auto blanks
         </Button>
+        {viewMode === 'montage' && (
+          <>
+            <Button type="button" variant="outline" onClick={onAddEmptySheet} disabled={isBusy}>
+              <Plus data-icon="inline-start" />
+              Add Empty Sheet
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onResetSheetLayout}
+              disabled={!hasBoardItems || isBusy}
+            >
+              <LayoutGrid data-icon="inline-start" />
+              Reset layout
+            </Button>
+          </>
+        )}
         <Button type="button" onClick={onExportPdf} disabled={!canExport || isBusy}>
           <FileDown data-icon="inline-start" />
           Export PDF

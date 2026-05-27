@@ -5,11 +5,14 @@ import type {
   ExportImageFormat,
   ExportProgress,
   ImportProgress,
+  SheetBoardPosition,
+  SheetBoardState,
   SheetSettings
 } from '../types'
 import {
   blanksNeededForBooklet,
   createBlankPage,
+  createStableId,
   generateBookletSheets,
   isBookletPageCount
 } from '../lib/bookletImposition'
@@ -21,6 +24,25 @@ import {
   releasePageThumbnails
 } from '../lib/memoryCleanup'
 import { validatePrintSettings } from '../lib/printSizes'
+import {
+  applyImportPageOrder,
+  normalizeCurrentOrder,
+  reorderPagesByDrag,
+  resetToOriginalOrder,
+  type ResetBlankMode
+} from '../lib/pageOrdering'
+import {
+  addEmptySheetToBoard,
+  createInitialSheetBoardState,
+  duplicateEmptySheetInBoard,
+  flattenBookletSides,
+  getEmptySheetsForExport,
+  removeEmptySheetFromBoard,
+  resetSheetBoardLayout,
+  syncSheetBoardWithBookletSides,
+  updateEmptySheetColor,
+  updateSheetBoardPosition
+} from '../lib/sheetLayoutState'
 
 const idleImportProgress: ImportProgress = {
   phase: 'idle',
@@ -43,6 +65,7 @@ export const defaultSheetSettings: SheetSettings = {
   customWidthMm: 297,
   customHeightMm: 210,
   scaleMode: 'fit',
+  readingDirection: 'ltr',
   cropMarks: true,
   registrationMarks: false,
   exportQuality: 'standard'
@@ -52,6 +75,9 @@ export function useBookletMontage() {
   const [pages, setPages] = useState<BookletPage[]>([])
   const [sources, setSources] = useState<BookletSource[]>([])
   const [settings, setSettings] = useState<SheetSettings>(defaultSheetSettings)
+  const [sheetBoardState, setSheetBoardState] = useState<SheetBoardState>(
+    createInitialSheetBoardState
+  )
   const [importProgress, setImportProgress] = useState<ImportProgress>(idleImportProgress)
   const [exportProgress, setExportProgress] = useState<ExportProgress>(idleExportProgress)
   const [error, setError] = useState<string | null>(null)
@@ -79,13 +105,31 @@ export function useBookletMontage() {
       return []
     }
 
-    return generateBookletSheets(pages)
-  }, [pageCountIsValid, pages])
+    return generateBookletSheets(pages, settings.readingDirection)
+  }, [pageCountIsValid, pages, settings.readingDirection])
+  const sheetSides = useMemo(() => flattenBookletSides(sheets), [sheets])
+  const emptySheetsForExport = useMemo(
+    () => getEmptySheetsForExport(sheetBoardState),
+    [sheetBoardState]
+  )
+
+  useEffect(() => {
+    setSheetBoardState((current) => syncSheetBoardWithBookletSides(sheetSides, current))
+  }, [sheetSides])
 
   const appendImportResult = useCallback(
     (nextSources: BookletSource[], nextPages: BookletPage[]): void => {
+      const batchId = createStableId('batch')
       setSources((current) => [...current, ...nextSources])
-      setPages((current) => [...current, ...nextPages])
+      setPages((current) =>
+        normalizeCurrentOrder([
+          ...current,
+          ...applyImportPageOrder(nextPages, {
+            batchId,
+            batchStartIndex: getNextOriginalOrderIndex(current)
+          })
+        ])
+      )
     },
     []
   )
@@ -167,11 +211,18 @@ export function useBookletMontage() {
     importAbortControllerRef.current?.abort()
   }, [])
 
-  const addBlankPage = useCallback((): void => {
-    setPages((current) => [
-      ...current,
-      createBlankPage(current.filter((page) => page.kind === 'blank').length + 1)
-    ])
+  const addBlankPage = useCallback((afterPageId?: string | null): void => {
+    setPages((current) => {
+      const insertAfterIndex = afterPageId
+        ? current.findIndex((page) => page.id === afterPageId)
+        : -1
+      const insertIndex = insertAfterIndex >= 0 ? insertAfterIndex + 1 : current.length
+      const nextPages = [...current]
+
+      nextPages.splice(insertIndex, 0, createManualBlankPage(current))
+
+      return normalizeCurrentOrder(nextPages)
+    })
   }, [])
 
   const autoAddBlankPages = useCallback((): void => {
@@ -182,7 +233,7 @@ export function useBookletMontage() {
         createBlankPage(existingBlankCount + index + 1)
       )
 
-      return [...current, ...blanks]
+      return normalizeCurrentOrder([...current, ...blanks])
     })
   }, [])
 
@@ -199,8 +250,18 @@ export function useBookletMontage() {
       const [page] = nextPages.splice(index, 1)
       nextPages.splice(targetIndex, 0, page)
 
-      return nextPages
+      return normalizeCurrentOrder(nextPages)
     })
+  }, [])
+
+  const reorderPages = useCallback((activeId: string, overId: string | null): void => {
+    setError(null)
+    setPages((current) => reorderPagesByDrag(current, activeId, overId))
+  }, [])
+
+  const resetPageOrder = useCallback((blankMode: ResetBlankMode): void => {
+    setError(null)
+    setPages((current) => resetToOriginalOrder(current, blankMode))
   }, [])
 
   const deletePage = useCallback((pageId: string): void => {
@@ -221,7 +282,7 @@ export function useBookletMontage() {
         currentSources.filter((source) => activeSourceIds.has(source.id))
       )
 
-      return nextPages
+      return normalizeCurrentOrder(nextPages)
     })
   }, [])
 
@@ -233,6 +294,7 @@ export function useBookletMontage() {
       return []
     })
     setSources([])
+    setSheetBoardState(createInitialSheetBoardState())
     setImportProgress(idleImportProgress)
     setExportProgress(idleExportProgress)
     setError(null)
@@ -242,8 +304,67 @@ export function useBookletMontage() {
     setSettings((current) => ({ ...current, ...nextSettings }))
   }, [])
 
+  const addEmptySheet = useCallback((): void => {
+    setError(null)
+    setSheetBoardState((current) => addEmptySheetToBoard(current))
+  }, [])
+
+  const resetSheetLayout = useCallback((): void => {
+    setSheetBoardState((current) => resetSheetBoardLayout(current))
+  }, [])
+
+  const moveSheetBoardItem = useCallback((itemId: string, position: SheetBoardPosition): void => {
+    setSheetBoardState((current) => updateSheetBoardPosition(current, itemId, position))
+  }, [])
+
+  const setEmptySheetColor = useCallback((itemId: string, colorHex: string): void => {
+    setSheetBoardState((current) => updateEmptySheetColor(current, itemId, colorHex))
+  }, [])
+
+  const deleteSheetBoardItem = useCallback((itemId: string): void => {
+    setSheetBoardState((current) => {
+      const item = current.items.find((candidate) => candidate.id === itemId)
+
+      if (!item) {
+        return current
+      }
+
+      if (item.kind === 'booklet-side') {
+        setError('This sheet is generated from the booklet order. Delete or rearrange source pages before export changes are allowed.')
+        return current
+      }
+
+      setError(null)
+      return removeEmptySheetFromBoard(current, itemId)
+    })
+  }, [])
+
+  const duplicateSheetBoardItem = useCallback((itemId: string): void => {
+    setSheetBoardState((current) => {
+      const item = current.items.find((candidate) => candidate.id === itemId)
+
+      if (!item) {
+        return current
+      }
+
+      if (item.kind === 'booklet-side') {
+        setError('Duplicating imposed booklet sheets is blocked for now so the export order stays correct.')
+        return current
+      }
+
+      setError(null)
+      return duplicateEmptySheetInBoard(current, itemId)
+    })
+  }, [])
+
   const exportPdf = useCallback(async (): Promise<void> => {
-    const readinessError = getExportReadinessError(pages.length, pageCountIsValid, settings)
+    const exportPageCount = sheets.length * 2 + emptySheetsForExport.length
+    const readinessError = getExportReadinessError(
+      pages.length,
+      pageCountIsValid,
+      settings,
+      emptySheetsForExport.length
+    )
 
     if (readinessError) {
       setError(readinessError)
@@ -257,19 +378,20 @@ export function useBookletMontage() {
     setExportProgress({
       phase: 'preparing-pages',
       current: 0,
-      total: sheets.length * 2,
+      total: exportPageCount,
       message: 'Preparing PDF export'
     })
 
     try {
       const { exportBookletPdf } = await import('../lib/exportPdf')
       const blob = await exportBookletPdf(sheets, sources, settings, setExportProgress, {
-        signal: abortController.signal
+        signal: abortController.signal,
+        emptySheets: emptySheetsForExport
       })
       setExportProgress({
         phase: 'saving-file',
-        current: sheets.length * 2,
-        total: sheets.length * 2,
+        current: exportPageCount,
+        total: exportPageCount,
         message: 'Saving PDF file'
       })
 
@@ -293,8 +415,8 @@ export function useBookletMontage() {
 
       setExportProgress({
         phase: 'done',
-        current: sheets.length * 2,
-        total: sheets.length * 2,
+        current: exportPageCount,
+        total: exportPageCount,
         message: 'PDF export done'
       })
     } catch (exportError) {
@@ -311,11 +433,17 @@ export function useBookletMontage() {
         exportAbortControllerRef.current = null
       }
     }
-  }, [pageCountIsValid, pages.length, settings, sheets, sources])
+  }, [emptySheetsForExport, pageCountIsValid, pages.length, settings, sheets, sources])
 
   const exportImages = useCallback(
     async (format: ExportImageFormat): Promise<void> => {
-      const readinessError = getExportReadinessError(pages.length, pageCountIsValid, settings)
+      const exportPageCount = sheets.length * 2 + emptySheetsForExport.length
+      const readinessError = getExportReadinessError(
+        pages.length,
+        pageCountIsValid,
+        settings,
+        emptySheetsForExport.length
+      )
 
       if (readinessError) {
         setError(readinessError)
@@ -329,7 +457,7 @@ export function useBookletMontage() {
       setExportProgress({
         phase: 'preparing-pages',
         current: 0,
-        total: sheets.length * 2,
+        total: exportPageCount,
         message: 'Preparing image export'
       })
 
@@ -362,6 +490,7 @@ export function useBookletMontage() {
           setExportProgress,
           {
             signal: abortController.signal,
+            emptySheets: emptySheetsForExport,
             onImage: async (image) => {
               if (abortController.signal.aborted) {
                 throw createCanceledError('Export canceled.')
@@ -371,7 +500,7 @@ export function useBookletMontage() {
               setExportProgress({
                 phase: 'saving-file',
                 current: exportedImageCount,
-                total: sheets.length * 2,
+                total: exportPageCount,
                 message: `Saving ${image.fileName}`
               })
 
@@ -399,7 +528,7 @@ export function useBookletMontage() {
         setExportProgress({
           phase: 'done',
           current: exportedImageCount,
-          total: sheets.length * 2,
+          total: exportPageCount,
           message: `${exportedImageCount} image sheets exported`
         })
       } catch (exportError) {
@@ -417,7 +546,7 @@ export function useBookletMontage() {
         }
       }
     },
-    [pageCountIsValid, pages.length, settings, sheets, sources]
+    [emptySheetsForExport, pageCountIsValid, pages.length, settings, sheets, sources]
   )
 
   const cancelExport = useCallback((): void => {
@@ -429,6 +558,8 @@ export function useBookletMontage() {
     sources,
     settings,
     sheets,
+    sheetBoardState,
+    emptySheetsForExport,
     blanksNeeded,
     pageCountIsValid,
     importProgress,
@@ -440,9 +571,17 @@ export function useBookletMontage() {
     addBlankPage,
     autoAddBlankPages,
     movePage,
+    reorderPages,
+    resetPageOrder,
     deletePage,
     clearProject,
     updateSettings,
+    addEmptySheet,
+    resetSheetLayout,
+    moveSheetBoardItem,
+    setEmptySheetColor,
+    deleteSheetBoardItem,
+    duplicateSheetBoardItem,
     exportPdf,
     exportImages,
     cancelExport
@@ -456,19 +595,41 @@ function getErrorMessage(error: unknown): string {
 function getExportReadinessError(
   pageCount: number,
   pageCountIsValid: boolean,
-  settings: SheetSettings
+  settings: SheetSettings,
+  emptySheetCount: number
 ): string | null {
-  if (pageCount === 0) {
-    return 'No pages imported. Import a PDF or image pages before exporting.'
+  if (pageCount === 0 && emptySheetCount === 0) {
+    return 'No pages or empty sheets are available to export.'
   }
 
-  if (!pageCountIsValid) {
+  if (pageCount > 0 && !pageCountIsValid) {
     return 'Page count must be divisible by 4 before exporting. Use Auto add blank pages.'
   }
 
   const settingsErrors = validatePrintSettings(settings)
 
   return settingsErrors[0] ?? null
+}
+
+function createManualBlankPage(currentPages: BookletPage[]): BookletPage {
+  const sequence = currentPages.filter((page) => page.sourceType === 'blank').length + 1
+  const blankPage = createBlankPage(sequence)
+
+  return {
+    ...blankPage,
+    importBatchId: createStableId('blank-batch'),
+    importBatchIndex: sequence - 1,
+    originalOrderIndex: Number.MAX_SAFE_INTEGER - currentPages.length,
+    currentOrderIndex: currentPages.length
+  }
+}
+
+function getNextOriginalOrderIndex(pages: BookletPage[]): number {
+  const finiteIndexes = pages
+    .map((page) => page.originalOrderIndex)
+    .filter((index) => Number.isFinite(index) && index < Number.MAX_SAFE_INTEGER / 2)
+
+  return finiteIndexes.length > 0 ? Math.max(...finiteIndexes) + 1 : 0
 }
 
 async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
