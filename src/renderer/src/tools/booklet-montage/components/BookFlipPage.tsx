@@ -4,6 +4,7 @@ import type { BookletPage, BookletReadingDirection } from '../types'
 interface BookFlipPageProps {
   page: BookletPage
   pageNumber: number
+  previewUrl?: string
   readingDirection: BookletReadingDirection
   width: number
   height: number
@@ -13,19 +14,20 @@ const BookFlipPageBase = forwardRef<HTMLDivElement, BookFlipPageProps>(
   function BookFlipPageBase({
     page,
     pageNumber,
+    previewUrl,
     readingDirection,
     width,
     height
   }, ref): JSX.Element {
     const [imageState, setImageState] = useState<'idle' | 'loading' | 'loaded' | 'failed'>(
-      page.thumbnailUrl ? 'loading' : 'idle'
+      previewUrl ? 'loading' : 'idle'
     )
     const isBlank = page.sourceType === 'blank'
     const pageLabel = getBookFlipPageLabel(page, pageNumber)
 
     useEffect(() => {
-      setImageState(page.thumbnailUrl ? 'loading' : 'idle')
-    }, [page.id, page.thumbnailUrl])
+      setImageState(previewUrl ? 'loading' : 'idle')
+    }, [page.id, previewUrl])
 
     return (
       <div
@@ -43,11 +45,7 @@ const BookFlipPageBase = forwardRef<HTMLDivElement, BookFlipPageProps>(
           style={{ transform: readingDirection === 'rtl' ? 'scaleX(-1)' : undefined }}
         >
           <div className="relative flex h-full w-full items-center justify-center bg-white">
-            {isBlank ? (
-              <div className="grid h-full w-full place-items-center bg-white text-sm font-semibold text-slate-400">
-                Blank Page
-              </div>
-            ) : page.thumbnailUrl ? (
+            {previewUrl ? (
               <>
                 {imageState === 'loading' && (
                   <div className="absolute inset-0 grid place-items-center bg-slate-50 text-sm text-slate-500">
@@ -60,9 +58,9 @@ const BookFlipPageBase = forwardRef<HTMLDivElement, BookFlipPageProps>(
                   </div>
                 ) : (
                   <img
-                    src={page.thumbnailUrl}
+                    src={previewUrl}
                     alt={pageLabel}
-                    className={`h-full w-full object-cover transition-opacity ${
+                    className={`h-full w-full object-fill transition-opacity ${
                       imageState === 'loaded' ? 'opacity-100' : 'opacity-0'
                     }`}
                     draggable={false}
@@ -71,6 +69,10 @@ const BookFlipPageBase = forwardRef<HTMLDivElement, BookFlipPageProps>(
                   />
                 )}
               </>
+            ) : isBlank ? (
+              <div className="grid h-full w-full place-items-center bg-white text-sm font-semibold text-slate-400">
+                Blank Page
+              </div>
             ) : (
               <div className="grid h-full w-full place-items-center bg-slate-50 px-6 text-center text-sm font-semibold text-slate-500">
                 Preview image unavailable

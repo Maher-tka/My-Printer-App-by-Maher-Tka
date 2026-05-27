@@ -12,12 +12,18 @@ import HTMLFlipBook from 'react-pageflip'
 import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import type { BookletPage, SheetSettings } from '../types'
-import { getBookletSlotRects, getPrintSizeMm } from '../lib/printSizes'
+import type { BookletPage, BookletSource, SheetSettings } from '../types'
+import {
+  clearPagePreviewCache,
+  getSinglePageAspectRatio,
+  releasePagePreviewUrl,
+  renderPagePreview
+} from '../lib/pagePreviewRenderer'
 import { BookFlipPage } from './BookFlipPage'
 
 interface BookFlipPreviewProps {
   orderedPages: BookletPage[]
+  sources: BookletSource[]
   settings: SheetSettings
 }
 
@@ -54,6 +60,7 @@ interface BookFlipErrorBoundaryState {
 
 export function BookFlipPreview({
   orderedPages,
+  sources,
   settings
 }: BookFlipPreviewProps): JSX.Element {
   const pages = useMemo(
@@ -70,7 +77,12 @@ export function BookFlipPreview({
 
   return (
     <BookFlipErrorBoundary key={pageKey}>
-      <BookFlipPreviewContent orderedPages={pages} pageKey={pageKey} settings={settings} />
+      <BookFlipPreviewContent
+        orderedPages={pages}
+        pageKey={pageKey}
+        settings={settings}
+        sources={sources}
+      />
     </BookFlipErrorBoundary>
   )
 }
@@ -78,49 +90,126 @@ export function BookFlipPreview({
 function BookFlipPreviewContent({
   orderedPages,
   pageKey,
-  settings
+  settings,
+  sources
 }: {
   orderedPages: BookletPage[]
   pageKey: string
   settings: SheetSettings
+  sources: BookletSource[]
 }): JSX.Element {
   const bookRef = useRef<FlipBookRef | null>(null)
   const rtlInteractionRef = useRef<HTMLDivElement | null>(null)
   const rtlPointerIdRef = useRef<number | null>(null)
+  const previewUrlsRef = useRef<Record<string, string>>({})
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [previewsReady, setPreviewsReady] = useState(false)
-  const dimensions = useMemo(() => getFlipPageDimensions(settings), [settings])
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [previewUrlsByPageId, setPreviewUrlsByPageId] = useState<Record<string, string>>({})
+  const dimensions = useMemo(
+    () => getFlipPageDimensions(settings, orderedPages[0]),
+    [orderedPages, settings]
+  )
+  const sourceMap = useMemo(
+    () => new Map(sources.map((source) => [source.id, source])),
+    [sources]
+  )
   const isRtl = settings.readingDirection === 'rtl'
-  const bookRenderKey = `${pageKey}:${dimensions.width}x${dimensions.height}:${settings.readingDirection}`
+  const previewUrlsKey = useMemo(
+    () => orderedPages.map((page) => `${page.id}:${previewUrlsByPageId[page.id] ?? 'pending'}`).join('|'),
+    [orderedPages, previewUrlsByPageId]
+  )
+  const bookRenderKey = `${pageKey}:${previewUrlsKey}:${dimensions.width}x${dimensions.height}:${settings.readingDirection}:${settings.scaleMode}`
 
   useEffect(() => {
     setCurrentPageIndex(0)
   }, [bookRenderKey])
 
   useEffect(() => {
-    let canceled = false
-    const previewUrls = orderedPages
-      .map((page) => page.thumbnailUrl)
-      .filter((url): url is string => Boolean(url))
+    previewUrlsRef.current = previewUrlsByPageId
+  }, [previewUrlsByPageId])
 
-    if (previewUrls.length === 0) {
+  useEffect(() => {
+    return () => {
+      for (const url of Object.values(previewUrlsRef.current)) {
+        releasePagePreviewUrl(url)
+      }
+
+      previewUrlsRef.current = {}
+      void clearPagePreviewCache()
+    }
+  }, [])
+
+  useEffect(() => {
+    let canceled = false
+    const abortController = new AbortController()
+
+    if (orderedPages.length === 0) {
       setPreviewsReady(true)
+      setPreviewError(null)
+      setPreviewUrlsByPageId((current) => {
+        for (const url of Object.values(current)) {
+          releasePagePreviewUrl(url)
+        }
+
+        return {}
+      })
+
       return () => {
         canceled = true
+        abortController.abort()
       }
     }
 
     setPreviewsReady(false)
-    Promise.allSettled(previewUrls.map(loadImage)).then(() => {
-      if (!canceled) {
+    setPreviewError(null)
+
+    Promise.all(
+      orderedPages.map(async (page) => {
+        const source = page.sourceId ? sourceMap.get(page.sourceId) : undefined
+        const url = await renderPagePreview(page, source, {
+          quality: 'fullPage3d',
+          targetWidthPx: dimensions.width * getPreviewPixelScale(),
+          targetHeightPx: dimensions.height * getPreviewPixelScale(),
+          scaleMode: settings.scaleMode,
+          signal: abortController.signal
+        })
+
+        return [page.id, url] as const
+      })
+    )
+      .then((entries) => {
+        if (canceled) {
+          return
+        }
+
+        const nextUrls = Object.fromEntries(entries)
+
+        setPreviewUrlsByPageId((current) => {
+          for (const [pageId, url] of Object.entries(current)) {
+            if (nextUrls[pageId] !== url) {
+              releasePagePreviewUrl(url)
+            }
+          }
+
+          return nextUrls
+        })
         setPreviewsReady(true)
-      }
-    })
+      })
+      .catch((error) => {
+        if (canceled) {
+          return
+        }
+
+        setPreviewError(getPreviewErrorMessage(error))
+        setPreviewsReady(false)
+      })
 
     return () => {
       canceled = true
+      abortController.abort()
     }
-  }, [pageKey, orderedPages])
+  }, [dimensions.height, dimensions.width, orderedPages, settings.scaleMode, sourceMap])
 
   const getRtlPointerPoint = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>): FlipPoint | null => {
@@ -233,7 +322,7 @@ function BookFlipPreviewContent({
 
   return (
     <section
-      className="overflow-hidden rounded-lg border bg-slate-50 shadow-sm"
+      className="rounded-lg border bg-slate-50 shadow-sm"
       data-book-flip-preview="ready"
       data-current-page={currentPageIndex + 1}
       data-page-count={orderedPages.length}
@@ -289,11 +378,13 @@ function BookFlipPreviewContent({
         </div>
       </div>
 
-      <div className="min-h-[660px] overflow-auto bg-[radial-gradient(circle_at_center,#ffffff_0%,#eef3f8_52%,#dce5ef_100%)] p-6">
-        <div className="mx-auto flex min-w-[820px] flex-col items-center justify-center gap-4">
+      <div className="min-h-[660px] overflow-visible bg-[radial-gradient(circle_at_center,#ffffff_0%,#eef3f8_52%,#dce5ef_100%)] p-6">
+        <div className="mx-auto flex w-full min-w-0 flex-col items-center justify-center gap-4">
           {!previewsReady ? (
             <div className="grid h-[560px] w-[760px] place-items-center rounded-lg border border-dashed bg-white/70 text-sm font-medium text-slate-600">
-              Preparing interactive book preview...
+              {previewError
+                ? 'Interactive book preview unavailable. Use Montage View for print accuracy.'
+                : 'Preparing interactive book preview...'}
             </div>
           ) : (
             <div
@@ -366,6 +457,7 @@ function BookFlipPreviewContent({
                       key={page.id}
                       page={page}
                       pageNumber={index + 1}
+                      previewUrl={previewUrlsByPageId[page.id] ?? page.thumbnailUrl}
                       readingDirection={settings.readingDirection}
                       width={dimensions.width}
                       height={dimensions.height}
@@ -432,31 +524,30 @@ class BookFlipErrorBoundary extends Component<
   }
 }
 
-function getFlipPageDimensions(settings: SheetSettings): { width: number; height: number } {
-  try {
-    const paperSize = getPrintSizeMm(settings)
-    const slot = getBookletSlotRects(paperSize).left
-    const ratio = Math.max(0.45, Math.min(slot.width / slot.height, 1.2))
-    const height = 540
-    const width = Math.round(height * ratio)
+function getFlipPageDimensions(
+  settings: SheetSettings,
+  firstPage?: BookletPage
+): { width: number; height: number } {
+  const ratio = getSinglePageAspectRatio(settings, firstPage)
+  const height = 540
+  const width = Math.round(height * ratio)
 
-    return {
-      width: Math.max(280, Math.min(width, 430)),
-      height
-    }
-  } catch {
-    return { width: 360, height: 540 }
+  return {
+    width: Math.max(260, Math.min(width, 460)),
+    height
   }
 }
 
-function loadImage(url: string): Promise<void> {
-  return new Promise((resolve) => {
-    const image = new Image()
+function getPreviewPixelScale(): number {
+  if (typeof window === 'undefined') {
+    return 2
+  }
 
-    image.onload = () => resolve()
-    image.onerror = () => resolve()
-    image.src = url
-  })
+  return Math.max(1.5, Math.min(window.devicePixelRatio || 2, 2))
+}
+
+function getPreviewErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Could not render 3D book previews.'
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

@@ -139,7 +139,7 @@ export function PageManager({
         onDragCancel={() => setActivePageId(null)}
       >
         <SortableContext items={pageIds} strategy={rectSortingStrategy}>
-          <div className="mt-4 grid max-h-[330px] grid-cols-[repeat(auto-fill,minmax(154px,1fr))] gap-3 overflow-auto pr-1">
+          <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(154px,1fr))] gap-3">
             {pages.map((page, index) => (
               <SortablePageCard
                 key={page.id}

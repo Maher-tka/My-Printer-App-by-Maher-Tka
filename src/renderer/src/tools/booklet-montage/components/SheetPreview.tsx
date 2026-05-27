@@ -118,7 +118,7 @@ export function SheetPreview({
   const boardSize = getBoardCanvasSize(visibleItems)
 
   return (
-    <div className="max-h-[calc(100vh-245px)] min-h-[620px] overflow-auto rounded-lg border bg-[linear-gradient(0deg,rgba(148,163,184,0.16)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.16)_1px,transparent_1px)] bg-[length:24px_24px] p-4">
+    <div className="min-h-[620px] overflow-visible rounded-lg border bg-[linear-gradient(0deg,rgba(148,163,184,0.16)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.16)_1px,transparent_1px)] bg-[length:24px_24px] p-4">
       <div
         className="relative"
         style={{

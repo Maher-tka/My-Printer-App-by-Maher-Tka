@@ -186,7 +186,11 @@ export function BookletMontagePage({
                     title="3D Book Mode"
                     description={`Flip through the current booklet visually in ${readingDirectionLabel}. Print accuracy still comes from Montage Mode and export.`}
                   />
-                  <BookFlipPreview orderedPages={montage.pages} settings={montage.settings} />
+                  <BookFlipPreview
+                    orderedPages={montage.pages}
+                    sources={montage.sources}
+                    settings={montage.settings}
+                  />
                 </>
               )}
             </div>
