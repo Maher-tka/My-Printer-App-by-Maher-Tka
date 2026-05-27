@@ -1,6 +1,8 @@
 import { ArrowLeft } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { getLargeProjectWarning } from '@/performance/renderQuality'
+import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
 import {
   Card,
   CardContent,
@@ -24,6 +26,8 @@ export function BookletMontagePage({
   onNavigate
 }: BookletMontagePageProps): JSX.Element {
   const montage = useBookletMontage()
+  const { settings: performanceSettings, setPreset: setPerformancePreset } =
+    usePerformanceSettings()
   const [viewMode, setViewMode] = useState<BookletViewMode>('sheet')
   const boardItemIds = useMemo(
     () => montage.sheetBoardState.items.map((item) => item.id),
@@ -52,6 +56,10 @@ export function BookletMontagePage({
     (montage.pages.length === 0 || montage.pageCountIsValid) &&
     !exportIsBusy &&
     !importIsBusy
+  const largeProjectWarning = getLargeProjectWarning({
+    pageCount: montage.pages.length,
+    totalBytes: montage.sources.reduce((total, source) => total + source.bytes.byteLength, 0)
+  })
 
   useEffect(() => {
     if (boardItemIds.length === 0) {
@@ -131,6 +139,19 @@ export function BookletMontagePage({
               {montage.error && (
                 <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
                   {montage.error}
+                </div>
+              )}
+              {largeProjectWarning && performanceSettings.preset !== 'low-end' && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                  <span>{largeProjectWarning}</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPerformancePreset('low-end')}
+                  >
+                    Switch to Low-end PC mode
+                  </Button>
                 </div>
               )}
               {viewMode === 'sheet' && (

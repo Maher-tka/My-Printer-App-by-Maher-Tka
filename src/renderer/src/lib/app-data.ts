@@ -28,7 +28,7 @@ export const printerTools: PrinterTool[] = [
     shortTitle: 'Cutter Montage',
     description:
       'Prepare print layer and cutline sheets for plotter/cutter with precision and efficiency',
-    status: 'coming-soon',
+    status: 'mvp',
     accent: 'green'
   }
 ]

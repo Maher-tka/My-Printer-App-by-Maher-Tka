@@ -1,4 +1,6 @@
 import type { ImportedPagesResult, ImportProgress } from '../types'
+import { getPerformanceSettingsSnapshot } from '../../../performance/performanceSettings'
+import { getLargeProjectWarning as getSharedLargeProjectWarning } from '../../../performance/renderQuality'
 import { createStableId } from './bookletImposition'
 import {
   assertCanvasWithinLimit,
@@ -9,7 +11,7 @@ import {
   resetCanvas
 } from './memoryCleanup'
 import { loadPdfDocument, normalizePdfError, type PDFPageProxy } from './pdfWorker'
-import { pdfThumbnailRenderQueue, yieldAfterChunk } from './renderQueue'
+import { pdfThumbnailRenderQueue, syncRenderQueueConcurrency, yieldAfterChunk } from './renderQueue'
 import { canvasToThumbnailBlob, getOrCreateThumbnailUrl } from './thumbnailCache'
 import { pointsToMm } from './units'
 
@@ -19,10 +21,6 @@ interface PdfImportOptions {
   signal?: AbortSignal
 }
 
-const THUMBNAIL_MAX_WIDTH = 300
-const THUMBNAIL_MAX_HEIGHT = 420
-const THUMBNAIL_QUALITY = 0.72
-const PDF_IMPORT_BATCH_SIZE = 6
 const LARGE_PDF_SIZE_BYTES = 50 * 1024 * 1024
 const LARGE_PDF_PAGE_COUNT = 50
 
@@ -40,6 +38,12 @@ export async function importPdfFile(
   const pages: ImportedPagesResult['pages'] = []
   let pdf: Awaited<ReturnType<typeof loadPdfDocument>> | undefined
   let warning = getLargePdfWarning(file.size)
+  const performanceSettings = getPerformanceSettingsSnapshot()
+  const thumbnailMaxSize = performanceSettings.render.thumbnailMaxSizePx
+  const thumbnailQuality = performanceSettings.render.thumbnailJpegQuality
+  const batchSize = performanceSettings.render.pdfImportBatchSize
+
+  syncRenderQueueConcurrency()
 
   try {
     assertNotCanceled(signal)
@@ -88,8 +92,19 @@ export async function importPdfFile(
 
       try {
         const thumbnailUrl = await pdfThumbnailRenderQueue.run(
-          () => renderPdfThumbnail(`${sourceId}:${pageNumber - 1}`, page, signal),
-          signal
+          () =>
+            renderPdfThumbnail(
+              `${sourceId}:${pageNumber - 1}:thumbnail:${thumbnailMaxSize}:${thumbnailQuality}`,
+              page,
+              {
+                maxWidth: thumbnailMaxSize,
+                maxHeight: Math.round(thumbnailMaxSize * 1.45),
+                quality: thumbnailQuality,
+                signal
+              }
+            ),
+          signal,
+          pageNumber <= 12 ? 10 : 0
         )
 
         pages.push({
@@ -121,7 +136,7 @@ export async function importPdfFile(
         page.cleanup()
       }
 
-      await yieldAfterChunk(pageNumber, PDF_IMPORT_BATCH_SIZE)
+      await yieldAfterChunk(pageNumber, batchSize)
       pdf.cleanup()
     }
 
@@ -162,15 +177,22 @@ export async function importPdfFile(
 async function renderPdfThumbnail(
   cacheKey: string,
   page: PDFPageProxy,
-  signal?: AbortSignal
+  options: {
+    maxWidth: number
+    maxHeight: number
+    quality: number
+    signal?: AbortSignal
+  }
 ): Promise<string> {
   return getOrCreateThumbnailUrl(cacheKey, async () => {
+    const signal = options.signal
+
     assertNotCanceled(signal)
 
     const baseViewport = page.getViewport({ scale: 1 })
     const scale = Math.min(
-      THUMBNAIL_MAX_WIDTH / baseViewport.width,
-      THUMBNAIL_MAX_HEIGHT / baseViewport.height,
+      options.maxWidth / baseViewport.width,
+      options.maxHeight / baseViewport.height,
       1
     )
     const viewport = page.getViewport({ scale })
@@ -193,7 +215,7 @@ async function renderPdfThumbnail(
     try {
       await renderTask.promise
       assertNotCanceled(signal)
-      return await canvasToThumbnailBlob(canvas, 'image/jpeg', THUMBNAIL_QUALITY)
+      return await canvasToThumbnailBlob(canvas, 'image/jpeg', options.quality)
     } catch (error) {
       if (signal?.aborted) {
         throw createCanceledError('PDF import canceled.')
@@ -208,7 +230,19 @@ async function renderPdfThumbnail(
 }
 
 function getLargePdfWarning(fileSize: number, pageCount?: number): string | undefined {
-  if (fileSize >= LARGE_PDF_SIZE_BYTES || (pageCount !== undefined && pageCount >= LARGE_PDF_PAGE_COUNT)) {
+  const sharedWarning = getSharedLargeProjectWarning({
+    pageCount: pageCount ?? 0,
+    totalBytes: fileSize
+  })
+
+  if (sharedWarning) {
+    return sharedWarning
+  }
+
+  if (
+    fileSize >= LARGE_PDF_SIZE_BYTES ||
+    (pageCount !== undefined && pageCount >= LARGE_PDF_PAGE_COUNT)
+  ) {
     return 'Large PDF detected. Import may take longer. The app will process it in batches.'
   }
 

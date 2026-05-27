@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DashboardPage } from '@/app/DashboardPage'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { LicensePage } from '@/licensing/LicensePage'
+import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
 import { SettingsPage } from '@/settings/SettingsPage'
 import { BookletMontagePage } from '@/tools/booklet-montage/BookletMontagePage'
 import { CutterMontagePage } from '@/tools/cutter-montage/CutterMontagePage'
@@ -53,6 +54,7 @@ function getRouteFromHash(): AppRoute {
 export function App(): JSX.Element {
   const [activeRoute, setActiveRoute] = useState<AppRoute>(() => getRouteFromHash())
   const activeMeta = useMemo(() => pageMeta[activeRoute], [activeRoute])
+  const { settings: performanceSettings } = usePerformanceSettings()
 
   useEffect(() => {
     const handleHashChange = (): void => {
@@ -65,6 +67,10 @@ export function App(): JSX.Element {
       window.removeEventListener('hashchange', handleHashChange)
     }
   }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.performancePreset = performanceSettings.preset
+  }, [performanceSettings.preset])
 
   const navigate = useCallback((route: AppRoute): void => {
     setActiveRoute(route)

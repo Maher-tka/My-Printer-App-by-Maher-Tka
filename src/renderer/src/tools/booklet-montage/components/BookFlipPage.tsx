@@ -1,11 +1,12 @@
 import { forwardRef, memo, useEffect, useState } from 'react'
-import type { BookletPage, BookletReadingDirection } from '../types'
+import type { BookletPage, BookletReadingDirection, BookletScaleMode } from '../types'
 
 interface BookFlipPageProps {
   page: BookletPage
   pageNumber: number
   previewUrl?: string
   readingDirection: BookletReadingDirection
+  scaleMode: BookletScaleMode
   width: number
   height: number
 }
@@ -16,6 +17,7 @@ const BookFlipPageBase = forwardRef<HTMLDivElement, BookFlipPageProps>(
     pageNumber,
     previewUrl,
     readingDirection,
+    scaleMode,
     width,
     height
   }, ref): JSX.Element {
@@ -32,7 +34,7 @@ const BookFlipPageBase = forwardRef<HTMLDivElement, BookFlipPageProps>(
     return (
       <div
         ref={ref}
-        className="book-flip-page relative overflow-hidden bg-white text-slate-950 shadow-sm"
+        className="book-flip-page relative overflow-hidden bg-white text-slate-950"
         style={{ width, height }}
         data-book-flip-page="true"
         data-page-id={page.id}
@@ -44,7 +46,7 @@ const BookFlipPageBase = forwardRef<HTMLDivElement, BookFlipPageProps>(
           className="relative h-full w-full"
           style={{ transform: readingDirection === 'rtl' ? 'scaleX(-1)' : undefined }}
         >
-          <div className="relative flex h-full w-full items-center justify-center bg-white">
+          <div className="relative h-full w-full bg-white">
             {previewUrl ? (
               <>
                 {imageState === 'loading' && (
@@ -60,7 +62,7 @@ const BookFlipPageBase = forwardRef<HTMLDivElement, BookFlipPageProps>(
                   <img
                     src={previewUrl}
                     alt={pageLabel}
-                    className={`h-full w-full object-fill transition-opacity ${
+                    className={`h-full w-full ${getObjectFitClass(scaleMode)} transition-opacity ${
                       imageState === 'loaded' ? 'opacity-100' : 'opacity-0'
                     }`}
                     draggable={false}
@@ -103,4 +105,8 @@ function getBookFlipPageLabel(page: BookletPage, pageNumber: number): string {
   }
 
   return page.label || 'Blank Page'
+}
+
+function getObjectFitClass(scaleMode: BookletScaleMode): string {
+  return scaleMode === 'stretch' ? 'object-fill' : 'object-fill'
 }

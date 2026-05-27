@@ -30,7 +30,7 @@ const accentClasses: Record<PrinterTool['accent'], string> = {
 
 export function ToolCard({ tool, onOpen }: ToolCardProps): JSX.Element {
   const Icon = iconByToolId[tool.id as keyof typeof iconByToolId]
-  const isActive = tool.status === 'active'
+  const isActive = tool.status === 'active' || tool.status === 'mvp'
 
   return (
     <Card
@@ -56,9 +56,9 @@ export function ToolCard({ tool, onOpen }: ToolCardProps): JSX.Element {
             </p>
           </div>
         </div>
-        {!isActive && (
+        {tool.status !== 'active' && (
           <Badge variant={tool.accent === 'green' ? 'success' : 'secondary'}>
-            Coming Soon
+            {tool.status === 'mvp' ? 'MVP Beta' : 'Coming Soon'}
           </Badge>
         )}
       </CardHeader>

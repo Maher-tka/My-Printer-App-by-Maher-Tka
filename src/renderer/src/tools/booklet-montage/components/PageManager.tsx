@@ -17,7 +17,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { FilePlus2, FileText, GripVertical, Image, RotateCcw, Trash2 } from 'lucide-react'
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo, useState, type CSSProperties } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { BookletPage } from '../types'
@@ -181,12 +181,14 @@ const SortablePageCard = memo(function SortablePageCard({
     transition,
     isDragging
   } = useSortable({ id: page.id })
-  const style = {
+  const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition: isDragging ? undefined : transition,
     willChange: 'transform',
     touchAction: 'none',
-    contain: 'layout paint' as const
+    contain: 'layout paint' as const,
+    contentVisibility: isDragging ? 'visible' : 'auto',
+    containIntrinsicSize: '154px 260px'
   }
   const SourceIcon = page.sourceType === 'image' ? Image : FileText
 

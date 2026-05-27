@@ -6,6 +6,7 @@ import type {
   Rect,
   SheetSettings
 } from '../types'
+import { getPerformanceSettingsSnapshot } from '../../../performance/performanceSettings'
 import {
   assertCanvasWithinLimit,
   assertNotCanceled,
@@ -53,9 +54,12 @@ export async function renderPagePreview(
   source: BookletSource | undefined,
   options: PagePreviewOptions
 ): Promise<string> {
+  syncPreviewQueue()
+
   return previewRenderQueue.run(
     () => renderPagePreviewNow(page, source, options),
-    options.signal
+    options.signal,
+    options.quality === 'fullPage3d' ? 6 : options.quality === 'medium' ? 4 : 1
   )
 }
 
@@ -243,6 +247,13 @@ export function getSinglePageAspectRatio(
   settings: SheetSettings,
   firstPage?: BookletPage
 ): number {
+  return getBookPageAspectRatio(settings, firstPage)
+}
+
+export function getBookPageAspectRatio(
+  settings: SheetSettings,
+  firstPage?: BookletPage
+): number {
   try {
     const printSize = getPrintSizeMm(settings)
     const foldedPageRatio = (printSize.widthMm / 2) / printSize.heightMm
@@ -333,8 +344,19 @@ function getPreviewCanvasSize(
     page.widthMm > 0 && page.heightMm > 0
       ? clampAspectRatio(page.widthMm / page.heightMm)
       : 0.707
-  const maxWidth = PREVIEW_MAX_WIDTH[options.quality]
-  const maxHeight = PREVIEW_MAX_HEIGHT[options.quality]
+  const performanceSettings = getPerformanceSettingsSnapshot()
+  const maxWidth =
+    options.quality === 'thumbnail'
+      ? performanceSettings.render.thumbnailMaxSizePx
+      : options.quality === 'fullPage3d'
+        ? performanceSettings.render.fullPage3dMaxWidthPx
+        : Math.min(PREVIEW_MAX_WIDTH[options.quality], performanceSettings.render.previewMaxWidthPx)
+  const maxHeight =
+    options.quality === 'thumbnail'
+      ? Math.round(performanceSettings.render.thumbnailMaxSizePx * 1.45)
+      : options.quality === 'fullPage3d'
+        ? performanceSettings.render.fullPage3dMaxHeightPx
+        : Math.min(PREVIEW_MAX_HEIGHT[options.quality], performanceSettings.render.previewMaxHeightPx)
   const widthFromHeight = maxHeight * aspectRatio
 
   if (widthFromHeight <= maxWidth) {
@@ -390,11 +412,19 @@ async function cacheCanvasPreview(
   canvas: HTMLCanvasElement,
   quality: PagePreviewQuality
 ): Promise<string> {
-  const blob = await canvasToPreviewBlob(canvas, PREVIEW_QUALITY[quality])
+  const performanceSettings = getPerformanceSettingsSnapshot()
+  const jpegQuality =
+    quality === 'fullPage3d'
+      ? performanceSettings.render.fullPage3dJpegQuality
+      : quality === 'thumbnail'
+        ? performanceSettings.render.thumbnailJpegQuality
+        : PREVIEW_QUALITY[quality]
+  const blob = await canvasToPreviewBlob(canvas, jpegQuality)
   const url = URL.createObjectURL(blob)
 
   previewUrlByKey.set(key, url)
   previewKeyByUrl.set(url, key)
+  trimPreviewCache()
 
   return url
 }
@@ -459,4 +489,29 @@ function clampAspectRatio(ratio: number): number {
   }
 
   return Math.max(0.35, Math.min(ratio, 1.45))
+}
+
+function syncPreviewQueue(): void {
+  previewRenderQueue.setConcurrency(getPerformanceSettingsSnapshot().render.renderConcurrency)
+}
+
+function trimPreviewCache(): void {
+  const limit = getPerformanceSettingsSnapshot().memory.objectUrlCacheLimit
+
+  if (previewUrlByKey.size <= limit) {
+    return
+  }
+
+  const keysToRemove = [...previewUrlByKey.keys()].slice(0, previewUrlByKey.size - limit)
+
+  for (const key of keysToRemove) {
+    const url = previewUrlByKey.get(key)
+
+    if (url) {
+      URL.revokeObjectURL(url)
+      previewKeyByUrl.delete(url)
+    }
+
+    previewUrlByKey.delete(key)
+  }
 }

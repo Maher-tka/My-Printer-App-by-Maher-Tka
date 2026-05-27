@@ -1,4 +1,6 @@
 import type { BookletPage } from '../types'
+import { assertWithinCanvasBudget } from '../../../performance/memoryBudget'
+import { getPerformanceSettingsSnapshot } from '../../../performance/performanceSettings'
 import { revokeThumbnailUrl } from './thumbnailCache'
 
 export const MAX_CANVAS_PIXELS = 80_000_000
@@ -8,11 +10,7 @@ export function assertCanvasWithinLimit(
   height: number,
   purpose: string
 ): void {
-  if (width * height > MAX_CANVAS_PIXELS) {
-    throw new Error(
-      `Out of memory risk while ${purpose}. Reduce paper size, export quality, or custom dimensions.`
-    )
-  }
+  assertWithinCanvasBudget(width, height, purpose, getPerformanceSettingsSnapshot())
 }
 
 export function resetCanvas(canvas: HTMLCanvasElement): void {

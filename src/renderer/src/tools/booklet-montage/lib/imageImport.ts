@@ -1,13 +1,13 @@
 import type { ImportedPagesResult, ImportProgress } from '../types'
+import { getPerformanceSettingsSnapshot } from '../../../performance/performanceSettings'
 import { createStableId } from './bookletImposition'
 import { assertNotCanceled, releasePageThumbnails, resetCanvas, yieldToUi } from './memoryCleanup'
 import { naturalSortFiles } from './naturalSort'
+import { previewRenderQueue, syncRenderQueueConcurrency } from './renderQueue'
 import { canvasToThumbnailBlob, getOrCreateThumbnailUrl } from './thumbnailCache'
 import { pixelsToMm } from './units'
 
 const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png'])
-const THUMBNAIL_MAX_SIZE = 360
-const THUMBNAIL_QUALITY = 0.72
 
 interface ImageImportOptions {
   signal?: AbortSignal
@@ -27,6 +27,11 @@ export async function importImageFiles(
   const sources = []
   const pages = []
   const signal = options.signal
+  const performanceSettings = getPerformanceSettingsSnapshot()
+  const thumbnailMaxSize = performanceSettings.render.thumbnailMaxSizePx
+  const thumbnailQuality = performanceSettings.render.thumbnailJpegQuality
+
+  syncRenderQueueConcurrency()
 
   try {
     for (let index = 0; index < imageFiles.length; index += 1) {
@@ -46,7 +51,21 @@ export async function importImageFiles(
 
       const sourceId = createStableId('image')
       const mimeType = getImageMimeType(file)
-      const imageInfo = await readImageInfo(bytes, mimeType, `image:${sourceId}`, signal)
+      const imageInfo = await previewRenderQueue.run(
+        () =>
+          readImageInfo(
+            bytes,
+            mimeType,
+            `image:${sourceId}:thumbnail:${thumbnailMaxSize}:${thumbnailQuality}`,
+            {
+              maxSize: thumbnailMaxSize,
+              quality: thumbnailQuality,
+              signal
+            }
+          ),
+        signal,
+        index < 12 ? 8 : 0
+      )
 
       sources.push({
         id: sourceId,
@@ -110,13 +129,19 @@ async function readImageInfo(
   bytes: Uint8Array,
   mimeType: string,
   cacheKey: string,
-  signal?: AbortSignal
+  options: {
+    maxSize: number
+    quality: number
+    signal?: AbortSignal
+  }
 ): Promise<{ width: number; height: number; thumbnailUrl: string }> {
+  const signal = options.signal
+
   assertNotCanceled(signal)
 
   const blob = new Blob([bytesToArrayBuffer(bytes)], { type: mimeType })
   const bitmap = await createImageBitmap(blob)
-  const scale = Math.min(THUMBNAIL_MAX_SIZE / bitmap.width, THUMBNAIL_MAX_SIZE / bitmap.height, 1)
+  const scale = Math.min(options.maxSize / bitmap.width, options.maxSize / bitmap.height, 1)
   const canvas = document.createElement('canvas')
   const context = canvas.getContext('2d')
 
@@ -131,7 +156,7 @@ async function readImageInfo(
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
 
     const thumbnailUrl = await getOrCreateThumbnailUrl(cacheKey, () =>
-      canvasToThumbnailBlob(canvas, 'image/jpeg', THUMBNAIL_QUALITY)
+      canvasToThumbnailBlob(canvas, 'image/jpeg', options.quality)
     )
 
     return { width: bitmap.width, height: bitmap.height, thumbnailUrl }

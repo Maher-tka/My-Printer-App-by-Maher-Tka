@@ -1,30 +1,49 @@
 import { assertNotCanceled, yieldToUi } from './memoryCleanup'
+import { getPerformanceSettingsSnapshot } from '../../../performance/performanceSettings'
+import { getRenderConcurrency } from '../../../performance/renderQuality'
 
 type QueueTask<T> = () => Promise<T>
 
 interface PendingQueueTask<T> {
   task: QueueTask<T>
   signal?: AbortSignal
+  priority: number
   resolve: (value: T) => void
   reject: (reason?: unknown) => void
 }
 
 export class RenderQueue {
   private activeCount = 0
-  private readonly pending: Array<PendingQueueTask<unknown>> = []
+  private pending: Array<PendingQueueTask<unknown>> = []
 
-  constructor(private readonly concurrency = 1) {}
+  constructor(private concurrency = 1) {}
 
-  run<T>(task: QueueTask<T>, signal?: AbortSignal): Promise<T> {
+  setConcurrency(concurrency: number): void {
+    this.concurrency = Math.max(1, Math.min(Math.floor(concurrency), 3))
+    this.drain()
+  }
+
+  clear(): void {
+    const queued = this.pending
+    this.pending = []
+
+    for (const task of queued) {
+      task.reject(new Error('Render queue cleared.'))
+    }
+  }
+
+  run<T>(task: QueueTask<T>, signal?: AbortSignal, priority = 0): Promise<T> {
     assertNotCanceled(signal)
 
     return new Promise<T>((resolve, reject) => {
       this.pending.push({
         task,
         signal,
+        priority,
         resolve: resolve as (value: unknown) => void,
         reject
       })
+      this.pending.sort((first, second) => second.priority - first.priority)
       this.drain()
     })
   }
@@ -55,12 +74,24 @@ export class RenderQueue {
   }
 }
 
-export const pdfThumbnailRenderQueue = new RenderQueue(1)
-export const previewRenderQueue = new RenderQueue(1)
+export const pdfThumbnailRenderQueue = new RenderQueue(getCurrentConcurrency())
+export const previewRenderQueue = new RenderQueue(getCurrentConcurrency())
 export const exportRenderQueue = new RenderQueue(1)
+
+export function syncRenderQueueConcurrency(): void {
+  const concurrency = getCurrentConcurrency()
+
+  pdfThumbnailRenderQueue.setConcurrency(concurrency)
+  previewRenderQueue.setConcurrency(concurrency)
+  exportRenderQueue.setConcurrency(1)
+}
 
 export async function yieldAfterChunk(index: number, chunkSize: number): Promise<void> {
   if (index > 0 && index % chunkSize === 0) {
     await yieldToUi(8)
   }
+}
+
+function getCurrentConcurrency(): number {
+  return getRenderConcurrency(getPerformanceSettingsSnapshot())
 }

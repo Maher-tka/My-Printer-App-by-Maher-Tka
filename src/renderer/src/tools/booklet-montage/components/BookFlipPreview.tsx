@@ -12,10 +12,15 @@ import HTMLFlipBook from 'react-pageflip'
 import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
+import {
+  getPerformanceBadgeTone,
+  shouldRequireManual3dLoad
+} from '@/performance/renderQuality'
 import type { BookletPage, BookletSource, SheetSettings } from '../types'
 import {
   clearPagePreviewCache,
-  getSinglePageAspectRatio,
+  getBookPageAspectRatio,
   releasePagePreviewUrl,
   renderPagePreview
 } from '../lib/pagePreviewRenderer'
@@ -102,10 +107,12 @@ function BookFlipPreviewContent({
   const rtlInteractionRef = useRef<HTMLDivElement | null>(null)
   const rtlPointerIdRef = useRef<number | null>(null)
   const previewUrlsRef = useRef<Record<string, string>>({})
+  const { settings: performanceSettings } = usePerformanceSettings()
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [previewsReady, setPreviewsReady] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewUrlsByPageId, setPreviewUrlsByPageId] = useState<Record<string, string>>({})
+  const [load3dRequested, setLoad3dRequested] = useState(false)
   const dimensions = useMemo(
     () => getFlipPageDimensions(settings, orderedPages[0]),
     [orderedPages, settings]
@@ -115,15 +122,30 @@ function BookFlipPreviewContent({
     [sources]
   )
   const isRtl = settings.readingDirection === 'rtl'
+  const projectInfo = useMemo(
+    () => ({
+      pageCount: orderedPages.length,
+      totalBytes: sources.reduce((total, source) => total + source.bytes.byteLength, 0)
+    }),
+    [orderedPages.length, sources]
+  )
+  const shouldWaitForManual3dLoad = shouldRequireManual3dLoad(
+    projectInfo,
+    performanceSettings
+  ) && !load3dRequested
   const previewUrlsKey = useMemo(
     () => orderedPages.map((page) => `${page.id}:${previewUrlsByPageId[page.id] ?? 'pending'}`).join('|'),
     [orderedPages, previewUrlsByPageId]
   )
-  const bookRenderKey = `${pageKey}:${previewUrlsKey}:${dimensions.width}x${dimensions.height}:${settings.readingDirection}:${settings.scaleMode}`
+  const bookRenderKey = `${pageKey}:${previewUrlsKey}:${dimensions.width}x${dimensions.height}:${settings.readingDirection}:${settings.scaleMode}:${performanceSettings.preset}`
 
   useEffect(() => {
     setCurrentPageIndex(0)
   }, [bookRenderKey])
+
+  useEffect(() => {
+    setLoad3dRequested(false)
+  }, [pageKey, performanceSettings.preset])
 
   useEffect(() => {
     previewUrlsRef.current = previewUrlsByPageId
@@ -144,7 +166,7 @@ function BookFlipPreviewContent({
     let canceled = false
     const abortController = new AbortController()
 
-    if (orderedPages.length === 0) {
+    if (orderedPages.length === 0 || shouldWaitForManual3dLoad) {
       setPreviewsReady(true)
       setPreviewError(null)
       setPreviewUrlsByPageId((current) => {
@@ -164,8 +186,14 @@ function BookFlipPreviewContent({
     setPreviewsReady(false)
     setPreviewError(null)
 
-    Promise.all(
-      orderedPages.map(async (page) => {
+    async function renderPreviews(): Promise<void> {
+      const entries: Array<readonly [string, string]> = []
+
+      for (const page of orderedPages) {
+        if (canceled) {
+          return
+        }
+
         const source = page.sourceId ? sourceMap.get(page.sourceId) : undefined
         const url = await renderPagePreview(page, source, {
           quality: 'fullPage3d',
@@ -175,10 +203,11 @@ function BookFlipPreviewContent({
           signal: abortController.signal
         })
 
-        return [page.id, url] as const
-      })
-    )
-      .then((entries) => {
+        entries.push([page.id, url] as const)
+        setPreviewUrlsByPageId((current) => ({ ...current, [page.id]: url }))
+      }
+
+      if (!canceled) {
         if (canceled) {
           return
         }
@@ -195,7 +224,10 @@ function BookFlipPreviewContent({
           return nextUrls
         })
         setPreviewsReady(true)
-      })
+      }
+    }
+
+    renderPreviews()
       .catch((error) => {
         if (canceled) {
           return
@@ -209,7 +241,14 @@ function BookFlipPreviewContent({
       canceled = true
       abortController.abort()
     }
-  }, [dimensions.height, dimensions.width, orderedPages, settings.scaleMode, sourceMap])
+  }, [
+    dimensions.height,
+    dimensions.width,
+    orderedPages,
+    settings.scaleMode,
+    shouldWaitForManual3dLoad,
+    sourceMap
+  ])
 
   const getRtlPointerPoint = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>): FlipPoint | null => {
@@ -320,6 +359,29 @@ function BookFlipPreviewContent({
   const canGoPrevious = currentPageIndex > 0
   const canGoNext = currentPageIndex < orderedPages.length - 1
 
+  if (shouldWaitForManual3dLoad) {
+    return (
+      <section
+        className="rounded-lg border bg-slate-50 p-6 text-center"
+        data-book-flip-preview="manual-load"
+      >
+        <div className="mx-auto flex max-w-xl flex-col items-center gap-3">
+          <Badge variant={getPerformanceBadgeTone(performanceSettings.preset)}>
+            {performanceSettings.label}
+          </Badge>
+          <h3 className="text-lg font-semibold text-slate-950">3D Book Preview is paused</h3>
+          <p className="text-sm leading-6 text-slate-600">
+            3D Book Preview may be slower on low-end PCs. This project has {orderedPages.length}
+            {' '}pages, so the app will wait before rendering full-page previews.
+          </p>
+          <Button type="button" onClick={() => setLoad3dRequested(true)}>
+            Load 3D Preview
+          </Button>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section
       className="rounded-lg border bg-slate-50 shadow-sm"
@@ -335,6 +397,9 @@ function BookFlipPreviewContent({
             <Badge variant="secondary">Interactive</Badge>
             <Badge variant={isRtl ? 'warning' : 'secondary'}>
               {isRtl ? 'RTL Arabic' : 'LTR'}
+            </Badge>
+            <Badge variant={getPerformanceBadgeTone(performanceSettings.preset)}>
+              {performanceSettings.label}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-slate-600">
@@ -459,6 +524,7 @@ function BookFlipPreviewContent({
                       pageNumber={index + 1}
                       previewUrl={previewUrlsByPageId[page.id] ?? page.thumbnailUrl}
                       readingDirection={settings.readingDirection}
+                      scaleMode={settings.scaleMode}
                       width={dimensions.width}
                       height={dimensions.height}
                     />
@@ -528,7 +594,7 @@ function getFlipPageDimensions(
   settings: SheetSettings,
   firstPage?: BookletPage
 ): { width: number; height: number } {
-  const ratio = getSinglePageAspectRatio(settings, firstPage)
+  const ratio = getBookPageAspectRatio(settings, firstPage)
   const height = 540
   const width = Math.round(height * ratio)
 

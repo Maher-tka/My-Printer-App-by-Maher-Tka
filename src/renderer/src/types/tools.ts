@@ -1,6 +1,6 @@
 import type { AppRoute } from './navigation'
 
-export type ToolStatus = 'active' | 'coming-soon'
+export type ToolStatus = 'active' | 'mvp' | 'coming-soon'
 
 export interface PrinterTool {
   id: string

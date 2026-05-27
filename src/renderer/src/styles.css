@@ -62,4 +62,36 @@
   select {
     font: inherit;
   }
+
+  html[data-performance-preset='low-end'] *,
+  html[data-performance-preset='low-end'] *::before,
+  html[data-performance-preset='low-end'] *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  html[data-performance-preset='low-end'] .shadow-panel,
+  html[data-performance-preset='low-end'] .shadow-sm,
+  html[data-performance-preset='low-end'] .shadow-md,
+  html[data-performance-preset='low-end'] .shadow-lg,
+  html[data-performance-preset='low-end'] .shadow-xl,
+  html[data-performance-preset='low-end'] .shadow-2xl {
+    box-shadow: none !important;
+  }
+
+  .book-flip-instance,
+  .book-flip-instance > div,
+  .book-flip-page {
+    background: transparent;
+  }
+
+  .book-flip-instance .stf__block,
+  .book-flip-instance .stf__item,
+  .book-flip-instance .stf__wrapper {
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+  }
 }

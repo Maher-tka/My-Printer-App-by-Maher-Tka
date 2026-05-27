@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
 import type {
   BookletPage,
   BookletSource,
@@ -31,6 +32,7 @@ import {
   resetToOriginalOrder,
   type ResetBlankMode
 } from '../lib/pageOrdering'
+import { syncRenderQueueConcurrency } from '../lib/renderQueue'
 import {
   addEmptySheetToBoard,
   createInitialSheetBoardState,
@@ -72,6 +74,7 @@ export const defaultSheetSettings: SheetSettings = {
 }
 
 export function useBookletMontage() {
+  const { settings: performanceSettings } = usePerformanceSettings()
   const [pages, setPages] = useState<BookletPage[]>([])
   const [sources, setSources] = useState<BookletSource[]>([])
   const [settings, setSettings] = useState<SheetSettings>(defaultSheetSettings)
@@ -91,6 +94,10 @@ export function useBookletMontage() {
   useEffect(() => {
     pagesRef.current = pages
   }, [pages])
+
+  useEffect(() => {
+    syncRenderQueueConcurrency()
+  }, [performanceSettings.preset])
 
   useEffect(() => {
     return () => {

@@ -51,7 +51,9 @@ export function DraggableSheetCard({
       } ${selected ? 'border-primary ring-2 ring-primary/20' : 'border-border'}`}
       style={{
         width: SHEET_BOARD_CARD.width,
-        transform: `translate3d(${position.x}px, ${position.y}px, 0)`
+        transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+        contentVisibility: dragging ? 'visible' : 'auto',
+        containIntrinsicSize: `${SHEET_BOARD_CARD.width}px 326px`
       }}
       onPointerDown={(event) => {
         if (event.button !== 0 || hasNoDragTarget(event.target)) {
