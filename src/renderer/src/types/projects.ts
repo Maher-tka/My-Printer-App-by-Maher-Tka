@@ -56,3 +56,9 @@ export interface OpenedPrinterProject<TPayload = unknown> {
   filePath: string
   project: PrinterProjectFile<TPayload>
 }
+
+export interface ActiveProjectSession {
+  isDirty: boolean
+  projectName: string
+  save: () => Promise<boolean>
+}

@@ -1,12 +1,19 @@
+import { createPublicKey } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
 import type { LicensePlan } from '../shared/licensing-types.js'
+import { LICENSE_PUBLIC_KEY_PEM } from './license-public-key.js'
 import {
   createOfflineSerialKey,
   validateOfflineSerialKey
 } from './license-serial.js'
 
 type PaidLicensePlan = Exclude<LicensePlan, 'trial'>
+
+const PRIVATE_KEY_ENV = 'MPTK_LICENSE_PRIVATE_KEY_FILE'
+const DEFAULT_PRIVATE_KEY_PATH = '.license-private/license-signing-private.pem'
 
 interface GeneratorOptions {
   plan?: string
@@ -42,7 +49,8 @@ Options:
   -h, --help                    Show this help
 
 When required options are omitted in a terminal, the generator prompts for them.
-Keys are created and verified entirely offline.`
+Keys are created and verified entirely offline. Run "npm run license:keygen" once
+on the seller machine before generating the first serial.`
 
 async function main(): Promise<void> {
   try {
@@ -54,7 +62,8 @@ async function main(): Promise<void> {
     }
 
     const answers = await collectMissingOptions(options)
-    const result = generateSerialKey(answers)
+    const signingPrivateKey = await loadSigningPrivateKey()
+    const result = generateSerialKey(answers, signingPrivateKey)
 
     if (answers.plain) {
       console.log(result.serialKey)
@@ -169,13 +178,17 @@ async function collectMissingOptions(
   }
 }
 
-function generateSerialKey(options: GeneratorOptions): SerialKeyResult {
+function generateSerialKey(
+  options: GeneratorOptions,
+  signingPrivateKey: string
+): SerialKeyResult {
   const plan = normalizePlan(options.plan)
   const expiresCode = normalizeExpiry(options.expiry)
   const serialKey = createOfflineSerialKey({
     plan,
     expiresCode,
-    ...(options.seat ? { seatCode: options.seat } : {})
+    ...(options.seat ? { seatCode: options.seat } : {}),
+    signingPrivateKey
   })
   const validation = validateOfflineSerialKey(serialKey)
 
@@ -193,6 +206,40 @@ function generateSerialKey(options: GeneratorOptions): SerialKeyResult {
     expiresAt: validation.license.expiresAt,
     seatCode: validation.license.seatCode
   }
+}
+
+async function loadSigningPrivateKey(): Promise<string> {
+  const privateKeyPath = resolve(
+    process.env[PRIVATE_KEY_ENV] ?? DEFAULT_PRIVATE_KEY_PATH
+  )
+  let signingPrivateKey: string
+
+  try {
+    signingPrivateKey = await readFile(privateKeyPath, 'utf-8')
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      throw new Error(
+        `Private signing key not found at ${privateKeyPath}. Run "npm run license:keygen" once on the seller machine.`
+      )
+    }
+
+    throw error
+  }
+
+  const derivedPublicKey = createPublicKey(signingPrivateKey)
+    .export({ type: 'spki', format: 'der' })
+    .toString('hex')
+  const appPublicKey = createPublicKey(LICENSE_PUBLIC_KEY_PEM)
+    .export({ type: 'spki', format: 'der' })
+    .toString('hex')
+
+  if (derivedPublicKey !== appPublicKey) {
+    throw new Error(
+      'The private signing key does not match the public key embedded in this app.'
+    )
+  }
+
+  return signingPrivateKey
 }
 
 function normalizePlan(value: string | undefined): PaidLicensePlan {
@@ -248,6 +295,15 @@ function readOptionValue(
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Unknown error.'
+}
+
+function isFileNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as NodeJS.ErrnoException).code === 'ENOENT'
+  )
 }
 
 void main()

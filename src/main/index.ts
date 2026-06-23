@@ -2,7 +2,10 @@ import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } fr
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { registerLicenseHandlers } from './licensing.js'
-import { registerProjectHandlers } from './project-persistence.js'
+import {
+  attachProjectWindowProtection,
+  registerProjectHandlers
+} from './project-persistence.js'
 
 const isDevelopment = Boolean(process.env.ELECTRON_RENDERER_URL)
 
@@ -23,6 +26,8 @@ function createMainWindow(): void {
       nodeIntegration: false
     }
   })
+
+  attachProjectWindowProtection(mainWindow)
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()

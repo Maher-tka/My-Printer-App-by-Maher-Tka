@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "electron-vite dev --config electron.vite.config.ts",
     "build": "npm run typecheck && electron-vite build --config electron.vite.config.ts",
+    "license:keygen": "tsx scripts/license-keygen.ts",
     "license:generate": "tsx src/main/license-generator-cli.ts",
     "test": "npm run test:license && npm run test:booklet && npm run test:projects && npm run test:cutter",
     "test:license": "tsx src/main/license-serial.test.ts",

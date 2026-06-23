@@ -1,3 +1,8 @@
+/// <reference types="node" />
+
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { DEFAULT_CUTTER_SHEET } from '../tools/cutter-montage/lib/cutterLayout'
 import {
   createPiecePresetFromSource,
@@ -5,6 +10,10 @@ import {
 } from '../tools/cutter-montage/lib/piecePresets'
 import type { BookletPage, BookletSource } from '../tools/booklet-montage/types'
 import type { PieceSourceFile } from '../tools/cutter-montage/types'
+import {
+  getBookletProjectStateKey,
+  getCutterProjectStateKey
+} from './projectDirtyState'
 import {
   createBookletProjectFile,
   createCutterProjectFile,
@@ -66,6 +75,31 @@ expectEqual([...restoredBooklet.sources[0].bytes], [1, 2, 3, 254], 'booklet sour
 expectEqual(restoredBooklet.pages[0].thumbnailUrl, undefined, 'temporary thumbnail omitted')
 expectEqual(restoredBooklet.settings.readingDirection, 'rtl', 'booklet reading direction')
 expectEqual(bookletFile.metadata.tool, 'booklet-montage', 'booklet metadata tool')
+const bookletStateKey = getBookletProjectStateKey({
+  sources: [bookletSource],
+  pages: [bookletPage],
+  settings: bookletFile.payload.settings,
+  sheetBoardState: bookletFile.payload.sheetBoardState
+})
+expectEqual(
+  getBookletProjectStateKey({
+    ...restoredBooklet,
+    pages: restoredBooklet.pages.map((page) => ({
+      ...page,
+      thumbnailUrl: 'blob:new-session-thumbnail'
+    }))
+  }),
+  bookletStateKey,
+  'booklet dirty state survives save/open and ignores temporary previews'
+)
+expectNotEqual(
+  getBookletProjectStateKey({
+    ...restoredBooklet,
+    settings: { ...restoredBooklet.settings, cropMarks: false }
+  }),
+  bookletStateKey,
+  'booklet setting edit marks project dirty'
+)
 
 const cutterSource: PieceSourceFile = {
   id: 'cutter-source-1',
@@ -109,6 +143,38 @@ expectEqual(
 )
 expectEqual(restoredCutter.selectedPlacedIds, [placedPiece.id], 'cutter selection')
 expectEqual(cutterFile.metadata.tool, 'cutter-montage', 'cutter metadata tool')
+const cutterStateKey = getCutterProjectStateKey({
+  sources: [cutterSource],
+  pieces: [cutterPiece],
+  placedPieces: [placedPiece],
+  sheet: cutterFile.payload.sheet,
+  layers: cutterFile.payload.layers
+})
+expectEqual(
+  getCutterProjectStateKey({
+    sources: restoredCutter.sources,
+    pieces: restoredCutter.pieces,
+    placedPieces: restoredCutter.placedPieces,
+    sheet: restoredCutter.sheet,
+    layers: restoredCutter.layers
+  }),
+  cutterStateKey,
+  'cutter dirty state survives save/open and ignores temporary previews'
+)
+expectNotEqual(
+  getCutterProjectStateKey({
+    sources: restoredCutter.sources,
+    pieces: restoredCutter.pieces,
+    placedPieces: restoredCutter.placedPieces.map((piece) => ({
+      ...piece,
+      xCm: piece.xCm + 1
+    })),
+    sheet: restoredCutter.sheet,
+    layers: restoredCutter.layers
+  }),
+  cutterStateKey,
+  'cutter layout edit marks project dirty'
+)
 URL.revokeObjectURL(restoredCutter.sources[0].previewUrl)
 
 expectEqual(
@@ -117,12 +183,59 @@ expectEqual(
   'safe suggested file name'
 )
 
-console.log('Project file tests passed: booklet and cutter save/open round trips.')
+const temporaryProjectFolder = await mkdtemp(join(tmpdir(), 'my-printer-app-projects-'))
+
+try {
+  const bookletPath = join(temporaryProjectFolder, 'booklet-round-trip.mpjob')
+  const cutterPath = join(temporaryProjectFolder, 'cutter-round-trip.mpjob')
+
+  await Promise.all([
+    writeFile(bookletPath, JSON.stringify(bookletFile), 'utf8'),
+    writeFile(cutterPath, JSON.stringify(cutterFile), 'utf8')
+  ])
+
+  const [bookletFromDisk, cutterFromDisk] = await Promise.all([
+    readFile(bookletPath, 'utf8').then((contents) => JSON.parse(contents) as unknown),
+    readFile(cutterPath, 'utf8').then((contents) => JSON.parse(contents) as unknown)
+  ])
+
+  expectEqual(isPrinterProjectFile(bookletFromDisk), true, 'booklet .mpjob disk validation')
+  expectEqual(isPrinterProjectFile(cutterFromDisk), true, 'cutter .mpjob disk validation')
+
+  if (!isPrinterProjectFile(bookletFromDisk) || !isPrinterProjectFile(cutterFromDisk)) {
+    throw new Error('Temporary .mpjob files did not pass project validation.')
+  }
+
+  expectEqual(
+    [...deserializeBookletProjectPayload(bookletFromDisk.payload as typeof bookletFile.payload).sources[0].bytes],
+    [1, 2, 3, 254],
+    'booklet .mpjob restores source bytes from disk'
+  )
+  const cutterFromDiskState = deserializeCutterProjectPayload(
+    cutterFromDisk.payload as typeof cutterFile.payload
+  )
+  expectEqual(
+    [...cutterFromDiskState.sources[0].bytes],
+    [137, 80, 78, 71],
+    'cutter .mpjob restores source bytes from disk'
+  )
+  URL.revokeObjectURL(cutterFromDiskState.sources[0].previewUrl)
+} finally {
+  await rm(temporaryProjectFolder, { recursive: true, force: true })
+}
+
+console.log('Project file tests passed: booklet and cutter .mpjob memory and disk round trips.')
 
 function expectEqual(actual: unknown, expected: unknown, label: string): void {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error(
       `${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`
     )
+  }
+}
+
+function expectNotEqual(actual: unknown, expected: unknown, label: string): void {
+  if (JSON.stringify(actual) === JSON.stringify(expected)) {
+    throw new Error(`${label}: expected values to differ`)
   }
 }

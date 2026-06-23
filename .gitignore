@@ -5,3 +5,4 @@ dist/
 .codex-*
 .env
 .env.*
+.license-private/

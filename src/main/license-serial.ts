@@ -1,10 +1,17 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import {
+  createHash,
+  randomBytes,
+  sign,
+  verify,
+  type KeyObject
+} from 'node:crypto'
 import type { LicenseFeature, LicensePlan } from '../shared/licensing-types.js'
+import { LICENSE_PUBLIC_KEY_PEM } from './license-public-key.js'
 
 const SERIAL_PREFIX = 'MPTK'
-const SIGNATURE_LENGTH = 16
-const SERIAL_SECRET =
-  'my-printer-app-by-maher-tka-offline-license-v1-change-before-release'
+const SIGNATURE_LENGTH = 128
+
+type LicenseKey = KeyObject | string | Buffer
 
 type PaidLicensePlan = Exclude<LicensePlan, 'trial'>
 
@@ -12,6 +19,7 @@ interface CreateOfflineSerialKeyOptions {
   plan: PaidLicensePlan
   expiresCode?: string
   seatCode?: string
+  signingPrivateKey: LicenseKey
 }
 
 interface ValidSerialLicense {
@@ -45,7 +53,8 @@ const featuresByPlan: Record<PaidLicensePlan, LicenseFeature[]> = {
 
 export function validateOfflineSerialKey(
   serialKey: string,
-  now = new Date()
+  now = new Date(),
+  verificationPublicKey: LicenseKey = LICENSE_PUBLIC_KEY_PEM
 ): SerialValidationResult {
   const parts = serialKey
     .trim()
@@ -83,13 +92,22 @@ export function validateOfflineSerialKey(
     return { ok: false, error: 'Serial key seat section is not valid.' }
   }
 
-  if (!/^[A-F0-9]{16}$/.test(signature)) {
+  if (
+    signature.length !== SIGNATURE_LENGTH ||
+    !/^[A-F0-9]+$/.test(signature)
+  ) {
     return { ok: false, error: 'Serial key signature is not valid.' }
   }
 
-  const expectedSignature = createSerialSignature(planCode, expiresCode, seatCode)
-
-  if (!isSameSignature(signature, expectedSignature)) {
+  if (
+    !verifySerialSignature(
+      planCode,
+      expiresCode,
+      seatCode,
+      signature,
+      verificationPublicKey
+    )
+  ) {
     return { ok: false, error: 'Serial key could not be verified offline.' }
   }
 
@@ -118,7 +136,8 @@ export function validateOfflineSerialKey(
 export function createOfflineSerialKey({
   plan,
   expiresCode = 'LIFE',
-  seatCode = createSeatCode()
+  seatCode = createSeatCode(),
+  signingPrivateKey
 }: CreateOfflineSerialKeyOptions): string {
   const planCode = plan.toUpperCase()
   const normalizedExpiresCode = normalizeExpiresCode(expiresCode)
@@ -126,7 +145,8 @@ export function createOfflineSerialKey({
   const signature = createSerialSignature(
     planCode,
     normalizedExpiresCode,
-    normalizedSeatCode
+    normalizedSeatCode,
+    signingPrivateKey
   )
 
   return `${SERIAL_PREFIX}-${planCode}-${normalizedExpiresCode}-${normalizedSeatCode}-${signature}`
@@ -135,25 +155,49 @@ export function createOfflineSerialKey({
 function createSerialSignature(
   planCode: string,
   expiresCode: string,
-  seatCode: string
+  seatCode: string,
+  signingPrivateKey: LicenseKey
 ): string {
-  return createHmac('sha256', SERIAL_SECRET)
-    .update(`${SERIAL_PREFIX}|${planCode}|${expiresCode}|${seatCode}`)
-    .digest('hex')
+  return sign(
+    null,
+    createSignaturePayload(planCode, expiresCode, seatCode),
+    signingPrivateKey
+  )
+    .toString('hex')
     .toUpperCase()
-    .slice(0, SIGNATURE_LENGTH)
 }
 
 function hashSerialKey(serialKey: string): string {
   return createHash('sha256').update(serialKey).digest('hex')
 }
 
-function isSameSignature(signature: string, expectedSignature: string): boolean {
-  const provided = Buffer.from(signature)
-  const expected = Buffer.from(expectedSignature)
+function verifySerialSignature(
+  planCode: string,
+  expiresCode: string,
+  seatCode: string,
+  signature: string,
+  verificationPublicKey: LicenseKey
+): boolean {
+  try {
+    return verify(
+      null,
+      createSignaturePayload(planCode, expiresCode, seatCode),
+      verificationPublicKey,
+      Buffer.from(signature, 'hex')
+    )
+  } catch {
+    return false
+  }
+}
 
-  return (
-    provided.length === expected.length && timingSafeEqual(provided, expected)
+function createSignaturePayload(
+  planCode: string,
+  expiresCode: string,
+  seatCode: string
+): Buffer {
+  return Buffer.from(
+    `${SERIAL_PREFIX}|${planCode}|${expiresCode}|${seatCode}`,
+    'utf-8'
   )
 }
 

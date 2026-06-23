@@ -1,5 +1,5 @@
 import { ArrowLeft } from 'lucide-react'
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/card'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
 import { ProjectFileActions } from '@/projects/ProjectFileActions'
+import { getCutterProjectStateKey } from '@/projects/projectDirtyState'
 import {
   createCutterProjectFile,
   getSuggestedProjectFileName,
@@ -18,10 +19,12 @@ import {
 } from '@/projects/projectFiles'
 import type { AppRoute } from '@/types/navigation'
 import type {
+  ActiveProjectSession,
   OpenedPrinterProject,
   PrinterAppProjectResult,
   ProjectMetadata
 } from '@/types/projects'
+import type { UnsavedChangesAction } from '../../../../shared/project-types'
 import { CutterToolbar } from './components/CutterToolbar'
 import { ExportCutterPanel } from './components/ExportCutterPanel'
 import { LayerVisibilityControls } from './components/LayerVisibilityControls'
@@ -30,17 +33,22 @@ import { PieceEditor } from './components/PieceEditor'
 import { PieceLibrary } from './components/PieceLibrary'
 import { useCutterProject } from './hooks/useCutterProject'
 import { CUT_CONTOUR_NAME, normalizeSpotName } from './lib/colorSpot'
+import { DEFAULT_CUTTER_SHEET } from './lib/cutterLayout'
 
 interface CutterMontagePageProps {
   onNavigate: (route: AppRoute) => void
   openedProject?: OpenedPrinterProject<CutterProjectPayload> | null
   onOpenProject: (filePath?: string | null) => Promise<PrinterAppProjectResult>
+  onProjectSessionChange: (session: ActiveProjectSession | null) => void
+  onConfirmUnsavedChanges: (action: UnsavedChangesAction) => Promise<boolean>
 }
 
 export function CutterMontagePage({
   onNavigate,
   openedProject,
-  onOpenProject
+  onOpenProject,
+  onProjectSessionChange,
+  onConfirmUnsavedChanges
 }: CutterMontagePageProps): JSX.Element {
   const { settings: performanceSettings } = usePerformanceSettings()
   const cutter = useCutterProject(openedProject?.project)
@@ -54,13 +62,32 @@ export function CutterMontagePage({
   const [projectMessage, setProjectMessage] = useState<string | null>(
     openedProject ? `Opened ${openedProject.project.metadata.jobName}` : null
   )
+  const projectStateKey = useMemo(
+    () =>
+      getCutterProjectStateKey({
+        sources: cutter.sources,
+        pieces: cutter.pieces,
+        placedPieces: cutter.placedPieces,
+        sheet: cutter.sheet,
+        layers: cutter.layers
+      }),
+    [cutter.layers, cutter.pieces, cutter.placedPieces, cutter.sheet, cutter.sources]
+  )
+  const [savedProjectStateKey, setSavedProjectStateKey] = useState(projectStateKey)
+  const isDirty = projectStateKey !== savedProjectStateKey
+  const projectName =
+    projectMetadata?.jobName ??
+    cutter.pieces[0]?.displayName ??
+    cutter.sources[0]?.displayName ??
+    'Untitled Cutter Project'
 
-  const saveProject = async (saveAs: boolean): Promise<void> => {
+  const saveProject = useCallback(async (saveAs: boolean): Promise<boolean> => {
     if (!window.printerApp?.saveProject) {
       setProjectMessage('Project saving is only available in the desktop app.')
-      return
+      return false
     }
 
+    const stateKeyAtSave = projectStateKey
     setProjectIsBusy(true)
     setProjectMessage('Saving project...')
 
@@ -91,7 +118,7 @@ export function CutterMontagePage({
 
       if (result.canceled) {
         setProjectMessage('Save canceled.')
-        return
+        return false
       }
 
       if (!result.ok || !result.filePath) {
@@ -100,13 +127,30 @@ export function CutterMontagePage({
 
       setProjectFilePath(result.filePath)
       setProjectMetadata(project.metadata)
+      setSavedProjectStateKey(stateKeyAtSave)
       setProjectMessage(`Saved ${project.metadata.jobName}`)
+      return true
     } catch (error) {
       setProjectMessage(getProjectErrorMessage(error))
+      return false
     } finally {
       setProjectIsBusy(false)
     }
-  }
+  }, [
+    cutter.activePieceId,
+    cutter.keyObject,
+    cutter.layers,
+    cutter.mode,
+    cutter.pieces,
+    cutter.placedPieces,
+    cutter.selectedEditorObjects,
+    cutter.selectedPlacedIds,
+    cutter.sheet,
+    cutter.sources,
+    projectFilePath,
+    projectMetadata,
+    projectStateKey
+  ])
 
   const openProject = async (): Promise<void> => {
     setProjectIsBusy(true)
@@ -122,12 +166,30 @@ export function CutterMontagePage({
     setProjectIsBusy(false)
   }
 
-  const startNewProject = (): void => {
+  const startNewProject = async (): Promise<void> => {
+    if (!(await onConfirmUnsavedChanges('new-project'))) {
+      return
+    }
+
+    setSavedProjectStateKey(getEmptyCutterProjectStateKey())
     cutter.clearProject()
     setProjectFilePath(null)
     setProjectMetadata(null)
     setProjectMessage('Started a new cutter project.')
   }
+
+  useEffect(() => {
+    onProjectSessionChange({
+      isDirty,
+      projectName,
+      save: () => saveProject(false)
+    })
+  }, [isDirty, onProjectSessionChange, projectName, saveProject])
+
+  useEffect(
+    () => () => onProjectSessionChange(null),
+    [onProjectSessionChange]
+  )
 
   return (
     <div className="mx-auto flex max-w-[1680px] flex-col gap-5">
@@ -156,13 +218,19 @@ export function CutterMontagePage({
             <ProjectFileActions
               filePath={projectFilePath}
               isBusy={projectIsBusy}
+              isDirty={isDirty}
               message={projectMessage}
               onOpen={() => void openProject()}
               onSave={() => void saveProject(false)}
               onSaveAs={() => void saveProject(true)}
             />
             <div className="flex items-center gap-2">
-              <Button type="button" size="sm" variant="ghost" onClick={startNewProject}>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => void startNewProject()}
+              >
                 New Project
               </Button>
               <Badge variant="secondary">{performanceSettings.label}</Badge>
@@ -259,4 +327,14 @@ export function CutterMontagePage({
 
 function getProjectErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong with the project file.'
+}
+
+function getEmptyCutterProjectStateKey(): string {
+  return getCutterProjectStateKey({
+    sources: [],
+    pieces: [],
+    placedPieces: [],
+    sheet: DEFAULT_CUTTER_SHEET,
+    layers: { artwork: true, cutlines: true }
+  })
 }

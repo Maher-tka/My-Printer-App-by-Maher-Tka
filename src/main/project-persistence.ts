@@ -7,11 +7,27 @@ import {
 } from 'electron'
 import { access, readFile, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
+import type {
+  UnsavedChangesAction,
+  UnsavedChangesChoice,
+  UnsavedChangesRequest,
+  UnsavedChangesResult
+} from '../shared/project-types.js'
 
 const PROJECT_SCHEMA = 'com.maher-tka.my-printer-app.project'
 const PROJECT_VERSION = 1
 const PROJECT_EXTENSION = 'mpjob'
 const MAX_RECENT_PROJECTS = 20
+const APP_TITLE = 'My Printer App by Maher Tka'
+
+interface ProjectWindowState {
+  allowClose: boolean
+  dirty: boolean
+  projectName: string
+  promptOpen: boolean
+}
+
+const projectWindowStates = new WeakMap<BrowserWindow, ProjectWindowState>()
 
 type ProjectToolId = 'booklet-montage' | 'cutter-montage'
 
@@ -58,6 +74,59 @@ interface RecentJob {
 }
 
 export function registerProjectHandlers(): void {
+  ipcMain.handle(
+    'projects:confirm-unsaved',
+    async (event, request: UnsavedChangesRequest): Promise<UnsavedChangesResult> => {
+      const owner = BrowserWindow.fromWebContents(event.sender)
+      const choice = await showUnsavedChangesDialog(
+        owner,
+        request?.projectName || 'Untitled Project',
+        request?.action || 'navigate'
+      )
+
+      return { choice }
+    }
+  )
+
+  ipcMain.handle(
+    'projects:set-dirty',
+    (event, request: { dirty?: boolean; projectName?: string }): void => {
+      const owner = BrowserWindow.fromWebContents(event.sender)
+
+      if (!owner) {
+        return
+      }
+
+      const state = getProjectWindowState(owner)
+      state.dirty = Boolean(request?.dirty)
+      state.projectName = request?.projectName?.trim() || 'Untitled Project'
+      updateWindowEditedState(owner, state)
+    }
+  )
+
+  ipcMain.handle(
+    'projects:close-after-save',
+    (event, saved: boolean): void => {
+      const owner = BrowserWindow.fromWebContents(event.sender)
+
+      if (!owner) {
+        return
+      }
+
+      const state = getProjectWindowState(owner)
+      state.promptOpen = false
+
+      if (!saved) {
+        return
+      }
+
+      state.dirty = false
+      state.allowClose = true
+      updateWindowEditedState(owner, state)
+      owner.close()
+    }
+  )
+
   ipcMain.handle('projects:save', async (event, request: SaveProjectRequest) => {
     try {
       if (!isProjectFile(request?.project)) {
@@ -157,6 +226,117 @@ export function registerProjectHandlers(): void {
       return { ok: false, error: getErrorMessage(error) }
     }
   })
+}
+
+export function attachProjectWindowProtection(window: BrowserWindow): void {
+  projectWindowStates.set(window, {
+    allowClose: false,
+    dirty: false,
+    projectName: 'Untitled Project',
+    promptOpen: false
+  })
+
+  window.on('close', (event) => {
+    const state = getProjectWindowState(window)
+
+    if (state.allowClose || !state.dirty) {
+      return
+    }
+
+    event.preventDefault()
+
+    if (state.promptOpen) {
+      return
+    }
+
+    state.promptOpen = true
+    void showUnsavedChangesDialog(window, state.projectName, 'close-window').then(
+      (choice) => {
+        if (window.isDestroyed()) {
+          return
+        }
+
+        if (choice === 'discard') {
+          state.dirty = false
+          state.allowClose = true
+          state.promptOpen = false
+          updateWindowEditedState(window, state)
+          window.close()
+          return
+        }
+
+        if (choice === 'save') {
+          window.webContents.send('projects:request-save-before-close')
+          return
+        }
+
+        state.promptOpen = false
+      }
+    )
+  })
+}
+
+function getProjectWindowState(window: BrowserWindow): ProjectWindowState {
+  const existing = projectWindowStates.get(window)
+
+  if (existing) {
+    return existing
+  }
+
+  const state: ProjectWindowState = {
+    allowClose: false,
+    dirty: false,
+    projectName: 'Untitled Project',
+    promptOpen: false
+  }
+  projectWindowStates.set(window, state)
+
+  return state
+}
+
+async function showUnsavedChangesDialog(
+  owner: BrowserWindow | null,
+  projectName: string,
+  action: UnsavedChangesAction
+): Promise<UnsavedChangesChoice> {
+  const options = {
+    type: 'warning' as const,
+    buttons: ['Save', 'Discard Changes', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+    noLink: true,
+    title: 'Unsaved changes',
+    message: `Save changes to “${projectName}”?`,
+    detail: getUnsavedChangesDetail(action)
+  }
+  const result = owner
+    ? await dialog.showMessageBox(owner, options)
+    : await dialog.showMessageBox(options)
+
+  return (['save', 'discard', 'cancel'] as const)[result.response] ?? 'cancel'
+}
+
+function getUnsavedChangesDetail(action: UnsavedChangesAction): string {
+  switch (action) {
+    case 'open-project':
+      return 'Your changes will be lost if you open another project without saving.'
+    case 'new-project':
+      return 'Your changes will be lost if you start a new project without saving.'
+    case 'import-pdf':
+      return 'Importing this PDF starts a new booklet project. Your current changes will be lost if you continue without saving.'
+    case 'close-window':
+      return 'Your changes will be lost if you close the app without saving.'
+    default:
+      return 'Your changes will be lost if you leave this project without saving.'
+  }
+}
+
+function updateWindowEditedState(
+  window: BrowserWindow,
+  state: ProjectWindowState
+): void {
+  window.setDocumentEdited(state.dirty)
+  window.setTitle(`${state.dirty ? '* ' : ''}${APP_TITLE}`)
 }
 
 const projectFileFilter = {

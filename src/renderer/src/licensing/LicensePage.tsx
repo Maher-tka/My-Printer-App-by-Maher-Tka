@@ -219,7 +219,7 @@ export function LicensePage({
                     setSerialKey(normalizeSerialInput(event.target.value))
                   }
                   className="h-11 rounded-md border border-input bg-card px-3 font-mono text-sm uppercase tracking-normal text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/20"
-                  placeholder="MPTK-PRO-LIFE-ABC123-0000000000000000"
+                  placeholder="MPTK-PRO-LIFE-ABC123-SIGNATURE"
                   autoComplete="off"
                   spellCheck={false}
                 />

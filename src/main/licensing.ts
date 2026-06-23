@@ -1,5 +1,5 @@
-import { app, ipcMain } from 'electron'
-import { createHmac, randomUUID } from 'node:crypto'
+import { app, ipcMain, safeStorage } from 'electron'
+import { createHmac, randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type {
@@ -13,13 +13,13 @@ import type {
 import { validateOfflineSerialKey } from './license-serial.js'
 
 const LICENSE_FILE_NAME = 'license-state.json'
-const LICENSE_FILE_VERSION = 2
+const LICENSE_INTEGRITY_KEY_FILE_NAME = 'license-integrity.key'
+const LICENSE_FILE_VERSION = 3
+const LICENSE_INTEGRITY_KEY_FILE_VERSION = 1
 const TRIAL_LENGTH_MS = 14 * 24 * 60 * 60 * 1000
 const CLOCK_ROLLBACK_TOLERANCE_MS = 5 * 60 * 1000
-const LICENSE_RECORD_SECRET =
-  'my-printer-app-by-maher-tka-local-license-record-v2'
-const ACTIVATION_PROOF_SECRET =
-  'my-printer-app-by-maher-tka-local-activation-proof-v1'
+
+let licenseIntegrityKeyPromise: Promise<Buffer> | undefined
 
 interface PersistedLicenseFile {
   version: typeof LICENSE_FILE_VERSION
@@ -40,6 +40,17 @@ interface EffectiveClock {
   warning?: string
 }
 
+interface LicenseRecordContext {
+  record: PersistedLicenseFile
+  integrityKey: Buffer
+}
+
+interface PersistedIntegrityKey {
+  version: typeof LICENSE_INTEGRITY_KEY_FILE_VERSION
+  protected: boolean
+  value: string
+}
+
 export function registerLicenseHandlers(): void {
   ipcMain.handle('license:get-state', async () => getLicenseSnapshot())
   ipcMain.handle('license:activate-serial', async (_event, serialKey: string) =>
@@ -48,25 +59,25 @@ export function registerLicenseHandlers(): void {
 }
 
 async function getLicenseSnapshot(): Promise<LicenseSnapshot> {
-  const record = await loadOrCreateLicenseRecord()
+  const { record, integrityKey } = await loadOrCreateLicenseRecord()
   const clock = getEffectiveClock(record)
 
-  await updateLastSeen(record, clock.now)
+  await updateLastSeen(record, clock.now, integrityKey)
 
-  return buildLicenseSnapshot(record, clock)
+  return buildLicenseSnapshot(record, clock, integrityKey)
 }
 
 async function activateSerialKey(
   serialKey: string
 ): Promise<LicenseActivationResult> {
-  const record = await loadOrCreateLicenseRecord()
+  const { record, integrityKey } = await loadOrCreateLicenseRecord()
   const clock = getEffectiveClock(record)
   const validation = validateOfflineSerialKey(serialKey, clock.now)
 
   if (!validation.ok) {
     return {
       ok: false,
-      state: buildLicenseSnapshot(record, clock),
+      state: buildLicenseSnapshot(record, clock, integrityKey),
       error: validation.error
     }
   }
@@ -77,40 +88,47 @@ async function activateSerialKey(
     proof: ''
   }
 
-  activation.proof = createActivationProof(record.installationId, activation)
+  activation.proof = createActivationProof(
+    record.installationId,
+    activation,
+    integrityKey
+  )
   record.activation = activation
-  await updateLastSeen(record, clock.now, true)
+  await updateLastSeen(record, clock.now, integrityKey, true)
 
   return {
     ok: true,
-    state: buildLicenseSnapshot(record, clock),
+    state: buildLicenseSnapshot(record, clock, integrityKey),
     message: 'Serial key activated locally.'
   }
 }
 
-async function loadOrCreateLicenseRecord(): Promise<PersistedLicenseFile> {
-  const existingRecord = await readLicenseRecord()
+async function loadOrCreateLicenseRecord(): Promise<LicenseRecordContext> {
+  const integrityKey = await getLicenseIntegrityKey()
+  const existingRecord = await readLicenseRecord(integrityKey)
 
   if (existingRecord) {
-    return existingRecord
+    return { record: existingRecord, integrityKey }
   }
 
   const now = new Date()
   const record = createNewLicenseRecord(now)
 
-  await writeLicenseRecord(record)
+  await writeLicenseRecord(record, integrityKey)
 
-  return record
+  return { record, integrityKey }
 }
 
-async function readLicenseRecord(): Promise<PersistedLicenseFile | undefined> {
+async function readLicenseRecord(
+  integrityKey: Buffer
+): Promise<PersistedLicenseFile | undefined> {
   const licenseFilePath = getLicenseFilePath()
 
   try {
     const rawRecord = await readFile(licenseFilePath, 'utf-8')
     const parsedRecord = JSON.parse(rawRecord) as Partial<PersistedLicenseFile>
 
-    if (!isPersistedLicenseFile(parsedRecord)) {
+    if (!isPersistedLicenseFile(parsedRecord, integrityKey)) {
       throw new Error('License file is not in the expected format.')
     }
 
@@ -123,17 +141,20 @@ async function readLicenseRecord(): Promise<PersistedLicenseFile | undefined> {
     await backupCorruptLicenseFile(licenseFilePath)
 
     const recoveredRecord = createNewLicenseRecord(new Date(), true)
-    await writeLicenseRecord(recoveredRecord)
+    await writeLicenseRecord(recoveredRecord, integrityKey)
 
     return recoveredRecord
   }
 }
 
-async function writeLicenseRecord(record: PersistedLicenseFile): Promise<void> {
+async function writeLicenseRecord(
+  record: PersistedLicenseFile,
+  integrityKey: Buffer
+): Promise<void> {
   const licenseFilePath = getLicenseFilePath()
   const temporaryPath = `${licenseFilePath}.tmp`
 
-  record.recordProof = createRecordProof(record)
+  record.recordProof = createRecordProof(record, integrityKey)
   await mkdir(dirname(licenseFilePath), { recursive: true })
   await writeFile(temporaryPath, `${JSON.stringify(record, null, 2)}\n`, 'utf-8')
   await rename(temporaryPath, licenseFilePath)
@@ -173,24 +194,26 @@ async function backupCorruptLicenseFile(licenseFilePath: string): Promise<void> 
 async function updateLastSeen(
   record: PersistedLicenseFile,
   now: Date,
+  integrityKey: Buffer,
   forceWrite = false
 ): Promise<void> {
   const lastSeenAt = new Date(record.lastSeenAt)
 
   if (forceWrite || now.getTime() > lastSeenAt.getTime()) {
     record.lastSeenAt = now.toISOString()
-    await writeLicenseRecord(record)
+    await writeLicenseRecord(record, integrityKey)
   }
 }
 
 function buildLicenseSnapshot(
   record: PersistedLicenseFile,
-  clock: EffectiveClock
+  clock: EffectiveClock,
+  integrityKey: Buffer
 ): LicenseSnapshot {
   const trialEndsAt = new Date(record.trialEndsAt)
   const remainingMs = Math.max(0, trialEndsAt.getTime() - clock.now.getTime())
   const trialIsExpired = remainingMs <= 0
-  const activationIssue = getActivationIntegrityIssue(record)
+  const activationIssue = getActivationIntegrityIssue(record, integrityKey)
   const activation = activationIssue
     ? undefined
     : getCurrentActivation(record.activation, clock.now)
@@ -243,7 +266,8 @@ function getCurrentActivation(
 }
 
 function getActivationIntegrityIssue(
-  record: PersistedLicenseFile
+  record: PersistedLicenseFile,
+  integrityKey: Buffer
 ): string | undefined {
   if (!record.activation) {
     return undefined
@@ -251,7 +275,8 @@ function getActivationIntegrityIssue(
 
   const expectedProof = createActivationProof(
     record.installationId,
-    record.activation
+    record.activation,
+    integrityKey
   )
 
   return record.activation.proof === expectedProof
@@ -261,11 +286,13 @@ function getActivationIntegrityIssue(
 
 function createActivationProof(
   installationId: string,
-  activation: PersistedActivation
+  activation: PersistedActivation,
+  integrityKey: Buffer
 ): string {
-  return createHmac('sha256', ACTIVATION_PROOF_SECRET)
+  return createHmac('sha256', integrityKey)
     .update(
       [
+        'activation-proof-v1',
         installationId,
         activation.plan,
         activation.expiresAt ?? 'LIFE',
@@ -277,10 +304,14 @@ function createActivationProof(
     .digest('hex')
 }
 
-function createRecordProof(record: PersistedLicenseFile): string {
-  return createHmac('sha256', LICENSE_RECORD_SECRET)
+function createRecordProof(
+  record: PersistedLicenseFile,
+  integrityKey: Buffer
+): string {
+  return createHmac('sha256', integrityKey)
     .update(
       [
+        'license-record-v3',
         record.installationId,
         record.trialStartedAt,
         record.trialEndsAt,
@@ -335,8 +366,13 @@ function getLicenseFilePath(): string {
   return join(app.getPath('userData'), LICENSE_FILE_NAME)
 }
 
+function getLicenseIntegrityKeyPath(): string {
+  return join(app.getPath('userData'), LICENSE_INTEGRITY_KEY_FILE_NAME)
+}
+
 function isPersistedLicenseFile(
-  record: Partial<PersistedLicenseFile>
+  record: Partial<PersistedLicenseFile>,
+  integrityKey: Buffer
 ): record is PersistedLicenseFile {
   return (
     record.version === LICENSE_FILE_VERSION &&
@@ -350,7 +386,8 @@ function isPersistedLicenseFile(
     isValidIsoDateString(record.lastSeenAt) &&
     (record.activation === undefined ||
       isPersistedActivation(record.activation)) &&
-    record.recordProof === createRecordProof(record as PersistedLicenseFile)
+    record.recordProof ===
+      createRecordProof(record as PersistedLicenseFile, integrityKey)
   )
 }
 
@@ -400,4 +437,80 @@ function isFileNotFoundError(error: unknown): boolean {
     'code' in error &&
     (error as NodeJS.ErrnoException).code === 'ENOENT'
   )
+}
+
+function getLicenseIntegrityKey(): Promise<Buffer> {
+  licenseIntegrityKeyPromise ??= loadOrCreateLicenseIntegrityKey()
+  return licenseIntegrityKeyPromise
+}
+
+async function loadOrCreateLicenseIntegrityKey(): Promise<Buffer> {
+  const keyFilePath = getLicenseIntegrityKeyPath()
+
+  try {
+    const rawKeyFile = await readFile(keyFilePath, 'utf-8')
+    const parsedKeyFile = JSON.parse(rawKeyFile) as Partial<PersistedIntegrityKey>
+    const integrityKey = decodeIntegrityKey(parsedKeyFile)
+
+    if (integrityKey.length !== 32) {
+      throw new Error('Local license integrity key has an unexpected length.')
+    }
+
+    return integrityKey
+  } catch (error) {
+    if (!isFileNotFoundError(error)) {
+      await backupCorruptLicenseFile(keyFilePath)
+    }
+
+    const integrityKey = randomBytes(32)
+    await writeLicenseIntegrityKey(keyFilePath, integrityKey)
+    return integrityKey
+  }
+}
+
+function decodeIntegrityKey(
+  keyFile: Partial<PersistedIntegrityKey>
+): Buffer {
+  if (
+    keyFile.version !== LICENSE_INTEGRITY_KEY_FILE_VERSION ||
+    typeof keyFile.protected !== 'boolean' ||
+    typeof keyFile.value !== 'string'
+  ) {
+    throw new Error('Local license integrity key is not in the expected format.')
+  }
+
+  if (keyFile.protected) {
+    if (!safeStorage.isEncryptionAvailable()) {
+      throw new Error('Operating-system protected storage is unavailable.')
+    }
+
+    return Buffer.from(
+      safeStorage.decryptString(Buffer.from(keyFile.value, 'base64')),
+      'base64'
+    )
+  }
+
+  return Buffer.from(keyFile.value, 'base64')
+}
+
+async function writeLicenseIntegrityKey(
+  keyFilePath: string,
+  integrityKey: Buffer
+): Promise<void> {
+  const encryptionAvailable = safeStorage.isEncryptionAvailable()
+  const keyFile: PersistedIntegrityKey = {
+    version: LICENSE_INTEGRITY_KEY_FILE_VERSION,
+    protected: encryptionAvailable,
+    value: encryptionAvailable
+      ? safeStorage.encryptString(integrityKey.toString('base64')).toString('base64')
+      : integrityKey.toString('base64')
+  }
+  const temporaryPath = `${keyFilePath}.tmp`
+
+  await mkdir(dirname(keyFilePath), { recursive: true })
+  await writeFile(temporaryPath, `${JSON.stringify(keyFile, null, 2)}\n`, {
+    encoding: 'utf-8',
+    mode: 0o600
+  })
+  await rename(temporaryPath, keyFilePath)
 }

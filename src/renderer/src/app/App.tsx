@@ -17,9 +17,11 @@ import { CutterMontagePage } from '@/tools/cutter-montage/CutterMontagePage'
 import { HardcoverCoverPage } from '@/tools/hardcover-cover/HardcoverCoverPage'
 import type { AppRoute, PageMeta } from '@/types/navigation'
 import type {
+  ActiveProjectSession,
   OpenedPrinterProject,
   PrinterAppProjectResult
 } from '@/types/projects'
+import type { UnsavedChangesAction } from '../../../shared/project-types'
 
 const pageMeta: Record<AppRoute, PageMeta> = {
   dashboard: {
@@ -70,6 +72,8 @@ function getRouteFromHash(): AppRoute {
 
 export function App(): JSX.Element {
   const [activeRoute, setActiveRoute] = useState<AppRoute>(() => getRouteFromHash())
+  const activeRouteRef = useRef(activeRoute)
+  const activeProjectSessionRef = useRef<ActiveProjectSession | null>(null)
   const [openedProject, setOpenedProject] = useState<
     (OpenedPrinterProject & { instanceId: number }) | null
   >(null)
@@ -81,23 +85,55 @@ export function App(): JSX.Element {
   const license = useLicenseState()
 
   useEffect(() => {
-    const handleHashChange = (): void => {
-      setActiveRoute(getRouteFromHash())
-    }
-
-    window.addEventListener('hashchange', handleHashChange)
-
-    return () => {
-      window.removeEventListener('hashchange', handleHashChange)
-    }
-  }, [])
-
-  useEffect(() => {
     document.documentElement.dataset.performancePreset = performanceSettings.preset
   }, [performanceSettings.preset])
 
+  const setActiveProjectSession = useCallback(
+    (session: ActiveProjectSession | null): void => {
+      activeProjectSessionRef.current = session
+      void window.printerApp?.setProjectDirty(
+        session?.isDirty ?? false,
+        session?.projectName ?? 'Untitled Project'
+      )
+    },
+    []
+  )
+
+  const clearActiveProjectSession = useCallback((): void => {
+    activeProjectSessionRef.current = null
+    void window.printerApp?.setProjectDirty(false, 'Untitled Project')
+  }, [])
+
+  const confirmUnsavedChanges = useCallback(
+    async (action: UnsavedChangesAction): Promise<boolean> => {
+      const session = activeProjectSessionRef.current
+
+      if (!session?.isDirty) {
+        return true
+      }
+
+      if (!window.printerApp?.confirmUnsavedChanges) {
+        return window.confirm(
+          `Discard unsaved changes to “${session.projectName}”?`
+        )
+      }
+
+      const result = await window.printerApp.confirmUnsavedChanges({
+        action,
+        projectName: session.projectName
+      })
+
+      if (result.choice === 'save') {
+        return session.save()
+      }
+
+      return result.choice === 'discard'
+    },
+    []
+  )
+
   const navigate = useCallback(
-    (route: AppRoute): void => {
+    async (route: AppRoute): Promise<void> => {
       const nextRoute =
         routeRequiresPaidAccess(route, printerTools) &&
         !license.isLoading &&
@@ -105,6 +141,21 @@ export function App(): JSX.Element {
           ? 'license'
           : route
 
+      if (nextRoute === activeRouteRef.current) {
+        return
+      }
+
+      if (!(await confirmUnsavedChanges('navigate'))) {
+        const currentHash = `#/${activeRouteRef.current}`
+
+        if (window.location.hash !== currentHash) {
+          window.location.hash = currentHash
+        }
+        return
+      }
+
+      clearActiveProjectSession()
+      activeRouteRef.current = nextRoute
       setActiveRoute(nextRoute)
       setOpenedProject(null)
       setPendingBookletPdfImport(null)
@@ -114,11 +165,52 @@ export function App(): JSX.Element {
         window.location.hash = nextHash
       }
     },
-    [license.isLoading, license.state?.canUsePaidTools]
+    [
+      clearActiveProjectSession,
+      confirmUnsavedChanges,
+      license.isLoading,
+      license.state?.canUsePaidTools
+    ]
   )
+
+  useEffect(() => {
+    const handleHashChange = (): void => {
+      const nextRoute = getRouteFromHash()
+
+      if (nextRoute !== activeRouteRef.current) {
+        void navigate(nextRoute)
+      }
+    }
+
+    window.addEventListener('hashchange', handleHashChange)
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange)
+    }
+  }, [navigate])
+
+  useEffect(() => {
+    const desktopApi = window.printerApp
+
+    if (!desktopApi?.onSaveBeforeClose) {
+      return
+    }
+
+    return desktopApi.onSaveBeforeClose(() => {
+      void (async () => {
+        const session = activeProjectSessionRef.current
+        const saved = !session?.isDirty || (await session.save())
+        await desktopApi.finishCloseAfterSave(saved)
+      })()
+    })
+  }, [])
 
   const openProject = useCallback(
     async (filePath?: string | null): Promise<PrinterAppProjectResult> => {
+      if (!(await confirmUnsavedChanges('open-project'))) {
+        return { ok: false, canceled: true }
+      }
+
       if (!window.printerApp?.openProject) {
         return {
           ok: false,
@@ -147,18 +239,25 @@ export function App(): JSX.Element {
           ? 'license'
           : projectRoute
 
+      clearActiveProjectSession()
       setOpenedProject({
         filePath: result.filePath,
         project: result.project,
         instanceId: Date.now()
       })
       setPendingBookletPdfImport(null)
+      activeRouteRef.current = nextRoute
       setActiveRoute(nextRoute)
       window.location.hash = `#/${nextRoute}`
 
       return result
     },
-    [license.isLoading, license.state?.canUsePaidTools]
+    [
+      clearActiveProjectSession,
+      confirmUnsavedChanges,
+      license.isLoading,
+      license.state?.canUsePaidTools
+    ]
   )
 
   const importBookletPdf = useCallback((files: File[]): void => {
@@ -172,6 +271,7 @@ export function App(): JSX.Element {
       id: bookletPdfImportIdRef.current,
       files
     })
+    activeRouteRef.current = 'booklet-montage'
     setActiveRoute('booklet-montage')
     window.location.hash = '#/booklet-montage'
   }, [])
@@ -220,6 +320,8 @@ export function App(): JSX.Element {
           onOpenProject={openProject}
           initialPdfImport={pendingBookletPdfImport}
           onInitialPdfImportConsumed={consumeBookletPdfImport}
+          onProjectSessionChange={setActiveProjectSession}
+          onConfirmUnsavedChanges={confirmUnsavedChanges}
           openedProject={
             openedProject?.project.metadata.tool === 'booklet-montage'
               ? (openedProject as OpenedPrinterProject<BookletProjectPayload>)
@@ -235,6 +337,8 @@ export function App(): JSX.Element {
           key={openedProject?.instanceId ?? 'new-cutter'}
           onNavigate={navigate}
           onOpenProject={openProject}
+          onProjectSessionChange={setActiveProjectSession}
+          onConfirmUnsavedChanges={confirmUnsavedChanges}
           openedProject={
             openedProject?.project.metadata.tool === 'cutter-montage'
               ? (openedProject as OpenedPrinterProject<CutterProjectPayload>)

@@ -1,7 +1,8 @@
 import { ArrowLeft } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ProjectFileActions } from '@/projects/ProjectFileActions'
+import { getBookletProjectStateKey } from '@/projects/projectDirtyState'
 import {
   createBookletProjectFile,
   getSuggestedProjectFileName,
@@ -18,10 +19,12 @@ import {
 } from '@/components/ui/card'
 import type { AppRoute } from '@/types/navigation'
 import type {
+  ActiveProjectSession,
   OpenedPrinterProject,
   PrinterAppProjectResult,
   ProjectMetadata
 } from '@/types/projects'
+import type { UnsavedChangesAction } from '../../../../shared/project-types'
 import { BookFlipPreview } from './components/BookFlipPreview'
 import { BookletToolbar } from './components/BookletToolbar'
 import { PageManager } from './components/PageManager'
@@ -35,6 +38,8 @@ interface BookletMontagePageProps {
   onOpenProject: (filePath?: string | null) => Promise<PrinterAppProjectResult>
   initialPdfImport?: { id: number; files: File[] } | null
   onInitialPdfImportConsumed: (requestId: number) => void
+  onProjectSessionChange: (session: ActiveProjectSession | null) => void
+  onConfirmUnsavedChanges: (action: UnsavedChangesAction) => Promise<boolean>
 }
 
 export function BookletMontagePage({
@@ -42,7 +47,9 @@ export function BookletMontagePage({
   openedProject,
   onOpenProject,
   initialPdfImport,
-  onInitialPdfImportConsumed
+  onInitialPdfImportConsumed,
+  onProjectSessionChange,
+  onConfirmUnsavedChanges
 }: BookletMontagePageProps): JSX.Element {
   const montage = useBookletMontage(openedProject?.project)
   const handledInitialPdfImportIdRef = useRef<number | null>(null)
@@ -59,6 +66,21 @@ export function BookletMontagePage({
   const [projectMessage, setProjectMessage] = useState<string | null>(
     openedProject ? `Opened ${openedProject.project.metadata.jobName}` : null
   )
+  const projectStateKey = useMemo(
+    () =>
+      getBookletProjectStateKey({
+        sources: montage.sources,
+        pages: montage.pages,
+        settings: montage.settings,
+        sheetBoardState: montage.sheetBoardState
+      }),
+    [montage.pages, montage.settings, montage.sheetBoardState, montage.sources]
+  )
+  const [savedProjectStateKey, setSavedProjectStateKey] = useState(projectStateKey)
+  const isDirty = projectStateKey !== savedProjectStateKey
+  const projectName =
+    projectMetadata?.jobName ??
+    getUnsavedBookletName(montage.sources[0]?.name)
   const boardItemIds = useMemo(
     () => montage.sheetBoardState.items.map((item) => item.id),
     [montage.sheetBoardState.items]
@@ -91,12 +113,13 @@ export function BookletMontagePage({
     totalBytes: montage.sources.reduce((total, source) => total + source.bytes.byteLength, 0)
   })
 
-  const saveProject = async (saveAs: boolean): Promise<void> => {
+  const saveProject = useCallback(async (saveAs: boolean): Promise<boolean> => {
     if (!window.printerApp?.saveProject) {
       setProjectMessage('Project saving is only available in the desktop app.')
-      return
+      return false
     }
 
+    const stateKeyAtSave = projectStateKey
     setProjectIsBusy(true)
     setProjectMessage('Saving project...')
 
@@ -116,7 +139,7 @@ export function BookletMontagePage({
 
       if (result.canceled) {
         setProjectMessage('Save canceled.')
-        return
+        return false
       }
 
       if (!result.ok || !result.filePath) {
@@ -125,13 +148,24 @@ export function BookletMontagePage({
 
       setProjectFilePath(result.filePath)
       setProjectMetadata(project.metadata)
+      setSavedProjectStateKey(stateKeyAtSave)
       setProjectMessage(`Saved ${project.metadata.jobName}`)
+      return true
     } catch (error) {
       setProjectMessage(getProjectErrorMessage(error))
+      return false
     } finally {
       setProjectIsBusy(false)
     }
-  }
+  }, [
+    montage.pages,
+    montage.settings,
+    montage.sheetBoardState,
+    montage.sources,
+    projectFilePath,
+    projectMetadata,
+    projectStateKey
+  ])
 
   const openProject = async (): Promise<void> => {
     setProjectIsBusy(true)
@@ -148,12 +182,43 @@ export function BookletMontagePage({
     setProjectIsBusy(false)
   }
 
-  const startNewProject = (): void => {
+  const startNewProject = async (): Promise<void> => {
+    if (!(await onConfirmUnsavedChanges('new-project'))) {
+      return
+    }
+
+    setSavedProjectStateKey(getEmptyBookletProjectStateKey(montage.settings))
     montage.clearProject()
     setProjectFilePath(null)
     setProjectMetadata(null)
     setProjectMessage('Started a new booklet project.')
   }
+
+  const importPdfFiles = async (files: File[]): Promise<void> => {
+    if (files.length === 0 || !(await onConfirmUnsavedChanges('import-pdf'))) {
+      return
+    }
+
+    setSavedProjectStateKey(getEmptyBookletProjectStateKey(montage.settings))
+    montage.clearProject()
+    setProjectFilePath(null)
+    setProjectMetadata(null)
+    setProjectMessage('Importing PDF into a new booklet project...')
+    await montage.importPdfFiles(files)
+  }
+
+  useEffect(() => {
+    onProjectSessionChange({
+      isDirty,
+      projectName,
+      save: () => saveProject(false)
+    })
+  }, [isDirty, onProjectSessionChange, projectName, saveProject])
+
+  useEffect(
+    () => () => onProjectSessionChange(null),
+    [onProjectSessionChange]
+  )
 
   useEffect(() => {
     if (
@@ -216,6 +281,7 @@ export function BookletMontagePage({
           <ProjectFileActions
             filePath={projectFilePath}
             isBusy={projectIsBusy || importIsBusy || exportIsBusy}
+            isDirty={isDirty}
             message={projectMessage}
             onOpen={() => void openProject()}
             onSave={() => void saveProject(false)}
@@ -232,11 +298,11 @@ export function BookletMontagePage({
             isBusy={importIsBusy || exportIsBusy}
             importProgress={montage.importProgress}
             exportProgress={montage.exportProgress}
-            onImportPdf={montage.importPdfFiles}
+            onImportPdf={(files) => void importPdfFiles(files)}
             onImportImages={montage.importImages}
             onCancelImport={montage.cancelImport}
             onCancelExport={montage.cancelExport}
-            onClear={startNewProject}
+            onClear={() => void startNewProject()}
             onSettingsChange={montage.updateSettings}
             onAutoAddBlankPages={montage.autoAddBlankPages}
             onAddEmptySheet={montage.addEmptySheet}
@@ -338,6 +404,21 @@ export function BookletMontagePage({
 
 function getProjectErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong with the project file.'
+}
+
+function getUnsavedBookletName(sourceName?: string): string {
+  return sourceName?.replace(/\.[^.]+$/, '') || 'Untitled Booklet Project'
+}
+
+function getEmptyBookletProjectStateKey(
+  settings: Parameters<typeof getBookletProjectStateKey>[0]['settings']
+): string {
+  return getBookletProjectStateKey({
+    sources: [],
+    pages: [],
+    settings,
+    sheetBoardState: { items: [], recentColors: [] }
+  })
 }
 
 function ModePurposeBanner({
