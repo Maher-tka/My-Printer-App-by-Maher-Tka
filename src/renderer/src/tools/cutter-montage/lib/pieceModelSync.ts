@@ -75,12 +75,12 @@ export function syncLegacyFieldsFromObjects(piece: PiecePreset): PiecePreset {
     objects,
     artworkObjectId: artwork?.id ?? piece.artworkObjectId,
     maskObjectId: mask?.id,
-    cutlineObjectId: cutline?.id ?? piece.cutlineObjectId,
+    cutlineObjectId: cutline?.id,
     helperObjectIds: helpers.map((object) => object.id),
     selectedObjectIds,
     keyObjectId,
-    groupLinked: Boolean(piece.groupLinked ?? piece.artworkCutlineGrouped),
-    artworkCutlineGrouped: Boolean(piece.groupLinked ?? piece.artworkCutlineGrouped),
+    groupLinked: objects.some((object) => Boolean(object.groupId)) || Boolean(piece.groupLinked),
+    artworkCutlineGrouped: objects.some((object) => Boolean(object.groupId)) || Boolean(piece.groupLinked),
     clippingMaskEnabled: Boolean(mask && (piece.clippingMaskEnabled ?? piece.mask.enabled)),
     artwork: artwork
       ? {
@@ -194,7 +194,7 @@ export function syncObjectsFromLegacyFields(piece: PiecePreset): PiecePreset {
   )
   const helper = piece.helperShape
     ? mergeObject(findByIdOrRole(current, helperId, 'helper'), {
-        id: helperId,
+        id: helperId ?? `helper-${piece.id}`,
         type: 'helper-shape',
         shapeType: maskShapeToEditorShape(piece.helperShape.shape),
         role: 'helper',

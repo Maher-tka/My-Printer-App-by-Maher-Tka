@@ -52,8 +52,11 @@ export function PieceEditorContextMenu(props: PieceEditorContextMenuProps): JSX.
         <Separator />
         <MenuItem label="Set as Key Object" onClick={() => props.onSetKeyObject(primary?.id)} disabled={!primary || !props.piece.selectedObjectIds.includes(primary.id)} />
         <MenuItem label="Align Left" onClick={() => props.onAlign('left')} disabled={!props.piece.keyObjectId || selected.length < 2} />
-        <MenuItem label="Align Center" onClick={() => props.onAlign('center-horizontal')} disabled={!props.piece.keyObjectId || selected.length < 2} />
+        <MenuItem label="Align Center Horizontal" onClick={() => props.onAlign('center-horizontal')} disabled={!props.piece.keyObjectId || selected.length < 2} />
+        <MenuItem label="Align Right" onClick={() => props.onAlign('right')} disabled={!props.piece.keyObjectId || selected.length < 2} />
         <MenuItem label="Align Top" onClick={() => props.onAlign('top')} disabled={!props.piece.keyObjectId || selected.length < 2} />
+        <MenuItem label="Align Center Vertical" onClick={() => props.onAlign('center-vertical')} disabled={!props.piece.keyObjectId || selected.length < 2} />
+        <MenuItem label="Align Bottom" onClick={() => props.onAlign('bottom')} disabled={!props.piece.keyObjectId || selected.length < 2} />
       </div>
     </>
   )

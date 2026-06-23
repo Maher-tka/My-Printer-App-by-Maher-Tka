@@ -16,6 +16,7 @@ import {
 
 interface EditorSelectionSnapshot {
   selectedTypes?: EditorObjectType[]
+  selectedObjectIds?: string[]
   keyObject?: KeyObjectState
 }
 
@@ -111,18 +112,20 @@ export function synchronizePieceEditorModel(
   const objects = [artwork, mask, cutline, ...retainedHelpers, helper].filter(
     (object): object is EditorObject => Boolean(object)
   )
-  const selectedObjectIds = selection.selectedTypes
-    ? selection.selectedTypes.flatMap((type) => {
-        if (type === 'helper-shape') {
-          return helper ? [helper.id] : []
-        }
-
-        const object = objects.find((candidate) => candidate.type === type)
-        return object ? [object.id] : []
-      })
+  const selectedObjectIds = selection.selectedObjectIds
+    ? selection.selectedObjectIds.filter((id) => objects.some((object) => object.id === id))
+    : selection.selectedTypes
+      ? objects
+          .filter((object) => selection.selectedTypes?.includes(object.type))
+          .map((object) => object.id)
     : (migrated.selectedObjectIds ?? []).filter((id) => objects.some((object) => object.id === id))
-  const keyObjectId = selection.keyObject?.object
-    ? objects.find((object) => object.type === selection.keyObject?.object)?.id
+  const requestedKeyId = selection.keyObject?.objectId
+  const keyObjectId = requestedKeyId && selectedObjectIds.includes(requestedKeyId)
+    ? requestedKeyId
+    : selection.keyObject?.object
+    ? objects.find(
+        (object) => object.type === selection.keyObject?.object && selectedObjectIds.includes(object.id)
+      )?.id
     : migrated.keyObjectId && objects.some((object) => object.id === migrated.keyObjectId)
       ? migrated.keyObjectId
       : undefined
@@ -149,21 +152,29 @@ export function duplicateObjects(
 ): { objects: EditorObject[]; selectedObjectIds: string[] } {
   const offset = inPlace ? 0 : 0.4
   const selected = new Set(selectedIds)
+  const groupIds = new Map<string, string>()
   const duplicates = objects
     .filter((object) => selected.has(object.id))
-    .map((object) => ({
-      ...object,
-      id: createObjectId(object.type),
-      name: `${object.name} copy`,
-      role: object.role === 'artwork' ? 'helper' as const : object.role,
-      type: object.type === 'artwork' ? 'helper-shape' as const : object.type,
-      sourceId: object.sourceId,
-      transform: {
-        ...object.transform,
-        xCm: object.transform.xCm + offset,
-        yCm: object.transform.yCm + offset
+    .map((object) => {
+      const groupId = object.groupId
+        ? groupIds.get(object.groupId) ?? createObjectId('group')
+        : undefined
+      if (object.groupId && groupId) groupIds.set(object.groupId, groupId)
+      return {
+        ...object,
+        id: createObjectId(object.type),
+        name: `${object.name} copy`,
+        role: object.role === 'artwork' ? 'helper' as const : object.role,
+        type: object.type === 'artwork' ? 'helper-shape' as const : object.type,
+        sourceId: object.sourceId,
+        groupId,
+        transform: {
+          ...object.transform,
+          xCm: object.transform.xCm + offset,
+          yCm: object.transform.yCm + offset
+        }
       }
-    }))
+    })
 
   return {
     objects: [...objects, ...duplicates],
@@ -183,8 +194,168 @@ export function duplicateShapeAsCutline(object: EditorObject): EditorObject {
     strokeWidthPt: object.strokeWidthPt ?? 0.25,
     strokeName: CUT_CONTOUR_NAME,
     exportEnabled: true,
+    groupId: undefined,
     transform: { ...object.transform }
   }
+}
+
+export function makeClippingMaskFromSelection(
+  piece: PiecePreset,
+  selectedIds: string[] = piece.selectedObjectIds
+): PiecePreset {
+  const selected = new Set(selectedIds)
+  const hasArtwork = piece.objects.some(
+    (object) => selected.has(object.id) && object.role === 'artwork'
+  )
+  const shape = [...piece.objects].reverse().find(
+    (object) => selected.has(object.id) &&
+      (object.role === 'helper' || object.role === 'clipping-mask') &&
+      object.shapeType !== 'image'
+  )
+  if (!hasArtwork || !shape) return piece
+
+  const objects = piece.objects.map((object) => {
+    if (object.id === shape.id) {
+      return {
+        ...object,
+        type: 'mask' as const,
+        role: 'clipping-mask' as const,
+        name: 'Clipping Mask',
+        exportEnabled: false
+      }
+    }
+    if (object.role === 'clipping-mask') {
+      return {
+        ...object,
+        type: 'helper-shape' as const,
+        role: 'helper' as const,
+        name: getNextHelperName(piece.objects),
+        exportEnabled: false
+      }
+    }
+    return object
+  })
+
+  return syncLegacyFieldsFromObjects({
+    ...piece,
+    objects,
+    maskObjectId: shape.id,
+    clippingMaskEnabled: true,
+    selectedObjectIds: [shape.id],
+    keyObjectId: undefined
+  })
+}
+
+export function releaseClippingMask(piece: PiecePreset): PiecePreset {
+  const mask = piece.objects.find((object) => object.id === piece.maskObjectId)
+    ?? piece.objects.find((object) => object.role === 'clipping-mask')
+  if (!mask) return piece
+
+  return syncLegacyFieldsFromObjects({
+    ...piece,
+    objects: piece.objects.map((object) => object.id === mask.id
+      ? {
+          ...object,
+          type: 'helper-shape' as const,
+          role: 'helper' as const,
+          name: getNextHelperName(piece.objects),
+          exportEnabled: false
+        }
+      : object),
+    maskObjectId: undefined,
+    clippingMaskEnabled: false,
+    selectedObjectIds: [mask.id],
+    keyObjectId: undefined
+  })
+}
+
+export function duplicateObjectAsCutline(piece: PiecePreset, objectId: string): PiecePreset {
+  const source = piece.objects.find((object) => object.id === objectId)
+  if (!source || source.shapeType === 'image') return piece
+  const cutline = duplicateShapeAsCutline(source)
+  return syncLegacyFieldsFromObjects({
+    ...piece,
+    objects: [...piece.objects, cutline],
+    cutlineObjectId: cutline.id,
+    selectedObjectIds: [cutline.id],
+    keyObjectId: undefined
+  })
+}
+
+export function convertObjectToCutline(piece: PiecePreset, objectId: string): PiecePreset {
+  const source = piece.objects.find((object) => object.id === objectId)
+  if (!source || source.shapeType === 'image') return piece
+  const cutline = { ...duplicateShapeAsCutline(source), id: source.id }
+  return syncLegacyFieldsFromObjects({
+    ...piece,
+    objects: piece.objects.map((object) => object.id === objectId ? cutline : object),
+    maskObjectId: piece.maskObjectId === objectId ? undefined : piece.maskObjectId,
+    clippingMaskEnabled: piece.maskObjectId === objectId ? false : piece.clippingMaskEnabled,
+    cutlineObjectId: objectId,
+    selectedObjectIds: [objectId],
+    keyObjectId: undefined
+  })
+}
+
+export function matchObjectGeometry(
+  piece: PiecePreset,
+  targetId: string | undefined,
+  sourceId: string | undefined
+): PiecePreset {
+  if (!targetId || !sourceId || targetId === sourceId) return piece
+  const source = piece.objects.find((object) => object.id === sourceId)
+  if (!source) return piece
+  return syncLegacyFieldsFromObjects({
+    ...piece,
+    objects: piece.objects.map((object) => object.id === targetId && !object.locked
+      ? { ...object, transform: { ...source.transform } }
+      : object)
+  })
+}
+
+export function centerObjectInside(
+  piece: PiecePreset,
+  targetId: string | undefined,
+  containerId: string | undefined
+): PiecePreset {
+  if (!targetId || !containerId || targetId === containerId) return piece
+  const container = piece.objects.find((object) => object.id === containerId)
+  if (!container) return piece
+  return syncLegacyFieldsFromObjects({
+    ...piece,
+    objects: piece.objects.map((object) => object.id === targetId && !object.locked
+      ? {
+          ...object,
+          transform: {
+            ...object.transform,
+            xCm: container.transform.xCm +
+              (container.transform.widthCm - object.transform.widthCm) / 2,
+            yCm: container.transform.yCm +
+              (container.transform.heightCm - object.transform.heightCm) / 2
+          }
+        }
+      : object)
+  })
+}
+
+export function setObjectGroup(
+  piece: PiecePreset,
+  selectedIds: string[],
+  grouped: boolean
+): PiecePreset {
+  const selected = new Set(selectedIds)
+  if (selected.size < (grouped ? 2 : 1)) return piece
+  const groupId = grouped ? createObjectId('group') : undefined
+  const objects = piece.objects.map((object) => selected.has(object.id)
+    ? { ...object, groupId }
+    : object)
+  const hasGroups = objects.some((object) => Boolean(object.groupId))
+  return syncLegacyFieldsFromObjects({
+    ...piece,
+    objects,
+    groupLinked: hasGroups,
+    artworkCutlineGrouped: hasGroups
+  })
 }
 
 export function alignEditorObjects(
@@ -271,4 +442,8 @@ function getAlignedPosition(
 
 function createObjectId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function getNextHelperName(objects: EditorObject[]): string {
+  return `Helper Shape ${objects.filter((object) => object.role === 'helper').length + 1}`
 }

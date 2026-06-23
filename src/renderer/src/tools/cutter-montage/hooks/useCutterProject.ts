@@ -228,10 +228,14 @@ export function useCutterProject(
   }, [activePieceId, pieces])
 
   const updatePiece = useCallback((updatedPiece: PiecePreset): void => {
-    const normalizedPiece = synchronizePieceEditorModel(updatedPiece, {
-      selectedTypes: selectedEditorObjects,
-      keyObject
-    })
+    const normalizedPiece = synchronizePieceEditorModel(updatedPiece)
+    const selectedIds = new Set(normalizedPiece.selectedObjectIds)
+    const selectedTypes = Array.from(new Set(normalizedPiece.objects
+      .filter((object) => selectedIds.has(object.id))
+      .map((object) => object.type)))
+    const key = normalizedPiece.objects.find((object) => object.id === normalizedPiece.keyObjectId)
+    setSelectedEditorObjects(selectedTypes)
+    setKeyObject({ object: key?.type ?? null, objectId: key?.id })
     setPieces((current) =>
       current.map((piece) => (piece.id === normalizedPiece.id ? normalizedPiece : piece))
     )
@@ -242,7 +246,7 @@ export function useCutterProject(
           : placed
       )
     )
-  }, [keyObject, selectedEditorObjects])
+  }, [])
 
   const selectEditorObjects = useCallback((objects: EditorObjectType[]): void => {
     setSelectedEditorObjects(objects)
@@ -258,12 +262,12 @@ export function useCutterProject(
     setPieces((current) => current.map((piece) =>
       piece.id === activePieceId
         ? synchronizePieceEditorModel(piece, {
-            selectedTypes: selectedEditorObjects,
+            selectedObjectIds: piece.selectedObjectIds,
             keyObject: nextKeyObject
           })
         : piece
     ))
-  }, [activePieceId, selectedEditorObjects])
+  }, [activePieceId])
 
   const updatePieceQuantity = useCallback((pieceId: string, quantity: number): void => {
     setPieces((current) =>

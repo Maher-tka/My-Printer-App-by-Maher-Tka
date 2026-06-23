@@ -1,16 +1,12 @@
 import type {
   CutterExportResult,
   CutterProject,
-  PieceCutline,
-  PieceSourceFile
+  EditorObject,
+  PiecePreset,
+  PieceSourceFile,
+  PlacedPiece
 } from '../types'
-import {
-  escapeXml,
-  getPlacedArtworkRect,
-  getPlacedCutlineRect,
-  type CutlineRect
-} from './cutlineGenerator'
-import { getPlacedMaskRect, type MaskRect } from './maskUtils'
+import { escapeXml, type CutlineRect } from './cutlineGenerator'
 
 const CM_TO_MM = 10
 
@@ -18,55 +14,56 @@ export async function exportCutterSvg(project: CutterProject): Promise<CutterExp
   const { sheet, sources, pieces, placedPieces, layers, exportSettings } = project
   const pieceMap = new Map(pieces.map((piece) => [piece.id, piece]))
   const sourceMap = new Map(sources.map((source) => [source.id, source]))
-  const artworkEntries = exportSettings.includeArtwork
-    ? await Promise.all(
-        placedPieces.map(async (placed) => {
-          const piece = pieceMap.get(placed.presetId)
-          const source = piece ? sourceMap.get(piece.sourceId) : undefined
+  const artworkEntries = exportSettings.includeArtwork && layers.artwork
+    ? await Promise.all(placedPieces.map(async (placed) => {
+        const piece = pieceMap.get(placed.presetId)
+        const artwork = piece ? getArtworkObject(piece) : undefined
+        const source = artwork ? sourceMap.get(artwork.sourceId ?? piece?.sourceId ?? '') : undefined
+        if (!piece || !artwork || !artwork.visible || artwork.exportEnabled === false || !source) {
+          return { definition: '', artwork: '' }
+        }
 
-          if (!piece || !source || !piece.objectVisibility.artwork) {
-            return { definition: '', artwork: '' }
-          }
+        const artworkRect = scaleRectToMm(getPlacedObjectRect(placed, piece, artwork))
+        const mask = getActiveMaskObject(piece)
+        const clippingEnabled = Boolean(piece.clippingMaskEnabled && mask)
+        const clipId = `clip-piece-${safeXmlId(placed.id)}`
+        const definition = clippingEnabled && mask
+          ? getMaskClipPathMarkup(
+              clipId,
+              scaleRectToMm(getPlacedObjectRect(placed, piece, mask)),
+              mask
+            )
+          : ''
+        const clipAttribute = clippingEnabled ? ` clip-path="url(#${clipId})"` : ''
+        const href = await sourceToDataUrl(source)
 
-          const artworkRect = scaleRectToMm(getPlacedArtworkRect(placed, piece))
-          const href = await sourceToDataUrl(source)
-          const clipId = `clip-piece-${safeXmlId(placed.id)}`
-          const clippingEnabled = piece.clippingMaskEnabled ?? piece.mask.enabled
-          const definition = clippingEnabled
-            ? getMaskClipPathMarkup(
-                clipId,
-                scaleRectToMm(getPlacedMaskRect(placed, piece)),
-                piece.mask.shape
-              )
-            : ''
-          const clipAttribute = clippingEnabled ? ` clip-path="url(#${clipId})"` : ''
-
-          return {
-            definition,
-            artwork: [
-              `<g id="artwork-${safeXmlId(placed.id)}" data-piece="${escapeXml(piece.displayName)}">`,
-              `<image href="${href}" x="${formatNumber(artworkRect.xCm)}" y="${formatNumber(artworkRect.yCm)}" width="${formatNumber(artworkRect.widthCm)}" height="${formatNumber(artworkRect.heightCm)}" preserveAspectRatio="none"${getRotationTransform(artworkRect)}${clipAttribute} />`,
-              '</g>'
-            ].join('')
-          }
-        })
-      )
+        return {
+          definition,
+          artwork: [
+            `<g id="artwork-${safeXmlId(placed.id)}" data-piece="${escapeXml(piece.displayName)}">`,
+            `<image href="${href}" x="${formatNumber(artworkRect.xCm)}" y="${formatNumber(artworkRect.yCm)}" width="${formatNumber(artworkRect.widthCm)}" height="${formatNumber(artworkRect.heightCm)}" preserveAspectRatio="none"${getRotationTransform(artworkRect)}${clipAttribute} />`,
+            '</g>'
+          ].join('')
+        }
+      }))
     : []
-  const cutlineMarkup = exportSettings.includeCutlines
-    ? placedPieces
-        .map((placed) => {
-          const piece = pieceMap.get(placed.presetId)
 
-          return piece && piece.objectVisibility.cutline
-            ? getCutlineSvgElementMm(scaleRectToMm(getPlacedCutlineRect(placed, piece)), piece.cutline)
-            : ''
-        })
-        .filter(Boolean)
-        .join('\n')
+  const cutlineMarkup = exportSettings.includeCutlines && layers.cutlines
+    ? placedPieces.flatMap((placed) => {
+        const piece = pieceMap.get(placed.presetId)
+        if (!piece) return []
+        return piece.objects
+          .filter((object) => object.role === 'cutline' && object.visible && object.exportEnabled !== false)
+          .map((object) => getCutlineSvgElementMm(
+            scaleRectToMm(getPlacedObjectRect(placed, piece, object, object.offsetMm ?? 0)),
+            object,
+            exportSettings.strokeName
+          ))
+      }).join('\n')
     : ''
+
   const widthMm = sheet.widthCm * CM_TO_MM
   const heightMm = sheet.heightCm * CM_TO_MM
-
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="${formatNumber(widthMm)}mm" height="${formatNumber(heightMm)}mm" viewBox="0 0 ${formatNumber(widthMm)} ${formatNumber(heightMm)}">
   <title>Cutter Montage ${sheet.widthCm}x${sheet.heightCm}cm</title>
@@ -92,50 +89,72 @@ export function getCutterFileName(widthCm: number, heightCm: number, extension: 
   return `cutter_montage_${formatNameNumber(widthCm)}x${formatNameNumber(heightCm)}cm.${extension}`
 }
 
-function getCutlineSvgElementMm(rect: CutlineRect, cutline: PieceCutline): string {
-  const className = safeXmlId(cutline.strokeName || 'CutContour')
-  const common = `class="${className}" data-spot-name="${escapeXml(cutline.strokeName)}" data-spot-color="${escapeXml(cutline.strokeColor)}" fill="none" stroke="${escapeXml(cutline.strokeColor)}" stroke-width="${formatNumber(cutline.strokeWidthPt)}pt" vector-effect="non-scaling-stroke"`
+function getArtworkObject(piece: PiecePreset): EditorObject | undefined {
+  return piece.objects.find((object) => object.id === piece.artworkObjectId)
+    ?? piece.objects.find((object) => object.role === 'artwork')
+}
+
+function getActiveMaskObject(piece: PiecePreset): EditorObject | undefined {
+  if (!piece.clippingMaskEnabled) return undefined
+  return piece.objects.find((object) => object.id === piece.maskObjectId)
+    ?? piece.objects.find((object) => object.role === 'clipping-mask')
+}
+
+function getPlacedObjectRect(
+  placed: PlacedPiece,
+  piece: PiecePreset,
+  object: EditorObject,
+  offsetMm = 0
+): CutlineRect {
+  const scaleX = placed.widthCm / piece.widthCm
+  const scaleY = placed.heightCm / piece.heightCm
+  const offsetCm = offsetMm / 10
+  return {
+    xCm: placed.xCm + object.transform.xCm * scaleX - offsetCm,
+    yCm: placed.yCm + object.transform.yCm * scaleY - offsetCm,
+    widthCm: object.transform.widthCm * scaleX + offsetCm * 2,
+    heightCm: object.transform.heightCm * scaleY + offsetCm * 2,
+    rotation: (placed.rotation + object.transform.rotation) % 360
+  }
+}
+
+function getCutlineSvgElementMm(
+  rect: CutlineRect,
+  object: EditorObject,
+  fallbackSpotName: string
+): string {
+  const spotName = object.strokeName || fallbackSpotName || 'CutContour'
+  const strokeColor = object.strokeColor || '#ff00ff'
+  const strokeWidth = object.strokeWidthPt ?? 0.25
+  const common = `class="${safeXmlId(spotName)}" data-object-id="${safeXmlId(object.id)}" data-spot-name="${escapeXml(spotName)}" data-spot-color="${escapeXml(strokeColor)}" fill="none" stroke="${escapeXml(strokeColor)}" stroke-width="${formatNumber(strokeWidth)}pt" vector-effect="non-scaling-stroke"`
   const rotation = getRotationTransform(rect)
 
-  if (cutline.shape === 'ellipse') {
+  if (object.shapeType === 'ellipse') {
     return `<ellipse cx="${formatNumber(rect.xCm + rect.widthCm / 2)}" cy="${formatNumber(rect.yCm + rect.heightCm / 2)}" rx="${formatNumber(rect.widthCm / 2)}" ry="${formatNumber(rect.heightCm / 2)}"${rotation} ${common} />`
   }
-
-  if (cutline.shape === 'rounded-rectangle') {
+  if (object.shapeType === 'rounded-rectangle') {
     const radius = Math.min(rect.widthCm, rect.heightCm) * 0.08
     return `<rect x="${formatNumber(rect.xCm)}" y="${formatNumber(rect.yCm)}" width="${formatNumber(rect.widthCm)}" height="${formatNumber(rect.heightCm)}" rx="${formatNumber(radius)}" ry="${formatNumber(radius)}"${rotation} ${common} />`
   }
-
-  if (cutline.shape === 'custom-path' && cutline.customPathData) {
+  if (object.shapeType === 'path' && object.pathData) {
     const transform = `translate(${formatNumber(rect.xCm)} ${formatNumber(rect.yCm)}) scale(${formatNumber(rect.widthCm)} ${formatNumber(rect.heightCm)})`
-    return `<path d="${escapeXml(cutline.customPathData)}" transform="${transform}" ${common} />`
+    return `<path d="${escapeXml(object.pathData)}" transform="${transform}" ${common} />`
   }
-
   return `<rect x="${formatNumber(rect.xCm)}" y="${formatNumber(rect.yCm)}" width="${formatNumber(rect.widthCm)}" height="${formatNumber(rect.heightCm)}"${rotation} ${common} />`
 }
 
-function getMaskClipPathMarkup(id: string, rect: MaskRect, shape: string): string {
+function getMaskClipPathMarkup(id: string, rect: CutlineRect, mask: EditorObject): string {
   const transform = getRotationTransform(rect)
-
-  if (shape === 'ellipse') {
+  if (mask.shapeType === 'ellipse') {
     return `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><ellipse cx="${formatNumber(rect.xCm + rect.widthCm / 2)}" cy="${formatNumber(rect.yCm + rect.heightCm / 2)}" rx="${formatNumber(rect.widthCm / 2)}" ry="${formatNumber(rect.heightCm / 2)}"${transform} /></clipPath>`
   }
-
-  if (shape === 'rounded-rectangle') {
+  if (mask.shapeType === 'rounded-rectangle') {
     const radius = Math.min(rect.widthCm, rect.heightCm) * 0.08
     return `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><rect x="${formatNumber(rect.xCm)}" y="${formatNumber(rect.yCm)}" width="${formatNumber(rect.widthCm)}" height="${formatNumber(rect.heightCm)}" rx="${formatNumber(radius)}" ry="${formatNumber(radius)}"${transform} /></clipPath>`
   }
-
-  if (shape === 'custom-polygon') {
-    const points = [
-      `${formatNumber(rect.xCm + rect.widthCm / 2)},${formatNumber(rect.yCm)}`,
-      `${formatNumber(rect.xCm + rect.widthCm)},${formatNumber(rect.yCm + rect.heightCm / 2)}`,
-      `${formatNumber(rect.xCm + rect.widthCm / 2)},${formatNumber(rect.yCm + rect.heightCm)}`,
-      `${formatNumber(rect.xCm)},${formatNumber(rect.yCm + rect.heightCm / 2)}`
-    ].join(' ')
-    return `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><polygon points="${points}"${transform} /></clipPath>`
+  if (mask.shapeType === 'path' && mask.pathData) {
+    return `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><path d="${escapeXml(mask.pathData)}" transform="translate(${formatNumber(rect.xCm)} ${formatNumber(rect.yCm)}) scale(${formatNumber(rect.widthCm)} ${formatNumber(rect.heightCm)})" /></clipPath>`
   }
-
   return `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><rect x="${formatNumber(rect.xCm)}" y="${formatNumber(rect.yCm)}" width="${formatNumber(rect.widthCm)}" height="${formatNumber(rect.heightCm)}"${transform} /></clipPath>`
 }
 
@@ -146,15 +165,13 @@ async function sourceToDataUrl(source: PieceSourceFile): Promise<string> {
 function uint8ToBase64(bytes: Uint8Array): string {
   let binary = ''
   const chunkSize = 0x8000
-
   for (let index = 0; index < bytes.length; index += chunkSize) {
     binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize))
   }
-
   return btoa(binary)
 }
 
-function scaleRectToMm<T extends CutlineRect | MaskRect>(rect: T): T {
+function scaleRectToMm(rect: CutlineRect): CutlineRect {
   return {
     ...rect,
     xCm: rect.xCm * CM_TO_MM,
@@ -164,7 +181,7 @@ function scaleRectToMm<T extends CutlineRect | MaskRect>(rect: T): T {
   }
 }
 
-function getRotationTransform(rect: CutlineRect | MaskRect): string {
+function getRotationTransform(rect: CutlineRect): string {
   return rect.rotation
     ? ` transform="rotate(${formatNumber(rect.rotation)} ${formatNumber(rect.xCm + rect.widthCm / 2)} ${formatNumber(rect.yCm + rect.heightCm / 2)})"`
     : ''

@@ -95,6 +95,21 @@ export function duplicatePiecePreset(
   existingPieces: PiecePreset[]
 ): PiecePreset {
   const pieceId = createCutterId('piece')
+  const objectIds = new Map(piece.objects.map((object) => [object.id, createCutterId(object.type)]))
+  const groupIds = new Map<string, string>()
+  const objects = piece.objects.map((object) => {
+    const groupId = object.groupId
+      ? groupIds.get(object.groupId) ?? createCutterId('group')
+      : undefined
+    if (object.groupId && groupId) groupIds.set(object.groupId, groupId)
+    return {
+      ...object,
+      id: objectIds.get(object.id) ?? createCutterId(object.type),
+      groupId,
+      transform: { ...object.transform }
+    }
+  })
+  const remapId = (id: string | undefined): string | undefined => id ? objectIds.get(id) : undefined
   const duplicate = {
     ...piece,
     id: pieceId,
@@ -121,13 +136,13 @@ export function duplicatePiecePreset(
     artworkCutlineGrouped: piece.artworkCutlineGrouped,
     objectVisibility: { ...piece.objectVisibility },
     objectLocks: { ...piece.objectLocks },
-    objects: [],
-    artworkObjectId: `artwork-${pieceId}`,
-    maskObjectId: piece.maskObjectId ? `mask-${pieceId}` : undefined,
-    cutlineObjectId: `cutline-${pieceId}`,
-    helperObjectIds: [],
+    objects,
+    artworkObjectId: remapId(piece.artworkObjectId) ?? `artwork-${pieceId}`,
+    maskObjectId: remapId(piece.maskObjectId),
+    cutlineObjectId: remapId(piece.cutlineObjectId),
+    helperObjectIds: piece.helperObjectIds.map((id) => remapId(id)).filter((id): id is string => Boolean(id)),
     selectedObjectIds: [],
-    keyObjectId: `cutline-${pieceId}`
+    keyObjectId: undefined
   }
 
   return synchronizePieceEditorModel(duplicate)
@@ -166,48 +181,16 @@ export function syncPieceBounds(piece: PiecePreset, widthCm: number, heightCm: n
     ...piece,
     widthCm: safeWidth,
     heightCm: safeHeight,
-    artwork: {
-      ...piece.artwork,
+    objects: piece.objects.map((object) => ({
+      ...object,
       transform: {
-        ...piece.artwork.transform,
-        xCm: piece.artwork.transform.xCm * widthScale,
-        yCm: piece.artwork.transform.yCm * heightScale,
-        widthCm: piece.artwork.transform.widthCm * widthScale,
-        heightCm: piece.artwork.transform.heightCm * heightScale
+        ...object.transform,
+        xCm: object.transform.xCm * widthScale,
+        yCm: object.transform.yCm * heightScale,
+        widthCm: object.transform.widthCm * widthScale,
+        heightCm: object.transform.heightCm * heightScale
       }
-    },
-    mask: {
-      ...piece.mask,
-      transform: {
-        ...piece.mask.transform,
-        xCm: piece.mask.transform.xCm * widthScale,
-        yCm: piece.mask.transform.yCm * heightScale,
-        widthCm: piece.mask.transform.widthCm * widthScale,
-        heightCm: piece.mask.transform.heightCm * heightScale
-      }
-    },
-    cutline: {
-      ...piece.cutline,
-      transform: {
-        ...piece.cutline.transform,
-        xCm: piece.cutline.transform.xCm * widthScale,
-        yCm: piece.cutline.transform.yCm * heightScale,
-        widthCm: piece.cutline.transform.widthCm * widthScale,
-        heightCm: piece.cutline.transform.heightCm * heightScale
-      }
-    },
-    helperShape: piece.helperShape
-      ? {
-          ...piece.helperShape,
-          transform: {
-            ...piece.helperShape.transform,
-            xCm: piece.helperShape.transform.xCm * widthScale,
-            yCm: piece.helperShape.transform.yCm * heightScale,
-            widthCm: piece.helperShape.transform.widthCm * widthScale,
-            heightCm: piece.helperShape.transform.heightCm * heightScale
-          }
-        }
-      : undefined
+    }))
   })
 }
 

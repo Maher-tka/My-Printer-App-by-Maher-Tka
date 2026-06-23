@@ -36,11 +36,7 @@ export function usePieceEditorSelection(
       : undefined
     const next = syncLegacyFieldsFromObjects({ ...piece, selectedObjectIds: validIds, keyObjectId })
     onPieceChange(next)
-    onSelectedTypesChange(Array.from(new Set(next.objects
-      .filter((object) => validIds.includes(object.id))
-      .map((object) => object.type))))
-    if (!keyObjectId) onKeyTypeChange(null)
-  }, [onKeyTypeChange, onPieceChange, onSelectedTypesChange, piece])
+  }, [onPieceChange, piece])
 
   const toggleId = useCallback((id: string, additive: boolean): void => {
     if (!additive) {
@@ -55,14 +51,14 @@ export function usePieceEditorSelection(
   const selectTypes = useCallback((types: EditorObjectType[]): void => {
     const typeSet = new Set(types)
     selectIds(piece.objects.filter((object) => typeSet.has(object.type)).map((object) => object.id))
-  }, [piece.objects, selectIds])
+    onSelectedTypesChange(types)
+  }, [onSelectedTypesChange, piece.objects, selectIds])
 
   const setKeyObjectId = useCallback((id?: string): void => {
     if (id && !piece.selectedObjectIds.includes(id)) return
     const object = piece.objects.find((candidate) => candidate.id === id)
     onPieceChange(syncLegacyFieldsFromObjects({ ...piece, keyObjectId: object?.id }))
-    onKeyTypeChange(object?.type ?? null)
-  }, [onKeyTypeChange, onPieceChange, piece])
+  }, [onPieceChange, piece])
 
   const setKeyObjectType = useCallback((type: EditorObjectType | null): void => {
     if (!type) {
@@ -73,7 +69,8 @@ export function usePieceEditorSelection(
       (candidate) => candidate.type === type && piece.selectedObjectIds.includes(candidate.id)
     )
     setKeyObjectId(object?.id)
-  }, [piece.objects, piece.selectedObjectIds, setKeyObjectId])
+    onKeyTypeChange(object?.type ?? null)
+  }, [onKeyTypeChange, piece.objects, piece.selectedObjectIds, setKeyObjectId])
 
   return {
     selectedObjectIds: piece.selectedObjectIds,

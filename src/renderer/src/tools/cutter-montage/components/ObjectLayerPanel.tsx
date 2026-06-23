@@ -1,115 +1,130 @@
-import { Eye, EyeOff, LockKeyhole, UnlockKeyhole } from 'lucide-react'
+import { Eye, EyeOff, KeyRound, LockKeyhole, Trash2, UnlockKeyhole } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { EditorObjectType, KeyObjectState, PiecePreset } from '../types'
+import type { EditorObject, PiecePreset } from '../types'
 
 interface ObjectLayerPanelProps {
   piece: PiecePreset
-  selectedObjects: EditorObjectType[]
-  keyObject: KeyObjectState
-  onPieceChange: (piece: PiecePreset) => void
-  onSelectedObjectsChange: (objects: EditorObjectType[]) => void
+  onSelectObject: (objectId: string, additive: boolean) => void
+  onToggleVisibility: (objectId: string) => void
+  onToggleLock: (objectId: string) => void
+  onSetKeyObject: (objectId?: string) => void
+  onDeleteObject: (objectId: string) => void
 }
-
-const objectRows: Array<{
-  id: EditorObjectType
-  visibilityKey: keyof PiecePreset['objectVisibility']
-  label: string
-  role: string
-}> = [
-  { id: 'artwork', visibilityKey: 'artwork', label: 'Artwork', role: 'Artwork' },
-  { id: 'mask', visibilityKey: 'mask', label: 'Mask', role: 'Clipping' },
-  { id: 'cutline', visibilityKey: 'cutline', label: 'CutContour', role: 'Cutline' },
-  { id: 'helper-shape', visibilityKey: 'helper', label: 'Helper Shape', role: 'Shape' }
-]
 
 export function ObjectLayerPanel({
   piece,
-  selectedObjects,
-  keyObject,
-  onPieceChange,
-  onSelectedObjectsChange
+  onSelectObject,
+  onToggleVisibility,
+  onToggleLock,
+  onSetKeyObject,
+  onDeleteObject
 }: ObjectLayerPanelProps): JSX.Element {
   return (
     <section className="rounded-lg border bg-card p-3">
-      <h4 className="text-sm font-semibold">Objects</h4>
-      <div className="mt-3 flex flex-col gap-2">
-        {objectRows.map((row) => {
-          const available = row.id !== 'helper-shape' || Boolean(piece.helperShape)
-          const visible = piece.objectVisibility[row.visibilityKey]
-          const locked = piece.objectLocks[row.visibilityKey]
-          const selected = selectedObjects.includes(row.id)
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold">Objects</h4>
+        <span className="text-[11px] text-muted-foreground">
+          {piece.selectedObjectIds.length} selected
+        </span>
+      </div>
+      <div className="mt-3 flex max-h-72 flex-col gap-2 overflow-auto">
+        {piece.objects.map((object) => {
+          const selected = piece.selectedObjectIds.includes(object.id)
+          const isKey = piece.keyObjectId === object.id
+          const canDelete = object.role === 'helper' || object.role === 'cutline'
 
           return (
             <div
-              key={row.id}
-              className={`flex items-center gap-2 rounded-md border px-2 py-2 text-sm ${
+              key={object.id}
+              className={`flex items-center gap-1 rounded-md border px-1 py-1.5 text-sm ${
                 selected ? 'border-primary bg-primary/5' : 'bg-muted/20'
-              } ${available ? '' : 'opacity-50'}`}
+              } ${isKey ? 'ring-2 ring-amber-300' : ''}`}
             >
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="size-7"
-                disabled={!available}
-                onClick={() =>
-                  onPieceChange({
-                    ...piece,
-                    objectVisibility: {
-                      ...piece.objectVisibility,
-                      [row.visibilityKey]: !visible
-                    }
-                  })
-                }
-                aria-label={`Toggle ${row.label} visibility`}
+              <LayerButton
+                label={`Toggle ${object.name} visibility`}
+                onClick={() => onToggleVisibility(object.id)}
               >
-                {visible ? <Eye /> : <EyeOff />}
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="size-7"
-                disabled={!available}
-                onClick={() =>
-                  onPieceChange({
-                    ...piece,
-                    objectLocks: {
-                      ...piece.objectLocks,
-                      [row.visibilityKey]: !locked
-                    }
-                  })
-                }
-                aria-label={`Toggle ${row.label} lock`}
+                {object.visible ? <Eye /> : <EyeOff />}
+              </LayerButton>
+              <LayerButton
+                label={`Toggle ${object.name} lock`}
+                onClick={() => onToggleLock(object.id)}
               >
-                {locked ? <LockKeyhole /> : <UnlockKeyhole />}
-              </Button>
+                {object.locked ? <LockKeyhole /> : <UnlockKeyhole />}
+              </LayerButton>
               <button
                 type="button"
                 className="min-w-0 flex-1 text-left"
-                disabled={!available}
-                onClick={(event) =>
-                  onSelectedObjectsChange(
-                    event.shiftKey
-                      ? selectedObjects.includes(row.id)
-                        ? selectedObjects.filter((object) => object !== row.id)
-                        : [...selectedObjects, row.id]
-                      : [row.id]
-                  )
-                }
+                onClick={(event) => onSelectObject(object.id, event.shiftKey)}
               >
-                <span className="block truncate font-medium">{row.label}</span>
-                <span className="block truncate text-xs text-muted-foreground">{row.role}</span>
-              </button>
-              {keyObject.object === row.id && (
-                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
-                  KEY
+                <span className="block truncate font-medium">{getObjectLabel(object)}</span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {getRoleLabel(object)}
                 </span>
-              )}
+              </button>
+              <Button
+                type="button"
+                size="icon"
+                variant={isKey ? 'default' : 'ghost'}
+                className="size-7"
+                disabled={!selected}
+                onClick={() => onSetKeyObject(isKey ? undefined : object.id)}
+                aria-label={`Set ${object.name} as key object`}
+              >
+                <KeyRound />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-7 text-destructive"
+                disabled={!canDelete}
+                onClick={() => onDeleteObject(object.id)}
+                aria-label={`Delete ${object.name}`}
+              >
+                <Trash2 />
+              </Button>
             </div>
           )
         })}
       </div>
     </section>
   )
+}
+
+function LayerButton({
+  label,
+  onClick,
+  children
+}: {
+  label: string
+  onClick: () => void
+  children: React.ReactNode
+}): JSX.Element {
+  return (
+    <Button
+      type="button"
+      size="icon"
+      variant="ghost"
+      className="size-7"
+      onClick={onClick}
+      aria-label={label}
+    >
+      {children}
+    </Button>
+  )
+}
+
+function getObjectLabel(object: EditorObject): string {
+  if (object.role === 'artwork') return 'Artwork'
+  if (object.role === 'clipping-mask') return 'Mask'
+  if (object.role === 'cutline') return object.strokeName || 'CutContour'
+  return object.name
+}
+
+function getRoleLabel(object: EditorObject): string {
+  if (object.role === 'clipping-mask') return 'Clipping mask'
+  if (object.role === 'cutline') return 'Cutline'
+  if (object.role === 'artwork') return 'Artwork'
+  return 'Helper shape'
 }

@@ -119,6 +119,8 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
             objects={selectedObjects}
             scale={scale}
             onHandlePointerDown={beginHandleTransform}
+            onHandlePointerMove={moveTransform}
+            onHandlePointerUp={endTransform}
           />
         ) : null}
 
@@ -139,8 +141,19 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
     event.preventDefault()
     event.stopPropagation()
     const isAlreadySelected = piece.selectedObjectIds.includes(object.id)
-    onSelectObject(object.id, event.shiftKey)
-    const ids = isAlreadySelected && !event.shiftKey ? piece.selectedObjectIds : [object.id]
+    if (event.shiftKey && isAlreadySelected) {
+      onSelectObject(object.id, true)
+      return
+    }
+    const groupedIds = object.groupId
+      ? piece.objects.filter((candidate) => candidate.groupId === object.groupId).map((candidate) => candidate.id)
+      : [object.id]
+    const ids = isAlreadySelected && !event.shiftKey
+      ? piece.selectedObjectIds
+      : event.shiftKey
+        ? Array.from(new Set([...piece.selectedObjectIds, ...groupedIds]))
+        : groupedIds
+    onSelectIds(ids)
     const objects = piece.objects.filter((candidate) => ids.includes(candidate.id) && !candidate.locked)
     const bounds = getBounds(objects)
     onTransformStart(piece)
@@ -296,9 +309,15 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
     if (transform.widthCm < 0.1 || transform.heightCm < 0.1) return
     const id = createObjectId('helper')
+    const helperNumber = piece.objects.filter((object) => object.role === 'helper').length + 1
+    const shapeType = draw.shape === 'custom-polygon'
+      ? 'path'
+      : draw.shape === 'square'
+        ? 'rectangle'
+        : draw.shape
     const helper: EditorObject = {
-      id, type: 'helper-shape', role: 'helper', shapeType: draw.shape === 'custom-polygon' ? 'path' : draw.shape,
-      name: 'Helper Shape', visible: true, locked: false, transform,
+      id, type: 'helper-shape', role: 'helper', shapeType,
+      name: `Helper Shape ${helperNumber}`, visible: true, locked: false, transform,
       fillColor: 'rgba(139, 92, 246, 0.1)', strokeColor: '#8b5cf6', strokeWidthPt: 0.75,
       exportEnabled: false
     }
@@ -374,7 +393,8 @@ const CanvasObject = memo(function CanvasObject({
 })
 
 function ShapePreview({ shape, transform, scale }: { shape: MaskShape; transform: ArtworkTransform; scale: number }): JSX.Element {
-  return <div className={`pointer-events-none absolute z-30 border-2 border-dashed border-primary bg-primary/10 ${shapeClass(shape === 'custom-polygon' ? 'path' : shape)}`} style={{ left: transform.xCm * scale, top: transform.yCm * scale, width: transform.widthCm * scale, height: transform.heightCm * scale }} />
+  const editorShape = shape === 'custom-polygon' ? 'path' : shape === 'square' ? 'rectangle' : shape
+  return <div className={`pointer-events-none absolute z-30 border-2 border-dashed border-primary bg-primary/10 ${shapeClass(editorShape)}`} style={{ left: transform.xCm * scale, top: transform.yCm * scale, width: transform.widthCm * scale, height: transform.heightCm * scale }} />
 }
 
 function getArtworkClipPath(piece: PiecePreset, scale: number): string {

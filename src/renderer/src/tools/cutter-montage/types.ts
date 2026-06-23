@@ -91,6 +91,8 @@ export interface EditorObject {
   pathData?: string
   offsetMm?: number
   exportEnabled?: boolean
+  /** Objects with the same group id move together in the piece editor. */
+  groupId?: string
 }
 
 export interface CutlineTransform {

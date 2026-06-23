@@ -24,9 +24,14 @@ export function usePieceEditorTransforms(): {
 
   const moveSelection = useCallback((piece: PiecePreset, dxCm: number, dyCm: number): PiecePreset => {
     const selected = new Set(piece.selectedObjectIds)
+    const selectedGroups = new Set(piece.objects
+      .filter((object) => selected.has(object.id) && object.groupId)
+      .map((object) => object.groupId))
     return syncLegacyFieldsFromObjects({
       ...piece,
-      objects: piece.objects.map((object) => selected.has(object.id) && !object.locked
+      objects: piece.objects.map((object) =>
+        (selected.has(object.id) || Boolean(object.groupId && selectedGroups.has(object.groupId))) &&
+        !object.locked
         ? {
             ...object,
             transform: {

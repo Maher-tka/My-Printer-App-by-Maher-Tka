@@ -8,109 +8,80 @@ import {
   Crosshair
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { AlignmentCommand, EditorObjectType, KeyObjectState } from '../types'
+import type { AlignmentCommand, PiecePreset } from '../types'
 
 interface AlignmentToolbarProps {
-  selectedObjects: EditorObjectType[]
-  keyObject: KeyObjectState
-  onSelectedObjectsChange: (objects: EditorObjectType[]) => void
-  onSetKeyObject: (object: EditorObjectType | null) => void
+  piece: PiecePreset
+  onSelectIds: (ids: string[]) => void
+  onSetKeyObject: (objectId?: string) => void
   onAlign: (command: AlignmentCommand) => void
+  onCenterArtworkToMask: () => void
   onCenterArtworkToCutline: () => void
-  onCenterCutlineToArtwork: () => void
+  onCenterCutlineToMask: () => void
   onMatchCutlineToMask: () => void
   onMatchMaskToCutline: () => void
 }
 
-export function AlignmentToolbar({
-  selectedObjects,
-  keyObject,
-  onSelectedObjectsChange,
-  onSetKeyObject,
-  onAlign,
-  onCenterArtworkToCutline,
-  onCenterCutlineToArtwork,
-  onMatchCutlineToMask,
-  onMatchMaskToCutline
-}: AlignmentToolbarProps): JSX.Element {
-  const artworkSelected = selectedObjects.includes('artwork')
-  const maskSelected = selectedObjects.includes('mask')
-  const cutlineSelected = selectedObjects.includes('cutline')
+export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
+  const selected = new Set(props.piece.selectedObjectIds)
+  const artwork = props.piece.objects.find((object) => object.id === props.piece.artworkObjectId)
+  const mask = props.piece.objects.find((object) => object.id === props.piece.maskObjectId)
+  const cutline = props.piece.objects.find((object) => object.id === props.piece.cutlineObjectId)
+  const primaryIds = [artwork?.id, mask?.id, cutline?.id].filter((id): id is string => Boolean(id))
+  const canAlign = props.piece.selectedObjectIds.length >= 2 &&
+    Boolean(props.piece.keyObjectId && selected.has(props.piece.keyObjectId))
 
   return (
     <div className="flex flex-col gap-4">
       <section className="rounded-lg border bg-card p-3">
         <h4 className="text-sm font-semibold">Selection</h4>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <Button type="button" size="sm" variant={artworkSelected && selectedObjects.length === 1 ? 'default' : 'outline'} onClick={() => onSelectedObjectsChange(['artwork'])}>
-            Artwork
-          </Button>
-          <Button type="button" size="sm" variant={maskSelected && selectedObjects.length === 1 ? 'default' : 'outline'} onClick={() => onSelectedObjectsChange(['mask'])}>
-            Mask
-          </Button>
-          <Button type="button" size="sm" variant={cutlineSelected && selectedObjects.length === 1 ? 'default' : 'outline'} onClick={() => onSelectedObjectsChange(['cutline'])}>
-            Cutline
-          </Button>
-          <Button type="button" size="sm" variant={selectedObjects.length === 3 ? 'default' : 'outline'} onClick={() => onSelectedObjectsChange(['artwork', 'mask', 'cutline'])}>
-            All
-          </Button>
-        </div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <Button type="button" size="sm" variant={keyObject.object === 'artwork' ? 'default' : 'outline'} onClick={() => onSetKeyObject('artwork')}>
-            Key Art
-          </Button>
-          <Button type="button" size="sm" variant={keyObject.object === 'mask' ? 'default' : 'outline'} onClick={() => onSetKeyObject('mask')}>
-            Key Mask
-          </Button>
-          <Button type="button" size="sm" variant={keyObject.object === 'cutline' ? 'default' : 'outline'} onClick={() => onSetKeyObject('cutline')}>
-            Key Cut
+          <SelectButton label="Artwork" objectId={artwork?.id} piece={props.piece} onSelectIds={props.onSelectIds} />
+          <SelectButton label="Mask" objectId={mask?.id} piece={props.piece} onSelectIds={props.onSelectIds} />
+          <SelectButton label="Cutline" objectId={cutline?.id} piece={props.piece} onSelectIds={props.onSelectIds} />
+          <Button type="button" size="sm" variant={primaryIds.every((id) => selected.has(id)) ? 'default' : 'outline'} onClick={() => props.onSelectIds(primaryIds)}>
+            Main objects
           </Button>
         </div>
       </section>
 
       <section className="rounded-lg border bg-card p-3">
-        <h4 className="text-sm font-semibold">Alignment</h4>
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-sm font-semibold">Key-object alignment</h4>
+          <span className="text-[11px] text-muted-foreground">
+            {props.piece.keyObjectId ? 'Key stays fixed' : 'Choose a key in Objects'}
+          </span>
+        </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
-          <IconButton label="Align left" icon={AlignStartVertical} onClick={() => onAlign('left')} />
-          <IconButton label="Align center horizontal" icon={AlignCenter} onClick={() => onAlign('center-horizontal')} />
-          <IconButton label="Align right" icon={AlignEndVertical} onClick={() => onAlign('right')} />
-          <IconButton label="Align top" icon={AlignStartHorizontal} onClick={() => onAlign('top')} />
-          <IconButton label="Align center vertical" icon={AlignHorizontalJustifyCenter} onClick={() => onAlign('center-vertical')} />
-          <IconButton label="Align bottom" icon={AlignEndHorizontal} onClick={() => onAlign('bottom')} />
+          <IconButton label="Align left" icon={AlignStartVertical} disabled={!canAlign} onClick={() => props.onAlign('left')} />
+          <IconButton label="Align center horizontal" icon={AlignCenter} disabled={!canAlign} onClick={() => props.onAlign('center-horizontal')} />
+          <IconButton label="Align right" icon={AlignEndVertical} disabled={!canAlign} onClick={() => props.onAlign('right')} />
+          <IconButton label="Align top" icon={AlignStartHorizontal} disabled={!canAlign} onClick={() => props.onAlign('top')} />
+          <IconButton label="Align center vertical" icon={AlignHorizontalJustifyCenter} disabled={!canAlign} onClick={() => props.onAlign('center-vertical')} />
+          <IconButton label="Align bottom" icon={AlignEndHorizontal} disabled={!canAlign} onClick={() => props.onAlign('bottom')} />
         </div>
         <div className="mt-2 grid grid-cols-1 gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={onCenterArtworkToCutline}>
-            <Crosshair data-icon="inline-start" />
-            Center artwork inside cutline
+          <Button type="button" size="sm" variant="outline" disabled={!artwork || !mask} onClick={props.onCenterArtworkToMask}>
+            <Crosshair data-icon="inline-start" />Center artwork inside mask
           </Button>
-          <Button type="button" size="sm" variant="outline" onClick={onCenterCutlineToArtwork}>
-            <Crosshair data-icon="inline-start" />
-            Center cutline around artwork
+          <Button type="button" size="sm" variant="outline" disabled={!artwork || !cutline} onClick={props.onCenterArtworkToCutline}>
+            <Crosshair data-icon="inline-start" />Center artwork inside cutline
           </Button>
-          <Button type="button" size="sm" variant="outline" onClick={onMatchCutlineToMask}>
-            Match cutline size to mask
+          <Button type="button" size="sm" variant="outline" disabled={!cutline || !mask} onClick={props.onCenterCutlineToMask}>
+            <Crosshair data-icon="inline-start" />Center cutline around mask
           </Button>
-          <Button type="button" size="sm" variant="outline" onClick={onMatchMaskToCutline}>
-            Match mask size to cutline
-          </Button>
+          <Button type="button" size="sm" variant="outline" disabled={!cutline || !mask} onClick={props.onMatchCutlineToMask}>Match cutline to mask</Button>
+          <Button type="button" size="sm" variant="outline" disabled={!cutline || !mask} onClick={props.onMatchMaskToCutline}>Match mask to cutline</Button>
         </div>
       </section>
     </div>
   )
 }
 
-function IconButton({
-  label,
-  icon: Icon,
-  onClick
-}: {
-  label: string
-  icon: typeof AlignCenter
-  onClick: () => void
-}): JSX.Element {
-  return (
-    <Button type="button" size="icon" variant="outline" onClick={onClick} aria-label={label}>
-      <Icon />
-    </Button>
-  )
+function SelectButton({ label, objectId, piece, onSelectIds }: { label: string; objectId?: string; piece: PiecePreset; onSelectIds: (ids: string[]) => void }): JSX.Element {
+  return <Button type="button" size="sm" disabled={!objectId} variant={objectId && piece.selectedObjectIds.length === 1 && piece.selectedObjectIds[0] === objectId ? 'default' : 'outline'} onClick={() => objectId && onSelectIds([objectId])}>{label}</Button>
+}
+
+function IconButton({ label, icon: Icon, onClick, disabled }: { label: string; icon: typeof AlignCenter; onClick: () => void; disabled: boolean }): JSX.Element {
+  return <Button type="button" size="icon" variant="outline" disabled={disabled} onClick={onClick} aria-label={label}><Icon /></Button>
 }

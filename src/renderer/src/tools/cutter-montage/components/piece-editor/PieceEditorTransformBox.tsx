@@ -12,6 +12,8 @@ interface PieceEditorTransformBoxProps {
     handle: TransformHandle,
     bounds: ArtworkTransform
   ) => void
+  onHandlePointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => void
+  onHandlePointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void
 }
 
 const handles: Array<{ handle: Exclude<TransformHandle, 'rotate'>; left: string; top: string; cursor: string }> = [
@@ -28,7 +30,9 @@ const handles: Array<{ handle: Exclude<TransformHandle, 'rotate'>; left: string;
 export function PieceEditorTransformBox({
   objects,
   scale,
-  onHandlePointerDown
+  onHandlePointerDown,
+  onHandlePointerMove,
+  onHandlePointerUp
 }: PieceEditorTransformBoxProps): JSX.Element | null {
   if (objects.length === 0 || objects.every((object) => object.locked)) return null
   const bounds = getSelectionBounds(objects)
@@ -50,6 +54,8 @@ export function PieceEditorTransformBox({
         style={{ cursor: 'grab' }}
         aria-label="Rotate selection"
         onPointerDown={(event) => onHandlePointerDown(event, 'rotate', bounds)}
+        onPointerMove={onHandlePointerMove}
+        onPointerUp={onHandlePointerUp}
       />
       {handles.map(({ handle, left, top, cursor }) => (
         <button
@@ -59,6 +65,8 @@ export function PieceEditorTransformBox({
           style={{ left, top, cursor }}
           aria-label={`Resize selection ${handle}`}
           onPointerDown={(event) => onHandlePointerDown(event, handle, bounds)}
+          onPointerMove={onHandlePointerMove}
+          onPointerUp={onHandlePointerUp}
         />
       ))}
     </div>
