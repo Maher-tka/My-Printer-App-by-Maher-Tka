@@ -6,3 +6,12 @@ dist/
 .env
 .env.*
 .license-private/
+node_modules/
+dist/
+out/
+build/
+.vite/
+*.log
+.DS_Store
+.env
+.env.local
