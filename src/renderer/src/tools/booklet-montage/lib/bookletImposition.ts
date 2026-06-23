@@ -1,4 +1,5 @@
 import type { BookletPage, BookletReadingDirection, BookletSheet } from '../types'
+import { DEFAULT_SOLID_FILL_HEX } from './colorUtils'
 
 export function blanksNeededForBooklet(pageCount: number): number {
   if (pageCount <= 0) {
@@ -89,6 +90,7 @@ export function createBlankPage(sequence: number): BookletPage {
     importBatchIndex: sequence - 1,
     label: 'Blank Page',
     displayName: `Blank Page ${sequence}`,
+    colorHex: DEFAULT_SOLID_FILL_HEX,
     widthMm: 210,
     heightMm: 297
   }

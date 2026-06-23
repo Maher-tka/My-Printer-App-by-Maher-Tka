@@ -1,5 +1,6 @@
 import { CUT_CONTOUR_COLOR, CUT_CONTOUR_NAME } from './colorSpot'
 import { createCutterId } from './nesting'
+import { synchronizePieceEditorModel } from './editorObjects'
 import type {
   ArtworkTransform,
   CutlineTransform,
@@ -30,9 +31,10 @@ export function createPiecePresetFromSource(
     rotation: 0,
     offsetMm: 1
   }
+  const pieceId = createCutterId('piece')
 
-  return {
-    id: createCutterId('piece'),
+  return synchronizePieceEditorModel({
+    id: pieceId,
     sourceId: source.id,
     sourceFileName: source.fileName,
     displayName,
@@ -50,33 +52,85 @@ export function createPiecePresetFromSource(
       previewUrl: source.previewUrl,
       transform: artworkTransform
     },
+    mask: {
+      enabled: false,
+      shape: 'rectangle',
+      transform: { ...artworkTransform }
+    },
     cutline: {
       shape: 'rectangle',
       transform: cutlineTransform,
       strokeName: CUT_CONTOUR_NAME,
       strokeColor: CUT_CONTOUR_COLOR,
       strokeWidthPt: 0.25
-    }
-  }
+    },
+    artworkCutlineGrouped: false,
+    objectVisibility: {
+      artwork: true,
+      mask: true,
+      cutline: true,
+      helper: true
+    },
+    objectLocks: {
+      artwork: false,
+      mask: false,
+      cutline: false,
+      helper: false
+    },
+    objects: [],
+    artworkObjectId: `artwork-${pieceId}`,
+    maskObjectId: undefined,
+    cutlineObjectId: `cutline-${pieceId}`,
+    helperObjectIds: [],
+    selectedObjectIds: [`artwork-${pieceId}`, `cutline-${pieceId}`],
+    keyObjectId: `cutline-${pieceId}`,
+    groupLinked: false,
+    lockAspectRatio: true,
+    clippingMaskEnabled: false
+  })
 }
 
 export function duplicatePiecePreset(
   piece: PiecePreset,
   existingPieces: PiecePreset[]
 ): PiecePreset {
-  return {
+  const pieceId = createCutterId('piece')
+  const duplicate = {
     ...piece,
-    id: createCutterId('piece'),
+    id: pieceId,
     displayName: getUniquePieceName(piece.sourceFileName, existingPieces),
     artwork: {
       ...piece.artwork,
       transform: { ...piece.artwork.transform }
     },
+    mask: {
+      ...piece.mask,
+      transform: { ...piece.mask.transform }
+    },
     cutline: {
       ...piece.cutline,
       transform: { ...piece.cutline.transform }
-    }
+    },
+    helperShape: piece.helperShape
+      ? {
+          ...piece.helperShape,
+          id: createCutterId('shape'),
+          transform: { ...piece.helperShape.transform }
+        }
+      : undefined,
+    artworkCutlineGrouped: piece.artworkCutlineGrouped,
+    objectVisibility: { ...piece.objectVisibility },
+    objectLocks: { ...piece.objectLocks },
+    objects: [],
+    artworkObjectId: `artwork-${pieceId}`,
+    maskObjectId: piece.maskObjectId ? `mask-${pieceId}` : undefined,
+    cutlineObjectId: `cutline-${pieceId}`,
+    helperObjectIds: [],
+    selectedObjectIds: [],
+    keyObjectId: `cutline-${pieceId}`
   }
+
+  return synchronizePieceEditorModel(duplicate)
 }
 
 export function createPlacedPieceFromPreset(
@@ -97,6 +151,7 @@ export function createPlacedPieceFromPreset(
     rotation,
     locked: piece.locked,
     artworkTransform: { ...piece.artwork.transform },
+    maskTransform: { ...piece.mask.transform },
     cutlineTransform: { ...piece.cutline.transform }
   }
 }
@@ -107,7 +162,7 @@ export function syncPieceBounds(piece: PiecePreset, widthCm: number, heightCm: n
   const widthScale = safeWidth / piece.widthCm
   const heightScale = safeHeight / piece.heightCm
 
-  return {
+  return synchronizePieceEditorModel({
     ...piece,
     widthCm: safeWidth,
     heightCm: safeHeight,
@@ -121,6 +176,16 @@ export function syncPieceBounds(piece: PiecePreset, widthCm: number, heightCm: n
         heightCm: piece.artwork.transform.heightCm * heightScale
       }
     },
+    mask: {
+      ...piece.mask,
+      transform: {
+        ...piece.mask.transform,
+        xCm: piece.mask.transform.xCm * widthScale,
+        yCm: piece.mask.transform.yCm * heightScale,
+        widthCm: piece.mask.transform.widthCm * widthScale,
+        heightCm: piece.mask.transform.heightCm * heightScale
+      }
+    },
     cutline: {
       ...piece.cutline,
       transform: {
@@ -130,8 +195,20 @@ export function syncPieceBounds(piece: PiecePreset, widthCm: number, heightCm: n
         widthCm: piece.cutline.transform.widthCm * widthScale,
         heightCm: piece.cutline.transform.heightCm * heightScale
       }
-    }
-  }
+    },
+    helperShape: piece.helperShape
+      ? {
+          ...piece.helperShape,
+          transform: {
+            ...piece.helperShape.transform,
+            xCm: piece.helperShape.transform.xCm * widthScale,
+            yCm: piece.helperShape.transform.yCm * heightScale,
+            widthCm: piece.helperShape.transform.widthCm * widthScale,
+            heightCm: piece.helperShape.transform.heightCm * heightScale
+          }
+        }
+      : undefined
+  })
 }
 
 function getDefaultPieceWidthCm(naturalWidthPx: number): number {

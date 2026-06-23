@@ -11,6 +11,12 @@ export interface CmykColor {
   k: number
 }
 
+export const DEFAULT_SOLID_FILL_HEX = '#FFFFFF'
+
+export function getSolidFillHex(colorHex?: string): string {
+  return normalizeHex(colorHex ?? DEFAULT_SOLID_FILL_HEX) ?? DEFAULT_SOLID_FILL_HEX
+}
+
 export function hexToRgb(hex: string): RgbColor | null {
   const normalized = normalizeHex(hex)
 

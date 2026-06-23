@@ -41,6 +41,7 @@ export interface BookletPage {
   label: string
   displayName: string
   thumbnailUrl?: string
+  colorHex?: string
   widthMm: number
   heightMm: number
 }

@@ -6,7 +6,8 @@ interface QuickAction {
   label: string
   description: string
   icon: LucideIcon
-  route: AppRoute
+  route?: AppRoute
+  onClick?: () => void
 }
 
 interface QuickActionListProps {
@@ -33,7 +34,13 @@ export function QuickActionList({
           <button
             key={action.label}
             type="button"
-            onClick={() => onNavigate(action.route)}
+            onClick={() => {
+              if (action.onClick) {
+                action.onClick()
+              } else if (action.route) {
+                onNavigate(action.route)
+              }
+            }}
             className="flex min-h-[88px] items-center gap-4 rounded-lg border bg-card p-3 text-left transition hover:bg-accent"
           >
             <div

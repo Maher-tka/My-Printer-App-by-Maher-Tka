@@ -1,0 +1,328 @@
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  type OpenDialogOptions
+} from 'electron'
+import { access, readFile, writeFile } from 'node:fs/promises'
+import { extname, join } from 'node:path'
+
+const PROJECT_SCHEMA = 'com.maher-tka.my-printer-app.project'
+const PROJECT_VERSION = 1
+const PROJECT_EXTENSION = 'mpjob'
+const MAX_RECENT_PROJECTS = 20
+
+type ProjectToolId = 'booklet-montage' | 'cutter-montage'
+
+interface ProjectMetadata {
+  id: string
+  jobName: string
+  tool: ProjectToolId
+  toolLabel: string
+  createdAt: string
+  updatedAt: string
+  sourceCount: number
+  itemCount: number
+  summary: string
+}
+
+interface ProjectFile {
+  schema: typeof PROJECT_SCHEMA
+  version: typeof PROJECT_VERSION
+  metadata: ProjectMetadata
+  payload: Record<string, unknown>
+}
+
+interface SaveProjectRequest {
+  suggestedName: string
+  filePath?: string | null
+  project: unknown
+}
+
+interface RecentProjectEntry {
+  filePath: string
+  metadata: ProjectMetadata
+}
+
+interface RecentJob {
+  id: string
+  jobName: string
+  tool: string
+  toolId: ProjectToolId
+  filePath: string
+  date: string
+  updatedAt: string
+  status: 'Saved' | 'Missing'
+  summary?: string
+}
+
+export function registerProjectHandlers(): void {
+  ipcMain.handle('projects:save', async (event, request: SaveProjectRequest) => {
+    try {
+      if (!isProjectFile(request?.project)) {
+        throw new Error('This project data is not a valid My Printer App job.')
+      }
+
+      let filePath = request.filePath?.trim() || null
+
+      if (!filePath) {
+        const owner = BrowserWindow.fromWebContents(event.sender)
+        const options = {
+          title: 'Save My Printer App job',
+          defaultPath: ensureProjectExtension(request.suggestedName || 'Untitled Project'),
+          filters: [projectFileFilter]
+        }
+        const result = owner
+          ? await dialog.showSaveDialog(owner, options)
+          : await dialog.showSaveDialog(options)
+
+        if (result.canceled || !result.filePath) {
+          return { ok: false, canceled: true }
+        }
+
+        filePath = result.filePath
+      }
+
+      filePath = ensureProjectExtension(filePath)
+      await writeFile(filePath, `${JSON.stringify(request.project, null, 2)}\n`, 'utf8')
+      await rememberProject(filePath, request.project.metadata)
+
+      return {
+        ok: true,
+        filePath,
+        project: request.project,
+        recentJob: toRecentJob(filePath, request.project.metadata, 'Saved')
+      }
+    } catch (error) {
+      return { ok: false, error: getErrorMessage(error) }
+    }
+  })
+
+  ipcMain.handle('projects:open', async (event, requestedPath: string | null) => {
+    try {
+      let filePath = requestedPath?.trim() || null
+
+      if (!filePath) {
+        const owner = BrowserWindow.fromWebContents(event.sender)
+        const options: OpenDialogOptions = {
+          title: 'Open My Printer App job',
+          properties: ['openFile'],
+          filters: [projectFileFilter]
+        }
+        const result = owner
+          ? await dialog.showOpenDialog(owner, options)
+          : await dialog.showOpenDialog(options)
+
+        if (result.canceled || result.filePaths.length === 0) {
+          return { ok: false, canceled: true }
+        }
+
+        filePath = result.filePaths[0]
+      }
+
+      if (extname(filePath).toLowerCase() !== `.${PROJECT_EXTENSION}`) {
+        throw new Error(`Choose a .${PROJECT_EXTENSION} project file.`)
+      }
+
+      const project = parseProjectFile(await readFile(filePath, 'utf8'))
+      await rememberProject(filePath, project.metadata)
+
+      return {
+        ok: true,
+        filePath,
+        project,
+        recentJob: toRecentJob(filePath, project.metadata, 'Saved')
+      }
+    } catch (error) {
+      return { ok: false, error: getErrorMessage(error) }
+    }
+  })
+
+  ipcMain.handle('projects:list-recent', async () => {
+    try {
+      const entries = await readRecentProjects()
+      const jobs = await Promise.all(
+        entries.map(async (entry) =>
+          toRecentJob(
+            entry.filePath,
+            entry.metadata,
+            (await fileExists(entry.filePath)) ? 'Saved' : 'Missing'
+          )
+        )
+      )
+
+      return { ok: true, jobs }
+    } catch (error) {
+      return { ok: false, error: getErrorMessage(error) }
+    }
+  })
+}
+
+const projectFileFilter = {
+  name: 'My Printer App Jobs',
+  extensions: [PROJECT_EXTENSION]
+}
+
+function parseProjectFile(contents: string): ProjectFile {
+  let parsed: unknown
+
+  try {
+    parsed = JSON.parse(contents)
+  } catch {
+    throw new Error('This file is not valid JSON and cannot be opened as a project.')
+  }
+
+  if (!isProjectFile(parsed)) {
+    throw new Error('This file is not a supported My Printer App project.')
+  }
+
+  return parsed
+}
+
+function isProjectFile(value: unknown): value is ProjectFile {
+  if (!isRecord(value) || !isRecord(value.metadata) || !isRecord(value.payload)) {
+    return false
+  }
+
+  const metadata = value.metadata
+  const tool = metadata.tool
+  const commonPayloadIsValid =
+    value.schema === PROJECT_SCHEMA &&
+    value.version === PROJECT_VERSION &&
+    (tool === 'booklet-montage' || tool === 'cutter-montage') &&
+    isNonEmptyString(metadata.id) &&
+    isNonEmptyString(metadata.jobName) &&
+    isNonEmptyString(metadata.toolLabel) &&
+    isNonEmptyString(metadata.createdAt) &&
+    isNonEmptyString(metadata.updatedAt) &&
+    typeof metadata.sourceCount === 'number' &&
+    typeof metadata.itemCount === 'number' &&
+    typeof metadata.summary === 'string'
+
+  if (!commonPayloadIsValid) {
+    return false
+  }
+
+  if (tool === 'booklet-montage') {
+    return (
+      isRecord(value.payload.settings) &&
+      isRecord(value.payload.sheetBoardState) &&
+      Array.isArray(value.payload.sources) &&
+      Array.isArray(value.payload.pages)
+    )
+  }
+
+  return (
+    typeof value.payload.mode === 'string' &&
+    isRecord(value.payload.sheet) &&
+    Array.isArray(value.payload.sources) &&
+    Array.isArray(value.payload.pieces) &&
+    Array.isArray(value.payload.placedPieces) &&
+    isRecord(value.payload.layers) &&
+    isRecord(value.payload.exportSettings)
+  )
+}
+
+async function rememberProject(filePath: string, metadata: ProjectMetadata): Promise<void> {
+  const entries = await readRecentProjects()
+  const normalizedPath = filePath.toLowerCase()
+  const nextEntries = [
+    { filePath, metadata },
+    ...entries.filter((entry) => entry.filePath.toLowerCase() !== normalizedPath)
+  ].slice(0, MAX_RECENT_PROJECTS)
+
+  await writeFile(getRecentProjectsPath(), JSON.stringify(nextEntries, null, 2), 'utf8')
+}
+
+async function readRecentProjects(): Promise<RecentProjectEntry[]> {
+  try {
+    const value: unknown = JSON.parse(await readFile(getRecentProjectsPath(), 'utf8'))
+
+    if (!Array.isArray(value)) {
+      return []
+    }
+
+    return value.filter(isRecentProjectEntry).slice(0, MAX_RECENT_PROJECTS)
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      return []
+    }
+
+    if (error instanceof SyntaxError) {
+      return []
+    }
+
+    throw error
+  }
+}
+
+function isRecentProjectEntry(value: unknown): value is RecentProjectEntry {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.filePath) &&
+    isRecord(value.metadata) &&
+    (value.metadata.tool === 'booklet-montage' || value.metadata.tool === 'cutter-montage') &&
+    isNonEmptyString(value.metadata.id) &&
+    isNonEmptyString(value.metadata.jobName) &&
+    isNonEmptyString(value.metadata.toolLabel) &&
+    isNonEmptyString(value.metadata.createdAt) &&
+    isNonEmptyString(value.metadata.updatedAt) &&
+    typeof value.metadata.sourceCount === 'number' &&
+    typeof value.metadata.itemCount === 'number' &&
+    typeof value.metadata.summary === 'string'
+  )
+}
+
+function toRecentJob(
+  filePath: string,
+  metadata: ProjectMetadata,
+  status: RecentJob['status']
+): RecentJob {
+  return {
+    id: metadata.id,
+    jobName: metadata.jobName,
+    tool: metadata.toolLabel,
+    toolId: metadata.tool,
+    filePath,
+    date: metadata.updatedAt,
+    updatedAt: metadata.updatedAt,
+    status,
+    summary: metadata.summary
+  }
+}
+
+function getRecentProjectsPath(): string {
+  return join(app.getPath('userData'), 'recent-projects.json')
+}
+
+function ensureProjectExtension(filePath: string): string {
+  return extname(filePath).toLowerCase() === `.${PROJECT_EXTENSION}`
+    ? filePath
+    : `${filePath}.${PROJECT_EXTENSION}`
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Something went wrong with the project file.'
+}

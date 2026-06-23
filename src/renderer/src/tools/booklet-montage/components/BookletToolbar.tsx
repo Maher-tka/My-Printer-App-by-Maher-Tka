@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useRef } from 'react'
+import { PdfFilePickerInput } from '@/components/file-input/PdfFilePickerInput'
 import { Button } from '@/components/ui/button'
 import type {
   BookletScaleMode,
@@ -261,16 +262,9 @@ export function BookletToolbar({
         <ProgressLine progress={exportProgress} />
       </div>
 
-      <input
+      <PdfFilePickerInput
         ref={pdfInputRef}
-        className="hidden"
-        type="file"
-        accept="application/pdf,.pdf"
-        multiple
-        onChange={(event) => {
-          onImportPdf(Array.from(event.target.files ?? []))
-          event.currentTarget.value = ''
-        }}
+        onFilesSelected={onImportPdf}
       />
       <input
         ref={imageInputRef}

@@ -8,11 +8,11 @@ import type {
   PlacedPiece
 } from '../types'
 import { getSafeArea } from '../lib/cutterLayout'
-import { formatCm } from '../lib/units'
+import { formatCm } from '../lib/cutterUnits'
 import { ArtboardResizeHandle } from './ArtboardResizeHandle'
-import { StickerItem } from './StickerItem'
+import { PlacedPieceItem } from './PlacedPieceItem'
 
-interface ArtboardCanvasProps {
+interface MontageArtboardProps {
   settings: CutterSheetSettings
   pieces: PiecePreset[]
   placedPieces: PlacedPiece[]
@@ -29,7 +29,7 @@ interface ArtboardCanvasProps {
   onNudgeSelected: (dxCm: number, dyCm: number) => void
 }
 
-export function ArtboardCanvas({
+export function MontageArtboard({
   settings,
   pieces,
   placedPieces,
@@ -44,7 +44,7 @@ export function ArtboardCanvas({
   onRotatePiece,
   onToggleLock,
   onNudgeSelected
-}: ArtboardCanvasProps): JSX.Element {
+}: MontageArtboardProps): JSX.Element {
   const pieceMap = useMemo(() => new Map(pieces.map((piece) => [piece.id, piece])), [pieces])
   const selectedPieces = placedPieces.filter((piece) => selectedPieceIds.includes(piece.id))
   const safeArea = getSafeArea(settings)
@@ -151,6 +151,12 @@ export function ArtboardCanvas({
               return
             }
 
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
+              event.preventDefault()
+              onDuplicatePieces(selectedPieceIds)
+              return
+            }
+
             const step = event.shiftKey ? 1 : settings.snapToGrid ? settings.gridStepCm : 0.1
 
             if (event.key === 'ArrowLeft') {
@@ -184,7 +190,7 @@ export function ArtboardCanvas({
             const piece = pieceMap.get(placed.presetId)
 
             return piece ? (
-              <StickerItem
+              <PlacedPieceItem
                 key={placed.id}
                 piece={piece}
                 placed={placed}
@@ -195,7 +201,27 @@ export function ArtboardCanvas({
                 sheetHeightCm={settings.heightCm}
                 snapStepCm={settings.snapToGrid ? settings.gridStepCm : 0.1}
                 onSelect={onSelectPiece}
-                onMove={onMovePiece}
+                onMove={(pieceId, xCm, yCm) => {
+                  const dragged = placedPieces.find((candidate) => candidate.id === pieceId)
+
+                  if (!dragged || !selectedPieceIds.includes(pieceId) || selectedPieceIds.length < 2) {
+                    onMovePiece(pieceId, xCm, yCm)
+                    return
+                  }
+
+                  const deltaX = xCm - dragged.xCm
+                  const deltaY = yCm - dragged.yCm
+
+                  for (const selected of selectedPieces) {
+                    if (!selected.locked) {
+                      onMovePiece(
+                        selected.id,
+                        clamp(selected.xCm + deltaX, 0, Math.max(settings.widthCm - selected.widthCm, 0)),
+                        clamp(selected.yCm + deltaY, 0, Math.max(settings.heightCm - selected.heightCm, 0))
+                      )
+                    }
+                  }
+                }}
                 onDuplicate={(pieceId) => onDuplicatePieces([pieceId])}
                 onDelete={(pieceId) => onDeletePieces([pieceId])}
                 onRotate={onRotatePiece}
@@ -217,6 +243,10 @@ export function ArtboardCanvas({
 
 function getArtboardScale(widthCm: number): number {
   return Math.max(5.5, Math.min(8.5, 820 / widthCm))
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
 }
 
 function SmallNumber({

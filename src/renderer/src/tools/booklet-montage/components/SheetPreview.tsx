@@ -19,6 +19,7 @@ import {
   getBoardCanvasSize,
   getSideKey
 } from '../lib/sheetLayoutState'
+import { getReadableTextColor, getSolidFillHex } from '../lib/colorUtils'
 import { ColorPickerPopover } from './ColorPickerPopover'
 import { DraggableSheetCard } from './DraggableSheetCard'
 import { EmptySheetCard } from './EmptySheetCard'
@@ -402,6 +403,22 @@ function PreviewSlot({
 }
 
 function PageArtwork({ page }: { page: BookletPage }): JSX.Element {
+  if (page.sourceType === 'blank') {
+    const fillColor = getSolidFillHex(page.colorHex)
+
+    return (
+      <div
+        className="grid h-full w-full place-items-center text-sm font-semibold"
+        style={{
+          backgroundColor: fillColor,
+          color: getReadableTextColor(fillColor)
+        }}
+      >
+        Blank
+      </div>
+    )
+  }
+
   if (page.thumbnailUrl) {
     return (
       <img

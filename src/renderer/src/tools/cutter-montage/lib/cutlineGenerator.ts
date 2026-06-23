@@ -26,6 +26,23 @@ export function getPlacedArtworkRect(
   }
 }
 
+export function getPlacedMaskArtworkRect(
+  placed: PlacedPiece,
+  preset: PiecePreset
+): CutlineRect {
+  const scaleX = placed.widthCm / preset.widthCm
+  const scaleY = placed.heightCm / preset.heightCm
+  const transform = placed.maskTransform
+
+  return {
+    xCm: placed.xCm + transform.xCm * scaleX,
+    yCm: placed.yCm + transform.yCm * scaleY,
+    widthCm: transform.widthCm * scaleX,
+    heightCm: transform.heightCm * scaleY,
+    rotation: (placed.rotation + transform.rotation) % 360
+  }
+}
+
 export function getPlacedCutlineRect(
   placed: PlacedPiece,
   preset: PiecePreset

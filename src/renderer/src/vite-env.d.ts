@@ -1,5 +1,15 @@
 /// <reference types="vite/client" />
 
+import type {
+  PrinterAppProjectResult,
+  PrinterAppRecentProjectsResult,
+  PrinterProjectFile
+} from '@/types/projects'
+import type {
+  LicenseActivationResult,
+  LicenseSnapshot
+} from '../../shared/licensing-types'
+
 declare global {
   interface PrinterAppFileFilter {
     name: string
@@ -41,7 +51,18 @@ declare global {
     printerApp?: {
       platform: string
       storageMode: 'local-first'
+      license: {
+        getState: () => Promise<LicenseSnapshot>
+        activateSerial: (serialKey: string) => Promise<LicenseActivationResult>
+      }
       saveFile: (request: PrinterAppSaveFileRequest) => Promise<PrinterAppSaveResult>
+      saveProject: (request: {
+        suggestedName: string
+        filePath?: string | null
+        project: PrinterProjectFile
+      }) => Promise<PrinterAppProjectResult>
+      openProject: (filePath?: string | null) => Promise<PrinterAppProjectResult>
+      listRecentProjects: () => Promise<PrinterAppRecentProjectsResult>
       selectOutputFolder: () => Promise<PrinterAppFolderResult>
       writeFilesToFolder: (
         folderPath: string,

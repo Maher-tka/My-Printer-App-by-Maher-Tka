@@ -6,11 +6,16 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "npm run typecheck && electron-vite build",
+    "dev": "electron-vite dev --config electron.vite.config.ts",
+    "build": "npm run typecheck && electron-vite build --config electron.vite.config.ts",
+    "license:generate": "tsx src/main/license-generator-cli.ts",
+    "test": "npm run test:license && npm run test:booklet && npm run test:projects && npm run test:cutter",
+    "test:license": "tsx src/main/license-serial.test.ts",
     "test:booklet": "tsx src/renderer/src/tools/booklet-montage/lib/bookletImposition.test.ts",
+    "test:projects": "tsx --tsconfig tsconfig.web.json src/renderer/src/projects/projectFiles.test.ts",
+    "test:cutter": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/editorWorkflow.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "preview": "electron-vite preview"
+    "preview": "electron-vite preview --config electron.vite.config.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

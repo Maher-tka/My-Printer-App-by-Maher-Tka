@@ -1,4 +1,3 @@
-import type { RecentJob } from '@/types/jobs'
 import type { PrinterTool } from '@/types/tools'
 
 export const printerTools: PrinterTool[] = [
@@ -9,7 +8,8 @@ export const printerTools: PrinterTool[] = [
     shortTitle: 'Booklet Montage',
     description: 'Create booklet imposition from PDF or images',
     status: 'active',
-    accent: 'blue'
+    accent: 'blue',
+    requiredFeature: 'paid-tools'
   },
   {
     id: 'hardcover-cover',
@@ -19,7 +19,8 @@ export const printerTools: PrinterTool[] = [
     description:
       'Generate graduation or mémoire cover sheets with spine and layout guides',
     status: 'coming-soon',
-    accent: 'violet'
+    accent: 'violet',
+    requiredFeature: 'paid-tools'
   },
   {
     id: 'cutter-montage',
@@ -29,44 +30,7 @@ export const printerTools: PrinterTool[] = [
     description:
       'Prepare print layer and cutline sheets for plotter/cutter with precision and efficiency',
     status: 'mvp',
-    accent: 'green'
-  }
-]
-
-export const recentJobs: RecentJob[] = [
-  {
-    id: 'job-001',
-    jobName: 'Memoire_2025_Volume1.pdf',
-    tool: 'Booklet Montage',
-    date: 'May 17, 2026',
-    status: 'Completed'
-  },
-  {
-    id: 'job-002',
-    jobName: 'Graduation_Covers_Batch_03.pdf',
-    tool: 'Hardcover Cover Sheet',
-    date: 'May 16, 2026',
-    status: 'Completed'
-  },
-  {
-    id: 'job-003',
-    jobName: 'Catalog_Layout_001.pdf',
-    tool: 'Cutter Montage',
-    date: 'May 15, 2026',
-    status: 'Completed'
-  },
-  {
-    id: 'job-004',
-    jobName: 'Thesis_FINAL.pdf',
-    tool: 'Booklet Montage',
-    date: 'May 14, 2026',
-    status: 'In Progress'
-  },
-  {
-    id: 'job-005',
-    jobName: 'Business_Cards_Sheet.ai',
-    tool: 'Cutter Montage',
-    date: 'May 13, 2026',
-    status: 'Failed'
+    accent: 'green',
+    requiredFeature: 'paid-tools'
   }
 ]

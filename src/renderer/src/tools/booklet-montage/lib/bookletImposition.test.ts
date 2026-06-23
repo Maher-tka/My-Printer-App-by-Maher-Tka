@@ -7,6 +7,10 @@ import { getPrintSizeMm, validatePrintSettings } from './printSizes'
 import { getPlacement } from './renderSheet'
 import { naturalSortFileNames } from './naturalSort'
 import {
+  getBookletImageExportFolderName,
+  getNumberedMontageImageFileName
+} from './exportNaming'
+import {
   normalizeCurrentOrder,
   reorderPagesByDrag,
   resetToOriginalOrder
@@ -181,6 +185,29 @@ function testResetOriginalOrder(): void {
   )
 }
 
+function testImageExportNaming(): void {
+  const settings: Pick<SheetSettings, 'scaleMode'> = { scaleMode: 'fit' }
+
+  expectEqual(
+    getBookletImageExportFolderName(
+      [
+        {
+          id: 'source-1',
+          kind: 'pdf',
+          name: 'Memoire_2025_Volume1.pdf',
+          mimeType: 'application/pdf',
+          bytes: new Uint8Array()
+        }
+      ],
+      settings
+    ),
+    'Memoire_2025_Volume1_fit',
+    'image export folder keeps source name and scale mode'
+  )
+  expectEqual(getNumberedMontageImageFileName(1, 'jpg'), '001.jpg', 'first image export file')
+  expectEqual(getNumberedMontageImageFileName(12, 'png'), '012.png', 'twelfth image export file')
+}
+
 function bookletPages(count: number): BookletPage[] {
   return Array.from({ length: count }, (_, index) => ({
     id: `page-${index + 1}`,
@@ -212,5 +239,6 @@ testScaleModes()
 testNaturalImageSorting()
 testDragOrderDrivesImposition()
 testResetOriginalOrder()
+testImageExportNaming()
 
-console.log('Booklet tests passed: imposition, auto blanks, print sizes, scale modes, sorting, and page ordering.')
+console.log('Booklet tests passed: imposition, auto blanks, print sizes, scale modes, sorting, page ordering, and export naming.')

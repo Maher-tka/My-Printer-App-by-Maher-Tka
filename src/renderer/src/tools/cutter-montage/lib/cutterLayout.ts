@@ -18,7 +18,7 @@ export function getSheetWarnings(settings: CutterSheetSettings): string[] {
   const warnings: string[] = []
 
   if (settings.widthCm >= 98) {
-    warnings.push('Sheet width is close to the 100 cm roll width. 95-97 cm is recommended for Mimaki marks.')
+    warnings.push('Sheet width is close to the 100 cm roll width. 95-97 cm is recommended for machine clearance.')
   }
 
   if (settings.heightCm > 150) {

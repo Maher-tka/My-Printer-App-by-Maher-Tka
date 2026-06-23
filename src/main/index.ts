@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
-import { writeFile } from 'node:fs/promises'
-import { basename, join, resolve, sep } from 'node:path'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
+import { registerLicenseHandlers } from './licensing.js'
+import { registerProjectHandlers } from './project-persistence.js'
 
 const isDevelopment = Boolean(process.env.ELECTRON_RENDERER_URL)
 
@@ -15,7 +17,7 @@ function createMainWindow(): void {
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -40,6 +42,8 @@ function createMainWindow(): void {
 
 app.whenReady().then(() => {
   registerBookletExportHandlers()
+  registerLicenseHandlers()
+  registerProjectHandlers()
   createMainWindow()
 
   app.on('activate', () => {
@@ -120,8 +124,8 @@ function registerBookletExportHandlers(): void {
         const writtenPaths: string[] = []
 
         for (const file of files) {
-          if (basename(file.fileName) !== file.fileName) {
-            throw new Error(`Invalid output file name: ${file.fileName}`)
+          if (!isSafeRelativeOutputPath(file.fileName)) {
+            throw new Error(`Invalid output file path: ${file.fileName}`)
           }
 
           const targetPath = resolve(folder, file.fileName)
@@ -130,6 +134,7 @@ function registerBookletExportHandlers(): void {
             throw new Error(`Invalid output path: ${file.fileName}`)
           }
 
+          await mkdir(dirname(targetPath), { recursive: true })
           await writeFile(targetPath, toBuffer(file.bytes))
           writtenPaths.push(targetPath)
         }
@@ -156,6 +161,18 @@ function isPathInsideFolder(folderPath: string, targetPath: string): boolean {
   const normalizedTarget = targetPath.toLowerCase()
 
   return normalizedTarget.startsWith(normalizedFolder)
+}
+
+function isSafeRelativeOutputPath(fileName: string): boolean {
+  const trimmed = fileName.trim()
+
+  if (!trimmed || isAbsolute(trimmed)) {
+    return false
+  }
+
+  return trimmed
+    .split(/[\\/]+/)
+    .every((part) => part.length > 0 && part !== '.' && part !== '..')
 }
 
 function getErrorMessage(error: unknown): string {

@@ -1,5 +1,6 @@
 import { CircleStop, FileImage, FileText, RotateCcw } from 'lucide-react'
 import { useRef } from 'react'
+import { PdfFilePickerInput } from '@/components/file-input/PdfFilePickerInput'
 import { Button } from '@/components/ui/button'
 import type { ImportProgress } from '../types'
 import { ProgressLine } from './ProgressLine'
@@ -63,16 +64,9 @@ export function FileImporter({
 
       <ProgressLine progress={importProgress} />
 
-      <input
+      <PdfFilePickerInput
         ref={pdfInputRef}
-        className="hidden"
-        type="file"
-        accept="application/pdf,.pdf"
-        multiple
-        onChange={(event) => {
-          onImportPdf(Array.from(event.target.files ?? []))
-          event.currentTarget.value = ''
-        }}
+        onFilesSelected={onImportPdf}
       />
       <input
         ref={imageInputRef}

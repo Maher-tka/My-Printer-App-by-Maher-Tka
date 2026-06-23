@@ -184,6 +184,19 @@ export function updateEmptySheetColor(
   }
 }
 
+export function rememberSheetBoardColor(state: SheetBoardState, colorHex: string): SheetBoardState {
+  const normalized = normalizeHex(colorHex)
+
+  if (!normalized) {
+    return state
+  }
+
+  return {
+    ...state,
+    recentColors: rememberRecentColor(state.recentColors, normalized)
+  }
+}
+
 export function getEmptySheetsForExport(state: SheetBoardState): EmptyMontageSheet[] {
   return state.items
     .filter((item): item is EmptySheetBoardItem => item.kind === 'empty-sheet')

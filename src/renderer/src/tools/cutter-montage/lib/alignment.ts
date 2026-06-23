@@ -29,7 +29,34 @@ export function alignPieceObjects(
 
 export function centerArtworkToCutline(piece: PiecePreset): PiecePreset {
   const cutline = piece.cutline.transform
-  const artwork = piece.artwork.transform
+  const artwork = piece.mask.enabled ? piece.mask.transform : piece.artwork.transform
+  const xCm = cutline.xCm + (cutline.widthCm - artwork.widthCm) / 2
+  const yCm = cutline.yCm + (cutline.heightCm - artwork.heightCm) / 2
+
+  if (piece.mask.enabled) {
+    const deltaX = xCm - piece.mask.transform.xCm
+    const deltaY = yCm - piece.mask.transform.yCm
+
+    return {
+      ...piece,
+      artwork: {
+        ...piece.artwork,
+        transform: {
+          ...piece.artwork.transform,
+          xCm: piece.artwork.transform.xCm + deltaX,
+          yCm: piece.artwork.transform.yCm + deltaY
+        }
+      },
+      mask: {
+        ...piece.mask,
+        transform: {
+          ...piece.mask.transform,
+          xCm,
+          yCm
+        }
+      }
+    }
+  }
 
   return {
     ...piece,
@@ -37,15 +64,15 @@ export function centerArtworkToCutline(piece: PiecePreset): PiecePreset {
       ...piece.artwork,
       transform: {
         ...artwork,
-        xCm: cutline.xCm + (cutline.widthCm - artwork.widthCm) / 2,
-        yCm: cutline.yCm + (cutline.heightCm - artwork.heightCm) / 2
+        xCm,
+        yCm
       }
     }
   }
 }
 
 export function centerCutlineToArtwork(piece: PiecePreset): PiecePreset {
-  const artwork = piece.artwork.transform
+  const artwork = piece.mask.enabled ? piece.mask.transform : piece.artwork.transform
   const cutline = piece.cutline.transform
 
   return {
@@ -159,7 +186,13 @@ function getAlignedPosition(
 
 function getObjectRect(piece: PiecePreset, object: EditorObjectType): Rect {
   const transform =
-    object === 'artwork' ? piece.artwork.transform : piece.cutline.transform
+    object === 'artwork'
+      ? piece.artwork.transform
+      : object === 'mask'
+        ? piece.mask.transform
+        : object === 'helper-shape'
+          ? piece.helperShape?.transform ?? piece.mask.transform
+          : piece.cutline.transform
 
   return {
     xCm: transform.xCm,
@@ -180,6 +213,30 @@ function setObjectPosition(
       artwork: {
         ...piece.artwork,
         transform: { ...piece.artwork.transform, ...position }
+      }
+    }
+  }
+
+  if (object === 'mask') {
+    return {
+      ...piece,
+      mask: {
+        ...piece.mask,
+        transform: { ...piece.mask.transform, ...position }
+      }
+    }
+  }
+
+  if (object === 'helper-shape') {
+    if (!piece.helperShape) {
+      return piece
+    }
+
+    return {
+      ...piece,
+      helperShape: {
+        ...piece.helperShape,
+        transform: { ...piece.helperShape.transform, ...position }
       }
     }
   }

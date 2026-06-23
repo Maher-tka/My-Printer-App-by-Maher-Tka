@@ -101,7 +101,7 @@ export function CutterToolbar({
           Roll width: {settings.rollWidthCm} cm
         </span>
         <span className="rounded-md bg-muted px-2 py-1">
-          95-97 cm recommended for Mimaki marks
+          95-97 cm recommended for machine clearance
         </span>
         {warnings.map((warning) => (
           <span key={warning} className="rounded-md bg-amber-50 px-2 py-1 text-amber-900">

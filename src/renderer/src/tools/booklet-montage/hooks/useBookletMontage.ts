@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
+import {
+  deserializeBookletProjectPayload,
+  type BookletProjectPayload
+} from '@/projects/projectFiles'
+import type { PrinterProjectFile } from '@/types/projects'
 import type {
   BookletPage,
   BookletSource,
@@ -39,12 +44,14 @@ import {
   duplicateEmptySheetInBoard,
   flattenBookletSides,
   getEmptySheetsForExport,
+  rememberSheetBoardColor,
   removeEmptySheetFromBoard,
   resetSheetBoardLayout,
   syncSheetBoardWithBookletSides,
   updateEmptySheetColor,
   updateSheetBoardPosition
 } from '../lib/sheetLayoutState'
+import { getSolidFillHex } from '../lib/colorUtils'
 
 const idleImportProgress: ImportProgress = {
   phase: 'idle',
@@ -73,13 +80,22 @@ export const defaultSheetSettings: SheetSettings = {
   exportQuality: 'standard'
 }
 
-export function useBookletMontage() {
+export function useBookletMontage(
+  initialProject?: PrinterProjectFile<BookletProjectPayload>
+) {
   const { settings: performanceSettings } = usePerformanceSettings()
-  const [pages, setPages] = useState<BookletPage[]>([])
-  const [sources, setSources] = useState<BookletSource[]>([])
-  const [settings, setSettings] = useState<SheetSettings>(defaultSheetSettings)
+  const [initialState] = useState(
+    () => initialProject ? deserializeBookletProjectPayload(initialProject.payload) : null
+  )
+  const [pages, setPages] = useState<BookletPage[]>(() => initialState?.pages ?? [])
+  const [sources, setSources] = useState<BookletSource[]>(
+    () => initialState?.sources ?? []
+  )
+  const [settings, setSettings] = useState<SheetSettings>(
+    () => initialState?.settings ?? defaultSheetSettings
+  )
   const [sheetBoardState, setSheetBoardState] = useState<SheetBoardState>(
-    createInitialSheetBoardState
+    () => initialState?.sheetBoardState ?? createInitialSheetBoardState()
   )
   const [importProgress, setImportProgress] = useState<ImportProgress>(idleImportProgress)
   const [exportProgress, setExportProgress] = useState<ExportProgress>(idleExportProgress)
@@ -269,6 +285,22 @@ export function useBookletMontage() {
   const resetPageOrder = useCallback((blankMode: ResetBlankMode): void => {
     setError(null)
     setPages((current) => resetToOriginalOrder(current, blankMode))
+  }, [])
+
+  const setBlankPageColor = useCallback((pageId: string, colorHex: string): void => {
+    const normalized = getSolidFillHex(colorHex)
+
+    setPages((current) =>
+      current.map((page) =>
+        page.id === pageId && page.sourceType === 'blank'
+          ? {
+              ...page,
+              colorHex: normalized
+            }
+          : page
+      )
+    )
+    setSheetBoardState((current) => rememberSheetBoardColor(current, normalized))
   }, [])
 
   const deletePage = useCallback((pageId: string): void => {
@@ -488,7 +520,9 @@ export function useBookletMontage() {
           outputFolder = folder.folderPath
         }
 
-        const { exportBookletImages } = await import('../lib/exportImages')
+        const { exportBookletImages, getBookletImageExportFolderName } = await import('../lib/exportImages')
+        const exportFolderName = getBookletImageExportFolderName(sources, settings)
+
         await exportBookletImages(
           sheets,
           sources,
@@ -504,17 +538,19 @@ export function useBookletMontage() {
               }
 
               exportedImageCount += 1
+              const outputFileName = `${exportFolderName}/${image.fileName}`
+
               setExportProgress({
                 phase: 'saving-file',
                 current: exportedImageCount,
                 total: exportPageCount,
-                message: `Saving ${image.fileName}`
+                message: `Saving ${outputFileName}`
               })
 
               if (outputFolder && writeFilesToFolder) {
                 const result = await writeFilesToFolder(outputFolder, [
                   {
-                    fileName: image.fileName,
+                    fileName: outputFileName,
                     bytes: await blobToUint8Array(image.blob)
                   }
                 ])
@@ -526,7 +562,7 @@ export function useBookletMontage() {
                 return
               }
 
-              downloadBlob(image.blob, image.fileName)
+              downloadBlob(image.blob, `${exportFolderName}_${image.fileName}`)
               await waitForDownloadTick()
             }
           }
@@ -580,6 +616,7 @@ export function useBookletMontage() {
     movePage,
     reorderPages,
     resetPageOrder,
+    setBlankPageColor,
     deletePage,
     clearProject,
     updateSettings,

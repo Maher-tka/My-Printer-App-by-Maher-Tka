@@ -1,4 +1,5 @@
 import { forwardRef, memo, useEffect, useState } from 'react'
+import { getReadableTextColor, getSolidFillHex } from '../lib/colorUtils'
 import type { BookletPage, BookletReadingDirection, BookletScaleMode } from '../types'
 
 interface BookFlipPageProps {
@@ -26,6 +27,7 @@ const BookFlipPageBase = forwardRef<HTMLDivElement, BookFlipPageProps>(
     )
     const isBlank = page.sourceType === 'blank'
     const pageLabel = getBookFlipPageLabel(page, pageNumber)
+    const blankFillColor = getSolidFillHex(page.colorHex)
 
     useEffect(() => {
       setImageState(previewUrl ? 'loading' : 'idle')
@@ -72,7 +74,13 @@ const BookFlipPageBase = forwardRef<HTMLDivElement, BookFlipPageProps>(
                 )}
               </>
             ) : isBlank ? (
-              <div className="grid h-full w-full place-items-center bg-white text-sm font-semibold text-slate-400">
+              <div
+                className="grid h-full w-full place-items-center text-sm font-semibold"
+                style={{
+                  backgroundColor: blankFillColor,
+                  color: getReadableTextColor(blankFillColor)
+                }}
+              >
                 Blank Page
               </div>
             ) : (

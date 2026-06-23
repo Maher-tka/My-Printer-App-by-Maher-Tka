@@ -13,6 +13,7 @@ import {
   createCanceledError,
   resetCanvas
 } from './memoryCleanup'
+import { getReadableTextColor, getSolidFillHex } from './colorUtils'
 import { getPrintSizeMm } from './printSizes'
 import { previewRenderQueue } from './renderQueue'
 
@@ -198,18 +199,20 @@ export async function renderBlankPagePreview(
   const { canvas, context } = createPreviewCanvas(page, options)
 
   try {
-    context.fillStyle = '#ffffff'
+    const fillColor = getSolidFillHex(page.colorHex)
+
+    context.fillStyle = fillColor
     context.fillRect(0, 0, canvas.width, canvas.height)
 
     if (options.quality !== 'fullPage3d') {
-      context.fillStyle = '#94a3b8'
+      context.fillStyle = getReadableTextColor(fillColor)
       context.font = `${Math.max(14, Math.round(canvas.width / 18))}px sans-serif`
       context.textAlign = 'center'
       context.textBaseline = 'middle'
       context.fillText('Blank Page', canvas.width / 2, canvas.height / 2)
     }
 
-    return await cacheCanvasPreview(cacheKey, canvas, options.quality)
+    return await cacheCanvasPreview(cacheKey, canvas, options.quality, 'image/png')
   } finally {
     resetCanvas(canvas)
   }
@@ -304,6 +307,7 @@ function getPagePreviewCacheKey(
     page.sourceType,
     page.sourceId ?? 'none',
     page.sourcePageIndex ?? 'none',
+    page.colorHex ?? 'none',
     page.widthMm,
     page.heightMm,
     source?.name ?? 'no-source'
@@ -410,7 +414,8 @@ function getPreviewPlacement(
 async function cacheCanvasPreview(
   key: string,
   canvas: HTMLCanvasElement,
-  quality: PagePreviewQuality
+  quality: PagePreviewQuality,
+  mimeType: 'image/jpeg' | 'image/png' = 'image/jpeg'
 ): Promise<string> {
   const performanceSettings = getPerformanceSettingsSnapshot()
   const jpegQuality =
@@ -419,7 +424,7 @@ async function cacheCanvasPreview(
       : quality === 'thumbnail'
         ? performanceSettings.render.thumbnailJpegQuality
         : PREVIEW_QUALITY[quality]
-  const blob = await canvasToPreviewBlob(canvas, jpegQuality)
+  const blob = await canvasToPreviewBlob(canvas, jpegQuality, mimeType)
   const url = URL.createObjectURL(blob)
 
   previewUrlByKey.set(key, url)
@@ -462,7 +467,11 @@ async function getPreviewPdfDocument(
   return promise
 }
 
-function canvasToPreviewBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+function canvasToPreviewBlob(
+  canvas: HTMLCanvasElement,
+  quality: number,
+  mimeType: 'image/jpeg' | 'image/png'
+): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -473,8 +482,8 @@ function canvasToPreviewBlob(canvas: HTMLCanvasElement, quality: number): Promis
 
         resolve(blob)
       },
-      'image/jpeg',
-      quality
+      mimeType,
+      mimeType === 'image/jpeg' ? quality : undefined
     )
   })
 }

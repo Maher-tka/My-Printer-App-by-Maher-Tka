@@ -1,4 +1,11 @@
-import { BookOpen, ExternalLink, Lock, PenLine, SquareStack } from 'lucide-react'
+import {
+  BookOpen,
+  ExternalLink,
+  Lock,
+  PenLine,
+  ShieldCheck,
+  SquareStack
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,6 +21,10 @@ import type { PrinterTool } from '@/types/tools'
 interface ToolCardProps {
   tool: PrinterTool
   onOpen: () => void
+  isCheckingLicense?: boolean
+  isLicenseLocked?: boolean
+  licenseReason?: string | null
+  onManageLicense?: () => void
 }
 
 const iconByToolId = {
@@ -28,9 +39,31 @@ const accentClasses: Record<PrinterTool['accent'], string> = {
   green: 'bg-emerald-100 text-emerald-700'
 }
 
-export function ToolCard({ tool, onOpen }: ToolCardProps): JSX.Element {
+export function ToolCard({
+  tool,
+  onOpen,
+  isCheckingLicense = false,
+  isLicenseLocked = false,
+  licenseReason,
+  onManageLicense
+}: ToolCardProps): JSX.Element {
   const Icon = iconByToolId[tool.id as keyof typeof iconByToolId]
   const isActive = tool.status === 'active' || tool.status === 'mvp'
+  const canOpen = isActive && !isCheckingLicense && !isLicenseLocked
+  const canManageLicense = isActive && isLicenseLocked && Boolean(onManageLicense)
+  const isButtonDisabled = !isActive || isCheckingLicense || (!canOpen && !canManageLicense)
+  const ButtonIcon = isCheckingLicense
+    ? ShieldCheck
+    : isLicenseLocked
+      ? Lock
+      : isActive
+        ? ExternalLink
+        : Lock
+  const buttonLabel = getToolButtonLabel({
+    isActive,
+    isCheckingLicense,
+    isLicenseLocked
+  })
 
   return (
     <Card
@@ -56,11 +89,16 @@ export function ToolCard({ tool, onOpen }: ToolCardProps): JSX.Element {
             </p>
           </div>
         </div>
-        {tool.status !== 'active' && (
-          <Badge variant={tool.accent === 'green' ? 'success' : 'secondary'}>
-            {tool.status === 'mvp' ? 'MVP Beta' : 'Coming Soon'}
-          </Badge>
-        )}
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          {tool.status !== 'active' && (
+            <Badge variant={tool.accent === 'green' ? 'success' : 'secondary'}>
+              {tool.status === 'mvp' ? 'MVP Beta' : 'Coming Soon'}
+            </Badge>
+          )}
+          {isActive && isLicenseLocked && (
+            <Badge variant="warning">{licenseReason ?? 'License Required'}</Badge>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="mt-auto px-5 pb-4 pt-0">
         <div className="h-px bg-border" />
@@ -68,19 +106,39 @@ export function ToolCard({ tool, onOpen }: ToolCardProps): JSX.Element {
       <CardFooter className="px-5 pb-5 pt-0">
         <Button
           className="w-full"
-          variant={isActive ? 'default' : 'secondary'}
-          disabled={!isActive}
-          onClick={onOpen}
+          variant={canOpen ? 'default' : 'secondary'}
+          disabled={isButtonDisabled}
+          onClick={canManageLicense ? onManageLicense : onOpen}
           type="button"
         >
-          {isActive ? (
-            <ExternalLink data-icon="inline-start" />
-          ) : (
-            <Lock data-icon="inline-start" />
-          )}
-          {isActive ? 'Open Tool' : 'Coming Soon'}
+          <ButtonIcon data-icon="inline-start" />
+          {buttonLabel}
         </Button>
       </CardFooter>
     </Card>
   )
+}
+
+function getToolButtonLabel({
+  isActive,
+  isCheckingLicense,
+  isLicenseLocked
+}: {
+  isActive: boolean
+  isCheckingLicense: boolean
+  isLicenseLocked: boolean
+}): string {
+  if (!isActive) {
+    return 'Coming Soon'
+  }
+
+  if (isCheckingLicense) {
+    return 'Checking License'
+  }
+
+  if (isLicenseLocked) {
+    return 'Activate License'
+  }
+
+  return 'Open Tool'
 }

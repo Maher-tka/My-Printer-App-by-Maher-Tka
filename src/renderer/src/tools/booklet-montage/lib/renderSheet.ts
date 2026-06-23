@@ -7,7 +7,8 @@ import {
   endPath,
   popGraphicsState,
   pushGraphicsState,
-  rectangle
+  rectangle,
+  rgb
 } from 'pdf-lib'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type {
@@ -35,6 +36,7 @@ import {
 } from './memoryCleanup'
 import type { SheetLayoutMm } from './printSizes'
 import { mmToPixels, mmToPoints } from './units'
+import { getSolidFillHex, hexToRgb } from './colorUtils'
 
 export interface PdfRenderAssets {
   pdf: PDFDocument
@@ -177,12 +179,21 @@ async function drawPdfSlot(
   assertNotCanceled(signal)
 
   const page = slot.page
+  const slotRect = rectMmToPoints(slotRectMm)
 
   if (page.kind === 'blank') {
+    const fillColor = hexToRgb(getSolidFillHex(page.colorHex)) ?? { r: 255, g: 255, b: 255 }
+
+    pdfPage.drawRectangle({
+      x: slotRect.x,
+      y: slotRect.y,
+      width: slotRect.width,
+      height: slotRect.height,
+      color: rgb(fillColor.r / 255, fillColor.g / 255, fillColor.b / 255)
+    })
     return
   }
 
-  const slotRect = rectMmToPoints(slotRectMm)
   const naturalSize = { width: mmToPoints(page.widthMm), height: mmToPoints(page.heightMm) }
   const placement = getPlacement(naturalSize, slotRect, settings.scaleMode)
 
@@ -225,12 +236,16 @@ async function drawCanvasSlot(
   assertNotCanceled(signal)
 
   const page = slot.page
+  const slotRect = rectMmToCanvasPixels(slotRectMm, layout.paperSize, dpi)
 
   if (page.kind === 'blank') {
+    context.save()
+    context.fillStyle = getSolidFillHex(page.colorHex)
+    context.fillRect(slotRect.x, slotRect.y, slotRect.width, slotRect.height)
+    context.restore()
     return
   }
 
-  const slotRect = rectMmToCanvasPixels(slotRectMm, layout.paperSize, dpi)
   const naturalSize = {
     width: mmToPixels(page.widthMm, dpi),
     height: mmToPixels(page.heightMm, dpi)

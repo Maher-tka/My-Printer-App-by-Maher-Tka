@@ -16,23 +16,27 @@ import {
   useSortable
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { FilePlus2, FileText, GripVertical, Image, RotateCcw, Trash2 } from 'lucide-react'
+import { FilePlus2, FileText, GripVertical, Image, Palette, RotateCcw, Trash2 } from 'lucide-react'
 import { memo, useMemo, useState, type CSSProperties } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { getReadableTextColor, getSolidFillHex } from '../lib/colorUtils'
 import type { BookletPage } from '../types'
+import { ColorPickerPopover } from './ColorPickerPopover'
 
 interface PageManagerProps {
   pages: BookletPage[]
   selectedPageId: string | null
   blanksNeeded: number
   pageCountIsValid: boolean
+  recentColors: string[]
   onSelectPage: (pageId: string) => void
   onAddBlankPage: (afterPageId?: string | null) => void
   onAutoAddBlankPages: () => void
   onReorderPages: (activeId: string, overId: string | null) => void
   onResetOrder: (blankMode: 'keep' | 'remove') => void
   onDeletePage: (pageId: string) => void
+  onBlankPageColorChange: (pageId: string, colorHex: string) => void
 }
 
 export function PageManager({
@@ -40,14 +44,17 @@ export function PageManager({
   selectedPageId,
   blanksNeeded,
   pageCountIsValid,
+  recentColors,
   onSelectPage,
   onAddBlankPage,
   onAutoAddBlankPages,
   onReorderPages,
   onResetOrder,
-  onDeletePage
+  onDeletePage,
+  onBlankPageColorChange
 }: PageManagerProps): JSX.Element {
   const [activePageId, setActivePageId] = useState<string | null>(null)
+  const [colorPickerPageId, setColorPickerPageId] = useState<string | null>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 2 }
@@ -62,6 +69,9 @@ export function PageManager({
     : null
   const activePage = activePageId
     ? pages.find((page) => page.id === activePageId)
+    : null
+  const colorPickerPage = colorPickerPageId
+    ? pages.find((page) => page.id === colorPickerPageId && page.sourceType === 'blank')
     : null
 
   return (
@@ -148,6 +158,9 @@ export function PageManager({
                 selected={page.id === selectedPageId}
                 onSelectPage={onSelectPage}
                 onDeletePage={onDeletePage}
+                onToggleColorPicker={(pageId) =>
+                  setColorPickerPageId((current) => (current === pageId ? null : pageId))
+                }
               />
             ))}
           </div>
@@ -156,6 +169,25 @@ export function PageManager({
           {activePage ? <PageDragPreview page={activePage} /> : null}
         </DragOverlay>
       </DndContext>
+
+      {colorPickerPage && (
+        <div
+          className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/25 p-4"
+          onClick={() => setColorPickerPageId(null)}
+        >
+          <div className="w-[330px] max-w-[calc(100vw-2rem)]">
+            <ColorPickerPopover
+              colorHex={getSolidFillHex(colorPickerPage.colorHex)}
+              recentColors={recentColors}
+              title="Blank page fill"
+              description="Solid exact RGB hex, exported at 100% opacity"
+              placement="static"
+              onChange={(colorHex) => onBlankPageColorChange(colorPickerPage.id, colorHex)}
+              onClose={() => setColorPickerPageId(null)}
+            />
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -165,13 +197,15 @@ const SortablePageCard = memo(function SortablePageCard({
   index,
   selected,
   onSelectPage,
-  onDeletePage
+  onDeletePage,
+  onToggleColorPicker
 }: {
   page: BookletPage
   index: number
   selected: boolean
   onSelectPage: (pageId: string) => void
   onDeletePage: (pageId: string) => void
+  onToggleColorPicker: (pageId: string) => void
 }): JSX.Element {
   const {
     attributes,
@@ -191,6 +225,7 @@ const SortablePageCard = memo(function SortablePageCard({
     containIntrinsicSize: '154px 260px'
   }
   const SourceIcon = page.sourceType === 'image' ? Image : FileText
+  const isBlank = page.sourceType === 'blank'
 
   return (
     <article
@@ -199,7 +234,7 @@ const SortablePageCard = memo(function SortablePageCard({
       data-page-card="true"
       data-page-id={page.id}
       data-current-order={index + 1}
-      className={`rounded-md border bg-muted/25 p-2 shadow-sm transition-[border-color,box-shadow,opacity] ${
+      className={`relative rounded-md border bg-muted/25 p-2 shadow-sm transition-[border-color,box-shadow,opacity] ${
         selected ? 'border-primary ring-2 ring-primary/20' : ''
       } ${isDragging ? 'z-20 opacity-35' : ''}`}
       onClick={() => onSelectPage(page.id)}
@@ -216,6 +251,22 @@ const SortablePageCard = memo(function SortablePageCard({
           <GripVertical className="h-4 w-4" />
         </button>
         <Badge variant="secondary">Current #{index + 1}</Badge>
+        {isBlank && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-8"
+            title="Blank page fill color"
+            onClick={(event) => {
+              event.stopPropagation()
+              onToggleColorPicker(page.id)
+            }}
+            aria-label={`Change fill color for ${getPageLabel(page)}`}
+          >
+            <Palette />
+          </Button>
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -231,20 +282,7 @@ const SortablePageCard = memo(function SortablePageCard({
         </Button>
       </div>
 
-      <div className="aspect-[3/4] overflow-hidden rounded-md border bg-white">
-        {page.thumbnailUrl ? (
-          <img
-            src={page.thumbnailUrl}
-            alt={page.displayName}
-            className="h-full w-full object-contain"
-            draggable={false}
-          />
-        ) : (
-          <div className="grid h-full place-items-center text-sm font-semibold text-muted-foreground">
-            Blank
-          </div>
-        )}
-      </div>
+      <BlankOrThumbnailPreview page={page} />
 
       <div className="mt-2 min-w-0">
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -254,6 +292,11 @@ const SortablePageCard = memo(function SortablePageCard({
         <p className="mt-1 truncate text-sm font-semibold" data-page-label="true">
           {getPageLabel(page)}
         </p>
+        {isBlank && (
+          <p className="truncate text-xs font-medium text-muted-foreground">
+            Fill: {getSolidFillHex(page.colorHex)}
+          </p>
+        )}
         {page.sourceFileName && page.sourceType === 'pdf' && (
           <p className="truncate text-xs text-muted-foreground">{page.sourceFileName}</p>
         )}
@@ -262,25 +305,40 @@ const SortablePageCard = memo(function SortablePageCard({
   )
 })
 
+function BlankOrThumbnailPreview({ page }: { page: BookletPage }): JSX.Element {
+  const fillColor = getSolidFillHex(page.colorHex)
+  const textColor = getReadableTextColor(fillColor)
+
+  return (
+    <div
+      className="aspect-[3/4] overflow-hidden rounded-md border bg-white"
+      style={page.sourceType === 'blank' ? { backgroundColor: fillColor } : undefined}
+    >
+      {page.thumbnailUrl ? (
+        <img
+          src={page.thumbnailUrl}
+          alt={page.displayName}
+          className="h-full w-full object-contain"
+          draggable={false}
+        />
+      ) : (
+        <div
+          className="grid h-full place-items-center text-sm font-semibold"
+          style={page.sourceType === 'blank' ? { color: textColor } : undefined}
+        >
+          Blank
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PageDragPreview({ page }: { page: BookletPage }): JSX.Element {
   const SourceIcon = page.sourceType === 'image' ? Image : FileText
 
   return (
     <div className="w-[154px] rounded-md border border-primary bg-card p-2 shadow-2xl ring-2 ring-primary/15">
-      <div className="aspect-[3/4] overflow-hidden rounded-md border bg-white">
-        {page.thumbnailUrl ? (
-          <img
-            src={page.thumbnailUrl}
-            alt={page.displayName}
-            className="h-full w-full object-contain"
-            draggable={false}
-          />
-        ) : (
-          <div className="grid h-full place-items-center text-sm font-semibold text-muted-foreground">
-            Blank
-          </div>
-        )}
-      </div>
+      <BlankOrThumbnailPreview page={page} />
       <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
         <SourceIcon className="h-3.5 w-3.5" />
         <span className="truncate font-semibold text-foreground">{getPageLabel(page)}</span>

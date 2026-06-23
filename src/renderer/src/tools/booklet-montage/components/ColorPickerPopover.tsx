@@ -23,6 +23,9 @@ declare global {
 interface ColorPickerPopoverProps {
   colorHex: string
   recentColors: string[]
+  title?: string
+  description?: string
+  placement?: 'floating' | 'static'
   onChange: (colorHex: string) => void
   onClose: () => void
 }
@@ -30,6 +33,9 @@ interface ColorPickerPopoverProps {
 export function ColorPickerPopover({
   colorHex,
   recentColors,
+  title = 'Sheet color',
+  description = 'RGB display, CMYK approximate',
+  placement = 'floating',
   onChange,
   onClose
 }: ColorPickerPopoverProps): JSX.Element {
@@ -47,14 +53,16 @@ export function ColorPickerPopover({
   return (
     <div
       data-no-drag="true"
-      className="absolute right-3 top-12 z-40 w-[330px] rounded-lg border bg-white p-4 text-slate-950 shadow-2xl"
+      className={`z-40 w-[330px] max-w-[calc(100vw-2rem)] rounded-lg border bg-white p-4 text-slate-950 shadow-2xl ${
+        placement === 'floating' ? 'absolute right-3 top-12' : 'relative'
+      }`}
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold">Sheet color</p>
-          <p className="text-xs text-slate-500">RGB display, CMYK approximate</p>
+          <p className="text-sm font-semibold">{title}</p>
+          <p className="text-xs text-slate-500">{description}</p>
         </div>
         <Button type="button" size="icon" variant="ghost" title="Close color picker" onClick={onClose}>
           <X className="h-4 w-4" />

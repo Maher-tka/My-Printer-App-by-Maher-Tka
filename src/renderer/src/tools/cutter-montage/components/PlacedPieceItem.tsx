@@ -3,9 +3,10 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { CutterLayerVisibility, PiecePreset, PlacedPiece } from '../types'
 import { getPlacedArtworkRect, getPlacedCutlineRect } from '../lib/cutlineGenerator'
+import { getMaskClipPath, getPlacedMaskRect } from '../lib/maskUtils'
 import { roundToStep } from '../lib/units'
 
-interface StickerItemProps {
+interface PlacedPieceItemProps {
   piece: PiecePreset
   placed: PlacedPiece
   scale: number
@@ -22,7 +23,7 @@ interface StickerItemProps {
   onToggleLock: (pieceId: string) => void
 }
 
-export const StickerItem = memo(function StickerItem({
+export const PlacedPieceItem = memo(function PlacedPieceItem({
   piece,
   placed,
   scale,
@@ -37,7 +38,7 @@ export const StickerItem = memo(function StickerItem({
   onDelete,
   onRotate,
   onToggleLock
-}: StickerItemProps): JSX.Element {
+}: PlacedPieceItemProps): JSX.Element {
   const itemRef = useRef<HTMLDivElement>(null)
   const animationFrameRef = useRef<number | null>(null)
   const latestPositionRef = useRef({ xCm: placed.xCm, yCm: placed.yCm })
@@ -52,6 +53,7 @@ export const StickerItem = memo(function StickerItem({
     originY: placed.yCm
   })
   const artworkRect = useMemo(() => getPlacedArtworkRect(placed, piece), [piece, placed])
+  const maskRect = useMemo(() => getPlacedMaskRect(placed, piece), [piece, placed])
   const cutlineRect = useMemo(() => getPlacedCutlineRect(placed, piece), [piece, placed])
 
   useEffect(() => {
@@ -145,7 +147,35 @@ export const StickerItem = memo(function StickerItem({
         onMove(placed.id, latestPositionRef.current.xCm, latestPositionRef.current.yCm)
       }}
     >
-      {layers.artwork && (
+      {layers.artwork && piece.objectVisibility.artwork && (piece.clippingMaskEnabled ?? piece.mask.enabled) ? (
+        <div
+          className="absolute overflow-hidden"
+          style={{
+            left: (maskRect.xCm - placed.xCm) * scale,
+            top: (maskRect.yCm - placed.yCm) * scale,
+            width: maskRect.widthCm * scale,
+            height: maskRect.heightCm * scale,
+            clipPath: getMaskClipPath(piece.mask),
+            transform: `rotate(${maskRect.rotation - placed.rotation}deg)`,
+            transformOrigin: 'center'
+          }}
+        >
+          <img
+            src={piece.previewUrl}
+            alt={piece.displayName}
+            className="absolute object-fill"
+            style={{
+              left: (artworkRect.xCm - maskRect.xCm) * scale,
+              top: (artworkRect.yCm - maskRect.yCm) * scale,
+              width: artworkRect.widthCm * scale,
+              height: artworkRect.heightCm * scale,
+              transform: `rotate(${artworkRect.rotation - maskRect.rotation}deg)`,
+              transformOrigin: 'center'
+            }}
+            draggable={false}
+          />
+        </div>
+      ) : layers.artwork && piece.objectVisibility.artwork ? (
         <img
           src={piece.previewUrl}
           alt={piece.displayName}
@@ -160,8 +190,8 @@ export const StickerItem = memo(function StickerItem({
           }}
           draggable={false}
         />
-      )}
-      {layers.cutlines && (
+      ) : null}
+      {layers.cutlines && piece.objectVisibility.cutline && (
         <div
           className={`pointer-events-none absolute ${
             piece.cutline.shape === 'ellipse'

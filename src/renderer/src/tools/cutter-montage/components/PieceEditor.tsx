@@ -1,18 +1,11 @@
 import {
-  AlignCenter,
-  AlignEndHorizontal,
-  AlignEndVertical,
-  AlignHorizontalJustifyCenter,
-  AlignStartHorizontal,
-  AlignStartVertical,
-  Circle,
   Copy,
-  Crosshair,
-  Expand,
+  Circle,
   LockKeyhole,
   Maximize,
   MousePointer2,
   Move,
+  RectangleHorizontal,
   RotateCcw,
   Save,
   Square,
@@ -20,19 +13,50 @@ import {
   ZoomIn,
   ZoomOut
 } from 'lucide-react'
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode
+} from 'react'
 import { Button } from '@/components/ui/button'
 import type {
-  AlignmentCommand,
+  ArtworkTransform,
   CutlineShape,
   EditorObjectType,
   EditorTool,
   KeyObjectState,
+  MaskShape,
   PiecePreset
 } from '../types'
-import { getPieceCutlineRect } from '../lib/cutlineGenerator'
+import {
+  alignPieceObjects,
+  centerArtworkToCutline,
+  centerCutlineToArtwork
+} from '../lib/alignmentUtils'
+import {
+  createCutlineFromHelper,
+  createCutlineFromMask,
+  createHelperShape,
+  makeClippingMaskFromHelper,
+  matchCutlineToMask,
+  matchMaskToCutline,
+  releaseClippingMaskToHelper,
+  toggleArtworkCutlineGroup
+} from '../lib/maskUtils'
 import { syncPieceBounds } from '../lib/piecePresets'
 import { formatCm } from '../lib/units'
+import { AlignmentToolbar } from './AlignmentToolbar'
+import { CutlineToolsPanel } from './CutlineToolsPanel'
+import { MaskToolsPanel } from './MaskToolsPanel'
+import { ObjectLayerPanel } from './ObjectLayerPanel'
+import {
+  PieceEditorContextMenu,
+  type PieceEditorContextMenuState
+} from './PieceEditorContextMenu'
+import { PieceEditorCanvas } from './PieceEditorCanvas'
 
 interface PieceEditorProps {
   piece: PiecePreset | null
@@ -41,9 +65,6 @@ interface PieceEditorProps {
   onPieceChange: (piece: PiecePreset) => void
   onSelectedObjectsChange: (objects: EditorObjectType[]) => void
   onSetKeyObject: (object: EditorObjectType | null) => void
-  onAlign: (command: AlignmentCommand) => void
-  onCenterArtworkToCutline: () => void
-  onCenterCutlineToArtwork: () => void
   onSave: () => void
   onDuplicate: () => void
 }
@@ -55,32 +76,30 @@ export function PieceEditor({
   onPieceChange,
   onSelectedObjectsChange,
   onSetKeyObject,
-  onAlign,
-  onCenterArtworkToCutline,
-  onCenterCutlineToArtwork,
   onSave,
   onDuplicate
 }: PieceEditorProps): JSX.Element {
   const [tool, setTool] = useState<EditorTool>('select')
   const [zoom, setZoom] = useState(1)
-  const [lockRatio, setLockRatio] = useState(true)
-  const dragRef = useRef<{
-    object: EditorObjectType | null
-    pointerId: number
-    startX: number
-    startY: number
-    originX: number
-    originY: number
-  }>({
-    object: null,
-    pointerId: -1,
-    startX: 0,
-    startY: 0,
-    originX: 0,
-    originY: 0
-  })
-  const cutlineRect = piece ? getPieceCutlineRect(piece.cutline) : null
+  const [showGrid, setShowGrid] = useState(true)
+  const [snapToGrid, setSnapToGrid] = useState(true)
+  const [smartGuides, setSmartGuides] = useState(true)
+  const [contextMenu, setContextMenu] = useState<PieceEditorContextMenuState | null>(null)
+  const [clipboard, setClipboard] = useState<ClipboardObject | null>(null)
+  const [past, setPast] = useState<PiecePreset[]>([])
+  const [future, setFuture] = useState<PiecePreset[]>([])
+  const currentPieceId = piece?.id ?? null
+  const lastPieceIdRef = useRef<string | null>(currentPieceId)
   const scale = useMemo(() => (piece ? getPieceScale(piece, zoom) : 1), [piece, zoom])
+
+  useEffect(() => {
+    if (currentPieceId !== lastPieceIdRef.current) {
+      lastPieceIdRef.current = currentPieceId
+      setPast([])
+      setFuture([])
+      setContextMenu(null)
+    }
+  }, [currentPieceId])
 
   if (!piece) {
     return (
@@ -95,23 +114,29 @@ export function PieceEditor({
     )
   }
 
-  const artworkSelected = selectedObjects.includes('artwork')
-  const cutlineSelected = selectedObjects.includes('cutline')
+  const activePiece = piece
 
   return (
-    <section className="grid grid-cols-1 gap-4 rounded-lg border bg-slate-100 p-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+    <section
+      className="grid grid-cols-1 gap-4 rounded-lg border bg-slate-100 p-4 outline-none xl:grid-cols-[minmax(0,1fr)_340px]"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
       <div className="min-w-0">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="font-semibold">Piece Editor</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {piece.displayName} · {formatCm(piece.widthCm)} x {formatCm(piece.heightCm)}
+              {activePiece.displayName} · {formatCm(activePiece.widthCm)} x {formatCm(activePiece.heightCm)}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <ToolButton active={tool === 'select'} onClick={() => setTool('select')} label="Select" icon={MousePointer2} />
             <ToolButton active={tool === 'pan'} onClick={() => setTool('pan')} label="Pan" icon={Move} />
             <ToolButton active={tool === 'zoom'} onClick={() => setTool('zoom')} label="Zoom" icon={ZoomIn} />
+            <ToolButton active={tool === 'rectangle'} onClick={() => setTool('rectangle')} label="Rect" icon={RectangleHorizontal} />
+            <ToolButton active={tool === 'rounded-rectangle'} onClick={() => setTool('rounded-rectangle')} label="Round" icon={Square} />
+            <ToolButton active={tool === 'ellipse'} onClick={() => setTool('ellipse')} label="Ellipse" icon={Circle} />
             <Button type="button" size="sm" variant="outline" onClick={() => setZoom((value) => Math.min(value + 0.15, 2.5))}>
               <ZoomIn data-icon="inline-start" />
               Zoom
@@ -124,118 +149,65 @@ export function PieceEditor({
               <Maximize data-icon="inline-start" />
               Fit
             </Button>
+            <Toggle label="Grid" checked={showGrid} onChange={setShowGrid} />
+            <Toggle label="Snap" checked={snapToGrid} onChange={setSnapToGrid} />
+            <Toggle label="Smart" checked={smartGuides} onChange={setSmartGuides} />
           </div>
         </div>
 
-        <div className="flex min-h-[560px] items-center justify-center overflow-visible rounded-lg border bg-[linear-gradient(0deg,rgba(148,163,184,0.20)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.20)_1px,transparent_1px)] bg-[length:24px_24px] p-8">
-          <div
-            className="relative bg-white shadow-md"
-            style={{ width: piece.widthCm * scale, height: piece.heightCm * scale }}
-          >
-            <img
-              src={piece.previewUrl}
-              alt={piece.displayName}
-              className={`absolute cursor-move object-fill ${artworkSelected ? 'ring-2 ring-primary' : 'ring-1 ring-slate-300'}`}
-              style={{
-                left: piece.artwork.transform.xCm * scale,
-                top: piece.artwork.transform.yCm * scale,
-                width: piece.artwork.transform.widthCm * scale,
-                height: piece.artwork.transform.heightCm * scale,
-                transform: `rotate(${piece.artwork.transform.rotation}deg)`
-              }}
-              draggable={false}
-              onPointerDown={(event) => beginObjectDrag(event, 'artwork')}
-              onPointerMove={moveObjectDrag}
-              onPointerUp={endObjectDrag}
-            />
-            {cutlineRect && (
-              <div
-                className={`absolute cursor-move ${piece.cutline.shape === 'ellipse' ? 'rounded-full' : piece.cutline.shape === 'rounded-rectangle' ? 'rounded-md' : ''} ${
-                  cutlineSelected ? 'ring-2 ring-primary' : ''
-                }`}
-                style={{
-                  left: cutlineRect.xCm * scale,
-                  top: cutlineRect.yCm * scale,
-                  width: cutlineRect.widthCm * scale,
-                  height: cutlineRect.heightCm * scale,
-                  border: `1.5px solid ${piece.cutline.strokeColor}`,
-                  transform: `rotate(${cutlineRect.rotation}deg)`
-                }}
-                onPointerDown={(event) => beginObjectDrag(event, 'cutline')}
-                onPointerMove={moveObjectDrag}
-                onPointerUp={endObjectDrag}
-              />
-            )}
-            {keyObject.object && (
-              <div className="pointer-events-none absolute right-2 top-2 rounded bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground">
-                Key: {keyObject.object}
-              </div>
-            )}
-          </div>
-        </div>
+        <PieceEditorCanvas
+          piece={activePiece}
+          scale={scale}
+          tool={tool}
+          selectedObjects={selectedObjects}
+          keyObject={keyObject}
+          showGrid={showGrid}
+          snapToGrid={snapToGrid}
+          smartGuides={smartGuides}
+          onPieceChange={commitPiece}
+          onSelectedObjectsChange={onSelectedObjectsChange}
+          onContextMenuOpen={(x, y) => setContextMenu({ x, y })}
+        />
       </div>
 
       <aside className="flex flex-col gap-4">
-        <Panel title="Selection">
-          <div className="grid grid-cols-3 gap-2">
-            <Button type="button" size="sm" variant={artworkSelected && selectedObjects.length === 1 ? 'default' : 'outline'} onClick={() => onSelectedObjectsChange(['artwork'])}>
-              Artwork
-            </Button>
-            <Button type="button" size="sm" variant={cutlineSelected && selectedObjects.length === 1 ? 'default' : 'outline'} onClick={() => onSelectedObjectsChange(['cutline'])}>
-              Cutline
-            </Button>
-            <Button type="button" size="sm" variant={selectedObjects.length === 2 ? 'default' : 'outline'} onClick={() => onSelectedObjectsChange(['artwork', 'cutline'])}>
-              Both
-            </Button>
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <Button type="button" size="sm" variant={keyObject.object === 'artwork' ? 'default' : 'outline'} onClick={() => onSetKeyObject('artwork')}>
-              Key Artwork
-            </Button>
-            <Button type="button" size="sm" variant={keyObject.object === 'cutline' ? 'default' : 'outline'} onClick={() => onSetKeyObject('cutline')}>
-              Key Cutline
-            </Button>
-          </div>
-        </Panel>
+        <ObjectLayerPanel
+          piece={activePiece}
+          selectedObjects={selectedObjects}
+          keyObject={keyObject}
+          onPieceChange={commitPiece}
+          onSelectedObjectsChange={onSelectedObjectsChange}
+        />
 
-        <Panel title="Alignment">
-          <div className="grid grid-cols-3 gap-2">
-            <IconButton label="Left" icon={AlignStartVertical} onClick={() => onAlign('left')} />
-            <IconButton label="Center" icon={AlignCenter} onClick={() => onAlign('center-horizontal')} />
-            <IconButton label="Right" icon={AlignEndVertical} onClick={() => onAlign('right')} />
-            <IconButton label="Top" icon={AlignStartHorizontal} onClick={() => onAlign('top')} />
-            <IconButton label="Middle" icon={AlignHorizontalJustifyCenter} onClick={() => onAlign('center-vertical')} />
-            <IconButton label="Bottom" icon={AlignEndHorizontal} onClick={() => onAlign('bottom')} />
-          </div>
-          <div className="mt-2 grid grid-cols-1 gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={onCenterArtworkToCutline}>
-              <Crosshair data-icon="inline-start" />
-              Center artwork to cutline
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={onCenterCutlineToArtwork}>
-              <Crosshair data-icon="inline-start" />
-              Center cutline to artwork
-            </Button>
-          </div>
-        </Panel>
+        <AlignmentToolbar
+          selectedObjects={selectedObjects}
+          keyObject={keyObject}
+          onSelectedObjectsChange={onSelectedObjectsChange}
+          onSetKeyObject={onSetKeyObject}
+          onAlign={(command) => commitPiece(alignPieceObjects(activePiece, selectedObjects, keyObject, command))}
+          onCenterArtworkToCutline={() => commitPiece(centerArtworkToCutline(activePiece))}
+          onCenterCutlineToArtwork={() => commitPiece(centerCutlineToArtwork(activePiece))}
+          onMatchCutlineToMask={() => commitPiece(matchCutlineToMask(activePiece))}
+          onMatchMaskToCutline={() => commitPiece(matchMaskToCutline(activePiece))}
+        />
 
         <Panel title="Piece">
           <div className="grid grid-cols-2 gap-2">
-            <NumberField label="Width cm" value={piece.widthCm} step={0.1} onChange={(widthCm) => onPieceChange(resizePiece(piece, widthCm, piece.heightCm, lockRatio, 'width'))} />
-            <NumberField label="Height cm" value={piece.heightCm} step={0.1} onChange={(heightCm) => onPieceChange(resizePiece(piece, piece.widthCm, heightCm, lockRatio, 'height'))} />
-            <NumberField label="Qty" value={piece.quantity} step={1} onChange={(quantity) => onPieceChange({ ...piece, quantity: Math.max(1, Math.round(quantity)) })} />
-            <NumberField label="Rotation" value={piece.artwork.transform.rotation} step={1} onChange={(rotation) => onPieceChange(updateArtwork(piece, { rotation }))} />
+            <NumberField label="Width cm" value={activePiece.widthCm} step={0.1} onChange={(widthCm) => commitPiece(resizePiece(activePiece, widthCm, activePiece.heightCm, activePiece.lockAspectRatio, 'width'))} />
+            <NumberField label="Height cm" value={activePiece.heightCm} step={0.1} onChange={(heightCm) => commitPiece(resizePiece(activePiece, activePiece.widthCm, heightCm, activePiece.lockAspectRatio, 'height'))} />
+            <NumberField label="Qty" value={activePiece.quantity} step={1} onChange={(quantity) => commitPiece({ ...activePiece, quantity: Math.max(1, Math.round(quantity)) })} />
+            <NumberField label="Rotation" value={activePiece.artwork.transform.rotation} step={1} onChange={(rotation) => commitPiece(updateArtwork(activePiece, { rotation }))} />
           </div>
           <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
-              checked={lockRatio}
-              onChange={(event) => setLockRatio(event.target.checked)}
+              checked={activePiece.lockAspectRatio}
+              onChange={(event) => commitPiece({ ...activePiece, lockAspectRatio: event.target.checked })}
             />
             Lock aspect ratio
           </label>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => onPieceChange(resetTransforms(piece))}>
+            <Button type="button" size="sm" variant="outline" onClick={() => commitPiece(resetTransforms(activePiece))}>
               <RotateCcw data-icon="inline-start" />
               Reset
             </Button>
@@ -243,112 +215,345 @@ export function PieceEditor({
               <Copy data-icon="inline-start" />
               Duplicate
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => onPieceChange({ ...piece, locked: !piece.locked })}>
-              {piece.locked ? <LockKeyhole data-icon="inline-start" /> : <UnlockKeyhole data-icon="inline-start" />}
-              {piece.locked ? 'Locked' : 'Unlocked'}
+            <Button type="button" size="sm" variant="outline" onClick={() => commitPiece({ ...activePiece, locked: !activePiece.locked })}>
+              {activePiece.locked ? <LockKeyhole data-icon="inline-start" /> : <UnlockKeyhole data-icon="inline-start" />}
+              {activePiece.locked ? 'Locked' : 'Unlocked'}
+            </Button>
+            <Button type="button" size="sm" variant={activePiece.artworkCutlineGrouped ? 'default' : 'outline'} onClick={() => commitPiece(toggleArtworkCutlineGroup(activePiece))}>
+              {activePiece.artworkCutlineGrouped ? 'Linked transforms' : 'Edit independently'}
             </Button>
           </div>
         </Panel>
 
         <Panel title="Artwork Transform">
           <TransformFields
-            x={piece.artwork.transform.xCm}
-            y={piece.artwork.transform.yCm}
-            width={piece.artwork.transform.widthCm}
-            height={piece.artwork.transform.heightCm}
-            onChange={(patch) => onPieceChange(updateArtwork(piece, patch))}
+            x={activePiece.artwork.transform.xCm}
+            y={activePiece.artwork.transform.yCm}
+            width={activePiece.artwork.transform.widthCm}
+            height={activePiece.artwork.transform.heightCm}
+            onChange={(patch) => commitPiece(updateArtwork(activePiece, patch))}
           />
         </Panel>
 
-        <Panel title="Cutline">
-          <div className="grid grid-cols-2 gap-2">
-            <Button type="button" size="sm" variant={piece.cutline.shape === 'rectangle' ? 'default' : 'outline'} onClick={() => onPieceChange(updateCutline(piece, { shape: 'rectangle' }))}>
-              <Square data-icon="inline-start" />
-              Rect
-            </Button>
-            <Button type="button" size="sm" variant={piece.cutline.shape === 'rounded-rectangle' ? 'default' : 'outline'} onClick={() => onPieceChange(updateCutline(piece, { shape: 'rounded-rectangle' }))}>
-              <Expand data-icon="inline-start" />
-              Rounded
-            </Button>
-            <Button type="button" size="sm" variant={piece.cutline.shape === 'ellipse' ? 'default' : 'outline'} onClick={() => onPieceChange(updateCutline(piece, { shape: 'ellipse' }))}>
-              <Circle data-icon="inline-start" />
-              Ellipse
-            </Button>
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <NumberField label="X" value={piece.cutline.transform.xCm} step={0.1} onChange={(xCm) => onPieceChange(updateCutlineTransform(piece, { xCm }))} />
-            <NumberField label="Y" value={piece.cutline.transform.yCm} step={0.1} onChange={(yCm) => onPieceChange(updateCutlineTransform(piece, { yCm }))} />
-            <NumberField label="Width" value={piece.cutline.transform.widthCm} step={0.1} onChange={(widthCm) => onPieceChange(updateCutlineTransform(piece, { widthCm }))} />
-            <NumberField label="Height" value={piece.cutline.transform.heightCm} step={0.1} onChange={(heightCm) => onPieceChange(updateCutlineTransform(piece, { heightCm }))} />
-            <NumberField label="Offset mm" value={piece.cutline.transform.offsetMm} step={0.1} onChange={(offsetMm) => onPieceChange(updateCutlineTransform(piece, { offsetMm }))} />
-            <NumberField label="Rotate" value={piece.cutline.transform.rotation} step={1} onChange={(rotation) => onPieceChange(updateCutlineTransform(piece, { rotation }))} />
-          </div>
-        </Panel>
+        <MaskToolsPanel
+          piece={activePiece}
+          onPieceChange={commitPiece}
+          onCreateCutlineFromMask={() => commitPiece(createCutlineFromMask(activePiece))}
+        />
+
+        <CutlineToolsPanel
+          piece={activePiece}
+          onPieceChange={commitPiece}
+          onDuplicateShapeAsCutline={() => duplicateAsCutline()}
+        />
 
         <Button type="button" onClick={onSave}>
           <Save data-icon="inline-start" />
           Save piece preset
         </Button>
       </aside>
+      <PieceEditorContextMenu
+        state={contextMenu}
+        piece={activePiece}
+        selectedObjects={selectedObjects}
+        onClose={() => setContextMenu(null)}
+        onCopy={() => runMenuAction(copySelection)}
+        onPaste={() => runMenuAction(() => pasteSelection(false))}
+        onPasteInPlace={() => runMenuAction(() => pasteSelection(true))}
+        onDuplicate={() => runMenuAction(duplicateSelection)}
+        onDelete={() => runMenuAction(deleteSelection)}
+        onLock={() => runMenuAction(() => setSelectedLock(true))}
+        onUnlock={() => runMenuAction(() => setSelectedLock(false))}
+        onGroup={() => runMenuAction(() => commitPiece({ ...activePiece, artworkCutlineGrouped: true }))}
+        onUngroup={() => runMenuAction(() => commitPiece({ ...activePiece, artworkCutlineGrouped: false }))}
+        onMakeClippingMask={() => runMenuAction(makeClippingMask)}
+        onReleaseClippingMask={() => runMenuAction(releaseClippingMask)}
+        onCreateCutlineFromMask={() => runMenuAction(() => commitPiece(createCutlineFromMask(activePiece)))}
+        onConvertToCutContour={() => runMenuAction(convertHelperToCutContour)}
+        onDuplicateAsCutline={() => runMenuAction(duplicateAsCutline)}
+        onCenterCutlineToArtwork={() => runMenuAction(() => commitPiece(centerCutlineToArtwork(activePiece)))}
+        onCenterArtworkToCutline={() => runMenuAction(() => commitPiece(centerArtworkToCutline(activePiece)))}
+        onAlign={(command) => runMenuAction(() => commitPiece(alignPieceObjects(activePiece, selectedObjects, keyObject, command)))}
+        onSetKeyObject={(object) => runMenuAction(() => onSetKeyObject(object))}
+      />
     </section>
   )
 
-  function beginObjectDrag(
-    event: ReactPointerEvent<HTMLElement>,
-    object: EditorObjectType
-  ): void {
-    if (tool !== 'select' || !piece) {
+  function commitPiece(nextPiece: PiecePreset): void {
+    setPast((current) => [...current.slice(-49), activePiece])
+    setFuture([])
+    onPieceChange(nextPiece)
+  }
+
+  function runMenuAction(action: () => void): void {
+    action()
+    setContextMenu(null)
+  }
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLElement>): void {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
       return
     }
 
-    event.preventDefault()
-    event.stopPropagation()
-    onSelectedObjectsChange([object])
-    const transform = object === 'artwork' ? piece.artwork.transform : piece.cutline.transform
+    const ctrl = event.ctrlKey || event.metaKey
+    const key = event.key.toLowerCase()
 
-    dragRef.current = {
-      object,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      originX: transform.xCm,
-      originY: transform.yCm
-    }
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-
-  function moveObjectDrag(event: ReactPointerEvent<HTMLElement>): void {
-    const drag = dragRef.current
-
-    if (!piece || drag.object === null || drag.pointerId !== event.pointerId) {
+    if (!ctrl && key === 'v') {
+      setTool('select')
       return
     }
 
-    event.preventDefault()
-    const nextX = drag.originX + (event.clientX - drag.startX) / scale
-    const nextY = drag.originY + (event.clientY - drag.startY) / scale
-
-    onPieceChange(moveEditorObject(piece, drag.object, nextX, nextY))
-  }
-
-  function endObjectDrag(event: ReactPointerEvent<HTMLElement>): void {
-    if (dragRef.current.pointerId !== event.pointerId) {
+    if (!ctrl && key === 'h') {
+      setTool('pan')
       return
     }
 
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
+    if (key === 'escape') {
+      onSelectedObjectsChange([])
+      setTool('select')
+      setContextMenu(null)
+      return
     }
 
-    dragRef.current = {
-      object: null,
-      pointerId: -1,
-      startX: 0,
-      startY: 0,
-      originX: 0,
-      originY: 0
+    if (key === 'delete' || key === 'backspace') {
+      event.preventDefault()
+      deleteSelection()
+      return
+    }
+
+    if (key.startsWith('arrow')) {
+      event.preventDefault()
+      nudgeSelection(event.shiftKey ? 0.5 : 0.1, key)
+      return
+    }
+
+    if (!ctrl) {
+      return
+    }
+
+    if (key === 'c' && event.shiftKey) {
+      event.preventDefault()
+      duplicateAsCutline()
+    } else if (key === 'c') {
+      event.preventDefault()
+      copySelection()
+    } else if (key === 'v') {
+      event.preventDefault()
+      pasteSelection(false)
+    } else if (key === 'f') {
+      event.preventDefault()
+      pasteSelection(true)
+    } else if (key === 'd') {
+      event.preventDefault()
+      duplicateSelection()
+    } else if (key === 'g' && event.shiftKey) {
+      event.preventDefault()
+      commitPiece({ ...activePiece, artworkCutlineGrouped: false })
+    } else if (key === 'g') {
+      event.preventDefault()
+      commitPiece({ ...activePiece, artworkCutlineGrouped: true })
+    } else if (key === 'a') {
+      event.preventDefault()
+      onSelectedObjectsChange(['artwork', 'mask', 'cutline', ...(activePiece.helperShape ? ['helper-shape' as const] : [])])
+    } else if (key === 'z' && event.shiftKey) {
+      event.preventDefault()
+      redo()
+    } else if (key === 'z') {
+      event.preventDefault()
+      undo()
+    } else if (key === 'y') {
+      event.preventDefault()
+      redo()
+    } else if (key === '7' && event.altKey) {
+      event.preventDefault()
+      releaseClippingMask()
+    } else if (key === '7') {
+      event.preventDefault()
+      makeClippingMask()
+    } else if (event.key === '+' || event.key === '=') {
+      event.preventDefault()
+      setZoom((value) => Math.min(value + 0.15, 2.5))
+    } else if (event.key === '-') {
+      event.preventDefault()
+      setZoom((value) => Math.max(value - 0.15, 0.45))
+    } else if (key === '0') {
+      event.preventDefault()
+      setZoom(1)
+    } else if (key === '1') {
+      event.preventDefault()
+      setZoom(1)
     }
   }
+
+  function copySelection(): void {
+    const object = selectedObjects[0]
+
+    if (!object) {
+      return
+    }
+
+    setClipboard(getClipboardObject(activePiece, object))
+  }
+
+  function pasteSelection(inPlace: boolean): void {
+    if (!clipboard) {
+      return
+    }
+
+    const offset = inPlace ? 0 : 0.4
+    const transform = {
+      ...clipboard.transform,
+      xCm: clipboard.transform.xCm + offset,
+      yCm: clipboard.transform.yCm + offset
+    }
+
+    if (clipboard.object === 'artwork') {
+      commitPiece(updateArtwork(activePiece, transform))
+      onSelectedObjectsChange(['artwork'])
+      return
+    }
+
+    commitPiece({
+      ...activePiece,
+      helperShape: createHelperShape(clipboard.shape ?? 'rectangle', transform)
+    })
+    onSelectedObjectsChange(['helper-shape'])
+  }
+
+  function duplicateSelection(): void {
+    copySelection()
+    const object = selectedObjects[0]
+    const copied = object ? getClipboardObject(activePiece, object) : clipboard
+
+    if (!copied) {
+      return
+    }
+
+    setClipboard(copied)
+    const transform = {
+      ...copied.transform,
+      xCm: copied.transform.xCm + 0.4,
+      yCm: copied.transform.yCm + 0.4
+    }
+
+    if (copied.object === 'artwork') {
+      commitPiece(updateArtwork(activePiece, transform))
+      onSelectedObjectsChange(['artwork'])
+      return
+    }
+
+    commitPiece({
+      ...activePiece,
+      helperShape: createHelperShape(copied.shape ?? 'rectangle', transform)
+    })
+    onSelectedObjectsChange(['helper-shape'])
+  }
+
+  function deleteSelection(): void {
+    const object = selectedObjects[0]
+
+    if (object === 'helper-shape') {
+      commitPiece({ ...activePiece, helperShape: undefined })
+      onSelectedObjectsChange([])
+    } else if (object === 'mask') {
+      commitPiece({ ...activePiece, mask: { ...activePiece.mask, enabled: false } })
+      onSelectedObjectsChange(['artwork'])
+    } else if (object === 'cutline') {
+      commitPiece({
+        ...activePiece,
+        objectVisibility: { ...activePiece.objectVisibility, cutline: false }
+      })
+      onSelectedObjectsChange(['artwork'])
+    }
+  }
+
+  function setSelectedLock(locked: boolean): void {
+    const object = selectedObjects[0]
+
+    if (!object) {
+      return
+    }
+
+    commitPiece({
+      ...activePiece,
+      objectLocks: {
+        ...activePiece.objectLocks,
+        [object === 'helper-shape' ? 'helper' : object]: locked
+      },
+      helperShape:
+        object === 'helper-shape' && activePiece.helperShape
+          ? { ...activePiece.helperShape, locked }
+          : activePiece.helperShape
+    })
+  }
+
+  function makeClippingMask(): void {
+    commitPiece(makeClippingMaskFromHelper(activePiece))
+    onSelectedObjectsChange(['mask'])
+  }
+
+  function releaseClippingMask(): void {
+    commitPiece(releaseClippingMaskToHelper(activePiece))
+    onSelectedObjectsChange(['helper-shape'])
+  }
+
+  function convertHelperToCutContour(): void {
+    if (!activePiece.helperShape) {
+      return
+    }
+
+    commitPiece(createCutlineFromHelper(activePiece))
+    onSelectedObjectsChange(['cutline'])
+  }
+
+  function duplicateAsCutline(): void {
+    if (selectedObjects.includes('helper-shape')) {
+      convertHelperToCutContour()
+      return
+    }
+
+    if (selectedObjects.includes('mask') || activePiece.mask.enabled) {
+      commitPiece(createCutlineFromMask(activePiece))
+      onSelectedObjectsChange(['cutline'])
+    }
+  }
+
+  function nudgeSelection(step: number, key: string): void {
+    const object = selectedObjects[0]
+
+    if (!object) {
+      return
+    }
+
+    const dx = key === 'arrowleft' ? -step : key === 'arrowright' ? step : 0
+    const dy = key === 'arrowup' ? -step : key === 'arrowdown' ? step : 0
+    commitPiece(moveObject(activePiece, object, dx, dy))
+  }
+
+  function undo(): void {
+    const previous = past[past.length - 1]
+
+    if (!previous) {
+      return
+    }
+
+    setPast((current) => current.slice(0, -1))
+    setFuture((current) => [activePiece, ...current].slice(0, 50))
+    onPieceChange(previous)
+  }
+
+  function redo(): void {
+    const next = future[0]
+
+    if (!next) {
+      return
+    }
+
+    setFuture((current) => current.slice(1))
+    setPast((current) => [...current.slice(-49), activePiece])
+    onPieceChange(next)
+  }
+
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }): JSX.Element {
@@ -379,19 +584,20 @@ function ToolButton({
   )
 }
 
-function IconButton({
+function Toggle({
   label,
-  icon: Icon,
-  onClick
+  checked,
+  onChange
 }: {
   label: string
-  icon: typeof AlignCenter
-  onClick: () => void
+  checked: boolean
+  onChange: (checked: boolean) => void
 }): JSX.Element {
   return (
-    <Button type="button" size="icon" variant="outline" onClick={onClick} aria-label={label}>
-      <Icon />
-    </Button>
+    <label className="flex h-8 items-center gap-1.5 rounded-md border bg-background px-2 text-xs font-medium text-muted-foreground">
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      {label}
+    </label>
   )
 }
 
@@ -476,27 +682,113 @@ function updateArtwork(
   }
 }
 
-function updateCutline(
-  piece: PiecePreset,
-  patch: Partial<PiecePreset['cutline']>
-): PiecePreset {
+interface ClipboardObject {
+  object: EditorObjectType
+  transform: ArtworkTransform
+  shape?: MaskShape
+}
+
+function getClipboardObject(piece: PiecePreset, object: EditorObjectType): ClipboardObject {
+  if (object === 'artwork') {
+    return {
+      object,
+      transform: { ...piece.artwork.transform }
+    }
+  }
+
+  if (object === 'mask') {
+    return {
+      object,
+      shape: piece.mask.shape,
+      transform: { ...piece.mask.transform }
+    }
+  }
+
+  if (object === 'helper-shape' && piece.helperShape) {
+    return {
+      object,
+      shape: piece.helperShape.shape,
+      transform: { ...piece.helperShape.transform }
+    }
+  }
+
   return {
-    ...piece,
-    cutline: { ...piece.cutline, ...patch }
+    object: 'cutline',
+    shape: cutlineShapeToMaskShape(piece.cutline.shape),
+    transform: {
+      xCm: piece.cutline.transform.xCm,
+      yCm: piece.cutline.transform.yCm,
+      widthCm: piece.cutline.transform.widthCm,
+      heightCm: piece.cutline.transform.heightCm,
+      rotation: piece.cutline.transform.rotation
+    }
   }
 }
 
-function updateCutlineTransform(
+function moveObject(
   piece: PiecePreset,
-  patch: Partial<PiecePreset['cutline']['transform']>
+  object: EditorObjectType,
+  dxCm: number,
+  dyCm: number
 ): PiecePreset {
+  if (object === 'artwork') {
+    return updateArtwork(piece, {
+      xCm: piece.artwork.transform.xCm + dxCm,
+      yCm: piece.artwork.transform.yCm + dyCm
+    })
+  }
+
+  if (object === 'mask') {
+    return {
+      ...piece,
+      mask: {
+        ...piece.mask,
+        transform: {
+          ...piece.mask.transform,
+          xCm: piece.mask.transform.xCm + dxCm,
+          yCm: piece.mask.transform.yCm + dyCm
+        }
+      }
+    }
+  }
+
+  if (object === 'helper-shape' && piece.helperShape) {
+    return {
+      ...piece,
+      helperShape: {
+        ...piece.helperShape,
+        transform: {
+          ...piece.helperShape.transform,
+          xCm: piece.helperShape.transform.xCm + dxCm,
+          yCm: piece.helperShape.transform.yCm + dyCm
+        }
+      }
+    }
+  }
+
   return {
     ...piece,
     cutline: {
       ...piece.cutline,
-      transform: { ...piece.cutline.transform, ...patch }
+      transform: {
+        ...piece.cutline.transform,
+        xCm: piece.cutline.transform.xCm + dxCm,
+        yCm: piece.cutline.transform.yCm + dyCm
+      }
     }
   }
+}
+
+function cutlineShapeToMaskShape(shape: CutlineShape): MaskShape {
+  if (shape === 'ellipse') {
+    return 'ellipse'
+  }
+
+  if (shape === 'rounded-rectangle') {
+    return 'rounded-rectangle'
+  }
+
+  return 'rectangle'
 }
 
 function resetTransforms(piece: PiecePreset): PiecePreset {
@@ -504,6 +796,16 @@ function resetTransforms(piece: PiecePreset): PiecePreset {
     ...piece,
     artwork: {
       ...piece.artwork,
+      transform: {
+        xCm: 0,
+        yCm: 0,
+        widthCm: piece.widthCm,
+        heightCm: piece.heightCm,
+        rotation: 0
+      }
+    },
+    mask: {
+      ...piece.mask,
       transform: {
         xCm: 0,
         yCm: 0,
@@ -524,17 +826,4 @@ function resetTransforms(piece: PiecePreset): PiecePreset {
       }
     }
   }
-}
-
-function moveEditorObject(
-  piece: PiecePreset,
-  object: EditorObjectType,
-  xCm: number,
-  yCm: number
-): PiecePreset {
-  if (object === 'artwork') {
-    return updateArtwork(piece, { xCm, yCm })
-  }
-
-  return updateCutlineTransform(piece, { xCm, yCm })
 }

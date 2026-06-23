@@ -14,11 +14,13 @@ import { exportRenderQueue } from './renderQueue'
 import {
   createCanvasRenderAssets,
   flattenSheetSides,
-  getSheetSideFileName,
   releaseCanvasRenderAssets,
   renderCanvasSheetSide
 } from './renderSheet'
+import { getNumberedMontageImageFileName } from './exportNaming'
 import { mmToPixels } from './units'
+
+export { getBookletImageExportFolderName } from './exportNaming'
 
 export interface ExportedImage {
   blob: Blob
@@ -96,7 +98,7 @@ export async function exportBookletImages(
         const blob = await canvasToBlob(canvas, format, settings.exportQuality)
         const image = {
           blob,
-          fileName: getSheetSideFileName(side.sheetNumber, side.side, format)
+          fileName: getNumberedMontageImageFileName(renderedCount + 1, format)
         }
 
         if (options.onImage) {
@@ -147,7 +149,7 @@ export async function exportBookletImages(
         const blob = await canvasToBlob(canvas, format, settings.exportQuality)
         const image = {
           blob,
-          fileName: getEmptySheetFileName(renderedCount - sides.length + 1, format)
+          fileName: getNumberedMontageImageFileName(renderedCount + 1, format)
         }
 
         if (options.onImage) {
@@ -175,10 +177,6 @@ export async function exportBookletImages(
   }
 
   return exported
-}
-
-function getEmptySheetFileName(index: number, extension: string): string {
-  return `booklet_empty_sheet_${String(index).padStart(3, '0')}.${extension}`
 }
 
 function canvasToBlob(
