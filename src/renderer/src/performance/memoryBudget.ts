@@ -1,9 +1,6 @@
 import type { PerformanceSettings } from './performanceTypes'
 
-export function getCanvasPixelBudget(
-  settings: PerformanceSettings,
-  purpose: string
-): number {
+export function getCanvasPixelBudget(settings: PerformanceSettings, purpose: string): number {
   return isExportPurpose(purpose)
     ? settings.memory.exportCanvasPixelBudget
     : settings.memory.previewCanvasPixelBudget

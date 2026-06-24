@@ -5,10 +5,7 @@ import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
 import type { LicensePlan } from '../shared/licensing-types.js'
 import { LICENSE_PUBLIC_KEY_PEM } from './license-public-key.js'
-import {
-  createOfflineSerialKey,
-  validateOfflineSerialKey
-} from './license-serial.js'
+import { createOfflineSerialKey, validateOfflineSerialKey } from './license-serial.js'
 
 type PaidLicensePlan = Exclude<LicensePlan, 'trial'>
 
@@ -145,9 +142,7 @@ function parseArguments(args: string[]): GeneratorOptions {
   return options
 }
 
-async function collectMissingOptions(
-  options: GeneratorOptions
-): Promise<GeneratorOptions> {
+async function collectMissingOptions(options: GeneratorOptions): Promise<GeneratorOptions> {
   if (options.plan && options.expiry) {
     return options
   }
@@ -161,11 +156,9 @@ async function collectMissingOptions(
   try {
     const plan = options.plan ?? (await prompt.question('Plan (Pro or Shop) [Pro]: '))
     const expiry =
-      options.expiry ??
-      (await prompt.question('Expiry (Lifetime or YYYY-MM-DD) [Lifetime]: '))
+      options.expiry ?? (await prompt.question('Expiry (Lifetime or YYYY-MM-DD) [Lifetime]: '))
     const seat =
-      options.seat ??
-      (await prompt.question('Seat code (six letters/numbers, blank for random): '))
+      options.seat ?? (await prompt.question('Seat code (six letters/numbers, blank for random): '))
 
     return {
       ...options,
@@ -178,10 +171,7 @@ async function collectMissingOptions(
   }
 }
 
-function generateSerialKey(
-  options: GeneratorOptions,
-  signingPrivateKey: string
-): SerialKeyResult {
+function generateSerialKey(options: GeneratorOptions, signingPrivateKey: string): SerialKeyResult {
   const plan = normalizePlan(options.plan)
   const expiresCode = normalizeExpiry(options.expiry)
   const serialKey = createOfflineSerialKey({
@@ -200,18 +190,14 @@ function generateSerialKey(
     serialKey,
     plan,
     planLabel: validation.license.planLabel,
-    expiry: validation.license.expiresAt
-      ? expiresCodeToDisplayDate(expiresCode)
-      : 'Lifetime',
+    expiry: validation.license.expiresAt ? expiresCodeToDisplayDate(expiresCode) : 'Lifetime',
     expiresAt: validation.license.expiresAt,
     seatCode: validation.license.seatCode
   }
 }
 
 async function loadSigningPrivateKey(): Promise<string> {
-  const privateKeyPath = resolve(
-    process.env[PRIVATE_KEY_ENV] ?? DEFAULT_PRIVATE_KEY_PATH
-  )
+  const privateKeyPath = resolve(process.env[PRIVATE_KEY_ENV] ?? DEFAULT_PRIVATE_KEY_PATH)
   let signingPrivateKey: string
 
   try {
@@ -234,9 +220,7 @@ async function loadSigningPrivateKey(): Promise<string> {
     .toString('hex')
 
   if (derivedPublicKey !== appPublicKey) {
-    throw new Error(
-      'The private signing key does not match the public key embedded in this app.'
-    )
+    throw new Error('The private signing key does not match the public key embedded in this app.')
   }
 
   return signingPrivateKey

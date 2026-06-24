@@ -117,8 +117,26 @@ export async function renderCanvasSheetSide(
   signal?: AbortSignal
 ): Promise<void> {
   assertNotCanceled(signal)
-  await drawCanvasSlot(context, side.left, layout.renderSlots.left, settings, layout, assets, dpi, signal)
-  await drawCanvasSlot(context, side.right, layout.renderSlots.right, settings, layout, assets, dpi, signal)
+  await drawCanvasSlot(
+    context,
+    side.left,
+    layout.renderSlots.left,
+    settings,
+    layout,
+    assets,
+    dpi,
+    signal
+  )
+  await drawCanvasSlot(
+    context,
+    side.right,
+    layout.renderSlots.right,
+    settings,
+    layout,
+    assets,
+    dpi,
+    signal
+  )
 
   if (settings.cropMarks) {
     drawCanvasCropMarks(context, layout.trimSlots.left, layout.paperSize, dpi)
@@ -205,7 +223,12 @@ async function drawPdfSlot(
   )
 
   if (page.kind === 'pdf' && page.sourceId && page.sourcePageIndex !== undefined) {
-    const embeddedPage = await getEmbeddedPdfPage(assets, page.sourceId, page.sourcePageIndex, signal)
+    const embeddedPage = await getEmbeddedPdfPage(
+      assets,
+      page.sourceId,
+      page.sourcePageIndex,
+      signal
+    )
 
     if (embeddedPage) {
       pdfPage.drawPage(embeddedPage, placement)
@@ -318,7 +341,11 @@ async function drawPdfPageToCanvas(
 
   tempCanvas.width = Math.max(Math.round(viewport.width), 1)
   tempCanvas.height = Math.max(Math.round(viewport.height), 1)
-  assertCanvasWithinLimit(tempCanvas.width, tempCanvas.height, 'rendering PDF pages for image export')
+  assertCanvasWithinLimit(
+    tempCanvas.width,
+    tempCanvas.height,
+    'rendering PDF pages for image export'
+  )
 
   const renderTask = pdfPage.render({ canvas: tempCanvas, canvasContext: tempContext, viewport })
   const abort = () => renderTask.cancel()

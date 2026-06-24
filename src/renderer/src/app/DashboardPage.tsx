@@ -6,7 +6,7 @@ import { RecentJobsTable } from '@/app/RecentJobsTable'
 import { PdfFilePickerInput } from '@/components/file-input/PdfFilePickerInput'
 import { ToolCard } from '@/components/tool-card/ToolCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { getToolAccessState, routeRequiresPaidAccess } from '@/licensing/tool-access'
+import { getToolAccessState } from '@/licensing/tool-access'
 import { printerTools } from '@/lib/app-data'
 import type { AppRoute } from '@/types/navigation'
 import type { PrinterAppProjectResult } from '@/types/projects'
@@ -40,11 +40,8 @@ export function DashboardPage({
     }
   }
   const openBookletPdfPicker = (): void => {
-    if (
-      routeRequiresPaidAccess('booklet-montage', printerTools) &&
-      !licenseState?.canUsePaidTools
-    ) {
-      onNavigate('license')
+    if (!licenseState?.canUsePaidTools) {
+      onNavigate('booklet-montage')
       return
     }
 
@@ -70,17 +67,7 @@ export function DashboardPage({
       onClick: () => openBookletPdfPicker()
     }
   ]
-  const navigateWithLicenseGate = (route: AppRoute): void => {
-    if (
-      routeRequiresPaidAccess(route, printerTools) &&
-      !licenseState?.canUsePaidTools
-    ) {
-      onNavigate('license')
-      return
-    }
-
-    onNavigate(route)
-  }
+  const navigateToTool = (route: AppRoute): void => onNavigate(route)
 
   return (
     <div className="mx-auto flex max-w-[1520px] flex-col gap-5">
@@ -99,8 +86,7 @@ export function DashboardPage({
             <ToolCard
               key={tool.id}
               tool={tool}
-              onOpen={() => navigateWithLicenseGate(tool.route)}
-              onManageLicense={() => onNavigate('license')}
+              onOpen={() => navigateToTool(tool.route)}
               {...access}
             />
           )
@@ -120,14 +106,8 @@ export function DashboardPage({
                 {projectOpenError}
               </div>
             )}
-            <QuickActionList
-              actions={quickActions}
-              onNavigate={navigateWithLicenseGate}
-            />
-            <PdfFilePickerInput
-              ref={pdfInputRef}
-              onFilesSelected={onImportBookletPdf}
-            />
+            <QuickActionList actions={quickActions} onNavigate={navigateToTool} />
+            <PdfFilePickerInput ref={pdfInputRef} onFilesSelected={onImportBookletPdf} />
           </CardContent>
         </Card>
       </section>

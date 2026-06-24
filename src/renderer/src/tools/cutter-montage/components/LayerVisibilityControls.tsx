@@ -17,10 +17,26 @@ export function LayerVisibilityControls({
     <section className="rounded-lg border bg-card p-4">
       <h3 className="font-semibold">View Layers</h3>
       <div className="mt-3 flex flex-col gap-2 text-sm">
-        <LayerToggle label="Artwork" checked={layers.artwork} onChange={(artwork) => onLayerChange({ artwork })} />
-        <LayerToggle label="Cutlines" checked={layers.cutlines} onChange={(cutlines) => onLayerChange({ cutlines })} />
-        <LayerToggle label="Grid" checked={settings.showGrid} onChange={(showGrid) => onSettingsChange({ showGrid })} />
-        <LayerToggle label="Snap to grid" checked={settings.snapToGrid} onChange={(snapToGrid) => onSettingsChange({ snapToGrid })} />
+        <LayerToggle
+          label="Artwork"
+          checked={layers.artwork}
+          onChange={(artwork) => onLayerChange({ artwork })}
+        />
+        <LayerToggle
+          label="Cutlines"
+          checked={layers.cutlines}
+          onChange={(cutlines) => onLayerChange({ cutlines })}
+        />
+        <LayerToggle
+          label="Grid"
+          checked={settings.showGrid}
+          onChange={(showGrid) => onSettingsChange({ showGrid })}
+        />
+        <LayerToggle
+          label="Snap to grid"
+          checked={settings.snapToGrid}
+          onChange={(snapToGrid) => onSettingsChange({ snapToGrid })}
+        />
       </div>
     </section>
   )

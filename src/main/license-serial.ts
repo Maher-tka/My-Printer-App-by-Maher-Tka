@@ -1,10 +1,4 @@
-import {
-  createHash,
-  randomBytes,
-  sign,
-  verify,
-  type KeyObject
-} from 'node:crypto'
+import { createHash, randomBytes, sign, verify, type KeyObject } from 'node:crypto'
 import type { LicenseFeature, LicensePlan } from '../shared/licensing-types.js'
 import { LICENSE_PUBLIC_KEY_PEM } from './license-public-key.js'
 
@@ -92,22 +86,11 @@ export function validateOfflineSerialKey(
     return { ok: false, error: 'Serial key seat section is not valid.' }
   }
 
-  if (
-    signature.length !== SIGNATURE_LENGTH ||
-    !/^[A-F0-9]+$/.test(signature)
-  ) {
+  if (signature.length !== SIGNATURE_LENGTH || !/^[A-F0-9]+$/.test(signature)) {
     return { ok: false, error: 'Serial key signature is not valid.' }
   }
 
-  if (
-    !verifySerialSignature(
-      planCode,
-      expiresCode,
-      seatCode,
-      signature,
-      verificationPublicKey
-    )
-  ) {
+  if (!verifySerialSignature(planCode, expiresCode, seatCode, signature, verificationPublicKey)) {
     return { ok: false, error: 'Serial key could not be verified offline.' }
   }
 
@@ -158,11 +141,7 @@ function createSerialSignature(
   seatCode: string,
   signingPrivateKey: LicenseKey
 ): string {
-  return sign(
-    null,
-    createSignaturePayload(planCode, expiresCode, seatCode),
-    signingPrivateKey
-  )
+  return sign(null, createSignaturePayload(planCode, expiresCode, seatCode), signingPrivateKey)
     .toString('hex')
     .toUpperCase()
 }
@@ -190,15 +169,8 @@ function verifySerialSignature(
   }
 }
 
-function createSignaturePayload(
-  planCode: string,
-  expiresCode: string,
-  seatCode: string
-): Buffer {
-  return Buffer.from(
-    `${SERIAL_PREFIX}|${planCode}|${expiresCode}|${seatCode}`,
-    'utf-8'
-  )
+function createSignaturePayload(planCode: string, expiresCode: string, seatCode: string): Buffer {
+  return Buffer.from(`${SERIAL_PREFIX}|${planCode}|${expiresCode}|${seatCode}`, 'utf-8')
 }
 
 function createSeatCode(): string {

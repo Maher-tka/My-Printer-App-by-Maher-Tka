@@ -64,12 +64,8 @@ export function PageManager({
     })
   )
   const pageIds = useMemo(() => pages.map((page) => page.id), [pages])
-  const selectedPage = selectedPageId
-    ? pages.find((page) => page.id === selectedPageId)
-    : null
-  const activePage = activePageId
-    ? pages.find((page) => page.id === activePageId)
-    : null
+  const selectedPage = selectedPageId ? pages.find((page) => page.id === selectedPageId) : null
+  const activePage = activePageId ? pages.find((page) => page.id === activePageId) : null
   const colorPickerPage = colorPickerPageId
     ? pages.find((page) => page.id === colorPickerPageId && page.sourceType === 'blank')
     : null
@@ -83,7 +79,8 @@ export function PageManager({
             Total pages: <span className="font-semibold text-foreground">{pages.length}</span>
             {selectedPage && (
               <span className="ml-2">
-                Selected: <span className="font-medium text-foreground">{getPageLabel(selectedPage)}</span>
+                Selected:{' '}
+                <span className="font-medium text-foreground">{getPageLabel(selectedPage)}</span>
               </span>
             )}
           </p>
@@ -109,12 +106,7 @@ export function PageManager({
           <FilePlus2 data-icon="inline-start" />
           Add Blank Page
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          onClick={onAutoAddBlankPages}
-          disabled={blanksNeeded === 0}
-        >
+        <Button type="button" size="sm" onClick={onAutoAddBlankPages} disabled={blanksNeeded === 0}>
           Auto add blank pages
         </Button>
         <Button
@@ -207,14 +199,9 @@ const SortablePageCard = memo(function SortablePageCard({
   onDeletePage: (pageId: string) => void
   onToggleColorPicker: (pageId: string) => void
 }): JSX.Element {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging
-  } = useSortable({ id: page.id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: page.id
+  })
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition: isDragging ? undefined : transition,

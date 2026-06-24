@@ -1,11 +1,5 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import type {
-  BookletPage,
-  BookletSource,
-  BookletScaleMode,
-  Rect,
-  SheetSettings
-} from '../types'
+import type { BookletPage, BookletSource, BookletScaleMode, Rect, SheetSettings } from '../types'
 import { getPerformanceSettingsSnapshot } from '../../../performance/performanceSettings'
 import {
   assertCanvasWithinLimit,
@@ -246,20 +240,14 @@ export async function clearPagePreviewCache(): Promise<void> {
   pdfDocumentBySourceId.clear()
 }
 
-export function getSinglePageAspectRatio(
-  settings: SheetSettings,
-  firstPage?: BookletPage
-): number {
+export function getSinglePageAspectRatio(settings: SheetSettings, firstPage?: BookletPage): number {
   return getBookPageAspectRatio(settings, firstPage)
 }
 
-export function getBookPageAspectRatio(
-  settings: SheetSettings,
-  firstPage?: BookletPage
-): number {
+export function getBookPageAspectRatio(settings: SheetSettings, firstPage?: BookletPage): number {
   try {
     const printSize = getPrintSizeMm(settings)
-    const foldedPageRatio = (printSize.widthMm / 2) / printSize.heightMm
+    const foldedPageRatio = printSize.widthMm / 2 / printSize.heightMm
 
     return clampAspectRatio(foldedPageRatio)
   } catch {
@@ -345,9 +333,7 @@ function getPreviewCanvasSize(
   }
 
   const aspectRatio =
-    page.widthMm > 0 && page.heightMm > 0
-      ? clampAspectRatio(page.widthMm / page.heightMm)
-      : 0.707
+    page.widthMm > 0 && page.heightMm > 0 ? clampAspectRatio(page.widthMm / page.heightMm) : 0.707
   const performanceSettings = getPerformanceSettingsSnapshot()
   const maxWidth =
     options.quality === 'thumbnail'
@@ -360,7 +346,10 @@ function getPreviewCanvasSize(
       ? Math.round(performanceSettings.render.thumbnailMaxSizePx * 1.45)
       : options.quality === 'fullPage3d'
         ? performanceSettings.render.fullPage3dMaxHeightPx
-        : Math.min(PREVIEW_MAX_HEIGHT[options.quality], performanceSettings.render.previewMaxHeightPx)
+        : Math.min(
+            PREVIEW_MAX_HEIGHT[options.quality],
+            performanceSettings.render.previewMaxHeightPx
+          )
   const widthFromHeight = maxHeight * aspectRatio
 
   if (widthFromHeight <= maxWidth) {

@@ -80,17 +80,13 @@ export const defaultSheetSettings: SheetSettings = {
   exportQuality: 'standard'
 }
 
-export function useBookletMontage(
-  initialProject?: PrinterProjectFile<BookletProjectPayload>
-) {
+export function useBookletMontage(initialProject?: PrinterProjectFile<BookletProjectPayload>) {
   const { settings: performanceSettings } = usePerformanceSettings()
-  const [initialState] = useState(
-    () => initialProject ? deserializeBookletProjectPayload(initialProject.payload) : null
+  const [initialState] = useState(() =>
+    initialProject ? deserializeBookletProjectPayload(initialProject.payload) : null
   )
   const [pages, setPages] = useState<BookletPage[]>(() => initialState?.pages ?? [])
-  const [sources, setSources] = useState<BookletSource[]>(
-    () => initialState?.sources ?? []
-  )
+  const [sources, setSources] = useState<BookletSource[]>(() => initialState?.sources ?? [])
   const [settings, setSettings] = useState<SheetSettings>(
     () => initialState?.settings ?? defaultSheetSettings
   )
@@ -369,7 +365,9 @@ export function useBookletMontage(
       }
 
       if (item.kind === 'booklet-side') {
-        setError('This sheet is generated from the booklet order. Delete or rearrange source pages before export changes are allowed.')
+        setError(
+          'This sheet is generated from the booklet order. Delete or rearrange source pages before export changes are allowed.'
+        )
         return current
       }
 
@@ -387,7 +385,9 @@ export function useBookletMontage(
       }
 
       if (item.kind === 'booklet-side') {
-        setError('Duplicating imposed booklet sheets is blocked for now so the export order stays correct.')
+        setError(
+          'Duplicating imposed booklet sheets is blocked for now so the export order stays correct.'
+        )
         return current
       }
 
@@ -520,53 +520,47 @@ export function useBookletMontage(
           outputFolder = folder.folderPath
         }
 
-        const { exportBookletImages, getBookletImageExportFolderName } = await import('../lib/exportImages')
+        const { exportBookletImages, getBookletImageExportFolderName } =
+          await import('../lib/exportImages')
         const exportFolderName = getBookletImageExportFolderName(sources, settings)
 
-        await exportBookletImages(
-          sheets,
-          sources,
-          settings,
-          format,
-          setExportProgress,
-          {
-            signal: abortController.signal,
-            emptySheets: emptySheetsForExport,
-            onImage: async (image) => {
-              if (abortController.signal.aborted) {
-                throw createCanceledError('Export canceled.')
-              }
-
-              exportedImageCount += 1
-              const outputFileName = `${exportFolderName}/${image.fileName}`
-
-              setExportProgress({
-                phase: 'saving-file',
-                current: exportedImageCount,
-                total: exportPageCount,
-                message: `Saving ${outputFileName}`
-              })
-
-              if (outputFolder && writeFilesToFolder) {
-                const result = await writeFilesToFolder(outputFolder, [
-                  {
-                    fileName: outputFileName,
-                    bytes: await blobToUint8Array(image.blob)
-                  }
-                ])
-
-                if (!result.ok) {
-                  throw new Error(result.error ?? 'Export failed while saving image sheets.')
-                }
-
-                return
-              }
-
-              downloadBlob(image.blob, `${exportFolderName}_${image.fileName}`)
-              await waitForDownloadTick()
+        await exportBookletImages(sheets, sources, settings, format, setExportProgress, {
+          signal: abortController.signal,
+          emptySheets: emptySheetsForExport,
+          onImage: async (image) => {
+            if (abortController.signal.aborted) {
+              throw createCanceledError('Export canceled.')
             }
+
+            exportedImageCount += 1
+            const outputFileName = `${exportFolderName}/${image.fileName}`
+
+            setExportProgress({
+              phase: 'saving-file',
+              current: exportedImageCount,
+              total: exportPageCount,
+              message: `Saving ${outputFileName}`
+            })
+
+            if (outputFolder && writeFilesToFolder) {
+              const result = await writeFilesToFolder(outputFolder, [
+                {
+                  fileName: outputFileName,
+                  bytes: await blobToUint8Array(image.blob)
+                }
+              ])
+
+              if (!result.ok) {
+                throw new Error(result.error ?? 'Export failed while saving image sheets.')
+              }
+
+              return
+            }
+
+            downloadBlob(image.blob, `${exportFolderName}_${image.fileName}`)
+            await waitForDownloadTick()
           }
-        )
+        })
 
         setExportProgress({
           phase: 'done',

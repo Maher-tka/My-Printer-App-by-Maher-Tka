@@ -10,10 +10,7 @@ import {
 } from '../tools/cutter-montage/lib/piecePresets'
 import type { BookletPage, BookletSource } from '../tools/booklet-montage/types'
 import type { PieceSourceFile } from '../tools/cutter-montage/types'
-import {
-  getBookletProjectStateKey,
-  getCutterProjectStateKey
-} from './projectDirtyState'
+import { getBookletProjectStateKey, getCutterProjectStateKey } from './projectDirtyState'
 import {
   createBookletProjectFile,
   createCutterProjectFile,
@@ -207,7 +204,10 @@ try {
   }
 
   expectEqual(
-    [...deserializeBookletProjectPayload(bookletFromDisk.payload as typeof bookletFile.payload).sources[0].bytes],
+    [
+      ...deserializeBookletProjectPayload(bookletFromDisk.payload as typeof bookletFile.payload)
+        .sources[0].bytes
+    ],
     [1, 2, 3, 254],
     'booklet .mpjob restores source bytes from disk'
   )
@@ -228,9 +228,7 @@ console.log('Project file tests passed: booklet and cutter .mpjob memory and dis
 
 function expectEqual(actual: unknown, expected: unknown, label: string): void {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new Error(
-      `${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`
-    )
+    throw new Error(`${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`)
   }
 }
 

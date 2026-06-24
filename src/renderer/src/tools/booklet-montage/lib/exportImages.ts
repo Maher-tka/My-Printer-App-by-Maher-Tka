@@ -142,7 +142,11 @@ export async function exportBookletImages(
       try {
         canvas.width = mmToPixels(layout.paperSize.widthMm, dpi)
         canvas.height = mmToPixels(layout.paperSize.heightMm, dpi)
-        assertCanvasWithinLimit(canvas.width, canvas.height, 'exporting empty montage sheets as images')
+        assertCanvasWithinLimit(
+          canvas.width,
+          canvas.height,
+          'exporting empty montage sheets as images'
+        )
         context.fillStyle = normalizeHex(emptySheet.colorHex) ?? '#FFFFFF'
         context.fillRect(0, 0, canvas.width, canvas.height)
 

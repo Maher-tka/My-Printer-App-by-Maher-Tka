@@ -1,9 +1,1 @@
-export {
-  cmToMm,
-  cmToPoints,
-  formatCm,
-  mmToCm,
-  mmToPoints,
-  roundToStep,
-  trimNumber
-} from './units'
+export { cmToMm, cmToPoints, formatCm, mmToCm, mmToPoints, roundToStep, trimNumber } from './units'

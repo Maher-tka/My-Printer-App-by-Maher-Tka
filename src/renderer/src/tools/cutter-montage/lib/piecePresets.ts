@@ -99,7 +99,7 @@ export function duplicatePiecePreset(
   const groupIds = new Map<string, string>()
   const objects = piece.objects.map((object) => {
     const groupId = object.groupId
-      ? groupIds.get(object.groupId) ?? createCutterId('group')
+      ? (groupIds.get(object.groupId) ?? createCutterId('group'))
       : undefined
     if (object.groupId && groupId) groupIds.set(object.groupId, groupId)
     return {
@@ -109,7 +109,8 @@ export function duplicatePiecePreset(
       transform: { ...object.transform }
     }
   })
-  const remapId = (id: string | undefined): string | undefined => id ? objectIds.get(id) : undefined
+  const remapId = (id: string | undefined): string | undefined =>
+    id ? objectIds.get(id) : undefined
   const duplicate = {
     ...piece,
     id: pieceId,
@@ -140,7 +141,9 @@ export function duplicatePiecePreset(
     artworkObjectId: remapId(piece.artworkObjectId) ?? `artwork-${pieceId}`,
     maskObjectId: remapId(piece.maskObjectId),
     cutlineObjectId: remapId(piece.cutlineObjectId),
-    helperObjectIds: piece.helperObjectIds.map((id) => remapId(id)).filter((id): id is string => Boolean(id)),
+    helperObjectIds: piece.helperObjectIds
+      .map((id) => remapId(id))
+      .filter((id): id is string => Boolean(id)),
     selectedObjectIds: [],
     keyObjectId: undefined
   }
@@ -171,7 +174,11 @@ export function createPlacedPieceFromPreset(
   }
 }
 
-export function syncPieceBounds(piece: PiecePreset, widthCm: number, heightCm: number): PiecePreset {
+export function syncPieceBounds(
+  piece: PiecePreset,
+  widthCm: number,
+  heightCm: number
+): PiecePreset {
   const safeWidth = Math.max(widthCm, 0.5)
   const safeHeight = Math.max(heightCm, 0.5)
   const widthScale = safeWidth / piece.widthCm

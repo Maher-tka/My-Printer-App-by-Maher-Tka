@@ -1,9 +1,4 @@
-import type {
-  EditorObject,
-  EditorShapeType,
-  MaskShape,
-  PiecePreset
-} from '../types'
+import type { EditorObject, EditorShapeType, MaskShape, PiecePreset } from '../types'
 import { CUT_CONTOUR_COLOR, CUT_CONTOUR_NAME } from './colorSpot'
 
 export function normalizePiecePreset(piece: PiecePreset): PiecePreset {
@@ -65,9 +60,10 @@ export function syncLegacyFieldsFromObjects(piece: PiecePreset): PiecePreset {
   const selectedObjectIds = (piece.selectedObjectIds ?? []).filter((id) =>
     objects.some((object) => object.id === id)
   )
-  const keyObjectId = piece.keyObjectId && selectedObjectIds.includes(piece.keyObjectId)
-    ? piece.keyObjectId
-    : undefined
+  const keyObjectId =
+    piece.keyObjectId && selectedObjectIds.includes(piece.keyObjectId)
+      ? piece.keyObjectId
+      : undefined
   const primaryHelper = getPrimaryHelper(piece, helpers)
 
   return {
@@ -80,7 +76,8 @@ export function syncLegacyFieldsFromObjects(piece: PiecePreset): PiecePreset {
     selectedObjectIds,
     keyObjectId,
     groupLinked: objects.some((object) => Boolean(object.groupId)) || Boolean(piece.groupLinked),
-    artworkCutlineGrouped: objects.some((object) => Boolean(object.groupId)) || Boolean(piece.groupLinked),
+    artworkCutlineGrouped:
+      objects.some((object) => Boolean(object.groupId)) || Boolean(piece.groupLinked),
     clippingMaskEnabled: Boolean(mask && (piece.clippingMaskEnabled ?? piece.mask.enabled)),
     artwork: artwork
       ? {
@@ -150,20 +147,21 @@ export function syncObjectsFromLegacyFields(piece: PiecePreset): PiecePreset {
     sourceId: piece.sourceId,
     exportEnabled: true
   })
-  const mask = piece.mask.enabled || piece.clippingMaskEnabled
-    ? mergeObject(findByIdOrRole(current, piece.maskObjectId, 'clipping-mask'), {
-        id: piece.maskObjectId || `mask-${piece.id}`,
-        type: 'mask',
-        shapeType: maskShapeToEditorShape(piece.mask.shape),
-        role: 'clipping-mask',
-        name: 'Clipping Mask',
-        visible: piece.objectVisibility.mask,
-        locked: piece.objectLocks.mask,
-        transform: { ...piece.mask.transform },
-        fillColor: 'transparent',
-        exportEnabled: false
-      })
-    : undefined
+  const mask =
+    piece.mask.enabled || piece.clippingMaskEnabled
+      ? mergeObject(findByIdOrRole(current, piece.maskObjectId, 'clipping-mask'), {
+          id: piece.maskObjectId || `mask-${piece.id}`,
+          type: 'mask',
+          shapeType: maskShapeToEditorShape(piece.mask.shape),
+          role: 'clipping-mask',
+          name: 'Clipping Mask',
+          visible: piece.objectVisibility.mask,
+          locked: piece.objectLocks.mask,
+          transform: { ...piece.mask.transform },
+          fillColor: 'transparent',
+          exportEnabled: false
+        })
+      : undefined
   const cutlineId = piece.cutlineObjectId || `cutline-${piece.id}`
   const cutline = mergeObject(findByIdOrRole(current, cutlineId, 'cutline'), {
     id: cutlineId,
@@ -218,7 +216,9 @@ export function syncObjectsFromLegacyFields(piece: PiecePreset): PiecePreset {
     artworkObjectId: artwork.id,
     maskObjectId: mask?.id,
     cutlineObjectId: cutline.id,
-    helperObjectIds: objects.filter((object) => object.role === 'helper').map((object) => object.id),
+    helperObjectIds: objects
+      .filter((object) => object.role === 'helper')
+      .map((object) => object.id),
     selectedObjectIds: (piece.selectedObjectIds ?? []).filter((id) =>
       objects.some((object) => object.id === id)
     ),
@@ -239,7 +239,9 @@ function findByIdOrRole(
   id: string | undefined,
   role: EditorObject['role']
 ): EditorObject | undefined {
-  return objects.find((object) => object.id === id) ?? objects.find((object) => object.role === role)
+  return (
+    objects.find((object) => object.id === id) ?? objects.find((object) => object.role === role)
+  )
 }
 
 function mergeObject(current: EditorObject | undefined, next: EditorObject): EditorObject {
@@ -276,9 +278,7 @@ export function maskShapeToEditorShape(shape: MaskShape): EditorShapeType {
   return 'rectangle'
 }
 
-export function cutlineShapeToEditorShape(
-  shape: PiecePreset['cutline']['shape']
-): EditorShapeType {
+export function cutlineShapeToEditorShape(shape: PiecePreset['cutline']['shape']): EditorShapeType {
   if (shape === 'ellipse') return 'ellipse'
   if (shape === 'rounded-rectangle') return 'rounded-rectangle'
   if (shape === 'custom-path') return 'path'
@@ -292,9 +292,7 @@ export function editorShapeToMaskShape(shape: EditorShapeType): MaskShape {
   return 'rectangle'
 }
 
-function editorShapeToCutlineShape(
-  shape: EditorShapeType
-): PiecePreset['cutline']['shape'] {
+function editorShapeToCutlineShape(shape: EditorShapeType): PiecePreset['cutline']['shape'] {
   if (shape === 'ellipse') return 'ellipse'
   if (shape === 'rounded-rectangle') return 'rounded-rectangle'
   if (shape === 'path') return 'custom-path'

@@ -14,11 +14,12 @@ export function alignPieceObjects(
     return distributeObjects(piece, command)
   }
 
-  const key = keyObject.object && selectedObjects.includes(keyObject.object)
-    ? keyObject.object
-    : selectedObjects.length > 1
-      ? selectedObjects[0]
-      : null
+  const key =
+    keyObject.object && selectedObjects.includes(keyObject.object)
+      ? keyObject.object
+      : selectedObjects.length > 1
+        ? selectedObjects[0]
+        : null
 
   if (key) {
     return moveObjectsToKey(piece, selectedObjects, key, command)
@@ -191,7 +192,7 @@ function getObjectRect(piece: PiecePreset, object: EditorObjectType): Rect {
       : object === 'mask'
         ? piece.mask.transform
         : object === 'helper-shape'
-          ? piece.helperShape?.transform ?? piece.mask.transform
+          ? (piece.helperShape?.transform ?? piece.mask.transform)
           : piece.cutline.transform
 
   return {

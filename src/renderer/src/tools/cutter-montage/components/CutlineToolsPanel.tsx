@@ -17,9 +17,27 @@ export function CutlineToolsPanel({
     <section className="rounded-lg border bg-card p-3">
       <h4 className="text-sm font-semibold">Cutline</h4>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <ShapeButton piece={piece} shape="rectangle" label="Rect" icon={Square} onPieceChange={onPieceChange} />
-        <ShapeButton piece={piece} shape="rounded-rectangle" label="Rounded" icon={Square} onPieceChange={onPieceChange} />
-        <ShapeButton piece={piece} shape="ellipse" label="Ellipse" icon={Circle} onPieceChange={onPieceChange} />
+        <ShapeButton
+          piece={piece}
+          shape="rectangle"
+          label="Rect"
+          icon={Square}
+          onPieceChange={onPieceChange}
+        />
+        <ShapeButton
+          piece={piece}
+          shape="rounded-rectangle"
+          label="Rounded"
+          icon={Square}
+          onPieceChange={onPieceChange}
+        />
+        <ShapeButton
+          piece={piece}
+          shape="ellipse"
+          label="Ellipse"
+          icon={Circle}
+          onPieceChange={onPieceChange}
+        />
         <Button
           type="button"
           size="sm"
@@ -32,12 +50,40 @@ export function CutlineToolsPanel({
         </Button>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <NumberField label="X" value={piece.cutline.transform.xCm} onChange={(xCm) => onPieceChange(updateCutlineTransform(piece, { xCm }))} />
-        <NumberField label="Y" value={piece.cutline.transform.yCm} onChange={(yCm) => onPieceChange(updateCutlineTransform(piece, { yCm }))} />
-        <NumberField label="Width" value={piece.cutline.transform.widthCm} onChange={(widthCm) => onPieceChange(updateCutlineTransform(piece, { widthCm: Math.max(widthCm, 0.2) }))} />
-        <NumberField label="Height" value={piece.cutline.transform.heightCm} onChange={(heightCm) => onPieceChange(updateCutlineTransform(piece, { heightCm: Math.max(heightCm, 0.2) }))} />
-        <NumberField label="Offset mm" value={piece.cutline.transform.offsetMm} onChange={(offsetMm) => onPieceChange(updateCutlineTransform(piece, { offsetMm }))} />
-        <NumberField label="Rotate" value={piece.cutline.transform.rotation} onChange={(rotation) => onPieceChange(updateCutlineTransform(piece, { rotation }))} />
+        <NumberField
+          label="X"
+          value={piece.cutline.transform.xCm}
+          onChange={(xCm) => onPieceChange(updateCutlineTransform(piece, { xCm }))}
+        />
+        <NumberField
+          label="Y"
+          value={piece.cutline.transform.yCm}
+          onChange={(yCm) => onPieceChange(updateCutlineTransform(piece, { yCm }))}
+        />
+        <NumberField
+          label="Width"
+          value={piece.cutline.transform.widthCm}
+          onChange={(widthCm) =>
+            onPieceChange(updateCutlineTransform(piece, { widthCm: Math.max(widthCm, 0.2) }))
+          }
+        />
+        <NumberField
+          label="Height"
+          value={piece.cutline.transform.heightCm}
+          onChange={(heightCm) =>
+            onPieceChange(updateCutlineTransform(piece, { heightCm: Math.max(heightCm, 0.2) }))
+          }
+        />
+        <NumberField
+          label="Offset mm"
+          value={piece.cutline.transform.offsetMm}
+          onChange={(offsetMm) => onPieceChange(updateCutlineTransform(piece, { offsetMm }))}
+        />
+        <NumberField
+          label="Rotate"
+          value={piece.cutline.transform.rotation}
+          onChange={(rotation) => onPieceChange(updateCutlineTransform(piece, { rotation }))}
+        />
       </div>
     </section>
   )

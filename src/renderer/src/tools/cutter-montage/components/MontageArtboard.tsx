@@ -1,12 +1,7 @@
 import { Copy, LockKeyhole, RotateCw, Trash2 } from 'lucide-react'
 import { useMemo } from 'react'
 import { Button } from '@/components/ui/button'
-import type {
-  CutterLayerVisibility,
-  CutterSheetSettings,
-  PiecePreset,
-  PlacedPiece
-} from '../types'
+import type { CutterLayerVisibility, CutterSheetSettings, PiecePreset, PlacedPiece } from '../types'
 import { getSafeArea } from '../lib/cutterLayout'
 import { formatCm } from '../lib/cutterUnits'
 import { ArtboardResizeHandle } from './ArtboardResizeHandle'
@@ -58,7 +53,8 @@ export function MontageArtboard({
         <div>
           <h3 className="font-semibold">Montage Sheet</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            {formatCm(settings.widthCm)} x {formatCm(settings.heightCm)}. Drag pieces, use arrow keys for small moves, or pull the bottom edge to resize height.
+            {formatCm(settings.widthCm)} x {formatCm(settings.heightCm)}. Drag pieces, use arrow
+            keys for small moves, or pull the bottom edge to resize height.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -204,7 +200,11 @@ export function MontageArtboard({
                 onMove={(pieceId, xCm, yCm) => {
                   const dragged = placedPieces.find((candidate) => candidate.id === pieceId)
 
-                  if (!dragged || !selectedPieceIds.includes(pieceId) || selectedPieceIds.length < 2) {
+                  if (
+                    !dragged ||
+                    !selectedPieceIds.includes(pieceId) ||
+                    selectedPieceIds.length < 2
+                  ) {
                     onMovePiece(pieceId, xCm, yCm)
                     return
                   }
@@ -216,8 +216,16 @@ export function MontageArtboard({
                     if (!selected.locked) {
                       onMovePiece(
                         selected.id,
-                        clamp(selected.xCm + deltaX, 0, Math.max(settings.widthCm - selected.widthCm, 0)),
-                        clamp(selected.yCm + deltaY, 0, Math.max(settings.heightCm - selected.heightCm, 0))
+                        clamp(
+                          selected.xCm + deltaX,
+                          0,
+                          Math.max(settings.widthCm - selected.widthCm, 0)
+                        ),
+                        clamp(
+                          selected.yCm + deltaY,
+                          0,
+                          Math.max(settings.heightCm - selected.heightCm, 0)
+                        )
                       )
                     }
                   }

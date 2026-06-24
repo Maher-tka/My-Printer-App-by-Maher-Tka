@@ -5,9 +5,7 @@ interface HardcoverCoverPageProps {
   onNavigate: (route: AppRoute) => void
 }
 
-export function HardcoverCoverPage({
-  onNavigate
-}: HardcoverCoverPageProps): JSX.Element {
+export function HardcoverCoverPage({ onNavigate }: HardcoverCoverPageProps): JSX.Element {
   return (
     <ComingSoonToolPage
       title="Hardcover Binding Cover Sheet"

@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type {
-  LicenseActivationResult,
-  LicenseSnapshot
-} from '../../../shared/licensing-types'
+import type { LicenseActivationResult, LicenseSnapshot } from '../../../shared/licensing-types'
 
 interface LicenseStateController {
   state: LicenseSnapshot | null
+  isDeveloperMode: boolean
   isLoading: boolean
   isActivating: boolean
   error: string | null
@@ -15,6 +13,7 @@ interface LicenseStateController {
 }
 
 const TICK_MS = 1000
+const IS_DEVELOPER_TEST_MODE = import.meta.env.DEV && import.meta.env.VITE_DEV_UNLOCK_ALL === 'true'
 
 export function useLicenseState(): LicenseStateController {
   const [snapshot, setSnapshot] = useState<LicenseSnapshot | null>(null)
@@ -57,10 +56,10 @@ export function useLicenseState(): LicenseStateController {
     }
   }, [])
 
-  const state = useMemo(
-    () => (snapshot ? getLiveLicenseSnapshot(snapshot) : null),
-    [snapshot, tick]
-  )
+  const state = useMemo(() => {
+    const liveSnapshot = snapshot ? getLiveLicenseSnapshot(snapshot) : null
+    return IS_DEVELOPER_TEST_MODE ? createDeveloperLicenseSnapshot(liveSnapshot) : liveSnapshot
+  }, [snapshot, tick])
 
   const activateSerial = useCallback(
     async (serialKey: string): Promise<LicenseActivationResult> => {
@@ -107,6 +106,7 @@ export function useLicenseState(): LicenseStateController {
 
   return {
     state,
+    isDeveloperMode: IS_DEVELOPER_TEST_MODE,
     isLoading,
     isActivating,
     error,
@@ -116,15 +116,31 @@ export function useLicenseState(): LicenseStateController {
   }
 }
 
+function createDeveloperLicenseSnapshot(snapshot: LicenseSnapshot | null): LicenseSnapshot {
+  const now = new Date().toISOString()
+  const base = snapshot ?? createUnavailableLicenseSnapshot()
+
+  return {
+    ...base,
+    mode: 'activated',
+    plan: 'shop',
+    planLabel: 'Developer Test Mode',
+    statusLabel: 'Developer Test Mode',
+    features: ['paid-tools', 'batch-exports'],
+    canUsePaidTools: true,
+    checkedAt: now,
+    clockWarning: undefined,
+    integrityWarning: undefined
+  }
+}
+
 function getLiveLicenseSnapshot(snapshot: LicenseSnapshot): LicenseSnapshot {
   if (snapshot.mode === 'activated') {
     return snapshot
   }
 
   const checkedAtMs = new Date(snapshot.checkedAt).getTime()
-  const elapsedMs = Number.isFinite(checkedAtMs)
-    ? Math.max(0, Date.now() - checkedAtMs)
-    : 0
+  const elapsedMs = Number.isFinite(checkedAtMs) ? Math.max(0, Date.now() - checkedAtMs) : 0
   const remainingMs = Math.max(0, snapshot.trial.remainingMs - elapsedMs)
   const isExpired = remainingMs <= 0
 

@@ -33,11 +33,7 @@ export function FileImporter({
   return (
     <div className="flex flex-col gap-4 rounded-lg border bg-card p-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          onClick={() => pdfInputRef.current?.click()}
-          disabled={isBusy}
-        >
+        <Button type="button" onClick={() => pdfInputRef.current?.click()} disabled={isBusy}>
           <FileText data-icon="inline-start" />
           Import PDF
         </Button>
@@ -64,10 +60,7 @@ export function FileImporter({
 
       <ProgressLine progress={importProgress} />
 
-      <PdfFilePickerInput
-        ref={pdfInputRef}
-        onFilesSelected={onImportPdf}
-      />
+      <PdfFilePickerInput ref={pdfInputRef} onFilesSelected={onImportPdf} />
       <input
         ref={imageInputRef}
         className="hidden"

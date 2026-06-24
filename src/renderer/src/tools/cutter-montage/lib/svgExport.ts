@@ -14,53 +14,73 @@ export async function exportCutterSvg(project: CutterProject): Promise<CutterExp
   const { sheet, sources, pieces, placedPieces, layers, exportSettings } = project
   const pieceMap = new Map(pieces.map((piece) => [piece.id, piece]))
   const sourceMap = new Map(sources.map((source) => [source.id, source]))
-  const artworkEntries = exportSettings.includeArtwork && layers.artwork
-    ? await Promise.all(placedPieces.map(async (placed) => {
-        const piece = pieceMap.get(placed.presetId)
-        const artwork = piece ? getArtworkObject(piece) : undefined
-        const source = artwork ? sourceMap.get(artwork.sourceId ?? piece?.sourceId ?? '') : undefined
-        if (!piece || !artwork || !artwork.visible || artwork.exportEnabled === false || !source) {
-          return { definition: '', artwork: '' }
-        }
+  const artworkEntries =
+    exportSettings.includeArtwork && layers.artwork
+      ? await Promise.all(
+          placedPieces.map(async (placed) => {
+            const piece = pieceMap.get(placed.presetId)
+            const artwork = piece ? getArtworkObject(piece) : undefined
+            const source = artwork
+              ? sourceMap.get(artwork.sourceId ?? piece?.sourceId ?? '')
+              : undefined
+            if (
+              !piece ||
+              !artwork ||
+              !artwork.visible ||
+              artwork.exportEnabled === false ||
+              !source
+            ) {
+              return { definition: '', artwork: '' }
+            }
 
-        const artworkRect = scaleRectToMm(getPlacedObjectRect(placed, piece, artwork))
-        const mask = getActiveMaskObject(piece)
-        const clippingEnabled = Boolean(piece.clippingMaskEnabled && mask)
-        const clipId = `clip-piece-${safeXmlId(placed.id)}`
-        const definition = clippingEnabled && mask
-          ? getMaskClipPathMarkup(
-              clipId,
-              scaleRectToMm(getPlacedObjectRect(placed, piece, mask)),
-              mask
-            )
-          : ''
-        const clipAttribute = clippingEnabled ? ` clip-path="url(#${clipId})"` : ''
-        const href = await sourceToDataUrl(source)
+            const artworkRect = scaleRectToMm(getPlacedObjectRect(placed, piece, artwork))
+            const mask = getActiveMaskObject(piece)
+            const clippingEnabled = Boolean(piece.clippingMaskEnabled && mask)
+            const clipId = `clip-piece-${safeXmlId(placed.id)}`
+            const definition =
+              clippingEnabled && mask
+                ? getMaskClipPathMarkup(
+                    clipId,
+                    scaleRectToMm(getPlacedObjectRect(placed, piece, mask)),
+                    mask
+                  )
+                : ''
+            const clipAttribute = clippingEnabled ? ` clip-path="url(#${clipId})"` : ''
+            const href = await sourceToDataUrl(source)
 
-        return {
-          definition,
-          artwork: [
-            `<g id="artwork-${safeXmlId(placed.id)}" data-piece="${escapeXml(piece.displayName)}">`,
-            `<image href="${href}" x="${formatNumber(artworkRect.xCm)}" y="${formatNumber(artworkRect.yCm)}" width="${formatNumber(artworkRect.widthCm)}" height="${formatNumber(artworkRect.heightCm)}" preserveAspectRatio="none"${getRotationTransform(artworkRect)}${clipAttribute} />`,
-            '</g>'
-          ].join('')
-        }
-      }))
-    : []
+            return {
+              definition,
+              artwork: [
+                `<g id="artwork-${safeXmlId(placed.id)}" data-piece="${escapeXml(piece.displayName)}">`,
+                `<image href="${href}" x="${formatNumber(artworkRect.xCm)}" y="${formatNumber(artworkRect.yCm)}" width="${formatNumber(artworkRect.widthCm)}" height="${formatNumber(artworkRect.heightCm)}" preserveAspectRatio="none"${getRotationTransform(artworkRect)}${clipAttribute} />`,
+                '</g>'
+              ].join('')
+            }
+          })
+        )
+      : []
 
-  const cutlineMarkup = exportSettings.includeCutlines && layers.cutlines
-    ? placedPieces.flatMap((placed) => {
-        const piece = pieceMap.get(placed.presetId)
-        if (!piece) return []
-        return piece.objects
-          .filter((object) => object.role === 'cutline' && object.visible && object.exportEnabled !== false)
-          .map((object) => getCutlineSvgElementMm(
-            scaleRectToMm(getPlacedObjectRect(placed, piece, object, object.offsetMm ?? 0)),
-            object,
-            exportSettings.strokeName
-          ))
-      }).join('\n')
-    : ''
+  const cutlineMarkup =
+    exportSettings.includeCutlines && layers.cutlines
+      ? placedPieces
+          .flatMap((placed) => {
+            const piece = pieceMap.get(placed.presetId)
+            if (!piece) return []
+            return piece.objects
+              .filter(
+                (object) =>
+                  object.role === 'cutline' && object.visible && object.exportEnabled !== false
+              )
+              .map((object) =>
+                getCutlineSvgElementMm(
+                  scaleRectToMm(getPlacedObjectRect(placed, piece, object, object.offsetMm ?? 0)),
+                  object,
+                  exportSettings.strokeName
+                )
+              )
+          })
+          .join('\n')
+      : ''
 
   const widthMm = sheet.widthCm * CM_TO_MM
   const heightMm = sheet.heightCm * CM_TO_MM
@@ -69,10 +89,16 @@ export async function exportCutterSvg(project: CutterProject): Promise<CutterExp
   <title>Cutter Montage ${sheet.widthCm}x${sheet.heightCm}cm</title>
   <desc>Generated by My Printer App by Maher Tka. Artwork may be clipped; CutContour geometry remains vector.</desc>
   <defs>
-${artworkEntries.map((entry) => entry.definition).filter(Boolean).join('\n')}
+${artworkEntries
+  .map((entry) => entry.definition)
+  .filter(Boolean)
+  .join('\n')}
   </defs>
   <g id="Artwork" inkscape:groupmode="layer" inkscape:label="Artwork" data-layer-visible="${layers.artwork}">
-${artworkEntries.map((entry) => entry.artwork).filter(Boolean).join('\n')}
+${artworkEntries
+  .map((entry) => entry.artwork)
+  .filter(Boolean)
+  .join('\n')}
   </g>
   <g id="CutContour" inkscape:groupmode="layer" inkscape:label="${escapeXml(exportSettings.strokeName)}" data-spot-name="${escapeXml(exportSettings.strokeName)}" data-layer-visible="${layers.cutlines}">
 ${cutlineMarkup}
@@ -90,14 +116,18 @@ export function getCutterFileName(widthCm: number, heightCm: number, extension: 
 }
 
 function getArtworkObject(piece: PiecePreset): EditorObject | undefined {
-  return piece.objects.find((object) => object.id === piece.artworkObjectId)
-    ?? piece.objects.find((object) => object.role === 'artwork')
+  return (
+    piece.objects.find((object) => object.id === piece.artworkObjectId) ??
+    piece.objects.find((object) => object.role === 'artwork')
+  )
 }
 
 function getActiveMaskObject(piece: PiecePreset): EditorObject | undefined {
   if (!piece.clippingMaskEnabled) return undefined
-  return piece.objects.find((object) => object.id === piece.maskObjectId)
-    ?? piece.objects.find((object) => object.role === 'clipping-mask')
+  return (
+    piece.objects.find((object) => object.id === piece.maskObjectId) ??
+    piece.objects.find((object) => object.role === 'clipping-mask')
+  )
 }
 
 function getPlacedObjectRect(

@@ -1,12 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type {
-  LicenseActivationResult,
-  LicenseSnapshot
-} from '../shared/licensing-types.js'
-import type {
-  UnsavedChangesRequest,
-  UnsavedChangesResult
-} from '../shared/project-types.js'
+import type { LicenseActivationResult, LicenseSnapshot } from '../shared/licensing-types.js'
+import type { UnsavedChangesRequest, UnsavedChangesResult } from '../shared/project-types.js'
 
 contextBridge.exposeInMainWorld('printerApp', {
   platform: process.platform,
@@ -21,16 +15,10 @@ contextBridge.exposeInMainWorld('printerApp', {
     bytes: Uint8Array
     filters: Array<{ name: string; extensions: string[] }>
   }) => ipcRenderer.invoke('booklet:save-file', request),
-  saveProject: (request: {
-    suggestedName: string
-    filePath?: string | null
-    project: unknown
-  }) => ipcRenderer.invoke('projects:save', request),
-  openProject: (filePath?: string | null) =>
-    ipcRenderer.invoke('projects:open', filePath ?? null),
-  confirmUnsavedChanges: (
-    request: UnsavedChangesRequest
-  ): Promise<UnsavedChangesResult> =>
+  saveProject: (request: { suggestedName: string; filePath?: string | null; project: unknown }) =>
+    ipcRenderer.invoke('projects:save', request),
+  openProject: (filePath?: string | null) => ipcRenderer.invoke('projects:open', filePath ?? null),
+  confirmUnsavedChanges: (request: UnsavedChangesRequest): Promise<UnsavedChangesResult> =>
     ipcRenderer.invoke('projects:confirm-unsaved', request),
   setProjectDirty: (dirty: boolean, projectName: string): Promise<void> =>
     ipcRenderer.invoke('projects:set-dirty', { dirty, projectName }),
@@ -44,8 +32,6 @@ contextBridge.exposeInMainWorld('printerApp', {
     ipcRenderer.invoke('projects:close-after-save', saved),
   listRecentProjects: () => ipcRenderer.invoke('projects:list-recent'),
   selectOutputFolder: () => ipcRenderer.invoke('booklet:select-output-folder'),
-  writeFilesToFolder: (
-    folderPath: string,
-    files: Array<{ fileName: string; bytes: Uint8Array }>
-  ) => ipcRenderer.invoke('booklet:write-files-to-folder', folderPath, files)
+  writeFilesToFolder: (folderPath: string, files: Array<{ fileName: string; bytes: Uint8Array }>) =>
+    ipcRenderer.invoke('booklet:write-files-to-folder', folderPath, files)
 })

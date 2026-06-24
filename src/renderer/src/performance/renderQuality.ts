@@ -1,8 +1,4 @@
-import type {
-  LargeProjectInfo,
-  PerformancePresetId,
-  PerformanceSettings
-} from './performanceTypes'
+import type { LargeProjectInfo, PerformancePresetId, PerformanceSettings } from './performanceTypes'
 
 const LARGE_PROJECT_BYTES = 80 * 1024 * 1024
 const LARGE_PROJECT_PAGE_COUNT = 64
@@ -19,9 +15,7 @@ export function isLargeProject(project: LargeProjectInfo): boolean {
 }
 
 export function getLargeProjectWarning(project: LargeProjectInfo): string | null {
-  return isLargeProject(project)
-    ? 'Large project detected. Low-end PC mode is recommended.'
-    : null
+  return isLargeProject(project) ? 'Large project detected. Low-end PC mode is recommended.' : null
 }
 
 export function shouldRequireManual3dLoad(
@@ -29,12 +23,13 @@ export function shouldRequireManual3dLoad(
   settings: PerformanceSettings
 ): boolean {
   return (
-    settings.preset === 'low-end' &&
-    project.pageCount > settings.render.lazy3dLargeProjectPageLimit
+    settings.preset === 'low-end' && project.pageCount > settings.render.lazy3dLargeProjectPageLimit
   )
 }
 
-export function getPerformanceBadgeTone(preset: PerformancePresetId): 'warning' | 'secondary' | 'success' {
+export function getPerformanceBadgeTone(
+  preset: PerformancePresetId
+): 'warning' | 'secondary' | 'success' {
   if (preset === 'low-end') {
     return 'warning'
   }

@@ -39,13 +39,11 @@ export function LicenseStatusCard({
           </div>
           <div className="flex flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium text-muted-foreground">
-                License Status
-              </p>
+              <p className="text-sm font-medium text-muted-foreground">License Status</p>
               <Badge variant={tone}>
                 {isLoading && !licenseState
                   ? 'Checking'
-                  : licenseState?.statusLabel ?? 'Unavailable'}
+                  : (licenseState?.statusLabel ?? 'Unavailable')}
               </Badge>
             </div>
             <p className="text-xl font-bold">

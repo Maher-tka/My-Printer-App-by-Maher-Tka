@@ -7,10 +7,7 @@ import {
   type Dispatch,
   type SetStateAction
 } from 'react'
-import {
-  deserializeCutterProjectPayload,
-  type CutterProjectPayload
-} from '@/projects/projectFiles'
+import { deserializeCutterProjectPayload, type CutterProjectPayload } from '@/projects/projectFiles'
 import type { PrinterProjectFile } from '@/types/projects'
 import { CUT_CONTOUR_NAME, normalizeSpotName } from '../lib/colorSpot'
 import {
@@ -20,11 +17,6 @@ import {
   getSheetWarnings
 } from '../lib/cutterLayout'
 import { exportCutterEps } from '../lib/epsExport'
-import {
-  alignPieceObjects,
-  centerArtworkToCutline,
-  centerCutlineToArtwork
-} from '../lib/alignmentUtils'
 import { autoArrangePieces, createCutterId } from '../lib/nesting'
 import {
   createPiecePresetFromSource,
@@ -35,7 +27,6 @@ import { exportCutterPdf } from '../lib/pdfCutExport'
 import { exportCutterSvg } from '../lib/svgExport'
 import { synchronizePieceEditorModel } from '../lib/editorObjects'
 import type {
-  AlignmentCommand,
   CutterExportResult,
   CutterLayerVisibility,
   CutterMode,
@@ -53,9 +44,7 @@ const defaultLayers: CutterLayerVisibility = {
   cutlines: true
 }
 
-export function useCutterProject(
-  initialProject?: PrinterProjectFile<CutterProjectPayload>
-): {
+export function useCutterProject(initialProject?: PrinterProjectFile<CutterProjectPayload>): {
   mode: CutterMode
   sheet: CutterSheetSettings
   sources: PieceSourceFile[]
@@ -73,8 +62,6 @@ export function useCutterProject(
   error: string | null
   setMode: (mode: CutterMode) => void
   setLayers: Dispatch<SetStateAction<CutterLayerVisibility>>
-  setSelectedEditorObjects: (objects: EditorObjectType[]) => void
-  setKeyObject: (keyObject: KeyObjectState) => void
   updateSheet: (patch: Partial<CutterSheetSettings>) => void
   importDesignFiles: (files: File[]) => Promise<void>
   updatePiece: (updatedPiece: PiecePreset) => void
@@ -93,27 +80,20 @@ export function useCutterProject(
   rotatePlacedPiece: (pieceId: string) => void
   togglePlacedLock: (pieceId: string) => void
   nudgeSelected: (dxCm: number, dyCm: number) => void
-  alignActivePiece: (command: AlignmentCommand) => void
-  centerActiveArtworkToCutline: () => void
-  centerActiveCutlineToArtwork: () => void
   handleExportSvg: () => Promise<void>
   handleExportPdf: () => Promise<void>
   handleExportEps: () => Promise<void>
   markPieceSaved: () => void
   clearProject: () => void
 } {
-  const [initialState] = useState(
-    () => initialProject ? deserializeCutterProjectPayload(initialProject.payload) : null
+  const [initialState] = useState(() =>
+    initialProject ? deserializeCutterProjectPayload(initialProject.payload) : null
   )
-  const [mode, setMode] = useState<CutterMode>(
-    () => initialState?.mode ?? 'piece-editor'
-  )
+  const [mode, setMode] = useState<CutterMode>(() => initialState?.mode ?? 'piece-editor')
   const [sheet, setSheet] = useState<CutterSheetSettings>(
     () => initialState?.sheet ?? DEFAULT_CUTTER_SHEET
   )
-  const [sources, setSources] = useState<PieceSourceFile[]>(
-    () => initialState?.sources ?? []
-  )
+  const [sources, setSources] = useState<PieceSourceFile[]>(() => initialState?.sources ?? [])
   const [pieces, setPieces] = useState<PiecePreset[]>(
     () => initialState?.pieces.map((piece) => synchronizePieceEditorModel(piece)) ?? []
   )
@@ -129,12 +109,6 @@ export function useCutterProject(
   const [selectedPlacedIds, setSelectedPlacedIds] = useState<string[]>(
     () => initialState?.selectedPlacedIds ?? []
   )
-  const [selectedEditorObjects, setSelectedEditorObjects] = useState<EditorObjectType[]>(
-    () => initialState?.selectedEditorObjects ?? ['artwork', 'mask', 'cutline']
-  )
-  const [keyObject, setKeyObject] = useState<KeyObjectState>(
-    () => initialState?.keyObject ?? { object: 'cutline' }
-  )
   const [status, setStatus] = useState<string>(() =>
     initialProject
       ? `Opened ${initialProject.metadata.jobName}.`
@@ -145,6 +119,10 @@ export function useCutterProject(
   const warnings = getSheetWarnings(sheet)
   const canExport = placedPieces.length > 0
   const activePiece = pieces.find((piece) => piece.id === activePieceId) ?? null
+  const { selectedEditorObjects, keyObject } = useMemo(
+    () => getLegacyEditorState(activePiece, initialState),
+    [activePiece, initialState]
+  )
 
   useEffect(() => {
     sourcesRef.current = sources
@@ -179,63 +157,60 @@ export function useCutterProject(
       ...current,
       ...patch,
       widthCm: patch.widthCm !== undefined ? clampSheetWidth(patch.widthCm) : current.widthCm,
-      heightCm:
-        patch.heightCm !== undefined ? clampSheetHeight(patch.heightCm) : current.heightCm
+      heightCm: patch.heightCm !== undefined ? clampSheetHeight(patch.heightCm) : current.heightCm
     }))
   }, [])
 
-  const importDesignFiles = useCallback(async (files: File[]): Promise<void> => {
-    setError(null)
-    const supportedFiles = files.filter(isSupportedDesignFile)
+  const importDesignFiles = useCallback(
+    async (files: File[]): Promise<void> => {
+      setError(null)
+      const supportedFiles = files.filter(isSupportedDesignFile)
 
-    if (supportedFiles.length !== files.length) {
-      setError('Only PNG, JPG, and SVG artwork files are supported in this cutter MVP.')
-      return
-    }
-
-    try {
-      const importedSources: PieceSourceFile[] = []
-      const importedPieces: PiecePreset[] = []
-
-      for (const file of supportedFiles) {
-        const bytes = new Uint8Array(await file.arrayBuffer())
-        const mimeType = getDesignMimeType(file)
-        const previewUrl = URL.createObjectURL(new Blob([bytesToArrayBuffer(bytes)], { type: mimeType }))
-        const dimensions = await loadArtworkDimensions(previewUrl)
-        const source: PieceSourceFile = {
-          id: createCutterId('source'),
-          fileName: file.name,
-          displayName: file.name.replace(/\.[^.]+$/, ''),
-          mimeType,
-          bytes,
-          previewUrl,
-          naturalWidthPx: dimensions.width,
-          naturalHeightPx: dimensions.height
-        }
-
-        importedSources.push(source)
-        importedPieces.push(createPiecePresetFromSource(source, [...pieces, ...importedPieces]))
+      if (supportedFiles.length !== files.length) {
+        setError('Only PNG, JPG, and SVG artwork files are supported in this cutter MVP.')
+        return
       }
 
-      setSources((current) => [...current, ...importedSources])
-      setPieces((current) => [...current, ...importedPieces])
-      setActivePieceId(importedPieces[0]?.id ?? activePieceId)
-      setMode('piece-editor')
-      setStatus(`Imported ${importedPieces.length} editable piece preset(s).`)
-    } catch (importError) {
-      setError(getErrorMessage(importError))
-    }
-  }, [activePieceId, pieces])
+      try {
+        const importedSources: PieceSourceFile[] = []
+        const importedPieces: PiecePreset[] = []
+
+        for (const file of supportedFiles) {
+          const bytes = new Uint8Array(await file.arrayBuffer())
+          const mimeType = getDesignMimeType(file)
+          const previewUrl = URL.createObjectURL(
+            new Blob([bytesToArrayBuffer(bytes)], { type: mimeType })
+          )
+          const dimensions = await loadArtworkDimensions(previewUrl)
+          const source: PieceSourceFile = {
+            id: createCutterId('source'),
+            fileName: file.name,
+            displayName: file.name.replace(/\.[^.]+$/, ''),
+            mimeType,
+            bytes,
+            previewUrl,
+            naturalWidthPx: dimensions.width,
+            naturalHeightPx: dimensions.height
+          }
+
+          importedSources.push(source)
+          importedPieces.push(createPiecePresetFromSource(source, [...pieces, ...importedPieces]))
+        }
+
+        setSources((current) => [...current, ...importedSources])
+        setPieces((current) => [...current, ...importedPieces])
+        setActivePieceId(importedPieces[0]?.id ?? activePieceId)
+        setMode('piece-editor')
+        setStatus(`Imported ${importedPieces.length} editable piece preset(s).`)
+      } catch (importError) {
+        setError(getErrorMessage(importError))
+      }
+    },
+    [activePieceId, pieces]
+  )
 
   const updatePiece = useCallback((updatedPiece: PiecePreset): void => {
     const normalizedPiece = synchronizePieceEditorModel(updatedPiece)
-    const selectedIds = new Set(normalizedPiece.selectedObjectIds)
-    const selectedTypes = Array.from(new Set(normalizedPiece.objects
-      .filter((object) => selectedIds.has(object.id))
-      .map((object) => object.type)))
-    const key = normalizedPiece.objects.find((object) => object.id === normalizedPiece.keyObjectId)
-    setSelectedEditorObjects(selectedTypes)
-    setKeyObject({ object: key?.type ?? null, objectId: key?.id })
     setPieces((current) =>
       current.map((piece) => (piece.id === normalizedPiece.id ? normalizedPiece : piece))
     )
@@ -248,27 +223,6 @@ export function useCutterProject(
     )
   }, [])
 
-  const selectEditorObjects = useCallback((objects: EditorObjectType[]): void => {
-    setSelectedEditorObjects(objects)
-    setPieces((current) => current.map((piece) =>
-      piece.id === activePieceId
-        ? synchronizePieceEditorModel(piece, { selectedTypes: objects, keyObject })
-        : piece
-    ))
-  }, [activePieceId, keyObject])
-
-  const updateKeyObject = useCallback((nextKeyObject: KeyObjectState): void => {
-    setKeyObject(nextKeyObject)
-    setPieces((current) => current.map((piece) =>
-      piece.id === activePieceId
-        ? synchronizePieceEditorModel(piece, {
-            selectedObjectIds: piece.selectedObjectIds,
-            keyObject: nextKeyObject
-          })
-        : piece
-    ))
-  }, [activePieceId])
-
   const updatePieceQuantity = useCallback((pieceId: string, quantity: number): void => {
     setPieces((current) =>
       current.map((piece) =>
@@ -277,11 +231,14 @@ export function useCutterProject(
     )
   }, [])
 
-  const updatePieceRotationAllowed = useCallback((pieceId: string, rotationAllowed: boolean): void => {
-    setPieces((current) =>
-      current.map((piece) => (piece.id === pieceId ? { ...piece, rotationAllowed } : piece))
-    )
-  }, [])
+  const updatePieceRotationAllowed = useCallback(
+    (pieceId: string, rotationAllowed: boolean): void => {
+      setPieces((current) =>
+        current.map((piece) => (piece.id === pieceId ? { ...piece, rotationAllowed } : piece))
+      )
+    },
+    []
+  )
 
   const duplicatePiece = useCallback((pieceId: string): void => {
     setPieces((current) => {
@@ -299,69 +256,79 @@ export function useCutterProject(
     })
   }, [])
 
-  const deletePiece = useCallback((pieceId: string): void => {
-    setPieces((current) => {
-      const nextPieces = current.filter((piece) => piece.id !== pieceId)
-      const removed = current.find((piece) => piece.id === pieceId)
+  const deletePiece = useCallback(
+    (pieceId: string): void => {
+      setPieces((current) => {
+        const nextPieces = current.filter((piece) => piece.id !== pieceId)
+        const removed = current.find((piece) => piece.id === pieceId)
 
-      if (removed && !nextPieces.some((piece) => piece.sourceId === removed.sourceId)) {
-        setSources((currentSources) =>
-          currentSources.filter((source) => {
-            if (source.id === removed.sourceId) {
-              URL.revokeObjectURL(source.previewUrl)
-              return false
-            }
+        if (removed && !nextPieces.some((piece) => piece.sourceId === removed.sourceId)) {
+          setSources((currentSources) =>
+            currentSources.filter((source) => {
+              if (source.id === removed.sourceId) {
+                URL.revokeObjectURL(source.previewUrl)
+                return false
+              }
 
-            return true
-          })
-        )
-      }
+              return true
+            })
+          )
+        }
 
-      return nextPieces
-    })
-    setPlacedPieces((current) => current.filter((placed) => placed.presetId !== pieceId))
-    setSelectedPlacedIds((current) =>
-      current.filter((id) => {
-        const placed = placedPieces.find((candidate) => candidate.id === id)
-        return placed?.presetId !== pieceId
+        return nextPieces
       })
-    )
-    setActivePieceId((current) => (current === pieceId ? null : current))
-    setStatus('Piece preset deleted.')
-  }, [placedPieces])
+      setPlacedPieces((current) => current.filter((placed) => placed.presetId !== pieceId))
+      setSelectedPlacedIds((current) =>
+        current.filter((id) => {
+          const placed = placedPieces.find((candidate) => candidate.id === id)
+          return placed?.presetId !== pieceId
+        })
+      )
+      setActivePieceId((current) => (current === pieceId ? null : current))
+      setStatus('Piece preset deleted.')
+    },
+    [placedPieces]
+  )
 
   const editPiece = useCallback((pieceId: string): void => {
     setActivePieceId(pieceId)
-    setSelectedEditorObjects(['artwork', 'mask', 'cutline'])
-    setKeyObject({ object: 'cutline' })
     setMode('piece-editor')
   }, [])
 
-  const addPieceToSheet = useCallback((pieceId: string): void => {
-    const piece = pieces.find((candidate) => candidate.id === pieceId)
+  const addPieceToSheet = useCallback(
+    (pieceId: string): void => {
+      const piece = pieces.find((candidate) => candidate.id === pieceId)
 
-    if (!piece) {
-      return
-    }
+      if (!piece) {
+        return
+      }
 
-    const copies: PlacedPiece[] = []
-    const baseOffset = placedPieces.length * 0.35
+      const copies: PlacedPiece[] = []
+      const baseOffset = placedPieces.length * 0.35
 
-    for (let index = 0; index < piece.quantity; index += 1) {
-      copies.push(
-        createPlacedPieceFromPreset(
-          piece,
-          Math.min(sheet.safeMarginCm + baseOffset + index * 0.25, Math.max(sheet.widthCm - piece.widthCm, 0)),
-          Math.min(sheet.safeMarginCm + baseOffset + index * 0.25, Math.max(sheet.heightCm - piece.heightCm, 0))
+      for (let index = 0; index < piece.quantity; index += 1) {
+        copies.push(
+          createPlacedPieceFromPreset(
+            piece,
+            Math.min(
+              sheet.safeMarginCm + baseOffset + index * 0.25,
+              Math.max(sheet.widthCm - piece.widthCm, 0)
+            ),
+            Math.min(
+              sheet.safeMarginCm + baseOffset + index * 0.25,
+              Math.max(sheet.heightCm - piece.heightCm, 0)
+            )
+          )
         )
-      )
-    }
+      }
 
-    setPlacedPieces((current) => [...current, ...copies])
-    setSelectedPlacedIds(copies[0] ? [copies[0].id] : [])
-    setMode('montage-sheet')
-    setStatus(`Added ${copies.length} copy/copies of ${piece.displayName} to the sheet.`)
-  }, [pieces, placedPieces.length, sheet.heightCm, sheet.safeMarginCm, sheet.widthCm])
+      setPlacedPieces((current) => [...current, ...copies])
+      setSelectedPlacedIds(copies[0] ? [copies[0].id] : [])
+      setMode('montage-sheet')
+      setStatus(`Added ${copies.length} copy/copies of ${piece.displayName} to the sheet.`)
+    },
+    [pieces, placedPieces.length, sheet.heightCm, sheet.safeMarginCm, sheet.widthCm]
+  )
 
   const runAutoArrange = useCallback((): void => {
     if (pieces.length === 0) {
@@ -399,37 +366,43 @@ export function useCutterProject(
     )
   }, [])
 
-  const resizePlacedPiece = useCallback((pieceId: string, widthCm: number, heightCm: number): void => {
-    setPlacedPieces((current) =>
-      current.map((placed) => {
-        if (placed.id !== pieceId || placed.locked) {
-          return placed
-        }
+  const resizePlacedPiece = useCallback(
+    (pieceId: string, widthCm: number, heightCm: number): void => {
+      setPlacedPieces((current) =>
+        current.map((placed) => {
+          if (placed.id !== pieceId || placed.locked) {
+            return placed
+          }
 
-        return {
+          return {
+            ...placed,
+            widthCm: Math.max(widthCm, 0.5),
+            heightCm: Math.max(heightCm, 0.5)
+          }
+        })
+      )
+    },
+    []
+  )
+
+  const duplicatePlacedPieces = useCallback(
+    (pieceIds: string[]): void => {
+      setPlacedPieces((current) => {
+        const selected = current.filter((placed) => pieceIds.includes(placed.id))
+        const duplicates = selected.map((placed) => ({
           ...placed,
-          widthCm: Math.max(widthCm, 0.5),
-          heightCm: Math.max(heightCm, 0.5)
-        }
+          id: createCutterId('placed'),
+          xCm: Math.min(placed.xCm + 1, Math.max(sheet.widthCm - placed.widthCm, 0)),
+          yCm: Math.min(placed.yCm + 1, Math.max(sheet.heightCm - placed.heightCm, 0))
+        }))
+
+        setSelectedPlacedIds(duplicates.map((placed) => placed.id))
+        setStatus(`Duplicated ${duplicates.length} placed piece(s).`)
+        return [...current, ...duplicates]
       })
-    )
-  }, [])
-
-  const duplicatePlacedPieces = useCallback((pieceIds: string[]): void => {
-    setPlacedPieces((current) => {
-      const selected = current.filter((placed) => pieceIds.includes(placed.id))
-      const duplicates = selected.map((placed) => ({
-        ...placed,
-        id: createCutterId('placed'),
-        xCm: Math.min(placed.xCm + 1, Math.max(sheet.widthCm - placed.widthCm, 0)),
-        yCm: Math.min(placed.yCm + 1, Math.max(sheet.heightCm - placed.heightCm, 0))
-      }))
-
-      setSelectedPlacedIds(duplicates.map((placed) => placed.id))
-      setStatus(`Duplicated ${duplicates.length} placed piece(s).`)
-      return [...current, ...duplicates]
-    })
-  }, [sheet.heightCm, sheet.widthCm])
+    },
+    [sheet.heightCm, sheet.widthCm]
+  )
 
   const deletePlacedPieces = useCallback((pieceIds: string[]): void => {
     setPlacedPieces((current) => current.filter((placed) => !pieceIds.includes(placed.id)))
@@ -464,41 +437,24 @@ export function useCutterProject(
     )
   }, [])
 
-  const nudgeSelected = useCallback((dxCm: number, dyCm: number): void => {
-    setPlacedPieces((current) =>
-      current.map((placed) => {
-        if (!selectedPlacedIds.includes(placed.id) || placed.locked) {
-          return placed
-        }
+  const nudgeSelected = useCallback(
+    (dxCm: number, dyCm: number): void => {
+      setPlacedPieces((current) =>
+        current.map((placed) => {
+          if (!selectedPlacedIds.includes(placed.id) || placed.locked) {
+            return placed
+          }
 
-        return {
-          ...placed,
-          xCm: clamp(placed.xCm + dxCm, 0, Math.max(sheet.widthCm - placed.widthCm, 0)),
-          yCm: clamp(placed.yCm + dyCm, 0, Math.max(sheet.heightCm - placed.heightCm, 0))
-        }
-      })
-    )
-  }, [selectedPlacedIds, sheet.heightCm, sheet.widthCm])
-
-  const alignActivePiece = useCallback((command: AlignmentCommand): void => {
-    if (!activePiece) {
-      return
-    }
-
-    updatePiece(alignPieceObjects(activePiece, selectedEditorObjects, keyObject, command))
-  }, [activePiece, keyObject, selectedEditorObjects, updatePiece])
-
-  const centerActiveArtworkToCutline = useCallback((): void => {
-    if (activePiece) {
-      updatePiece(centerArtworkToCutline(activePiece))
-    }
-  }, [activePiece, updatePiece])
-
-  const centerActiveCutlineToArtwork = useCallback((): void => {
-    if (activePiece) {
-      updatePiece(centerCutlineToArtwork(activePiece))
-    }
-  }, [activePiece, updatePiece])
+          return {
+            ...placed,
+            xCm: clamp(placed.xCm + dxCm, 0, Math.max(sheet.widthCm - placed.widthCm, 0)),
+            yCm: clamp(placed.yCm + dyCm, 0, Math.max(sheet.heightCm - placed.heightCm, 0))
+          }
+        })
+      )
+    },
+    [selectedPlacedIds, sheet.heightCm, sheet.widthCm]
+  )
 
   const saveExport = useCallback(async (result: CutterExportResult): Promise<void> => {
     const extension = result.fileName.split('.').pop() ?? 'svg'
@@ -575,8 +531,6 @@ export function useCutterProject(
     setLayers(defaultLayers)
     setActivePieceId(null)
     setSelectedPlacedIds([])
-    setSelectedEditorObjects(['artwork', 'mask', 'cutline'])
-    setKeyObject({ object: 'cutline' })
     setStatus('Started a new cutter project. Import artwork to begin.')
     setError(null)
   }, [])
@@ -599,8 +553,6 @@ export function useCutterProject(
     error,
     setMode,
     setLayers,
-    setSelectedEditorObjects: selectEditorObjects,
-    setKeyObject: updateKeyObject,
     updateSheet,
     importDesignFiles,
     updatePiece,
@@ -619,14 +571,41 @@ export function useCutterProject(
     rotatePlacedPiece,
     togglePlacedLock,
     nudgeSelected,
-    alignActivePiece,
-    centerActiveArtworkToCutline,
-    centerActiveCutlineToArtwork,
     handleExportSvg,
     handleExportPdf,
     handleExportEps,
     markPieceSaved,
     clearProject
+  }
+}
+
+function getLegacyEditorState(
+  piece: PiecePreset | null,
+  fallback: {
+    selectedEditorObjects: EditorObjectType[]
+    keyObject: KeyObjectState
+  } | null
+): { selectedEditorObjects: EditorObjectType[]; keyObject: KeyObjectState } {
+  if (!piece) {
+    return {
+      selectedEditorObjects: fallback?.selectedEditorObjects ?? [],
+      keyObject: fallback?.keyObject ?? { object: null }
+    }
+  }
+
+  const selectedIds = new Set(piece.selectedObjectIds)
+  const selectedEditorObjects = Array.from(
+    new Set(
+      piece.objects.filter((object) => selectedIds.has(object.id)).map((object) => object.type)
+    )
+  )
+  const key = piece.objects.find(
+    (object) => object.id === piece.keyObjectId && selectedIds.has(object.id)
+  )
+
+  return {
+    selectedEditorObjects,
+    keyObject: { object: key?.type ?? null, objectId: key?.id }
   }
 }
 
@@ -647,10 +626,7 @@ function refreshPlacedFromPreset(placed: PlacedPiece, piece: PiecePreset): Place
 }
 
 function isSupportedDesignFile(file: File): boolean {
-  return (
-    /image\/(png|jpeg|svg\+xml)/.test(file.type) ||
-    /\.(png|jpe?g|svg)$/i.test(file.name)
-  )
+  return /image\/(png|jpeg|svg\+xml)/.test(file.type) || /\.(png|jpe?g|svg)$/i.test(file.name)
 }
 
 function getDesignMimeType(file: File): string {

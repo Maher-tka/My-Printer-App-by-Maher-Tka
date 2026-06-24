@@ -20,6 +20,7 @@ const TRIAL_LENGTH_MS = 14 * 24 * 60 * 60 * 1000
 const CLOCK_ROLLBACK_TOLERANCE_MS = 5 * 60 * 1000
 
 let licenseIntegrityKeyPromise: Promise<Buffer> | undefined
+let licenseOperationQueue: Promise<void> = Promise.resolve()
 
 interface PersistedLicenseFile {
   version: typeof LICENSE_FILE_VERSION
@@ -52,10 +53,19 @@ interface PersistedIntegrityKey {
 }
 
 export function registerLicenseHandlers(): void {
-  ipcMain.handle('license:get-state', async () => getLicenseSnapshot())
+  ipcMain.handle('license:get-state', async () => runLicenseOperation(getLicenseSnapshot))
   ipcMain.handle('license:activate-serial', async (_event, serialKey: string) =>
-    activateSerialKey(serialKey)
+    runLicenseOperation(() => activateSerialKey(serialKey))
   )
+}
+
+function runLicenseOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const result = licenseOperationQueue.then(operation, operation)
+  licenseOperationQueue = result.then(
+    () => undefined,
+    () => undefined
+  )
+  return result
 }
 
 async function getLicenseSnapshot(): Promise<LicenseSnapshot> {
@@ -67,9 +77,7 @@ async function getLicenseSnapshot(): Promise<LicenseSnapshot> {
   return buildLicenseSnapshot(record, clock, integrityKey)
 }
 
-async function activateSerialKey(
-  serialKey: string
-): Promise<LicenseActivationResult> {
+async function activateSerialKey(serialKey: string): Promise<LicenseActivationResult> {
   const { record, integrityKey } = await loadOrCreateLicenseRecord()
   const clock = getEffectiveClock(record)
   const validation = validateOfflineSerialKey(serialKey, clock.now)
@@ -88,11 +96,7 @@ async function activateSerialKey(
     proof: ''
   }
 
-  activation.proof = createActivationProof(
-    record.installationId,
-    activation,
-    integrityKey
-  )
+  activation.proof = createActivationProof(record.installationId, activation, integrityKey)
   record.activation = activation
   await updateLastSeen(record, clock.now, integrityKey, true)
 
@@ -119,9 +123,7 @@ async function loadOrCreateLicenseRecord(): Promise<LicenseRecordContext> {
   return { record, integrityKey }
 }
 
-async function readLicenseRecord(
-  integrityKey: Buffer
-): Promise<PersistedLicenseFile | undefined> {
+async function readLicenseRecord(integrityKey: Buffer): Promise<PersistedLicenseFile | undefined> {
   const licenseFilePath = getLicenseFilePath()
 
   try {
@@ -152,7 +154,7 @@ async function writeLicenseRecord(
   integrityKey: Buffer
 ): Promise<void> {
   const licenseFilePath = getLicenseFilePath()
-  const temporaryPath = `${licenseFilePath}.tmp`
+  const temporaryPath = `${licenseFilePath}.${randomUUID()}.tmp`
 
   record.recordProof = createRecordProof(record, integrityKey)
   await mkdir(dirname(licenseFilePath), { recursive: true })
@@ -160,16 +162,9 @@ async function writeLicenseRecord(
   await rename(temporaryPath, licenseFilePath)
 }
 
-function createNewLicenseRecord(
-  now: Date,
-  trialExpired = false
-): PersistedLicenseFile {
-  const trialStartedAt = trialExpired
-    ? new Date(now.getTime() - TRIAL_LENGTH_MS)
-    : now
-  const trialEndsAt = trialExpired
-    ? now
-    : new Date(now.getTime() + TRIAL_LENGTH_MS)
+function createNewLicenseRecord(now: Date, trialExpired = false): PersistedLicenseFile {
+  const trialStartedAt = trialExpired ? new Date(now.getTime() - TRIAL_LENGTH_MS) : now
+  const trialEndsAt = trialExpired ? now : new Date(now.getTime() + TRIAL_LENGTH_MS)
 
   return {
     version: LICENSE_FILE_VERSION,
@@ -217,11 +212,7 @@ function buildLicenseSnapshot(
   const activation = activationIssue
     ? undefined
     : getCurrentActivation(record.activation, clock.now)
-  const mode: LicenseMode = activation
-    ? 'activated'
-    : trialIsExpired
-      ? 'expired'
-      : 'trial'
+  const mode: LicenseMode = activation ? 'activated' : trialIsExpired ? 'expired' : 'trial'
   const plan: LicensePlan = activation?.plan ?? 'trial'
   const features = activation?.features ?? getTrialFeatures(trialIsExpired)
 
@@ -304,10 +295,7 @@ function createActivationProof(
     .digest('hex')
 }
 
-function createRecordProof(
-  record: PersistedLicenseFile,
-  integrityKey: Buffer
-): string {
+function createRecordProof(record: PersistedLicenseFile, integrityKey: Buffer): string {
   return createHmac('sha256', integrityKey)
     .update(
       [
@@ -384,21 +372,13 @@ function isPersistedLicenseFile(
     isValidIsoDateString(record.trialStartedAt) &&
     isValidIsoDateString(record.trialEndsAt) &&
     isValidIsoDateString(record.lastSeenAt) &&
-    (record.activation === undefined ||
-      isPersistedActivation(record.activation)) &&
-    record.recordProof ===
-      createRecordProof(record as PersistedLicenseFile, integrityKey)
+    (record.activation === undefined || isPersistedActivation(record.activation)) &&
+    record.recordProof === createRecordProof(record as PersistedLicenseFile, integrityKey)
   )
 }
 
-function isPersistedActivation(
-  activation: unknown
-): activation is PersistedActivation {
-  if (
-    typeof activation !== 'object' ||
-    activation === null ||
-    !('plan' in activation)
-  ) {
+function isPersistedActivation(activation: unknown): activation is PersistedActivation {
+  if (typeof activation !== 'object' || activation === null || !('plan' in activation)) {
     return false
   }
 
@@ -410,8 +390,7 @@ function isPersistedActivation(
     typeof candidate.activatedAt === 'string' &&
     isValidIsoDateString(candidate.activatedAt) &&
     (candidate.expiresAt === undefined ||
-      (typeof candidate.expiresAt === 'string' &&
-        isValidIsoDateString(candidate.expiresAt))) &&
+      (typeof candidate.expiresAt === 'string' && isValidIsoDateString(candidate.expiresAt))) &&
     typeof candidate.serialKeyHash === 'string' &&
     typeof candidate.serialKeySuffix === 'string' &&
     typeof candidate.seatCode === 'string' &&
@@ -468,9 +447,7 @@ async function loadOrCreateLicenseIntegrityKey(): Promise<Buffer> {
   }
 }
 
-function decodeIntegrityKey(
-  keyFile: Partial<PersistedIntegrityKey>
-): Buffer {
+function decodeIntegrityKey(keyFile: Partial<PersistedIntegrityKey>): Buffer {
   if (
     keyFile.version !== LICENSE_INTEGRITY_KEY_FILE_VERSION ||
     typeof keyFile.protected !== 'boolean' ||
@@ -484,19 +461,13 @@ function decodeIntegrityKey(
       throw new Error('Operating-system protected storage is unavailable.')
     }
 
-    return Buffer.from(
-      safeStorage.decryptString(Buffer.from(keyFile.value, 'base64')),
-      'base64'
-    )
+    return Buffer.from(safeStorage.decryptString(Buffer.from(keyFile.value, 'base64')), 'base64')
   }
 
   return Buffer.from(keyFile.value, 'base64')
 }
 
-async function writeLicenseIntegrityKey(
-  keyFilePath: string,
-  integrityKey: Buffer
-): Promise<void> {
+async function writeLicenseIntegrityKey(keyFilePath: string, integrityKey: Buffer): Promise<void> {
   const encryptionAvailable = safeStorage.isEncryptionAvailable()
   const keyFile: PersistedIntegrityKey = {
     version: LICENSE_INTEGRITY_KEY_FILE_VERSION,

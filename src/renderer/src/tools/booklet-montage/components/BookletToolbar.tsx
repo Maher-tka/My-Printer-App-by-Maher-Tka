@@ -262,10 +262,7 @@ export function BookletToolbar({
         <ProgressLine progress={exportProgress} />
       </div>
 
-      <PdfFilePickerInput
-        ref={pdfInputRef}
-        onFilesSelected={onImportPdf}
-      />
+      <PdfFilePickerInput ref={pdfInputRef} onFilesSelected={onImportPdf} />
       <input
         ref={imageInputRef}
         className="hidden"

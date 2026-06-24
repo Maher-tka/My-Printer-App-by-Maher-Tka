@@ -13,10 +13,7 @@ import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
-import {
-  getPerformanceBadgeTone,
-  shouldRequireManual3dLoad
-} from '@/performance/renderQuality'
+import { getPerformanceBadgeTone, shouldRequireManual3dLoad } from '@/performance/renderQuality'
 import type { BookletPage, BookletSource, SheetSettings } from '../types'
 import {
   clearPagePreviewCache,
@@ -70,9 +67,7 @@ export function BookFlipPreview({
 }: BookFlipPreviewProps): JSX.Element {
   const pages = useMemo(
     () =>
-      [...orderedPages].sort(
-        (first, second) => first.currentOrderIndex - second.currentOrderIndex
-      ),
+      [...orderedPages].sort((first, second) => first.currentOrderIndex - second.currentOrderIndex),
     [orderedPages]
   )
   const pageKey = useMemo(
@@ -117,10 +112,7 @@ function BookFlipPreviewContent({
     () => getFlipPageDimensions(settings, orderedPages[0]),
     [orderedPages, settings]
   )
-  const sourceMap = useMemo(
-    () => new Map(sources.map((source) => [source.id, source])),
-    [sources]
-  )
+  const sourceMap = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources])
   const isRtl = settings.readingDirection === 'rtl'
   const projectInfo = useMemo(
     () => ({
@@ -129,12 +121,13 @@ function BookFlipPreviewContent({
     }),
     [orderedPages.length, sources]
   )
-  const shouldWaitForManual3dLoad = shouldRequireManual3dLoad(
-    projectInfo,
-    performanceSettings
-  ) && !load3dRequested
+  const shouldWaitForManual3dLoad =
+    shouldRequireManual3dLoad(projectInfo, performanceSettings) && !load3dRequested
   const previewUrlsKey = useMemo(
-    () => orderedPages.map((page) => `${page.id}:${previewUrlsByPageId[page.id] ?? 'pending'}`).join('|'),
+    () =>
+      orderedPages
+        .map((page) => `${page.id}:${previewUrlsByPageId[page.id] ?? 'pending'}`)
+        .join('|'),
     [orderedPages, previewUrlsByPageId]
   )
   const bookRenderKey = `${pageKey}:${previewUrlsKey}:${dimensions.width}x${dimensions.height}:${settings.readingDirection}:${settings.scaleMode}:${performanceSettings.preset}`
@@ -227,15 +220,14 @@ function BookFlipPreviewContent({
       }
     }
 
-    renderPreviews()
-      .catch((error) => {
-        if (canceled) {
-          return
-        }
+    renderPreviews().catch((error) => {
+      if (canceled) {
+        return
+      }
 
-        setPreviewError(getPreviewErrorMessage(error))
-        setPreviewsReady(false)
-      })
+      setPreviewError(getPreviewErrorMessage(error))
+      setPreviewsReady(false)
+    })
 
     return () => {
       canceled = true
@@ -371,8 +363,8 @@ function BookFlipPreviewContent({
           </Badge>
           <h3 className="text-lg font-semibold text-slate-950">3D Book Preview is paused</h3>
           <p className="text-sm leading-6 text-slate-600">
-            3D Book Preview may be slower on low-end PCs. This project has {orderedPages.length}
-            {' '}pages, so the app will wait before rendering full-page previews.
+            3D Book Preview may be slower on low-end PCs. This project has {orderedPages.length}{' '}
+            pages, so the app will wait before rendering full-page previews.
           </p>
           <Button type="button" onClick={() => setLoad3dRequested(true)}>
             Load 3D Preview
@@ -395,9 +387,7 @@ function BookFlipPreviewContent({
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-slate-950">3D Book Mode</h3>
             <Badge variant="secondary">Interactive</Badge>
-            <Badge variant={isRtl ? 'warning' : 'secondary'}>
-              {isRtl ? 'RTL Arabic' : 'LTR'}
-            </Badge>
+            <Badge variant={isRtl ? 'warning' : 'secondary'}>{isRtl ? 'RTL Arabic' : 'LTR'}</Badge>
             <Badge variant={getPerformanceBadgeTone(performanceSettings.preset)}>
               {performanceSettings.label}
             </Badge>
@@ -550,8 +540,8 @@ function BookFlipPreviewContent({
 
           <p className="max-w-xl text-center text-sm text-slate-600">
             Drag a page corner or page edge with the mouse, then release it to flip.
-            {isRtl ? ' RTL Arabic mode is active.' : ''} Montage Mode remains the
-            print-accurate layout.
+            {isRtl ? ' RTL Arabic mode is active.' : ''} Montage Mode remains the print-accurate
+            layout.
           </p>
         </div>
       </div>

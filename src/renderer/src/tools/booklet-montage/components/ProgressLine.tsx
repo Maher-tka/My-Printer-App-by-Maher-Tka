@@ -5,16 +5,11 @@ interface ProgressLineProps {
 }
 
 export function ProgressLine({ progress }: ProgressLineProps): JSX.Element {
-  const percent =
-    progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0
+  const percent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0
   const isVisible = progress.phase !== 'idle'
 
   if (!isVisible) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Ready for local PDF or image input.
-      </p>
-    )
+    return <p className="text-sm text-muted-foreground">Ready for local PDF or image input.</p>
   }
 
   return (

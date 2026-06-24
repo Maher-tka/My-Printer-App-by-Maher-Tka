@@ -1,0 +1,12 @@
+node_modules
+dist
+out
+build
+.vite
+package-lock.json
+.git
+.agents
+.codex
+.license-private
+*.log
+*.tsbuildinfo

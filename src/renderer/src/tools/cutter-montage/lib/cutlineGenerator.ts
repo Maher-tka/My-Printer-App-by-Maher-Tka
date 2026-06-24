@@ -9,10 +9,7 @@ export interface CutlineRect {
   rotation: number
 }
 
-export function getPlacedArtworkRect(
-  placed: PlacedPiece,
-  preset: PiecePreset
-): CutlineRect {
+export function getPlacedArtworkRect(placed: PlacedPiece, preset: PiecePreset): CutlineRect {
   const scaleX = placed.widthCm / preset.widthCm
   const scaleY = placed.heightCm / preset.heightCm
   const transform = placed.artworkTransform
@@ -26,10 +23,7 @@ export function getPlacedArtworkRect(
   }
 }
 
-export function getPlacedMaskArtworkRect(
-  placed: PlacedPiece,
-  preset: PiecePreset
-): CutlineRect {
+export function getPlacedMaskArtworkRect(placed: PlacedPiece, preset: PiecePreset): CutlineRect {
   const scaleX = placed.widthCm / preset.widthCm
   const scaleY = placed.heightCm / preset.heightCm
   const transform = placed.maskTransform
@@ -43,10 +37,7 @@ export function getPlacedMaskArtworkRect(
   }
 }
 
-export function getPlacedCutlineRect(
-  placed: PlacedPiece,
-  preset: PiecePreset
-): CutlineRect {
+export function getPlacedCutlineRect(placed: PlacedPiece, preset: PiecePreset): CutlineRect {
   const scaleX = placed.widthCm / preset.widthCm
   const scaleY = placed.heightCm / preset.heightCm
   const transform = placed.cutlineTransform
@@ -73,10 +64,7 @@ export function getPieceCutlineRect(cutline: PieceCutline): CutlineRect {
   }
 }
 
-export function getPlacedCutlineSvgElement(
-  placed: PlacedPiece,
-  preset: PiecePreset
-): string {
+export function getPlacedCutlineSvgElement(placed: PlacedPiece, preset: PiecePreset): string {
   return getCutlineSvgElement(getPlacedCutlineRect(placed, preset), preset.cutline)
 }
 

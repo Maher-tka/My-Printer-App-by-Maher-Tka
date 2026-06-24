@@ -73,7 +73,10 @@ export function normalizeHex(hex: string): string | null {
   const value = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed
 
   if (/^[0-9a-fA-F]{3}$/.test(value)) {
-    return `#${value.split('').map((part) => part + part).join('')}`.toUpperCase()
+    return `#${value
+      .split('')
+      .map((part) => part + part)
+      .join('')}`.toUpperCase()
   }
 
   if (/^[0-9a-fA-F]{6}$/.test(value)) {

@@ -10,13 +10,7 @@ import {
 } from '@/projects/projectFiles'
 import { getLargeProjectWarning } from '@/performance/renderQuality'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { AppRoute } from '@/types/navigation'
 import type {
   ActiveProjectSession,
@@ -78,9 +72,7 @@ export function BookletMontagePage({
   )
   const [savedProjectStateKey, setSavedProjectStateKey] = useState(projectStateKey)
   const isDirty = projectStateKey !== savedProjectStateKey
-  const projectName =
-    projectMetadata?.jobName ??
-    getUnsavedBookletName(montage.sources[0]?.name)
+  const projectName = projectMetadata?.jobName ?? getUnsavedBookletName(montage.sources[0]?.name)
   const boardItemIds = useMemo(
     () => montage.sheetBoardState.items.map((item) => item.id),
     [montage.sheetBoardState.items]
@@ -99,8 +91,7 @@ export function BookletMontagePage({
     montage.exportProgress.phase === 'rendering-page' ||
     montage.exportProgress.phase === 'creating-pdf' ||
     montage.exportProgress.phase === 'saving-file'
-  const hasExportableItems =
-    montage.sheets.length > 0 || montage.emptySheetsForExport.length > 0
+  const hasExportableItems = montage.sheets.length > 0 || montage.emptySheetsForExport.length > 0
   const readingDirectionLabel =
     montage.settings.readingDirection === 'rtl' ? 'RTL Arabic mode' : 'LTR mode'
   const canExport =
@@ -113,59 +104,62 @@ export function BookletMontagePage({
     totalBytes: montage.sources.reduce((total, source) => total + source.bytes.byteLength, 0)
   })
 
-  const saveProject = useCallback(async (saveAs: boolean): Promise<boolean> => {
-    if (!window.printerApp?.saveProject) {
-      setProjectMessage('Project saving is only available in the desktop app.')
-      return false
-    }
-
-    const stateKeyAtSave = projectStateKey
-    setProjectIsBusy(true)
-    setProjectMessage('Saving project...')
-
-    try {
-      const project = createBookletProjectFile({
-        sources: montage.sources,
-        pages: montage.pages,
-        settings: montage.settings,
-        sheetBoardState: montage.sheetBoardState,
-        existingMetadata: projectMetadata
-      })
-      const result = await window.printerApp.saveProject({
-        suggestedName: getSuggestedProjectFileName(project.metadata.jobName),
-        filePath: saveAs ? null : projectFilePath,
-        project
-      })
-
-      if (result.canceled) {
-        setProjectMessage('Save canceled.')
+  const saveProject = useCallback(
+    async (saveAs: boolean): Promise<boolean> => {
+      if (!window.printerApp?.saveProject) {
+        setProjectMessage('Project saving is only available in the desktop app.')
         return false
       }
 
-      if (!result.ok || !result.filePath) {
-        throw new Error(result.error ?? 'Could not save this booklet project.')
-      }
+      const stateKeyAtSave = projectStateKey
+      setProjectIsBusy(true)
+      setProjectMessage('Saving project...')
 
-      setProjectFilePath(result.filePath)
-      setProjectMetadata(project.metadata)
-      setSavedProjectStateKey(stateKeyAtSave)
-      setProjectMessage(`Saved ${project.metadata.jobName}`)
-      return true
-    } catch (error) {
-      setProjectMessage(getProjectErrorMessage(error))
-      return false
-    } finally {
-      setProjectIsBusy(false)
-    }
-  }, [
-    montage.pages,
-    montage.settings,
-    montage.sheetBoardState,
-    montage.sources,
-    projectFilePath,
-    projectMetadata,
-    projectStateKey
-  ])
+      try {
+        const project = createBookletProjectFile({
+          sources: montage.sources,
+          pages: montage.pages,
+          settings: montage.settings,
+          sheetBoardState: montage.sheetBoardState,
+          existingMetadata: projectMetadata
+        })
+        const result = await window.printerApp.saveProject({
+          suggestedName: getSuggestedProjectFileName(project.metadata.jobName),
+          filePath: saveAs ? null : projectFilePath,
+          project
+        })
+
+        if (result.canceled) {
+          setProjectMessage('Save canceled.')
+          return false
+        }
+
+        if (!result.ok || !result.filePath) {
+          throw new Error(result.error ?? 'Could not save this booklet project.')
+        }
+
+        setProjectFilePath(result.filePath)
+        setProjectMetadata(project.metadata)
+        setSavedProjectStateKey(stateKeyAtSave)
+        setProjectMessage(`Saved ${project.metadata.jobName}`)
+        return true
+      } catch (error) {
+        setProjectMessage(getProjectErrorMessage(error))
+        return false
+      } finally {
+        setProjectIsBusy(false)
+      }
+    },
+    [
+      montage.pages,
+      montage.settings,
+      montage.sheetBoardState,
+      montage.sources,
+      projectFilePath,
+      projectMetadata,
+      projectStateKey
+    ]
+  )
 
   const openProject = async (): Promise<void> => {
     setProjectIsBusy(true)
@@ -215,16 +209,10 @@ export function BookletMontagePage({
     })
   }, [isDirty, onProjectSessionChange, projectName, saveProject])
 
-  useEffect(
-    () => () => onProjectSessionChange(null),
-    [onProjectSessionChange]
-  )
+  useEffect(() => () => onProjectSessionChange(null), [onProjectSessionChange])
 
   useEffect(() => {
-    if (
-      !initialPdfImport ||
-      handledInitialPdfImportIdRef.current === initialPdfImport.id
-    ) {
+    if (!initialPdfImport || handledInitialPdfImportIdRef.current === initialPdfImport.id) {
       return
     }
 
@@ -239,7 +227,9 @@ export function BookletMontagePage({
       return
     }
 
-    setSelectedItemId((current) => (current && boardItemIds.includes(current) ? current : boardItemIds[0]))
+    setSelectedItemId((current) =>
+      current && boardItemIds.includes(current) ? current : boardItemIds[0]
+    )
     setInspectedItemId((current) => (current && boardItemIds.includes(current) ? current : null))
   }, [boardItemIds])
 

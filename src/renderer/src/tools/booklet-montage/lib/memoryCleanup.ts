@@ -5,11 +5,7 @@ import { revokeThumbnailUrl } from './thumbnailCache'
 
 export const MAX_CANVAS_PIXELS = 80_000_000
 
-export function assertCanvasWithinLimit(
-  width: number,
-  height: number,
-  purpose: string
-): void {
+export function assertCanvasWithinLimit(width: number, height: number, purpose: string): void {
   assertWithinCanvasBudget(width, height, purpose, getPerformanceSettingsSnapshot())
 }
 

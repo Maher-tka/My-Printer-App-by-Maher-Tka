@@ -14,11 +14,7 @@ import type {
   SheetSettings
 } from '../types'
 import { getBookletSlotRects, getPrintSizeMm } from '../lib/printSizes'
-import {
-  SHEET_BOARD_CARD,
-  getBoardCanvasSize,
-  getSideKey
-} from '../lib/sheetLayoutState'
+import { SHEET_BOARD_CARD, getBoardCanvasSize, getSideKey } from '../lib/sheetLayoutState'
 import { getReadableTextColor, getSolidFillHex } from '../lib/colorUtils'
 import { ColorPickerPopover } from './ColorPickerPopover'
 import { DraggableSheetCard } from './DraggableSheetCard'
@@ -123,7 +119,10 @@ export function SheetPreview({
       <div
         className="relative"
         style={{
-          minWidth: Math.max(boardSize.width, SHEET_BOARD_CARD.width + SHEET_BOARD_CARD.padding * 2),
+          minWidth: Math.max(
+            boardSize.width,
+            SHEET_BOARD_CARD.width + SHEET_BOARD_CARD.padding * 2
+          ),
           minHeight: Math.max(boardSize.height, 560)
         }}
       >
@@ -227,11 +226,7 @@ function BookletSideCard({
 
   return (
     <div className="relative h-[300px] rounded-md bg-card p-3">
-      <SheetHoverActions
-        onInspect={onInspect}
-        onDelete={onDelete}
-        onDuplicate={onDuplicate}
-      />
+      <SheetHoverActions onInspect={onInspect} onDelete={onDelete} onDuplicate={onDuplicate} />
       <div className="mb-2 flex items-center justify-between gap-2 pr-36">
         <span className="truncate text-sm font-semibold">
           Sheet {side.sheetNumber} {side.side === 'front' ? 'Front' : 'Back'}
@@ -254,7 +249,10 @@ function BookletSideCard({
   )
 }
 
-function getPreviewSlots(paperSize: { widthMm: number; heightMm: number }): { left: Rect; right: Rect } {
+function getPreviewSlots(paperSize: { widthMm: number; heightMm: number }): {
+  left: Rect
+  right: Rect
+} {
   try {
     return getBookletSlotRects(paperSize)
   } catch {
@@ -395,7 +393,9 @@ function PreviewSlot({
       style={style}
     >
       <PageArtwork page={page} />
-      <div className={`absolute left-2 top-2 rounded bg-white/90 px-2 py-1 font-bold shadow-sm ${large ? 'text-sm' : 'text-xs'}`}>
+      <div
+        className={`absolute left-2 top-2 rounded bg-white/90 px-2 py-1 font-bold shadow-sm ${large ? 'text-sm' : 'text-xs'}`}
+      >
         Page {slot.pageNumber}
       </div>
     </div>

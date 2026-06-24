@@ -136,10 +136,7 @@ export function createHelperShapeFromMask(piece: PiecePreset): PiecePreset {
   }
 }
 
-export function createHelperShape(
-  shape: MaskShape,
-  transform: ArtworkTransform
-): PieceHelperShape {
+export function createHelperShape(shape: MaskShape, transform: ArtworkTransform): PieceHelperShape {
   return {
     id: createShapeId(),
     role: 'helper',

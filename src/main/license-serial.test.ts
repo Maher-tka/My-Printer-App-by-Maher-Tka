@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict'
 import { generateKeyPairSync } from 'node:crypto'
-import {
-  createOfflineSerialKey,
-  validateOfflineSerialKey
-} from './license-serial.js'
+import { createOfflineSerialKey, validateOfflineSerialKey } from './license-serial.js'
 
 const now = new Date('2026-06-18T12:00:00.000Z')
 const { privateKey, publicKey } = generateKeyPairSync('ed25519')
@@ -42,10 +39,7 @@ assert.equal(shopValidation.ok, true)
 if (shopValidation.ok) {
   assert.equal(shopValidation.license.plan, 'shop')
   assert.equal(shopValidation.license.expiresAt, '2026-12-31T23:59:59.999Z')
-  assert.deepEqual(shopValidation.license.features, [
-    'paid-tools',
-    'batch-exports'
-  ])
+  assert.deepEqual(shopValidation.license.features, ['paid-tools', 'batch-exports'])
 }
 
 const tamperedKey = proKey.replace('-PRO-', '-SHOP-')
@@ -58,11 +52,7 @@ const unauthorizedKey = createOfflineSerialKey({
   seatCode: 'BAD001',
   signingPrivateKey: otherKeyPair.privateKey
 })
-const unauthorizedValidation = validateOfflineSerialKey(
-  unauthorizedKey,
-  now,
-  publicKey
-)
+const unauthorizedValidation = validateOfflineSerialKey(unauthorizedKey, now, publicKey)
 assert.equal(unauthorizedValidation.ok, false)
 assert.equal(validateOfflineSerialKey(unauthorizedKey, now).ok, false)
 

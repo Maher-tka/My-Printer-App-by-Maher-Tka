@@ -1,20 +1,9 @@
-import {
-  blanksNeededForBooklet,
-  createBlankPage,
-  generateBookletSheets
-} from './bookletImposition'
+import { blanksNeededForBooklet, createBlankPage, generateBookletSheets } from './bookletImposition'
 import { getPrintSizeMm, validatePrintSettings } from './printSizes'
 import { getPlacement } from './renderSheet'
 import { naturalSortFileNames } from './naturalSort'
-import {
-  getBookletImageExportFolderName,
-  getNumberedMontageImageFileName
-} from './exportNaming'
-import {
-  normalizeCurrentOrder,
-  reorderPagesByDrag,
-  resetToOriginalOrder
-} from './pageOrdering'
+import { getBookletImageExportFolderName, getNumberedMontageImageFileName } from './exportNaming'
+import { normalizeCurrentOrder, reorderPagesByDrag, resetToOriginalOrder } from './pageOrdering'
 import type { BookletPage, SheetSettings } from '../types'
 
 interface TestPage {
@@ -131,18 +120,26 @@ function testScaleModes(): void {
   const naturalSize = { width: 100, height: 100 }
   const targetRect = { x: 0, y: 0, width: 100, height: 50 }
 
-  expectEqual(getPlacement(naturalSize, targetRect, 'fit'), {
-    x: 25,
-    y: 0,
-    width: 50,
-    height: 50
-  }, 'fit scale mode')
-  expectEqual(getPlacement(naturalSize, targetRect, 'original'), {
-    x: 25,
-    y: 0,
-    width: 50,
-    height: 50
-  }, 'original scale mode when page is larger than target')
+  expectEqual(
+    getPlacement(naturalSize, targetRect, 'fit'),
+    {
+      x: 25,
+      y: 0,
+      width: 50,
+      height: 50
+    },
+    'fit scale mode'
+  )
+  expectEqual(
+    getPlacement(naturalSize, targetRect, 'original'),
+    {
+      x: 25,
+      y: 0,
+      width: 50,
+      height: 50
+    },
+    'original scale mode when page is larger than target'
+  )
   expectEqual(getPlacement(naturalSize, targetRect, 'stretch'), targetRect, 'stretch scale mode')
 }
 
@@ -241,4 +238,6 @@ testDragOrderDrivesImposition()
 testResetOriginalOrder()
 testImageExportNaming()
 
-console.log('Booklet tests passed: imposition, auto blanks, print sizes, scale modes, sorting, page ordering, and export naming.')
+console.log(
+  'Booklet tests passed: imposition, auto blanks, print sizes, scale modes, sorting, page ordering, and export naming.'
+)

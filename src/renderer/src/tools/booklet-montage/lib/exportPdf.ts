@@ -10,11 +10,7 @@ import type {
 import { hexToRgb } from './colorUtils'
 import { assertNotCanceled, yieldToUi } from './memoryCleanup'
 import { getPrintSizeMm, getSheetLayoutMm, validatePrintSettings } from './printSizes'
-import {
-  flattenSheetSides,
-  preparePdfRenderAssets,
-  renderPdfSheetSide
-} from './renderSheet'
+import { flattenSheetSides, preparePdfRenderAssets, renderPdfSheetSide } from './renderSheet'
 import { mmToPoints } from './units'
 
 interface ExportPdfOptions {
@@ -61,10 +57,7 @@ export async function exportBookletPdf(
       message: `Rendering page ${renderedPages + 1} of ${totalPages}: sheet ${side.sheetNumber} ${side.side}`
     })
 
-    const pdfPage = pdf.addPage([
-      mmToPoints(printSize.widthMm),
-      mmToPoints(printSize.heightMm)
-    ])
+    const pdfPage = pdf.addPage([mmToPoints(printSize.widthMm), mmToPoints(printSize.heightMm)])
 
     await renderPdfSheetSide(pdfPage, side, settings, layout, assets, signal)
 

@@ -1,5 +1,1 @@
-export {
-  alignPieceObjects,
-  centerArtworkToCutline,
-  centerCutlineToArtwork
-} from './alignment'
+export { alignPieceObjects, centerArtworkToCutline, centerCutlineToArtwork } from './alignment'

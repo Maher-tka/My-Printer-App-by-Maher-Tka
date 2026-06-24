@@ -21,10 +21,7 @@ const actionTones = [
   'bg-emerald-100 text-emerald-700'
 ]
 
-export function QuickActionList({
-  actions,
-  onNavigate
-}: QuickActionListProps): JSX.Element {
+export function QuickActionList({ actions, onNavigate }: QuickActionListProps): JSX.Element {
   return (
     <div className="flex flex-col gap-3">
       {actions.map((action, index) => {
@@ -53,9 +50,7 @@ export function QuickActionList({
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="font-semibold">{action.label}</span>
-              <span className="text-sm text-muted-foreground">
-                {action.description}
-              </span>
+              <span className="text-sm text-muted-foreground">{action.description}</span>
             </div>
             <ChevronRight className="size-5 text-muted-foreground" aria-hidden="true" />
           </button>

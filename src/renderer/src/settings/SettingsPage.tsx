@@ -1,16 +1,8 @@
 import { ArrowLeft, Gauge, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import {
-  PERFORMANCE_PRESETS
-} from '@/performance/performanceSettings'
+import { PERFORMANCE_PRESETS } from '@/performance/performanceSettings'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
 import type { PerformancePresetId } from '@/performance/performanceTypes'
 import type { AppRoute } from '@/types/navigation'
@@ -39,9 +31,7 @@ export function SettingsPage({ onNavigate }: SettingsPageProps): JSX.Element {
           <Settings className="size-6 text-primary" aria-hidden="true" />
           <div className="flex flex-col gap-1.5">
             <CardTitle className="text-xl">Settings</CardTitle>
-            <CardDescription>
-              Local workspace preferences for this desktop app.
-            </CardDescription>
+            <CardDescription>Local workspace preferences for this desktop app.</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
@@ -57,8 +47,8 @@ export function SettingsPage({ onNavigate }: SettingsPageProps): JSX.Element {
                     <Badge variant="secondary">{settings.label}</Badge>
                   </div>
                   <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                    Use Low-end PC mode for older printer-shop computers. This setting
-                    controls preview size, render batching, animations, and memory cleanup.
+                    Use Low-end PC mode for older printer-shop computers. This setting controls
+                    preview size, render batching, animations, and memory cleanup.
                   </p>
                 </div>
               </div>
@@ -106,8 +96,8 @@ export function SettingsPage({ onNavigate }: SettingsPageProps): JSX.Element {
           <section className="rounded-lg border bg-card p-4">
             <h3 className="font-semibold">Local-first workspace</h3>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Printer presets, folders, and shop defaults will stay on this computer.
-              No cloud login or payment integration is configured.
+              Printer presets, folders, and shop defaults will stay on this computer. No cloud login
+              or payment integration is configured.
             </p>
           </section>
         </CardContent>

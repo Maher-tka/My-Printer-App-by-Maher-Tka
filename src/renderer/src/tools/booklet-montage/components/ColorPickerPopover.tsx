@@ -64,7 +64,13 @@ export function ColorPickerPopover({
           <p className="text-sm font-semibold">{title}</p>
           <p className="text-xs text-slate-500">{description}</p>
         </div>
-        <Button type="button" size="icon" variant="ghost" title="Close color picker" onClick={onClose}>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          title="Close color picker"
+          onClick={onClose}
+        >
           <X className="h-4 w-4" />
         </Button>
       </div>

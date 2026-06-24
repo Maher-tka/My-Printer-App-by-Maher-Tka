@@ -12,7 +12,13 @@ import {
   rectangle,
   rgb
 } from 'pdf-lib'
-import type { CutterExportResult, CutterProject, PiecePreset, PieceSourceFile, PlacedPiece } from '../types'
+import type {
+  CutterExportResult,
+  CutterProject,
+  PiecePreset,
+  PieceSourceFile,
+  PlacedPiece
+} from '../types'
 import { getPlacedArtworkRect, getPlacedCutlineRect } from './cutlineGenerator'
 import { getPlacedMaskRect } from './maskUtils'
 import { cmToPoints, mmToPoints } from './units'
@@ -20,10 +26,7 @@ import { getCutterFileName } from './svgExport'
 
 export async function exportCutterPdf(project: CutterProject): Promise<CutterExportResult> {
   const pdf = await PDFDocument.create()
-  const page = pdf.addPage([
-    cmToPoints(project.sheet.widthCm),
-    cmToPoints(project.sheet.heightCm)
-  ])
+  const page = pdf.addPage([cmToPoints(project.sheet.widthCm), cmToPoints(project.sheet.heightCm)])
   const pieceMap = new Map(project.pieces.map((piece) => [piece.id, piece]))
   const sourceMap = new Map(project.sources.map((source) => [source.id, source]))
 

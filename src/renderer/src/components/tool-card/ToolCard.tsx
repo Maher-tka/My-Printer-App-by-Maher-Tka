@@ -1,20 +1,7 @@
-import {
-  BookOpen,
-  ExternalLink,
-  Lock,
-  PenLine,
-  ShieldCheck,
-  SquareStack
-} from 'lucide-react'
+import { BookOpen, ExternalLink, Lock, PenLine, ShieldCheck, SquareStack } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { PrinterTool } from '@/types/tools'
 
@@ -24,7 +11,6 @@ interface ToolCardProps {
   isCheckingLicense?: boolean
   isLicenseLocked?: boolean
   licenseReason?: string | null
-  onManageLicense?: () => void
 }
 
 const iconByToolId = {
@@ -44,14 +30,12 @@ export function ToolCard({
   onOpen,
   isCheckingLicense = false,
   isLicenseLocked = false,
-  licenseReason,
-  onManageLicense
+  licenseReason
 }: ToolCardProps): JSX.Element {
   const Icon = iconByToolId[tool.id as keyof typeof iconByToolId]
   const isActive = tool.status === 'active' || tool.status === 'mvp'
-  const canOpen = isActive && !isCheckingLicense && !isLicenseLocked
-  const canManageLicense = isActive && isLicenseLocked && Boolean(onManageLicense)
-  const isButtonDisabled = !isActive || isCheckingLicense || (!canOpen && !canManageLicense)
+  const canOpen = isActive && !isCheckingLicense
+  const isButtonDisabled = !canOpen
   const ButtonIcon = isCheckingLicense
     ? ShieldCheck
     : isLicenseLocked
@@ -84,9 +68,7 @@ export function ToolCard({
           </div>
           <div className="flex min-w-0 flex-col gap-2">
             <CardTitle className="leading-6">{tool.title}</CardTitle>
-            <p className="text-sm leading-6 text-muted-foreground">
-              {tool.description}
-            </p>
+            <p className="text-sm leading-6 text-muted-foreground">{tool.description}</p>
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
@@ -106,9 +88,9 @@ export function ToolCard({
       <CardFooter className="px-5 pb-5 pt-0">
         <Button
           className="w-full"
-          variant={canOpen ? 'default' : 'secondary'}
+          variant={canOpen && !isLicenseLocked ? 'default' : 'secondary'}
           disabled={isButtonDisabled}
-          onClick={canManageLicense ? onManageLicense : onOpen}
+          onClick={onOpen}
           type="button"
         >
           <ButtonIcon data-icon="inline-start" />
@@ -137,7 +119,7 @@ function getToolButtonLabel({
   }
 
   if (isLicenseLocked) {
-    return 'Activate License'
+    return 'View Locked Tool'
   }
 
   return 'Open Tool'

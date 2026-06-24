@@ -24,11 +24,14 @@ export function usePieceEditorHistory(
     setFuture([])
   }, [piece.id])
 
-  const commit = useCallback((nextPiece: PiecePreset): void => {
-    setPast((current) => [...current.slice(-(HISTORY_LIMIT - 1)), pieceRef.current])
-    setFuture([])
-    onPieceChange(nextPiece)
-  }, [onPieceChange])
+  const commit = useCallback(
+    (nextPiece: PiecePreset): void => {
+      setPast((current) => [...current.slice(-(HISTORY_LIMIT - 1)), pieceRef.current])
+      setFuture([])
+      onPieceChange(nextPiece)
+    },
+    [onPieceChange]
+  )
 
   const checkpoint = useCallback((previousPiece: PiecePreset): void => {
     setPast((current) => [...current.slice(-(HISTORY_LIMIT - 1)), previousPiece])

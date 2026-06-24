@@ -61,12 +61,7 @@ function omitSourceBytes<T extends { bytes: Uint8Array }>(
   omitPreview = false
 ): Record<string, unknown> {
   const source = value as T & { bytesBase64?: string; previewUrl?: string }
-  const {
-    bytes,
-    bytesBase64: _bytesBase64,
-    previewUrl: temporaryPreviewUrl,
-    ...rest
-  } = source
+  const { bytes, bytesBase64: _bytesBase64, previewUrl: temporaryPreviewUrl, ...rest } = source
 
   return {
     ...rest,
@@ -75,9 +70,7 @@ function omitSourceBytes<T extends { bytes: Uint8Array }>(
   }
 }
 
-function omitPreviewUrl<T extends { previewUrl: string }>(
-  value: T
-): Omit<T, 'previewUrl'> {
+function omitPreviewUrl<T extends { previewUrl: string }>(value: T): Omit<T, 'previewUrl'> {
   const { previewUrl: _previewUrl, ...rest } = value
 
   return rest

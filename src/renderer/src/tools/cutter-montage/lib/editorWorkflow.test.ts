@@ -1,5 +1,6 @@
 import {
   alignEditorObjects,
+  convertObjectToCutline,
   duplicateObjectAsCutline,
   duplicateObjects,
   makeClippingMaskFromSelection,
@@ -44,7 +45,11 @@ async function run(): Promise<void> {
     selectedObjectIds: [rectangle.id, ellipse.id]
   })
 
-  expectEqual(piece.selectedObjectIds, [rectangle.id, ellipse.id], 'selection keeps real helper ids')
+  expectEqual(
+    piece.selectedObjectIds,
+    [rectangle.id, ellipse.id],
+    'selection keeps real helper ids'
+  )
   expectEqual(
     piece.objects.filter((object) => object.role === 'helper').length,
     2,
@@ -63,7 +68,10 @@ async function run(): Promise<void> {
   expectEqual(cutline.type, 'cutline', 'cutline type')
   expectEqual(cutline.strokeName, 'CutContour', 'cutline spot name')
   expectEqual(cutline.fillColor, 'none', 'cutline fill')
-  expect(cutlinePiece.objects.some((object) => object.id === ellipse.id), 'source shape still exists')
+  expect(
+    cutlinePiece.objects.some((object) => object.id === ellipse.id),
+    'source shape still exists'
+  )
   expectEqual(cutlinePiece.selectedObjectIds, [cutline.id], 'new cutline becomes selected')
 
   const artwork = piece.objects.find((object) => object.role === 'artwork')
@@ -77,10 +85,12 @@ async function run(): Promise<void> {
     'match cutline to mask copies x/y/w/h/rotation exactly'
   )
 
-  piece = makeClippingMaskFromSelection(syncLegacyFieldsFromObjects({
-    ...cutlinePiece,
-    selectedObjectIds: [artwork.id, ellipse.id]
-  }))
+  piece = makeClippingMaskFromSelection(
+    syncLegacyFieldsFromObjects({
+      ...cutlinePiece,
+      selectedObjectIds: [artwork.id, ellipse.id]
+    })
+  )
   expectEqual(piece.clippingMaskEnabled, true, 'clipping enabled')
   expectEqual(piece.maskObjectId, ellipse.id, 'selected shape becomes mask by id')
   expectEqual(
@@ -88,7 +98,43 @@ async function run(): Promise<void> {
     'clipping-mask',
     'mask role'
   )
-  expect(piece.objects.some((object) => object.id === artwork.id), 'original artwork is preserved')
+  expect(
+    piece.objects.some((object) => object.id === artwork.id),
+    'original artwork is preserved'
+  )
+
+  const pastedMask = duplicateObjects(piece.objects, [ellipse.id], true)
+  const pastedMaskId = pastedMask.selectedObjectIds[0]
+  const pastedMaskPiece = synchronizePieceEditorModel(
+    syncLegacyFieldsFromObjects({
+      ...piece,
+      objects: pastedMask.objects,
+      selectedObjectIds: pastedMask.selectedObjectIds
+    })
+  )
+  expectEqual(
+    pastedMaskPiece.objects.find((object) => object.id === pastedMaskId)?.role,
+    'helper',
+    'pasted canonical mask becomes an editable helper'
+  )
+  expectEqual(
+    pastedMaskPiece.selectedObjectIds,
+    [pastedMaskId],
+    'pasted mask helper remains selected after model normalization'
+  )
+  const convertedPastedMask = synchronizePieceEditorModel(
+    convertObjectToCutline(pastedMaskPiece, pastedMaskId)
+  )
+  expectEqual(
+    convertedPastedMask.selectedObjectIds,
+    [pastedMaskId],
+    'converted pasted mask remains selected as canonical cutline'
+  )
+  expectEqual(
+    convertedPastedMask.cutlineObjectId,
+    pastedMaskId,
+    'converted pasted mask becomes canonical CutContour by id'
+  )
 
   const released = releaseClippingMask(piece)
   expectEqual(released.clippingMaskEnabled, false, 'clipping released')
@@ -100,13 +146,18 @@ async function run(): Promise<void> {
   )
 
   const grouped = setObjectGroup(
-    syncLegacyFieldsFromObjects({ ...piece, selectedObjectIds: [artwork.id, ellipse.id, cutline.id] }),
+    syncLegacyFieldsFromObjects({
+      ...piece,
+      selectedObjectIds: [artwork.id, ellipse.id, cutline.id]
+    }),
     [artwork.id, ellipse.id, cutline.id],
     true
   )
-  const groupIds = new Set(grouped.objects
-    .filter((object) => [artwork.id, ellipse.id, cutline.id].includes(object.id))
-    .map((object) => object.groupId))
+  const groupIds = new Set(
+    grouped.objects
+      .filter((object) => [artwork.id, ellipse.id, cutline.id].includes(object.id))
+      .map((object) => object.groupId)
+  )
   expectEqual(groupIds.size, 1, 'linked workflow objects share one group id')
 
   const placed = createPlacedPieceFromPreset(piece, 2, 3)
@@ -127,12 +178,20 @@ async function run(): Promise<void> {
   expectMatch(svg, /<defs>[\s\S]*<clipPath id="clip-piece-/, 'SVG clip path')
   expectMatch(svg, /<g id="Artwork"/, 'Artwork group')
   expectMatch(svg, /<g id="CutContour"/, 'CutContour group')
-  expectMatch(svg, /<(rect|ellipse|path)[^>]+data-spot-name="CutContour"[^>]+fill="none"/, 'vector CutContour')
+  expectMatch(
+    svg,
+    /<(rect|ellipse|path)[^>]+data-spot-name="CutContour"[^>]+fill="none"/,
+    'vector CutContour'
+  )
   expect(!/<image[^>]+data-spot-name="CutContour"/.test(svg), 'cutline must not be raster')
 
   const sameFileCopy = createPiecePresetFromSource(source, [piece])
   expectEqual(sameFileCopy.displayName, 'sticker copy 2', 'same-file duplicate naming')
-  expectEqual(synchronizePieceEditorModel(piece).selectedObjectIds, piece.selectedObjectIds, 'model sync preserves id selection')
+  expectEqual(
+    synchronizePieceEditorModel(piece).selectedObjectIds,
+    piece.selectedObjectIds,
+    'model sync preserves id selection'
+  )
 
   console.log('Cutter editor workflow tests passed.')
 }
@@ -156,15 +215,35 @@ function assertKeyAlignment(artwork: EditorObject, cutline: EditorObject): void 
   ]
   const ids = objects.map((object) => object.id)
   const cutlineKey = alignEditorObjects(objects, ids, cutline.id, 'center-horizontal')
-  expectEqual(cutlineKey.find((object) => object.id === cutline.id)?.transform, objects[1].transform, 'cutline key stays fixed')
-  expect(cutlineKey.find((object) => object.id === artwork.id)?.transform.xCm !== objects[0].transform.xCm, 'artwork moves when cutline is key')
+  expectEqual(
+    cutlineKey.find((object) => object.id === cutline.id)?.transform,
+    objects[1].transform,
+    'cutline key stays fixed'
+  )
+  expect(
+    cutlineKey.find((object) => object.id === artwork.id)?.transform.xCm !==
+      objects[0].transform.xCm,
+    'artwork moves when cutline is key'
+  )
 
   const artworkKey = alignEditorObjects(objects, ids, artwork.id, 'center-vertical')
-  expectEqual(artworkKey.find((object) => object.id === artwork.id)?.transform, objects[0].transform, 'artwork key stays fixed')
-  expect(artworkKey.find((object) => object.id === cutline.id)?.transform.yCm !== objects[1].transform.yCm, 'cutline moves when artwork is key')
+  expectEqual(
+    artworkKey.find((object) => object.id === artwork.id)?.transform,
+    objects[0].transform,
+    'artwork key stays fixed'
+  )
+  expect(
+    artworkKey.find((object) => object.id === cutline.id)?.transform.yCm !==
+      objects[1].transform.yCm,
+    'cutline moves when artwork is key'
+  )
 }
 
-function createHelper(id: string, shapeType: EditorShapeType, transform: ArtworkTransform): EditorObject {
+function createHelper(
+  id: string,
+  shapeType: EditorShapeType,
+  transform: ArtworkTransform
+): EditorObject {
   return {
     id,
     type: 'helper-shape',

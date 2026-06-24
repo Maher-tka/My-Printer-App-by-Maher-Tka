@@ -31,8 +31,7 @@ export const projectToolLabels: Record<ProjectToolId, string> = {
   'cutter-montage': 'Cutter Montage'
 }
 
-export interface SerializedBookletSource
-  extends Omit<BookletSource, 'bytes'> {
+export interface SerializedBookletSource extends Omit<BookletSource, 'bytes'> {
   bytesBase64: string
 }
 
@@ -45,15 +44,13 @@ export interface BookletProjectPayload {
   pages: SerializedBookletPage[]
 }
 
-export interface SerializedPieceSourceFile
-  extends Omit<PieceSourceFile, 'bytes' | 'previewUrl'> {
+export interface SerializedPieceSourceFile extends Omit<PieceSourceFile, 'bytes' | 'previewUrl'> {
   bytesBase64: string
 }
 
 export type SerializedPieceArtwork = Omit<PieceArtwork, 'previewUrl'>
 
-export interface SerializedPiecePreset
-  extends Omit<PiecePreset, 'previewUrl' | 'artwork'> {
+export interface SerializedPiecePreset extends Omit<PiecePreset, 'previewUrl' | 'artwork'> {
   artwork: SerializedPieceArtwork
 }
 
@@ -126,9 +123,7 @@ export function createBookletProjectFile({
   }
 }
 
-export function deserializeBookletProjectPayload(
-  payload: BookletProjectPayload
-): {
+export function deserializeBookletProjectPayload(payload: BookletProjectPayload): {
   sources: BookletSource[]
   pages: BookletPage[]
   settings: SheetSettings
@@ -213,9 +208,7 @@ export function deserializeCutterProjectPayload(
       )
     }
   })
-  const previewBySourceId = new Map(
-    sources.map((source) => [source.id, source.previewUrl])
-  )
+  const previewBySourceId = new Map(sources.map((source) => [source.id, source.previewUrl]))
   const pieces = payload.pieces.map((piece) => {
     const previewUrl = previewBySourceId.get(piece.sourceId) ?? ''
 
@@ -305,11 +298,7 @@ function serializePieceSource(source: PieceSourceFile): SerializedPieceSourceFil
 }
 
 function serializePiecePreset(piece: PiecePreset): SerializedPiecePreset {
-  const {
-    previewUrl: _piecePreviewUrl,
-    artwork,
-    ...serializablePiece
-  } = piece
+  const { previewUrl: _piecePreviewUrl, artwork, ...serializablePiece } = piece
   const { previewUrl: _artworkPreviewUrl, ...serializableArtwork } = artwork
 
   return {
@@ -318,10 +307,7 @@ function serializePiecePreset(piece: PiecePreset): SerializedPiecePreset {
   }
 }
 
-function getBookletProjectName(
-  sources: BookletSource[],
-  pages: BookletPage[]
-): string {
+function getBookletProjectName(sources: BookletSource[], pages: BookletPage[]): string {
   const firstSourceName = sources[0]?.name
 
   if (firstSourceName) {
@@ -336,13 +322,8 @@ function getBookletProjectSummary(
   pages: BookletPage[],
   sheetBoardState: SheetBoardState
 ): string {
-  const emptySheetCount = sheetBoardState.items.filter(
-    (item) => item.kind === 'empty-sheet'
-  ).length
-  const parts = [
-    formatCount(pages.length, 'page'),
-    formatCount(sources.length, 'source')
-  ]
+  const emptySheetCount = sheetBoardState.items.filter((item) => item.kind === 'empty-sheet').length
+  const parts = [formatCount(pages.length, 'page'), formatCount(sources.length, 'source')]
 
   if (emptySheetCount > 0) {
     parts.push(formatCount(emptySheetCount, 'empty sheet'))
@@ -351,10 +332,7 @@ function getBookletProjectSummary(
   return parts.join(', ')
 }
 
-function getCutterProjectName(
-  pieces: PiecePreset[],
-  sources: PieceSourceFile[]
-): string {
+function getCutterProjectName(pieces: PiecePreset[], sources: PieceSourceFile[]): string {
   const firstPieceName = pieces[0]?.displayName
 
   if (firstPieceName) {
@@ -363,9 +341,7 @@ function getCutterProjectName(
 
   const firstSourceName = sources[0]?.displayName ?? sources[0]?.fileName
 
-  return firstSourceName
-    ? stripFileExtension(firstSourceName)
-    : 'Untitled Cutter Project'
+  return firstSourceName ? stripFileExtension(firstSourceName) : 'Untitled Cutter Project'
 }
 
 function getCutterProjectSummary(

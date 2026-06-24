@@ -12,13 +12,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   formatDate,
   formatDateTime,
@@ -27,10 +21,7 @@ import {
   getPlanDisplayName
 } from '@/licensing/license-format'
 import type { AppRoute } from '@/types/navigation'
-import type {
-  LicenseActivationResult,
-  LicenseSnapshot
-} from '../../../shared/licensing-types'
+import type { LicenseActivationResult, LicenseSnapshot } from '../../../shared/licensing-types'
 
 interface LicensePageProps {
   licenseState: LicenseSnapshot | null
@@ -63,10 +54,7 @@ export function LicensePage({
     ? formatTrialTimeRemaining(licenseState.trial.remainingMs)
     : 'Checking'
   const paidToolsLabel = licenseState?.canUsePaidTools ? 'Unlocked' : 'Locked'
-  const activationDetails = useMemo(
-    () => getActivationDetails(licenseState),
-    [licenseState]
-  )
+  const activationDetails = useMemo(() => getActivationDetails(licenseState), [licenseState])
   const visibleError = formError ?? error
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -122,9 +110,7 @@ export function LicensePage({
             </CardDescription>
           </div>
           <Badge variant={tone}>
-            {isLoading && !licenseState
-              ? 'Checking'
-              : licenseState?.statusLabel ?? 'Unavailable'}
+            {isLoading && !licenseState ? 'Checking' : (licenseState?.statusLabel ?? 'Unavailable')}
           </Badge>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
@@ -150,9 +136,7 @@ export function LicensePage({
               label="Paid Tools"
               value={paidToolsLabel}
               detail={
-                licenseState?.canUsePaidTools
-                  ? 'Available on this device'
-                  : 'Activation required'
+                licenseState?.canUsePaidTools ? 'Available on this device' : 'Activation required'
               }
             />
             <StatusMetric
@@ -186,9 +170,7 @@ export function LicensePage({
             <div className="rounded-lg border border-warning/80 bg-warning p-4 text-sm text-warning-foreground">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                <span>
-                  {licenseState.clockWarning ?? licenseState.integrityWarning}
-                </span>
+                <span>{licenseState.clockWarning ?? licenseState.integrityWarning}</span>
               </div>
             </div>
           )}
@@ -206,18 +188,13 @@ export function LicensePage({
           <CardContent>
             <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
               <div className="flex flex-col gap-2">
-                <label
-                  className="text-sm font-semibold text-foreground"
-                  htmlFor="serial-key"
-                >
+                <label className="text-sm font-semibold text-foreground" htmlFor="serial-key">
                   Serial Key
                 </label>
                 <input
                   id="serial-key"
                   value={serialKey}
-                  onChange={(event) =>
-                    setSerialKey(normalizeSerialInput(event.target.value))
-                  }
+                  onChange={(event) => setSerialKey(normalizeSerialInput(event.target.value))}
                   className="h-11 rounded-md border border-input bg-card px-3 font-mono text-sm uppercase tracking-normal text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/20"
                   placeholder="MPTK-PRO-LIFE-ABC123-SIGNATURE"
                   autoComplete="off"
@@ -248,35 +225,20 @@ export function LicensePage({
         <Card>
           <CardHeader>
             <CardTitle>Local Record</CardTitle>
-            <CardDescription>
-              Activation details saved by the desktop app.
-            </CardDescription>
+            <CardDescription>Activation details saved by the desktop app.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <DetailRow
               label="Trial Started"
-              value={
-                licenseState ? formatDateTime(licenseState.trial.startedAt) : 'Checking'
-              }
+              value={licenseState ? formatDateTime(licenseState.trial.startedAt) : 'Checking'}
             />
             <DetailRow
               label="Trial Ends"
-              value={
-                licenseState ? formatDateTime(licenseState.trial.endsAt) : 'Checking'
-              }
+              value={licenseState ? formatDateTime(licenseState.trial.endsAt) : 'Checking'}
             />
-            <DetailRow
-              label="Serial Suffix"
-              value={activationDetails.serial}
-            />
-            <DetailRow
-              label="Seat"
-              value={activationDetails.seat}
-            />
-            <DetailRow
-              label="Expires"
-              value={activationDetails.expires}
-            />
+            <DetailRow label="Serial Suffix" value={activationDetails.serial} />
+            <DetailRow label="Seat" value={activationDetails.seat} />
+            <DetailRow label="Expires" value={activationDetails.expires} />
             <DetailRow
               label="Last Checked"
               value={licenseState ? formatDateTime(licenseState.checkedAt) : 'Checking'}
@@ -295,12 +257,7 @@ interface StatusMetricProps {
   detail: string
 }
 
-function StatusMetric({
-  icon: Icon,
-  label,
-  value,
-  detail
-}: StatusMetricProps): JSX.Element {
+function StatusMetric({ icon: Icon, label, value, detail }: StatusMetricProps): JSX.Element {
   return (
     <div className="rounded-lg border bg-muted/35 p-4">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">

@@ -42,13 +42,10 @@ export function ProjectFileActions({
             Unsaved changes
           </span>
         )}
-        <p
-          className="truncate text-right text-muted-foreground"
-          title={filePath ?? undefined}
-        >
+        <p className="truncate text-right text-muted-foreground" title={filePath ?? undefined}>
           {isDirty
-            ? filePath ?? 'Not saved yet'
-            : message ?? (filePath ? filePath : 'Not saved yet')}
+            ? (filePath ?? 'Not saved yet')
+            : (message ?? (filePath ? filePath : 'Not saved yet'))}
         </p>
       </div>
     </div>

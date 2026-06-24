@@ -32,7 +32,11 @@ export function PieceCard({
     >
       <div className="flex gap-3">
         <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded border bg-white">
-          <img src={piece.previewUrl} alt={piece.displayName} className="h-full w-full object-contain" />
+          <img
+            src={piece.previewUrl}
+            alt={piece.displayName}
+            className="h-full w-full object-contain"
+          />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{piece.displayName}</p>

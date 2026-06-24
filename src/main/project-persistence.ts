@@ -1,10 +1,4 @@
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  ipcMain,
-  type OpenDialogOptions
-} from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron'
 import { access, readFile, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import type {
@@ -104,28 +98,25 @@ export function registerProjectHandlers(): void {
     }
   )
 
-  ipcMain.handle(
-    'projects:close-after-save',
-    (event, saved: boolean): void => {
-      const owner = BrowserWindow.fromWebContents(event.sender)
+  ipcMain.handle('projects:close-after-save', (event, saved: boolean): void => {
+    const owner = BrowserWindow.fromWebContents(event.sender)
 
-      if (!owner) {
-        return
-      }
-
-      const state = getProjectWindowState(owner)
-      state.promptOpen = false
-
-      if (!saved) {
-        return
-      }
-
-      state.dirty = false
-      state.allowClose = true
-      updateWindowEditedState(owner, state)
-      owner.close()
+    if (!owner) {
+      return
     }
-  )
+
+    const state = getProjectWindowState(owner)
+    state.promptOpen = false
+
+    if (!saved) {
+      return
+    }
+
+    state.dirty = false
+    state.allowClose = true
+    updateWindowEditedState(owner, state)
+    owner.close()
+  })
 
   ipcMain.handle('projects:save', async (event, request: SaveProjectRequest) => {
     try {
@@ -250,29 +241,27 @@ export function attachProjectWindowProtection(window: BrowserWindow): void {
     }
 
     state.promptOpen = true
-    void showUnsavedChangesDialog(window, state.projectName, 'close-window').then(
-      (choice) => {
-        if (window.isDestroyed()) {
-          return
-        }
-
-        if (choice === 'discard') {
-          state.dirty = false
-          state.allowClose = true
-          state.promptOpen = false
-          updateWindowEditedState(window, state)
-          window.close()
-          return
-        }
-
-        if (choice === 'save') {
-          window.webContents.send('projects:request-save-before-close')
-          return
-        }
-
-        state.promptOpen = false
+    void showUnsavedChangesDialog(window, state.projectName, 'close-window').then((choice) => {
+      if (window.isDestroyed()) {
+        return
       }
-    )
+
+      if (choice === 'discard') {
+        state.dirty = false
+        state.allowClose = true
+        state.promptOpen = false
+        updateWindowEditedState(window, state)
+        window.close()
+        return
+      }
+
+      if (choice === 'save') {
+        window.webContents.send('projects:request-save-before-close')
+        return
+      }
+
+      state.promptOpen = false
+    })
   })
 }
 
@@ -331,10 +320,7 @@ function getUnsavedChangesDetail(action: UnsavedChangesAction): string {
   }
 }
 
-function updateWindowEditedState(
-  window: BrowserWindow,
-  state: ProjectWindowState
-): void {
+function updateWindowEditedState(window: BrowserWindow, state: ProjectWindowState): void {
   window.setDocumentEdited(state.dirty)
   window.setTitle(`${state.dirty ? '* ' : ''}${APP_TITLE}`)
 }

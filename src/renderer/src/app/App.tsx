@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DashboardPage } from '@/app/DashboardPage'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { LicensePage } from '@/licensing/LicensePage'
-import { routeRequiresPaidAccess } from '@/licensing/tool-access'
+import { ToolAccessOverlay } from '@/licensing/ToolAccessOverlay'
+import { getToolAccessState } from '@/licensing/tool-access'
 import { useLicenseState } from '@/licensing/useLicenseState'
 import { printerTools } from '@/lib/app-data'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
@@ -83,21 +84,25 @@ export function App(): JSX.Element {
   const activeMeta = useMemo(() => pageMeta[activeRoute], [activeRoute])
   const { settings: performanceSettings } = usePerformanceSettings()
   const license = useLicenseState()
+  const activeTool = printerTools.find((tool) => tool.route === activeRoute)
+  const activeToolAccess = activeTool
+    ? getToolAccessState(activeTool, license.state, license.isLoading)
+    : null
+  const showToolAccessOverlay = Boolean(
+    activeToolAccess?.isCheckingLicense || activeToolAccess?.isLicenseLocked
+  )
 
   useEffect(() => {
     document.documentElement.dataset.performancePreset = performanceSettings.preset
   }, [performanceSettings.preset])
 
-  const setActiveProjectSession = useCallback(
-    (session: ActiveProjectSession | null): void => {
-      activeProjectSessionRef.current = session
-      void window.printerApp?.setProjectDirty(
-        session?.isDirty ?? false,
-        session?.projectName ?? 'Untitled Project'
-      )
-    },
-    []
-  )
+  const setActiveProjectSession = useCallback((session: ActiveProjectSession | null): void => {
+    activeProjectSessionRef.current = session
+    void window.printerApp?.setProjectDirty(
+      session?.isDirty ?? false,
+      session?.projectName ?? 'Untitled Project'
+    )
+  }, [])
 
   const clearActiveProjectSession = useCallback((): void => {
     activeProjectSessionRef.current = null
@@ -113,9 +118,7 @@ export function App(): JSX.Element {
       }
 
       if (!window.printerApp?.confirmUnsavedChanges) {
-        return window.confirm(
-          `Discard unsaved changes to “${session.projectName}”?`
-        )
+        return window.confirm(`Discard unsaved changes to “${session.projectName}”?`)
       }
 
       const result = await window.printerApp.confirmUnsavedChanges({
@@ -134,14 +137,7 @@ export function App(): JSX.Element {
 
   const navigate = useCallback(
     async (route: AppRoute): Promise<void> => {
-      const nextRoute =
-        routeRequiresPaidAccess(route, printerTools) &&
-        !license.isLoading &&
-        !license.state?.canUsePaidTools
-          ? 'license'
-          : route
-
-      if (nextRoute === activeRouteRef.current) {
+      if (route === activeRouteRef.current) {
         return
       }
 
@@ -155,22 +151,17 @@ export function App(): JSX.Element {
       }
 
       clearActiveProjectSession()
-      activeRouteRef.current = nextRoute
-      setActiveRoute(nextRoute)
+      activeRouteRef.current = route
+      setActiveRoute(route)
       setOpenedProject(null)
       setPendingBookletPdfImport(null)
 
-      const nextHash = `#/${nextRoute}`
+      const nextHash = `#/${route}`
       if (window.location.hash !== nextHash) {
         window.location.hash = nextHash
       }
     },
-    [
-      clearActiveProjectSession,
-      confirmUnsavedChanges,
-      license.isLoading,
-      license.state?.canUsePaidTools
-    ]
+    [clearActiveProjectSession, confirmUnsavedChanges]
   )
 
   useEffect(() => {
@@ -232,12 +223,6 @@ export function App(): JSX.Element {
       }
 
       const projectRoute = result.project.metadata.tool
-      const nextRoute =
-        routeRequiresPaidAccess(projectRoute, printerTools) &&
-        !license.isLoading &&
-        !license.state?.canUsePaidTools
-          ? 'license'
-          : projectRoute
 
       clearActiveProjectSession()
       setOpenedProject({
@@ -246,18 +231,13 @@ export function App(): JSX.Element {
         instanceId: Date.now()
       })
       setPendingBookletPdfImport(null)
-      activeRouteRef.current = nextRoute
-      setActiveRoute(nextRoute)
-      window.location.hash = `#/${nextRoute}`
+      activeRouteRef.current = projectRoute
+      setActiveRoute(projectRoute)
+      window.location.hash = `#/${projectRoute}`
 
       return result
     },
-    [
-      clearActiveProjectSession,
-      confirmUnsavedChanges,
-      license.isLoading,
-      license.state?.canUsePaidTools
-    ]
+    [clearActiveProjectSession, confirmUnsavedChanges]
   )
 
   const importBookletPdf = useCallback((files: File[]): void => {
@@ -277,31 +257,15 @@ export function App(): JSX.Element {
   }, [])
 
   const consumeBookletPdfImport = useCallback((requestId: number): void => {
-    setPendingBookletPdfImport((current) =>
-      current?.id === requestId ? null : current
-    )
+    setPendingBookletPdfImport((current) => (current?.id === requestId ? null : current))
   }, [])
-
-  useEffect(() => {
-    if (
-      !license.isLoading &&
-      routeRequiresPaidAccess(activeRoute, printerTools) &&
-      !license.state?.canUsePaidTools
-    ) {
-      navigate('license')
-    }
-  }, [
-    activeRoute,
-    license.isLoading,
-    license.state?.canUsePaidTools,
-    navigate
-  ])
 
   return (
     <AppLayout
       activeRoute={activeRoute}
       pageMeta={activeMeta}
       onNavigate={navigate}
+      isDeveloperMode={license.isDeveloperMode}
     >
       {activeRoute === 'dashboard' && (
         <DashboardPage
@@ -313,7 +277,7 @@ export function App(): JSX.Element {
           onImportBookletPdf={importBookletPdf}
         />
       )}
-      {activeRoute === 'booklet-montage' && (
+      {activeRoute === 'booklet-montage' && !showToolAccessOverlay && (
         <BookletMontagePage
           key={openedProject?.instanceId ?? 'new-booklet'}
           onNavigate={navigate}
@@ -329,10 +293,10 @@ export function App(): JSX.Element {
           }
         />
       )}
-      {activeRoute === 'hardcover-cover' && (
+      {activeRoute === 'hardcover-cover' && !showToolAccessOverlay && (
         <HardcoverCoverPage onNavigate={navigate} />
       )}
-      {activeRoute === 'cutter-montage' && (
+      {activeRoute === 'cutter-montage' && !showToolAccessOverlay && (
         <CutterMontagePage
           key={openedProject?.instanceId ?? 'new-cutter'}
           onNavigate={navigate}
@@ -359,6 +323,15 @@ export function App(): JSX.Element {
         />
       )}
       {activeRoute === 'settings' && <SettingsPage onNavigate={navigate} />}
+      {showToolAccessOverlay && activeTool && activeToolAccess && (
+        <ToolAccessOverlay
+          toolName={activeTool.title}
+          isChecking={activeToolAccess.isCheckingLicense}
+          reason={activeToolAccess.licenseReason}
+          onBack={() => void navigate('dashboard')}
+          onManageLicense={() => void navigate('license')}
+        />
+      )}
     </AppLayout>
   )
 }

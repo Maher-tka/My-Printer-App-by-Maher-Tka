@@ -39,10 +39,7 @@ export function getToolAccessState(
   return {
     isCheckingLicense: false,
     isLicenseLocked: true,
-    licenseReason:
-      licenseState?.mode === 'expired'
-        ? 'Trial expired'
-        : 'License required'
+    licenseReason: licenseState?.mode === 'expired' ? 'Trial expired' : 'License required'
   }
 }
 
@@ -53,11 +50,6 @@ export function canUseFeature(
   return licenseState?.features.includes(feature) ?? false
 }
 
-export function routeRequiresPaidAccess(
-  route: string,
-  tools: PrinterTool[]
-): boolean {
-  return tools.some(
-    (tool) => tool.route === route && tool.requiredFeature === 'paid-tools'
-  )
+export function routeRequiresPaidAccess(route: string, tools: PrinterTool[]): boolean {
+  return tools.some((tool) => tool.route === route && tool.requiredFeature === 'paid-tools')
 }

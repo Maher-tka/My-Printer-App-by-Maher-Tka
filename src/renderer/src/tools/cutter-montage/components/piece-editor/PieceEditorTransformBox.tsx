@@ -1,8 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { ArtworkTransform, EditorObject } from '../../types'
 
-export type TransformHandle =
-  | 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate'
+export type TransformHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate'
 
 interface PieceEditorTransformBoxProps {
   objects: EditorObject[]
@@ -16,7 +15,12 @@ interface PieceEditorTransformBoxProps {
   onHandlePointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void
 }
 
-const handles: Array<{ handle: Exclude<TransformHandle, 'rotate'>; left: string; top: string; cursor: string }> = [
+const handles: Array<{
+  handle: Exclude<TransformHandle, 'rotate'>
+  left: string
+  top: string
+  cursor: string
+}> = [
   { handle: 'nw', left: '0%', top: '0%', cursor: 'nwse-resize' },
   { handle: 'n', left: '50%', top: '0%', cursor: 'ns-resize' },
   { handle: 'ne', left: '100%', top: '0%', cursor: 'nesw-resize' },
@@ -76,7 +80,11 @@ export function PieceEditorTransformBox({
 export function getSelectionBounds(objects: EditorObject[]): ArtworkTransform {
   const left = Math.min(...objects.map((object) => object.transform.xCm))
   const top = Math.min(...objects.map((object) => object.transform.yCm))
-  const right = Math.max(...objects.map((object) => object.transform.xCm + object.transform.widthCm))
-  const bottom = Math.max(...objects.map((object) => object.transform.yCm + object.transform.heightCm))
+  const right = Math.max(
+    ...objects.map((object) => object.transform.xCm + object.transform.widthCm)
+  )
+  const bottom = Math.max(
+    ...objects.map((object) => object.transform.yCm + object.transform.heightCm)
+  )
   return { xCm: left, yCm: top, widthCm: right - left, heightCm: bottom - top, rotation: 0 }
 }

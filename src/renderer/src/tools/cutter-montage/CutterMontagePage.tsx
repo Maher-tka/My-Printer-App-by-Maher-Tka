@@ -2,13 +2,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
 import { ProjectFileActions } from '@/projects/ProjectFileActions'
 import { getCutterProjectStateKey } from '@/projects/projectDirtyState'
@@ -81,76 +75,79 @@ export function CutterMontagePage({
     cutter.sources[0]?.displayName ??
     'Untitled Cutter Project'
 
-  const saveProject = useCallback(async (saveAs: boolean): Promise<boolean> => {
-    if (!window.printerApp?.saveProject) {
-      setProjectMessage('Project saving is only available in the desktop app.')
-      return false
-    }
-
-    const stateKeyAtSave = projectStateKey
-    setProjectIsBusy(true)
-    setProjectMessage('Saving project...')
-
-    try {
-      const project = createCutterProjectFile({
-        mode: cutter.mode,
-        activePieceId: cutter.activePieceId,
-        selectedPlacedIds: cutter.selectedPlacedIds,
-        selectedEditorObjects: cutter.selectedEditorObjects,
-        keyObject: cutter.keyObject,
-        sheet: cutter.sheet,
-        sources: cutter.sources,
-        pieces: cutter.pieces,
-        placedPieces: cutter.placedPieces,
-        layers: cutter.layers,
-        exportSettings: {
-          strokeName: normalizeSpotName(CUT_CONTOUR_NAME),
-          includeArtwork: cutter.layers.artwork,
-          includeCutlines: cutter.layers.cutlines
-        },
-        existingMetadata: projectMetadata
-      })
-      const result = await window.printerApp.saveProject({
-        suggestedName: getSuggestedProjectFileName(project.metadata.jobName),
-        filePath: saveAs ? null : projectFilePath,
-        project
-      })
-
-      if (result.canceled) {
-        setProjectMessage('Save canceled.')
+  const saveProject = useCallback(
+    async (saveAs: boolean): Promise<boolean> => {
+      if (!window.printerApp?.saveProject) {
+        setProjectMessage('Project saving is only available in the desktop app.')
         return false
       }
 
-      if (!result.ok || !result.filePath) {
-        throw new Error(result.error ?? 'Could not save this cutter project.')
-      }
+      const stateKeyAtSave = projectStateKey
+      setProjectIsBusy(true)
+      setProjectMessage('Saving project...')
 
-      setProjectFilePath(result.filePath)
-      setProjectMetadata(project.metadata)
-      setSavedProjectStateKey(stateKeyAtSave)
-      setProjectMessage(`Saved ${project.metadata.jobName}`)
-      return true
-    } catch (error) {
-      setProjectMessage(getProjectErrorMessage(error))
-      return false
-    } finally {
-      setProjectIsBusy(false)
-    }
-  }, [
-    cutter.activePieceId,
-    cutter.keyObject,
-    cutter.layers,
-    cutter.mode,
-    cutter.pieces,
-    cutter.placedPieces,
-    cutter.selectedEditorObjects,
-    cutter.selectedPlacedIds,
-    cutter.sheet,
-    cutter.sources,
-    projectFilePath,
-    projectMetadata,
-    projectStateKey
-  ])
+      try {
+        const project = createCutterProjectFile({
+          mode: cutter.mode,
+          activePieceId: cutter.activePieceId,
+          selectedPlacedIds: cutter.selectedPlacedIds,
+          selectedEditorObjects: cutter.selectedEditorObjects,
+          keyObject: cutter.keyObject,
+          sheet: cutter.sheet,
+          sources: cutter.sources,
+          pieces: cutter.pieces,
+          placedPieces: cutter.placedPieces,
+          layers: cutter.layers,
+          exportSettings: {
+            strokeName: normalizeSpotName(CUT_CONTOUR_NAME),
+            includeArtwork: cutter.layers.artwork,
+            includeCutlines: cutter.layers.cutlines
+          },
+          existingMetadata: projectMetadata
+        })
+        const result = await window.printerApp.saveProject({
+          suggestedName: getSuggestedProjectFileName(project.metadata.jobName),
+          filePath: saveAs ? null : projectFilePath,
+          project
+        })
+
+        if (result.canceled) {
+          setProjectMessage('Save canceled.')
+          return false
+        }
+
+        if (!result.ok || !result.filePath) {
+          throw new Error(result.error ?? 'Could not save this cutter project.')
+        }
+
+        setProjectFilePath(result.filePath)
+        setProjectMetadata(project.metadata)
+        setSavedProjectStateKey(stateKeyAtSave)
+        setProjectMessage(`Saved ${project.metadata.jobName}`)
+        return true
+      } catch (error) {
+        setProjectMessage(getProjectErrorMessage(error))
+        return false
+      } finally {
+        setProjectIsBusy(false)
+      }
+    },
+    [
+      cutter.activePieceId,
+      cutter.keyObject,
+      cutter.layers,
+      cutter.mode,
+      cutter.pieces,
+      cutter.placedPieces,
+      cutter.selectedEditorObjects,
+      cutter.selectedPlacedIds,
+      cutter.sheet,
+      cutter.sources,
+      projectFilePath,
+      projectMetadata,
+      projectStateKey
+    ]
+  )
 
   const openProject = async (): Promise<void> => {
     setProjectIsBusy(true)
@@ -186,10 +183,7 @@ export function CutterMontagePage({
     })
   }, [isDirty, onProjectSessionChange, projectName, saveProject])
 
-  useEffect(
-    () => () => onProjectSessionChange(null),
-    [onProjectSessionChange]
-  )
+  useEffect(() => () => onProjectSessionChange(null), [onProjectSessionChange])
 
   return (
     <div className="mx-auto flex max-w-[1680px] flex-col gap-5">
@@ -211,7 +205,8 @@ export function CutterMontagePage({
               <Badge variant="warning">MVP Beta</Badge>
             </div>
             <CardDescription>
-              Prepare masked sticker pieces, align vector CutContour paths, then arrange them on a real-size roll sheet.
+              Prepare masked sticker pieces, align vector CutContour paths, then arrange them on a
+              real-size roll sheet.
             </CardDescription>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -274,9 +269,7 @@ export function CutterMontagePage({
               <LayerVisibilityControls
                 layers={cutter.layers}
                 settings={cutter.sheet}
-                onLayerChange={(patch) =>
-                  cutter.setLayers((current) => ({ ...current, ...patch }))
-                }
+                onLayerChange={(patch) => cutter.setLayers((current) => ({ ...current, ...patch }))}
                 onSettingsChange={cutter.updateSheet}
               />
               <ExportCutterPanel
@@ -290,11 +283,7 @@ export function CutterMontagePage({
             {cutter.mode === 'piece-editor' ? (
               <PieceEditor
                 piece={cutter.activePiece}
-                selectedObjects={cutter.selectedEditorObjects}
-                keyObject={cutter.keyObject}
                 onPieceChange={cutter.updatePiece}
-                onSelectedObjectsChange={cutter.setSelectedEditorObjects}
-                onSetKeyObject={(object) => cutter.setKeyObject({ object })}
                 onSave={cutter.markPieceSaved}
                 onDuplicate={() =>
                   cutter.activePiece && cutter.duplicatePiece(cutter.activePiece.id)

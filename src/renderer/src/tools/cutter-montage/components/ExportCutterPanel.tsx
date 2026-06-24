@@ -18,7 +18,8 @@ export function ExportCutterPanel({
     <section className="rounded-lg border bg-card p-4">
       <h3 className="font-semibold">Export</h3>
       <p className="mt-1 text-sm text-muted-foreground">
-        SVG keeps Artwork and CutContour groups. PDF/EPS keep vector cutlines with known layer limitations.
+        SVG keeps Artwork and CutContour groups. PDF/EPS keep vector cutlines with known layer
+        limitations.
       </p>
       <div className="mt-4 grid grid-cols-1 gap-2">
         <Button type="button" onClick={onExportSvg} disabled={!canExport}>

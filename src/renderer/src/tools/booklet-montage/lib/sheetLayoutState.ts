@@ -137,7 +137,10 @@ export function removeEmptySheetFromBoard(state: SheetBoardState, itemId: string
   }
 }
 
-export function duplicateEmptySheetInBoard(state: SheetBoardState, itemId: string): SheetBoardState {
+export function duplicateEmptySheetInBoard(
+  state: SheetBoardState,
+  itemId: string
+): SheetBoardState {
   const source = state.items.find(
     (item): item is EmptySheetBoardItem => item.id === itemId && item.kind === 'empty-sheet'
   )
@@ -214,8 +217,14 @@ export function getBoardCanvasSize(items: SheetBoardItem[]): { width: number; he
 
   return items.reduce(
     (size, item) => ({
-      width: Math.max(size.width, item.position.x + SHEET_BOARD_CARD.width + SHEET_BOARD_CARD.padding),
-      height: Math.max(size.height, item.position.y + SHEET_BOARD_CARD.height + SHEET_BOARD_CARD.padding)
+      width: Math.max(
+        size.width,
+        item.position.x + SHEET_BOARD_CARD.width + SHEET_BOARD_CARD.padding
+      ),
+      height: Math.max(
+        size.height,
+        item.position.y + SHEET_BOARD_CARD.height + SHEET_BOARD_CARD.padding
+      )
     }),
     { width: 0, height: 0 }
   )

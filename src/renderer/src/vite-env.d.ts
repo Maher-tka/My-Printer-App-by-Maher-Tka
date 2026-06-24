@@ -1,18 +1,20 @@
 /// <reference types="vite/client" />
 
+interface ImportMetaEnv {
+  readonly VITE_DEV_UNLOCK_ALL?: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
+
 import type {
   PrinterAppProjectResult,
   PrinterAppRecentProjectsResult,
   PrinterProjectFile
 } from '@/types/projects'
-import type {
-  LicenseActivationResult,
-  LicenseSnapshot
-} from '../../shared/licensing-types'
-import type {
-  UnsavedChangesRequest,
-  UnsavedChangesResult
-} from '../../shared/project-types'
+import type { LicenseActivationResult, LicenseSnapshot } from '../../shared/licensing-types'
+import type { UnsavedChangesRequest, UnsavedChangesResult } from '../../shared/project-types'
 
 declare global {
   interface PrinterAppFileFilter {
@@ -66,9 +68,7 @@ declare global {
         project: PrinterProjectFile
       }) => Promise<PrinterAppProjectResult>
       openProject: (filePath?: string | null) => Promise<PrinterAppProjectResult>
-      confirmUnsavedChanges: (
-        request: UnsavedChangesRequest
-      ) => Promise<UnsavedChangesResult>
+      confirmUnsavedChanges: (request: UnsavedChangesRequest) => Promise<UnsavedChangesResult>
       setProjectDirty: (dirty: boolean, projectName: string) => Promise<void>
       onSaveBeforeClose: (callback: () => void) => () => void
       finishCloseAfterSave: (saved: boolean) => Promise<void>

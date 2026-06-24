@@ -9,9 +9,7 @@ const PUBLIC_KEY_SOURCE_PATH = 'src/main/license-public-key.ts'
 
 async function main(): Promise<void> {
   const force = process.argv.slice(2).includes('--force')
-  const privateKeyPath = resolve(
-    process.env[PRIVATE_KEY_ENV] ?? DEFAULT_PRIVATE_KEY_PATH
-  )
+  const privateKeyPath = resolve(process.env[PRIVATE_KEY_ENV] ?? DEFAULT_PRIVATE_KEY_PATH)
   const publicKeySourcePath = resolve(PUBLIC_KEY_SOURCE_PATH)
 
   if (existsSync(privateKeyPath) && !force) {

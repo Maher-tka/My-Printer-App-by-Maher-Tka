@@ -11,18 +11,13 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table'
-import type {
-  PrinterAppProjectResult,
-  RecentJob
-} from '@/types/projects'
+import type { PrinterAppProjectResult, RecentJob } from '@/types/projects'
 
 interface RecentJobsTableProps {
   onOpenProject: (filePath?: string | null) => Promise<PrinterAppProjectResult>
 }
 
-export function RecentJobsTable({
-  onOpenProject
-}: RecentJobsTableProps): JSX.Element {
+export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.Element {
   const [jobs, setJobs] = useState<RecentJob[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [openingPath, setOpeningPath] = useState<string | null>(null)

@@ -6,7 +6,8 @@ export const PERFORMANCE_PRESETS: Record<PerformancePresetId, PerformanceSetting
   'low-end': {
     preset: 'low-end',
     label: 'Low-end PC',
-    description: 'Best for older printer-shop computers. Uses smaller previews and one render at a time.',
+    description:
+      'Best for older printer-shop computers. Uses smaller previews and one render at a time.',
     render: {
       thumbnailMaxSizePx: 220,
       thumbnailJpegQuality: 0.58,
@@ -29,7 +30,8 @@ export const PERFORMANCE_PRESETS: Record<PerformancePresetId, PerformanceSetting
   balanced: {
     preset: 'balanced',
     label: 'Balanced',
-    description: 'Good default for daily shop work. Keeps previews clear without pushing memory too hard.',
+    description:
+      'Good default for daily shop work. Keeps previews clear without pushing memory too hard.',
     render: {
       thumbnailMaxSizePx: 320,
       thumbnailJpegQuality: 0.72,

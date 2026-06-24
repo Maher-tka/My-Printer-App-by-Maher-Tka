@@ -1,14 +1,16 @@
 import { Bell, ChevronDown, CircleHelp } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import type { PageMeta } from '@/types/navigation'
 
 interface TopBarProps {
   pageMeta: PageMeta
+  isDeveloperMode?: boolean
 }
 
-export function TopBar({ pageMeta }: TopBarProps): JSX.Element {
+export function TopBar({ pageMeta, isDeveloperMode = false }: TopBarProps): JSX.Element {
   return (
     <header className="flex h-20 shrink-0 items-center justify-between border-b bg-card px-8">
       <div className="flex min-w-0 flex-col gap-1">
@@ -19,6 +21,7 @@ export function TopBar({ pageMeta }: TopBarProps): JSX.Element {
       </div>
 
       <div className="flex items-center gap-4">
+        {isDeveloperMode ? <Badge variant="warning">Developer Test Mode</Badge> : null}
         <Button variant="ghost" className="gap-2" type="button">
           <CircleHelp data-icon="inline-start" />
           Help

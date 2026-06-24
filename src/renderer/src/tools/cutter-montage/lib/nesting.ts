@@ -1,9 +1,4 @@
-import type {
-  CutterLayoutResult,
-  CutterSheetSettings,
-  PiecePreset,
-  PlacedPiece
-} from '../types'
+import type { CutterLayoutResult, CutterSheetSettings, PiecePreset, PlacedPiece } from '../types'
 import { getSafeArea } from './cutterLayout'
 import { createPlacedPieceFromPreset } from './piecePresets'
 import { mmToCm, roundToStep } from './units'

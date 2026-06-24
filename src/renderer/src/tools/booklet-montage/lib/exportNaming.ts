@@ -12,10 +12,7 @@ export function getBookletImageExportFolderName(
   return `${baseName}_${settings.scaleMode}`
 }
 
-export function getNumberedMontageImageFileName(
-  index: number,
-  format: ExportImageFormat
-): string {
+export function getNumberedMontageImageFileName(index: number, format: ExportImageFormat): string {
   return `${String(Math.max(1, index)).padStart(3, '0')}.${format}`
 }
 

@@ -113,8 +113,16 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
         event.preventDefault()
         const deltaX = (event.clientX - drag.startX) / scale
         const deltaY = (event.clientY - drag.startY) / scale
-        const xCm = clamp(roundToStep(drag.originX + deltaX, snapStepCm), 0, Math.max(sheetWidthCm - placed.widthCm, 0))
-        const yCm = clamp(roundToStep(drag.originY + deltaY, snapStepCm), 0, Math.max(sheetHeightCm - placed.heightCm, 0))
+        const xCm = clamp(
+          roundToStep(drag.originX + deltaX, snapStepCm),
+          0,
+          Math.max(sheetWidthCm - placed.widthCm, 0)
+        )
+        const yCm = clamp(
+          roundToStep(drag.originY + deltaY, snapStepCm),
+          0,
+          Math.max(sheetHeightCm - placed.heightCm, 0)
+        )
 
         if (Math.abs(deltaX) + Math.abs(deltaY) > 0.2) {
           drag.moved = true
@@ -147,7 +155,9 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
         onMove(placed.id, latestPositionRef.current.xCm, latestPositionRef.current.yCm)
       }}
     >
-      {layers.artwork && piece.objectVisibility.artwork && (piece.clippingMaskEnabled ?? piece.mask.enabled) ? (
+      {layers.artwork &&
+      piece.objectVisibility.artwork &&
+      (piece.clippingMaskEnabled ?? piece.mask.enabled) ? (
         <div
           className="absolute overflow-hidden"
           style={{
@@ -219,16 +229,44 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
           className="absolute -right-2 -top-10 z-40 flex gap-1 rounded-md border bg-card p-1 shadow-sm"
           data-no-drag="true"
         >
-          <Button type="button" size="icon" variant="ghost" className="size-8" onClick={() => onDuplicate(placed.id)} aria-label="Duplicate placed piece">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8"
+            onClick={() => onDuplicate(placed.id)}
+            aria-label="Duplicate placed piece"
+          >
             <Copy />
           </Button>
-          <Button type="button" size="icon" variant="ghost" className="size-8" onClick={() => onRotate(placed.id)} aria-label="Rotate placed piece">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8"
+            onClick={() => onRotate(placed.id)}
+            aria-label="Rotate placed piece"
+          >
             <RotateCw />
           </Button>
-          <Button type="button" size="icon" variant="ghost" className="size-8" onClick={() => onToggleLock(placed.id)} aria-label={placed.locked ? 'Unlock placed piece' : 'Lock placed piece'}>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8"
+            onClick={() => onToggleLock(placed.id)}
+            aria-label={placed.locked ? 'Unlock placed piece' : 'Lock placed piece'}
+          >
             {placed.locked ? <LockKeyhole /> : <UnlockKeyhole />}
           </Button>
-          <Button type="button" size="icon" variant="ghost" className="size-8" onClick={() => onDelete(placed.id)} aria-label="Delete placed piece">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8"
+            onClick={() => onDelete(placed.id)}
+            aria-label="Delete placed piece"
+          >
             <Trash2 />
           </Button>
         </div>

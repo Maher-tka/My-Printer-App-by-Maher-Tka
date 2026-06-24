@@ -4,12 +4,7 @@ export type CutterMode = 'piece-editor' | 'montage-sheet'
 
 export type EditorObjectType = 'artwork' | 'mask' | 'cutline' | 'helper-shape'
 
-export type EditorShapeType =
-  | 'image'
-  | 'rectangle'
-  | 'rounded-rectangle'
-  | 'ellipse'
-  | 'path'
+export type EditorShapeType = 'image' | 'rectangle' | 'rounded-rectangle' | 'ellipse' | 'path'
 
 export type EditorObjectRole = 'artwork' | 'clipping-mask' | 'cutline' | 'helper'
 
@@ -24,12 +19,7 @@ export type EditorTool =
 
 export type CutlineShape = 'rectangle' | 'rounded-rectangle' | 'ellipse' | 'custom-path'
 
-export type MaskShape =
-  | 'rectangle'
-  | 'rounded-rectangle'
-  | 'ellipse'
-  | 'square'
-  | 'custom-polygon'
+export type MaskShape = 'rectangle' | 'rounded-rectangle' | 'ellipse' | 'square' | 'custom-polygon'
 
 export type AlignmentCommand =
   | 'left'

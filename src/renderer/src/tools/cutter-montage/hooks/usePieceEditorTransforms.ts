@@ -11,46 +11,55 @@ export function usePieceEditorTransforms(): {
   moveSelection: (piece: PiecePreset, dxCm: number, dyCm: number) => PiecePreset
   setSelectionLock: (piece: PiecePreset, locked: boolean) => PiecePreset
 } {
-  const updateTransform = useCallback((
-    piece: PiecePreset,
-    objectId: string,
-    patch: Partial<ArtworkTransform>
-  ): PiecePreset => syncLegacyFieldsFromObjects({
-    ...piece,
-    objects: piece.objects.map((object) => object.id === objectId && !object.locked
-      ? { ...object, transform: { ...object.transform, ...patch } }
-      : object)
-  }), [])
+  const updateTransform = useCallback(
+    (piece: PiecePreset, objectId: string, patch: Partial<ArtworkTransform>): PiecePreset =>
+      syncLegacyFieldsFromObjects({
+        ...piece,
+        objects: piece.objects.map((object) =>
+          object.id === objectId && !object.locked
+            ? { ...object, transform: { ...object.transform, ...patch } }
+            : object
+        )
+      }),
+    []
+  )
 
-  const moveSelection = useCallback((piece: PiecePreset, dxCm: number, dyCm: number): PiecePreset => {
-    const selected = new Set(piece.selectedObjectIds)
-    const selectedGroups = new Set(piece.objects
-      .filter((object) => selected.has(object.id) && object.groupId)
-      .map((object) => object.groupId))
-    return syncLegacyFieldsFromObjects({
-      ...piece,
-      objects: piece.objects.map((object) =>
-        (selected.has(object.id) || Boolean(object.groupId && selectedGroups.has(object.groupId))) &&
-        !object.locked
-        ? {
-            ...object,
-            transform: {
-              ...object.transform,
-              xCm: object.transform.xCm + dxCm,
-              yCm: object.transform.yCm + dyCm
-            }
-          }
-        : object)
-    })
-  }, [])
+  const moveSelection = useCallback(
+    (piece: PiecePreset, dxCm: number, dyCm: number): PiecePreset => {
+      const selected = new Set(piece.selectedObjectIds)
+      const selectedGroups = new Set(
+        piece.objects
+          .filter((object) => selected.has(object.id) && object.groupId)
+          .map((object) => object.groupId)
+      )
+      return syncLegacyFieldsFromObjects({
+        ...piece,
+        objects: piece.objects.map((object) =>
+          (selected.has(object.id) ||
+            Boolean(object.groupId && selectedGroups.has(object.groupId))) &&
+          !object.locked
+            ? {
+                ...object,
+                transform: {
+                  ...object.transform,
+                  xCm: object.transform.xCm + dxCm,
+                  yCm: object.transform.yCm + dyCm
+                }
+              }
+            : object
+        )
+      })
+    },
+    []
+  )
 
   const setSelectionLock = useCallback((piece: PiecePreset, locked: boolean): PiecePreset => {
     const selected = new Set(piece.selectedObjectIds)
     return syncLegacyFieldsFromObjects({
       ...piece,
-      objects: piece.objects.map((object) => selected.has(object.id)
-        ? { ...object, locked }
-        : object)
+      objects: piece.objects.map((object) =>
+        selected.has(object.id) ? { ...object, locked } : object
+      )
     })
   }, [])
 

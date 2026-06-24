@@ -5,6 +5,7 @@ dist/
 .codex-*
 .env
 .env.*
+!.env.development
 .license-private/
 node_modules/
 dist/

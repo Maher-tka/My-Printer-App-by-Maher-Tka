@@ -1,13 +1,7 @@
 import { Save, Scissors } from 'lucide-react'
 import { useMemo } from 'react'
 import { Button } from '@/components/ui/button'
-import type {
-  AlignmentCommand,
-  EditorObject,
-  EditorObjectType,
-  KeyObjectState,
-  PiecePreset
-} from '../types'
+import type { AlignmentCommand, EditorObject, PiecePreset } from '../types'
 import {
   alignEditorObjects,
   centerObjectInside,
@@ -30,10 +24,7 @@ import { usePieceEditorTransforms } from '../hooks/usePieceEditorTransforms'
 import { AlignmentToolbar } from './AlignmentToolbar'
 import { ObjectLayerPanel } from './ObjectLayerPanel'
 import { PieceEditorCanvas } from './PieceEditorCanvas'
-import {
-  PieceEditorContextMenu,
-  type PieceEditorContextMenuState
-} from './PieceEditorContextMenu'
+import { PieceEditorContextMenu, type PieceEditorContextMenuState } from './PieceEditorContextMenu'
 import { PieceEditorPropertiesPanel } from './piece-editor/PieceEditorPropertiesPanel'
 import { PieceEditorShortcuts } from './piece-editor/PieceEditorShortcuts'
 import { PieceEditorStatusBar } from './piece-editor/PieceEditorStatusBar'
@@ -41,11 +32,7 @@ import { PieceEditorToolbar } from './piece-editor/PieceEditorToolbar'
 
 interface PieceEditorProps {
   piece: PiecePreset | null
-  selectedObjects: EditorObjectType[]
-  keyObject: KeyObjectState
   onPieceChange: (piece: PiecePreset) => void
-  onSelectedObjectsChange: (objects: EditorObjectType[]) => void
-  onSetKeyObject: (object: EditorObjectType | null) => void
   onSave: () => void
   onDuplicate: () => void
 }
@@ -70,8 +57,6 @@ export function PieceEditor(props: PieceEditorProps): JSX.Element {
 function ActivePieceEditor({
   piece,
   onPieceChange,
-  onSelectedObjectsChange,
-  onSetKeyObject,
   onSave,
   onDuplicate
 }: PieceEditorProps & { piece: PiecePreset }): JSX.Element {
@@ -79,22 +64,20 @@ function ActivePieceEditor({
   const history = usePieceEditorHistory(piece, onPieceChange)
   const clipboard = usePieceEditorClipboard()
   const transforms = usePieceEditorTransforms()
-  const selection = usePieceEditorSelection(
-    piece,
-    onPieceChange,
-    onSelectedObjectsChange,
-    onSetKeyObject
-  )
+  const selection = usePieceEditorSelection(piece, onPieceChange)
   const scale = useMemo(() => getPieceScale(piece, editorState.zoom), [editorState.zoom, piece])
   const selectedObjects = useMemo(
     () => piece.objects.filter((object) => piece.selectedObjectIds.includes(object.id)),
     [piece.objects, piece.selectedObjectIds]
   )
   const selectedObject = selectedObjects.length === 1 ? selectedObjects[0] : undefined
-  const selectedShape = [...selectedObjects].reverse().find(
-    (object) => object.shapeType !== 'image' &&
-      (object.role === 'helper' || object.role === 'clipping-mask')
-  )
+  const selectedShape = [...selectedObjects]
+    .reverse()
+    .find(
+      (object) =>
+        object.shapeType !== 'image' &&
+        (object.role === 'helper' || object.role === 'clipping-mask')
+    )
 
   const handleKeyDown = usePieceEditorShortcuts({
     clearSelection: () => {
@@ -164,7 +147,8 @@ function ActivePieceEditor({
         <div className="mt-2 flex items-center justify-between gap-3">
           <PieceEditorShortcuts />
           <span className="text-[11px] text-muted-foreground">
-            {history.canUndo ? 'Undo ready' : 'No undo'} · {history.canRedo ? 'Redo ready' : 'No redo'}
+            {history.canUndo ? 'Undo ready' : 'No undo'} ·{' '}
+            {history.canRedo ? 'Redo ready' : 'No redo'}
           </span>
         </div>
       </div>
@@ -208,10 +192,12 @@ function ActivePieceEditor({
           onPieceSizeChange={(widthCm, heightCm, source) =>
             history.commit(resizePiece(piece, widthCm, heightCm, source))
           }
-          onQuantityChange={(quantity) => history.commit({
-            ...piece,
-            quantity: Math.max(1, Math.round(quantity))
-          })}
+          onQuantityChange={(quantity) =>
+            history.commit({
+              ...piece,
+              quantity: Math.max(1, Math.round(quantity))
+            })
+          }
           onAspectLockChange={(lockAspectRatio) => history.commit({ ...piece, lockAspectRatio })}
           onObjectTransformChange={(objectId, patch) =>
             history.commit(transforms.updateTransform(piece, objectId, patch))
@@ -223,7 +209,8 @@ function ActivePieceEditor({
         />
 
         <Button type="button" onClick={onSave}>
-          <Save data-icon="inline-start" />Save piece preset
+          <Save data-icon="inline-start" />
+          Save piece preset
         </Button>
       </aside>
 
@@ -281,37 +268,43 @@ function ActivePieceEditor({
     if (objects.length === piece.objects.length) return
     const nextCutline = objects.find((object) => object.role === 'cutline')
     const maskDeleted = Boolean(piece.maskObjectId && deleting.has(piece.maskObjectId))
-    history.commit(syncLegacyFieldsFromObjects({
-      ...piece,
-      objects,
-      maskObjectId: maskDeleted ? undefined : piece.maskObjectId,
-      clippingMaskEnabled: maskDeleted ? false : piece.clippingMaskEnabled,
-      cutlineObjectId: piece.cutlineObjectId && deleting.has(piece.cutlineObjectId)
-        ? nextCutline?.id
-        : piece.cutlineObjectId,
-      selectedObjectIds: piece.selectedObjectIds.filter((id) => !deleting.has(id)),
-      keyObjectId: piece.keyObjectId && deleting.has(piece.keyObjectId)
-        ? undefined
-        : piece.keyObjectId
-    }))
+    history.commit(
+      syncLegacyFieldsFromObjects({
+        ...piece,
+        objects,
+        maskObjectId: maskDeleted ? undefined : piece.maskObjectId,
+        clippingMaskEnabled: maskDeleted ? false : piece.clippingMaskEnabled,
+        cutlineObjectId:
+          piece.cutlineObjectId && deleting.has(piece.cutlineObjectId)
+            ? nextCutline?.id
+            : piece.cutlineObjectId,
+        selectedObjectIds: piece.selectedObjectIds.filter((id) => !deleting.has(id)),
+        keyObjectId:
+          piece.keyObjectId && deleting.has(piece.keyObjectId) ? undefined : piece.keyObjectId
+      })
+    )
   }
 
   function toggleVisibility(objectId: string): void {
-    history.commit(syncLegacyFieldsFromObjects({
-      ...piece,
-      objects: piece.objects.map((object) => object.id === objectId
-        ? { ...object, visible: !object.visible }
-        : object)
-    }))
+    history.commit(
+      syncLegacyFieldsFromObjects({
+        ...piece,
+        objects: piece.objects.map((object) =>
+          object.id === objectId ? { ...object, visible: !object.visible } : object
+        )
+      })
+    )
   }
 
   function toggleLock(objectId: string): void {
-    history.commit(syncLegacyFieldsFromObjects({
-      ...piece,
-      objects: piece.objects.map((object) => object.id === objectId
-        ? { ...object, locked: !object.locked }
-        : object)
-    }))
+    history.commit(
+      syncLegacyFieldsFromObjects({
+        ...piece,
+        objects: piece.objects.map((object) =>
+          object.id === objectId ? { ...object, locked: !object.locked } : object
+        )
+      })
+    )
   }
 
   function setSelectionLock(locked: boolean): void {
@@ -345,15 +338,17 @@ function ActivePieceEditor({
 
   function alignSelection(command: AlignmentCommand): void {
     if (!piece.keyObjectId || piece.selectedObjectIds.length < 2) return
-    history.commit(syncLegacyFieldsFromObjects({
-      ...piece,
-      objects: alignEditorObjects(
-        piece.objects,
-        piece.selectedObjectIds,
-        piece.keyObjectId,
-        command
-      )
-    }))
+    history.commit(
+      syncLegacyFieldsFromObjects({
+        ...piece,
+        objects: alignEditorObjects(
+          piece.objects,
+          piece.selectedObjectIds,
+          piece.keyObjectId,
+          command
+        )
+      })
+    )
   }
 
   function center(targetId: string | undefined, containerId: string | undefined): void {
@@ -402,15 +397,62 @@ function WorkflowPanel({
     <section className="rounded-lg border bg-card p-3">
       <h4 className="text-sm font-semibold">Object workflow</h4>
       <div className="mt-3 grid grid-cols-1 gap-2">
-        <Button type="button" size="sm" variant="outline" disabled={!canMakeMask} onClick={onMakeMask}>Make Clipping Mask</Button>
-        <Button type="button" size="sm" variant="outline" disabled={!piece.clippingMaskEnabled} onClick={onReleaseMask}>Release Clipping Mask</Button>
-        <Button type="button" size="sm" variant="outline" disabled={!selectedShape} onClick={onDuplicateAsCutline}>
-          <Scissors data-icon="inline-start" />Duplicate Shape as Cutline
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!canMakeMask}
+          onClick={onMakeMask}
+        >
+          Make Clipping Mask
         </Button>
-        <Button type="button" size="sm" variant="outline" disabled={!selectedShape} onClick={onConvertToCutline}>Convert to CutContour</Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!piece.clippingMaskEnabled}
+          onClick={onReleaseMask}
+        >
+          Release Clipping Mask
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!selectedShape}
+          onClick={onDuplicateAsCutline}
+        >
+          <Scissors data-icon="inline-start" />
+          Duplicate Shape as Cutline
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!selectedShape}
+          onClick={onConvertToCutline}
+        >
+          Convert to CutContour
+        </Button>
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" size="sm" variant="outline" disabled={piece.selectedObjectIds.length < 2} onClick={onGroup}>Group / link</Button>
-          <Button type="button" size="sm" variant="outline" disabled={!selected.some((object) => object.groupId)} onClick={onUngroup}>Ungroup</Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={piece.selectedObjectIds.length < 2}
+            onClick={onGroup}
+          >
+            Group / link
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!selected.some((object) => object.groupId)}
+            onClick={onUngroup}
+          >
+            Ungroup
+          </Button>
         </div>
       </div>
     </section>
@@ -430,8 +472,10 @@ function resizePiece(
   const nextWidth = Math.max(widthCm, 0.5)
   const nextHeight = Math.max(heightCm, 0.5)
   const ratio = piece.heightCm / piece.widthCm
-  const finalWidth = piece.lockAspectRatio && sourceAxis === 'height' ? nextHeight / ratio : nextWidth
-  const finalHeight = piece.lockAspectRatio && sourceAxis === 'width' ? nextWidth * ratio : nextHeight
+  const finalWidth =
+    piece.lockAspectRatio && sourceAxis === 'height' ? nextHeight / ratio : nextWidth
+  const finalHeight =
+    piece.lockAspectRatio && sourceAxis === 'width' ? nextWidth * ratio : nextHeight
   return syncPieceBounds(piece, finalWidth, finalHeight)
 }
 
@@ -439,18 +483,20 @@ function resetTransforms(piece: PiecePreset): PiecePreset {
   const primaryIds = new Set([piece.artworkObjectId, piece.maskObjectId, piece.cutlineObjectId])
   return syncLegacyFieldsFromObjects({
     ...piece,
-    objects: piece.objects.map((object) => primaryIds.has(object.id)
-      ? {
-          ...object,
-          transform: {
-            ...object.transform,
-            xCm: 0,
-            yCm: 0,
-            widthCm: piece.widthCm,
-            heightCm: piece.heightCm,
-            rotation: 0
+    objects: piece.objects.map((object) =>
+      primaryIds.has(object.id)
+        ? {
+            ...object,
+            transform: {
+              ...object.transform,
+              xCm: 0,
+              yCm: 0,
+              widthCm: piece.widthCm,
+              heightCm: piece.heightCm,
+              rotation: 0
+            }
           }
-        }
-      : object)
+        : object
+    )
   })
 }

@@ -83,7 +83,10 @@ export function validatePrintSettings(settings: SheetSettings): string[] {
   const errors: string[] = []
 
   if (settings.paperSize === 'custom') {
-    if (!isPositiveFiniteNumber(settings.customWidthMm) || !isPositiveFiniteNumber(settings.customHeightMm)) {
+    if (
+      !isPositiveFiniteNumber(settings.customWidthMm) ||
+      !isPositiveFiniteNumber(settings.customHeightMm)
+    ) {
       errors.push('Custom paper width and height must be greater than 0 mm.')
     }
   }
