@@ -2,7 +2,7 @@ export const PRINTER_PROJECT_SCHEMA = 'com.maher-tka.my-printer-app.project'
 export const PRINTER_PROJECT_VERSION = 1
 export const PRINTER_PROJECT_EXTENSION = 'mpjob'
 
-export type ProjectToolId = 'booklet-montage' | 'cutter-montage'
+export type ProjectToolId = 'booklet-montage' | 'cutter-montage' | 'hardcover-cover'
 
 export type JobStatus = 'Saved' | 'Missing'
 
@@ -16,6 +16,7 @@ export interface ProjectMetadata {
   sourceCount: number
   itemCount: number
   summary: string
+  price?: number
 }
 
 export interface PrinterProjectFile<TPayload = unknown> {
@@ -35,6 +36,7 @@ export interface RecentJob {
   updatedAt: string
   status: JobStatus
   summary?: string
+  price?: number
 }
 
 export interface PrinterAppProjectResult<TPayload = unknown> {

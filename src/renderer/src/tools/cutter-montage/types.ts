@@ -43,6 +43,9 @@ export interface CutterSheetSettings {
   allowRotation: boolean
   preserveManualPositions: boolean
   showGrid: boolean
+  preferSameDesignGrouping?: boolean
+  fillDirection?: 'left-to-right' | 'top-to-bottom'
+  sortStrategy?: 'largest-first' | 'smallest-first' | 'piece-name' | 'quantity'
 }
 
 export interface PieceSourceFile {
@@ -191,6 +194,9 @@ export interface PlacedPiece {
 export interface CutterLayerVisibility {
   artwork: boolean
   cutlines: boolean
+  helpers?: boolean
+  artworkLocked?: boolean
+  cutlinesLocked?: boolean
 }
 
 export interface SelectionState {
@@ -208,6 +214,8 @@ export interface CutterExportSettings {
   strokeName: string
   includeArtwork: boolean
   includeCutlines: boolean
+  mode?: 'print-cut' | 'print-only' | 'cut-only'
+  preset?: 'svg-illustrator' | 'pdf-print-cut' | 'eps-cut-test'
 }
 
 export interface CutterProject {
@@ -224,6 +232,8 @@ export interface CutterLayoutResult {
   placedCount: number
   requestedCount: number
   usedHeightCm: number
+  usedAreaPercent?: number
+  wasteAreaPercent?: number
   warning?: string
 }
 

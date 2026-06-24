@@ -12,6 +12,9 @@ import {
 import { syncLegacyFieldsFromObjects } from './pieceModelSync'
 import { createPiecePresetFromSource, createPlacedPieceFromPreset } from './piecePresets'
 import { exportCutterSvg } from './svgExport'
+import { autoArrangePieces } from './nesting'
+import { detectOutOfBounds, detectOverlaps } from './nestingStrategies'
+import { runCutterPreflight } from './preflight'
 import type {
   ArtworkTransform,
   CutterProject,
@@ -185,6 +188,87 @@ async function run(): Promise<void> {
   )
   expect(!/<image[^>]+data-spot-name="CutContour"/.test(svg), 'cutline must not be raster')
 
+  const printOnlySvg = await (
+    await exportCutterSvg({
+      ...project,
+      exportSettings: {
+        ...project.exportSettings,
+        includeArtwork: true,
+        includeCutlines: false,
+        mode: 'print-only'
+      }
+    })
+  ).blob.text()
+  expectMatch(printOnlySvg, /<g id="Artwork"/, 'Print Only includes Artwork')
+  expect(!/<g id="CutContour"/.test(printOnlySvg), 'Print Only excludes CutContour group')
+  const cutOnlySvg = await (
+    await exportCutterSvg({
+      ...project,
+      exportSettings: {
+        ...project.exportSettings,
+        includeArtwork: false,
+        includeCutlines: true,
+        mode: 'cut-only'
+      }
+    })
+  ).blob.text()
+  expect(!/<g id="Artwork"/.test(cutOnlySvg), 'Cut Only excludes Artwork group')
+  expectMatch(cutOnlySvg, /<g id="CutContour"/, 'Cut Only includes CutContour')
+
+  const mixedPiece = { ...sameSizePiece(piece, 'mixed-small', 3, 2), quantity: 4 }
+  const largePiece = { ...sameSizePiece(piece, 'mixed-large', 8, 6), quantity: 2 }
+  const arranged = autoArrangePieces([mixedPiece, largePiece], {
+    ...DEFAULT_CUTTER_SHEET,
+    widthCm: 30,
+    heightCm: 30,
+    sortStrategy: 'largest-first'
+  })
+  expectEqual(arranged.placedCount, 6, 'mixed-size auto arrange places all requested pieces')
+  expect((arranged.usedAreaPercent ?? 0) > 0, 'auto arrange reports used area')
+  expectEqual(
+    detectOutOfBounds(arranged.placedPieces, {
+      ...DEFAULT_CUTTER_SHEET,
+      widthCm: 30,
+      heightCm: 30
+    }),
+    [],
+    'arranged pieces stay in bounds'
+  )
+
+  const overlapping = [
+    createPlacedPieceFromPreset(piece, 1, 1),
+    createPlacedPieceFromPreset(piece, 1.5, 1.5)
+  ]
+  expectEqual(detectOverlaps(overlapping).length, 1, 'overlap detection finds obvious collision')
+  const outside = { ...createPlacedPieceFromPreset(piece, 94, 119), widthCm: 5, heightCm: 5 }
+  expectEqual(
+    detectOutOfBounds([outside], project.sheet),
+    [outside.id],
+    'out-of-bounds detection finds overflow'
+  )
+  const preflight = runCutterPreflight({ ...project, placedPieces: overlapping })
+  expect(
+    preflight.issues.some((issue) => issue.id === 'overlap'),
+    'preflight reports overlaps'
+  )
+
+  const locked = { ...createPlacedPieceFromPreset(piece, 3, 4), locked: true }
+  const withLocked = autoArrangePieces(
+    [{ ...piece, quantity: 2 }],
+    { ...DEFAULT_CUTTER_SHEET, preserveManualPositions: false },
+    [locked]
+  )
+  expectEqual(
+    withLocked.placedPieces.find((placedPiece) => placedPiece.id === locked.id),
+    locked,
+    'locked placed piece remains fixed during auto arrange'
+  )
+  expectEqual(
+    withLocked.placedPieces.length,
+    2,
+    'locked retained copy counts toward requested quantity'
+  )
+
   const sameFileCopy = createPiecePresetFromSource(source, [piece])
   expectEqual(sameFileCopy.displayName, 'sticker copy 2', 'same-file duplicate naming')
   expectEqual(
@@ -270,6 +354,31 @@ function createSource(fileName: string): PieceSourceFile {
     previewUrl: 'blob:test-source',
     naturalWidthPx: 800,
     naturalHeightPx: 600
+  }
+}
+
+function sameSizePiece(
+  piece: ReturnType<typeof createPiecePresetFromSource>,
+  id: string,
+  widthCm: number,
+  heightCm: number
+) {
+  return {
+    ...piece,
+    id,
+    displayName: id,
+    widthCm,
+    heightCm,
+    artwork: { ...piece.artwork, transform: { ...piece.artwork.transform, widthCm, heightCm } },
+    cutline: { ...piece.cutline, transform: { ...piece.cutline.transform, widthCm, heightCm } },
+    objects: piece.objects.map((object) => ({
+      ...object,
+      id: `${id}-${object.id}`,
+      transform: { ...object.transform, widthCm, heightCm }
+    })),
+    artworkObjectId: `${id}-${piece.artworkObjectId}`,
+    cutlineObjectId: piece.cutlineObjectId ? `${id}-${piece.cutlineObjectId}` : undefined,
+    selectedObjectIds: []
   }
 }
 

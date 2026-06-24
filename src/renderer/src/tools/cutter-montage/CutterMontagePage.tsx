@@ -25,6 +25,7 @@ import { LayerVisibilityControls } from './components/LayerVisibilityControls'
 import { MontageArtboard } from './components/MontageArtboard'
 import { PieceEditor } from './components/PieceEditor'
 import { PieceLibrary } from './components/PieceLibrary'
+import { PreflightPanel } from './components/PreflightPanel'
 import { useCutterProject } from './hooks/useCutterProject'
 import { CUT_CONTOUR_NAME, normalizeSpotName } from './lib/colorSpot'
 import { DEFAULT_CUTTER_SHEET } from './lib/cutterLayout'
@@ -63,9 +64,17 @@ export function CutterMontagePage({
         pieces: cutter.pieces,
         placedPieces: cutter.placedPieces,
         sheet: cutter.sheet,
-        layers: cutter.layers
+        layers: cutter.layers,
+        exportSettings: cutter.exportSettings
       }),
-    [cutter.layers, cutter.pieces, cutter.placedPieces, cutter.sheet, cutter.sources]
+    [
+      cutter.exportSettings,
+      cutter.layers,
+      cutter.pieces,
+      cutter.placedPieces,
+      cutter.sheet,
+      cutter.sources
+    ]
   )
   const [savedProjectStateKey, setSavedProjectStateKey] = useState(projectStateKey)
   const isDirty = projectStateKey !== savedProjectStateKey
@@ -98,11 +107,7 @@ export function CutterMontagePage({
           pieces: cutter.pieces,
           placedPieces: cutter.placedPieces,
           layers: cutter.layers,
-          exportSettings: {
-            strokeName: normalizeSpotName(CUT_CONTOUR_NAME),
-            includeArtwork: cutter.layers.artwork,
-            includeCutlines: cutter.layers.cutlines
-          },
+          exportSettings: cutter.exportSettings,
           existingMetadata: projectMetadata
         })
         const result = await window.printerApp.saveProject({
@@ -136,6 +141,7 @@ export function CutterMontagePage({
       cutter.activePieceId,
       cutter.keyObject,
       cutter.layers,
+      cutter.exportSettings,
       cutter.mode,
       cutter.pieces,
       cutter.placedPieces,
@@ -241,6 +247,8 @@ export function CutterMontagePage({
             onModeChange={cutter.setMode}
             onSettingsChange={cutter.updateSheet}
             onAutoArrange={cutter.runAutoArrange}
+            onUndoAutoArrange={cutter.undoAutoArrange}
+            onCreateTestProject={import.meta.env.DEV ? cutter.createTestMontage : undefined}
           />
 
           {cutter.error && (
@@ -265,6 +273,7 @@ export function CutterMontagePage({
                 onAddToSheet={cutter.addPieceToSheet}
                 onPieceQuantityChange={cutter.updatePieceQuantity}
                 onPieceRotationAllowedChange={cutter.updatePieceRotationAllowed}
+                onRename={cutter.renamePiece}
               />
               <LayerVisibilityControls
                 layers={cutter.layers}
@@ -274,10 +283,13 @@ export function CutterMontagePage({
               />
               <ExportCutterPanel
                 canExport={cutter.canExport}
+                settings={cutter.exportSettings}
+                onModeChange={cutter.setExportMode}
                 onExportSvg={cutter.handleExportSvg}
                 onExportPdf={cutter.handleExportPdf}
                 onExportEps={cutter.handleExportEps}
               />
+              <PreflightPanel report={cutter.preflight} placedCount={cutter.placedPieces.length} />
             </aside>
 
             {cutter.mode === 'piece-editor' ? (
@@ -305,6 +317,9 @@ export function CutterMontagePage({
                 onRotatePiece={cutter.rotatePlacedPiece}
                 onToggleLock={cutter.togglePlacedLock}
                 onNudgeSelected={cutter.nudgeSelected}
+                outOfBoundsPieceIds={cutter.preflight.outOfBoundsIds}
+                overlapPieceIds={cutter.preflight.overlapIds}
+                onAlignSelected={cutter.alignSelected}
               />
             )}
           </div>
@@ -324,6 +339,13 @@ function getEmptyCutterProjectStateKey(): string {
     pieces: [],
     placedPieces: [],
     sheet: DEFAULT_CUTTER_SHEET,
-    layers: { artwork: true, cutlines: true }
+    layers: { artwork: true, cutlines: true },
+    exportSettings: {
+      strokeName: normalizeSpotName(CUT_CONTOUR_NAME),
+      includeArtwork: true,
+      includeCutlines: true,
+      mode: 'print-cut',
+      preset: 'svg-illustrator'
+    }
   })
 }

@@ -11,6 +11,7 @@ interface PlacedPieceItemProps {
   placed: PlacedPiece
   scale: number
   selected: boolean
+  warning?: 'out-of-bounds' | 'overlap'
   layers: CutterLayerVisibility
   sheetWidthCm: number
   sheetHeightCm: number
@@ -28,6 +29,7 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
   placed,
   scale,
   selected,
+  warning,
   layers,
   sheetWidthCm,
   sheetHeightCm,
@@ -68,7 +70,13 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
     <div
       ref={itemRef}
       className={`group absolute touch-none select-none rounded-sm ${
-        selected ? 'ring-2 ring-primary' : 'ring-1 ring-slate-300/60'
+        warning === 'out-of-bounds'
+          ? 'ring-2 ring-destructive'
+          : warning === 'overlap'
+            ? 'ring-2 ring-amber-500'
+            : selected
+              ? 'ring-2 ring-primary'
+              : 'ring-1 ring-slate-300/60'
       } ${dragging ? 'z-30 cursor-grabbing' : placed.locked ? 'z-10 cursor-not-allowed' : 'z-10 cursor-grab'}`}
       style={{
         width: placed.widthCm * scale,
@@ -223,6 +231,7 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
       )}
       <div className="pointer-events-none absolute left-1 top-1 rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
         {placed.displayName}
+        {warning ? ` · ${warning}` : ''}
       </div>
       {selected && (
         <div

@@ -2,6 +2,7 @@ import type { CutterLayoutResult, CutterSheetSettings, PiecePreset, PlacedPiece 
 import { getSafeArea } from './cutterLayout'
 import { createPlacedPieceFromPreset } from './piecePresets'
 import { mmToCm, roundToStep } from './units'
+import { calculateUsedArea, sortPiecesForNesting } from './nestingStrategies'
 
 export function autoArrangePieces(
   pieces: PiecePreset[],
@@ -11,7 +12,16 @@ export function autoArrangePieces(
   const safeArea = getSafeArea(settings)
   const spacingCm = mmToCm(settings.spacingMm)
   const gridStep = settings.snapToGrid ? settings.gridStepCm : 0.1
-  const placedPieces = settings.preserveManualPositions ? [...existingPieces] : []
+  const placedPieces = settings.preserveManualPositions
+    ? [...existingPieces]
+    : existingPieces.filter((piece) => piece.locked)
+  const retainedCountByPreset = new Map<string, number>()
+  for (const placed of placedPieces) {
+    retainedCountByPreset.set(
+      placed.presetId,
+      (retainedCountByPreset.get(placed.presetId) ?? 0) + 1
+    )
+  }
   let cursorX = safeArea.xCm
   let cursorY = safeArea.yCm
   let rowHeight = 0
@@ -24,11 +34,12 @@ export function autoArrangePieces(
     cursorY = roundToStep(lowestBottom + spacingCm, gridStep)
   }
 
-  let placedCount = 0
+  let placedCount = placedPieces.length
   const requestedCount = pieces.reduce((total, piece) => total + piece.quantity, 0)
 
-  for (const piece of pieces) {
-    for (let copy = 0; copy < piece.quantity; copy += 1) {
+  for (const piece of sortPiecesForNesting(pieces, settings)) {
+    const copiesToPlace = Math.max(0, piece.quantity - (retainedCountByPreset.get(piece.id) ?? 0))
+    for (let copy = 0; copy < copiesToPlace; copy += 1) {
       const placement = choosePlacement(piece, settings, cursorX, safeArea)
 
       if (!placement) {
@@ -45,6 +56,7 @@ export function autoArrangePieces(
           placedCount,
           requestedCount,
           usedHeightCm: cursorY,
+          ...calculateUsedArea(placedPieces, settings),
           warning: `${requestedCount - placedCount} piece(s) did not fit on the sheet.`
         }
       }
@@ -68,7 +80,8 @@ export function autoArrangePieces(
     placedPieces,
     placedCount,
     requestedCount,
-    usedHeightCm: cursorY + rowHeight
+    usedHeightCm: cursorY + rowHeight,
+    ...calculateUsedArea(placedPieces, settings)
   }
 }
 

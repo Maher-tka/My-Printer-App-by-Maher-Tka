@@ -31,6 +31,8 @@ interface LicensePageProps {
   activationMessage: string | null
   onActivateSerial: (serialKey: string) => Promise<LicenseActivationResult>
   onRefresh: () => Promise<void>
+  onResetLocal: () => Promise<void>
+  isDeveloperMode: boolean
   onNavigate: (route: AppRoute) => void
 }
 
@@ -42,6 +44,8 @@ export function LicensePage({
   activationMessage,
   onActivateSerial,
   onRefresh,
+  onResetLocal,
+  isDeveloperMode,
   onNavigate
 }: LicensePageProps): JSX.Element {
   const [serialKey, setSerialKey] = useState('')
@@ -90,6 +94,16 @@ export function LicensePage({
           <ArrowLeft data-icon="inline-start" />
           Back to Dashboard
         </Button>
+        {isDeveloperMode && (
+          <Button
+            variant="outline"
+            onClick={() => void onResetLocal()}
+            disabled={isLoading}
+            type="button"
+          >
+            Reset Local License / Trial Data
+          </Button>
+        )}
         <Button
           variant="outline"
           onClick={() => void onRefresh()}

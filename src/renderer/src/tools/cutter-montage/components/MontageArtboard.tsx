@@ -1,7 +1,13 @@
 import { Copy, LockKeyhole, RotateCw, Trash2 } from 'lucide-react'
 import { useMemo } from 'react'
 import { Button } from '@/components/ui/button'
-import type { CutterLayerVisibility, CutterSheetSettings, PiecePreset, PlacedPiece } from '../types'
+import type {
+  AlignmentCommand,
+  CutterLayerVisibility,
+  CutterSheetSettings,
+  PiecePreset,
+  PlacedPiece
+} from '../types'
 import { getSafeArea } from '../lib/cutterLayout'
 import { formatCm } from '../lib/cutterUnits'
 import { ArtboardResizeHandle } from './ArtboardResizeHandle'
@@ -22,6 +28,9 @@ interface MontageArtboardProps {
   onRotatePiece: (pieceId: string) => void
   onToggleLock: (pieceId: string) => void
   onNudgeSelected: (dxCm: number, dyCm: number) => void
+  outOfBoundsPieceIds?: string[]
+  overlapPieceIds?: string[]
+  onAlignSelected: (command: AlignmentCommand) => void
 }
 
 export function MontageArtboard({
@@ -38,7 +47,10 @@ export function MontageArtboard({
   onDeletePieces,
   onRotatePiece,
   onToggleLock,
-  onNudgeSelected
+  onNudgeSelected,
+  outOfBoundsPieceIds = [],
+  overlapPieceIds = [],
+  onAlignSelected
 }: MontageArtboardProps): JSX.Element {
   const pieceMap = useMemo(() => new Map(pieces.map((piece) => [piece.id, piece])), [pieces])
   const selectedPieces = placedPieces.filter((piece) => selectedPieceIds.includes(piece.id))
@@ -97,6 +109,33 @@ export function MontageArtboard({
             <Copy data-icon="inline-start" />
             Duplicate
           </Button>
+          {selectedPieceIds.length > 1 && (
+            <div className="flex items-center gap-1 rounded-md border bg-card p-1">
+              {(
+                [
+                  ['left', 'L'],
+                  ['center-horizontal', 'HC'],
+                  ['right', 'R'],
+                  ['top', 'T'],
+                  ['center-vertical', 'VC'],
+                  ['bottom', 'B'],
+                  ['distribute-horizontal', 'DH'],
+                  ['distribute-vertical', 'DV']
+                ] as Array<[AlignmentCommand, string]>
+              ).map(([command, label]) => (
+                <Button
+                  key={command}
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => onAlignSelected(command)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+          )}
           <Button
             type="button"
             size="sm"
@@ -192,6 +231,13 @@ export function MontageArtboard({
                 placed={placed}
                 scale={scale}
                 selected={selectedPieceIds.includes(placed.id)}
+                warning={
+                  outOfBoundsPieceIds.includes(placed.id)
+                    ? 'out-of-bounds'
+                    : overlapPieceIds.includes(placed.id)
+                      ? 'overlap'
+                      : undefined
+                }
                 layers={layers}
                 sheetWidthCm={settings.widthCm}
                 sheetHeightCm={settings.heightCm}

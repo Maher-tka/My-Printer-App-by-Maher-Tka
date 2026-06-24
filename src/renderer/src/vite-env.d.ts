@@ -60,6 +60,7 @@ declare global {
       license: {
         getState: () => Promise<LicenseSnapshot>
         activateSerial: (serialKey: string) => Promise<LicenseActivationResult>
+        resetLocal: () => Promise<LicenseSnapshot>
       }
       saveFile: (request: PrinterAppSaveFileRequest) => Promise<PrinterAppSaveResult>
       saveProject: (request: {

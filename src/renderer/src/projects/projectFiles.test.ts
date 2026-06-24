@@ -10,12 +10,19 @@ import {
 } from '../tools/cutter-montage/lib/piecePresets'
 import type { BookletPage, BookletSource } from '../tools/booklet-montage/types'
 import type { PieceSourceFile } from '../tools/cutter-montage/types'
-import { getBookletProjectStateKey, getCutterProjectStateKey } from './projectDirtyState'
+import { createDefaultHardcoverProject } from '../tools/hardcover-cover/hooks/useHardcoverProject'
+import {
+  getBookletProjectStateKey,
+  getCutterProjectStateKey,
+  getHardcoverProjectStateKey
+} from './projectDirtyState'
 import {
   createBookletProjectFile,
   createCutterProjectFile,
+  createHardcoverProjectFile,
   deserializeBookletProjectPayload,
   deserializeCutterProjectPayload,
+  deserializeHardcoverProjectPayload,
   getSuggestedProjectFileName,
   isPrinterProjectFile
 } from './projectFiles'
@@ -174,6 +181,20 @@ expectNotEqual(
 )
 URL.revokeObjectURL(restoredCutter.sources[0].previewUrl)
 
+const hardcoverState = createDefaultHardcoverProject()
+const hardcoverFile = createHardcoverProjectFile({ state: hardcoverState })
+const parsedHardcover = JSON.parse(JSON.stringify(hardcoverFile)) as unknown
+expectEqual(isPrinterProjectFile(parsedHardcover), true, 'hardcover project validation')
+const restoredHardcover = deserializeHardcoverProjectPayload(hardcoverFile.payload)
+expectEqual(restoredHardcover.setup.bookWidthMm, 210, 'hardcover book width restored')
+expectEqual(restoredHardcover.setup.spineWidthMm, 20, 'hardcover spine restored')
+expectEqual(hardcoverFile.metadata.tool, 'hardcover-cover', 'hardcover metadata tool')
+expectEqual(
+  getHardcoverProjectStateKey(restoredHardcover),
+  getHardcoverProjectStateKey(hardcoverState),
+  'hardcover dirty state survives save/open'
+)
+
 expectEqual(
   getSuggestedProjectFileName('Client: Job/01'),
   'Client- Job-01.mpjob',
@@ -185,19 +206,23 @@ const temporaryProjectFolder = await mkdtemp(join(tmpdir(), 'my-printer-app-proj
 try {
   const bookletPath = join(temporaryProjectFolder, 'booklet-round-trip.mpjob')
   const cutterPath = join(temporaryProjectFolder, 'cutter-round-trip.mpjob')
+  const hardcoverPath = join(temporaryProjectFolder, 'hardcover-round-trip.mpjob')
 
   await Promise.all([
     writeFile(bookletPath, JSON.stringify(bookletFile), 'utf8'),
-    writeFile(cutterPath, JSON.stringify(cutterFile), 'utf8')
+    writeFile(cutterPath, JSON.stringify(cutterFile), 'utf8'),
+    writeFile(hardcoverPath, JSON.stringify(hardcoverFile), 'utf8')
   ])
 
-  const [bookletFromDisk, cutterFromDisk] = await Promise.all([
+  const [bookletFromDisk, cutterFromDisk, hardcoverFromDisk] = await Promise.all([
     readFile(bookletPath, 'utf8').then((contents) => JSON.parse(contents) as unknown),
-    readFile(cutterPath, 'utf8').then((contents) => JSON.parse(contents) as unknown)
+    readFile(cutterPath, 'utf8').then((contents) => JSON.parse(contents) as unknown),
+    readFile(hardcoverPath, 'utf8').then((contents) => JSON.parse(contents) as unknown)
   ])
 
   expectEqual(isPrinterProjectFile(bookletFromDisk), true, 'booklet .mpjob disk validation')
   expectEqual(isPrinterProjectFile(cutterFromDisk), true, 'cutter .mpjob disk validation')
+  expectEqual(isPrinterProjectFile(hardcoverFromDisk), true, 'hardcover .mpjob disk validation')
 
   if (!isPrinterProjectFile(bookletFromDisk) || !isPrinterProjectFile(cutterFromDisk)) {
     throw new Error('Temporary .mpjob files did not pass project validation.')
@@ -220,11 +245,21 @@ try {
     'cutter .mpjob restores source bytes from disk'
   )
   URL.revokeObjectURL(cutterFromDiskState.sources[0].previewUrl)
+  if (!isPrinterProjectFile(hardcoverFromDisk))
+    throw new Error('Hardcover .mpjob did not pass validation.')
+  expectEqual(
+    deserializeHardcoverProjectPayload(hardcoverFromDisk.payload as typeof hardcoverFile.payload)
+      .content.front.studentName,
+    'Student Name',
+    'hardcover .mpjob restores cover content from disk'
+  )
 } finally {
   await rm(temporaryProjectFolder, { recursive: true, force: true })
 }
 
-console.log('Project file tests passed: booklet and cutter .mpjob memory and disk round trips.')
+console.log(
+  'Project file tests passed: booklet, cutter, and hardcover .mpjob memory and disk round trips.'
+)
 
 function expectEqual(actual: unknown, expected: unknown, label: string): void {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {

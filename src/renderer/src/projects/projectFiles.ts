@@ -17,6 +17,7 @@ import type {
   PlacedPiece
 } from '@/tools/cutter-montage/types'
 import { synchronizePieceEditorModel } from '@/tools/cutter-montage/lib/editorObjects'
+import type { HardcoverProjectState } from '@/tools/hardcover-cover/types'
 import {
   PRINTER_PROJECT_EXTENSION,
   PRINTER_PROJECT_SCHEMA,
@@ -28,7 +29,8 @@ import {
 
 export const projectToolLabels: Record<ProjectToolId, string> = {
   'booklet-montage': 'Booklet Montage',
-  'cutter-montage': 'Cutter Montage'
+  'cutter-montage': 'Cutter Montage',
+  'hardcover-cover': 'Hardcover Cover'
 }
 
 export interface SerializedBookletSource extends Omit<BookletSource, 'bytes'> {
@@ -81,12 +83,15 @@ export interface RestoredCutterProject {
   layers: CutterLayerVisibility
 }
 
+export type HardcoverProjectPayload = HardcoverProjectState
+
 interface MetadataInput {
   tool: ProjectToolId
   jobName: string
   sourceCount: number
   itemCount: number
   summary: string
+  price?: number
   existingMetadata?: ProjectMetadata | null
 }
 
@@ -236,6 +241,41 @@ export function deserializeCutterProjectPayload(
   }
 }
 
+export function createHardcoverProjectFile({
+  state,
+  existingMetadata
+}: {
+  state: HardcoverProjectState
+  existingMetadata?: ProjectMetadata | null
+}): PrinterProjectFile<HardcoverProjectPayload> {
+  return {
+    schema: PRINTER_PROJECT_SCHEMA,
+    version: PRINTER_PROJECT_VERSION,
+    metadata: createProjectMetadata({
+      tool: 'hardcover-cover',
+      jobName:
+        state.job.jobTitle.trim() ||
+        state.content.front.studentName.trim() ||
+        'Untitled Hardcover Cover',
+      sourceCount:
+        Number(Boolean(state.content.front.logoDataUrl)) +
+        Number(Boolean(state.content.front.backgroundDataUrl)) +
+        Number(Boolean(state.content.back.logoDataUrl)),
+      itemCount: Math.max(1, state.batchStudents.length),
+      summary: `${state.content.front.studentName || 'Unnamed student'}, ${state.setup.bookWidthMm} x ${state.setup.bookHeightMm} mm, ${state.setup.spineWidthMm} mm spine`,
+      price: getHardcoverQuoteTotal(state),
+      existingMetadata
+    }),
+    payload: state
+  }
+}
+
+export function deserializeHardcoverProjectPayload(
+  payload: HardcoverProjectPayload
+): HardcoverProjectState {
+  return structuredClone(payload)
+}
+
 export function isPrinterProjectFile(value: unknown): value is PrinterProjectFile {
   if (!value || typeof value !== 'object') {
     return false
@@ -249,7 +289,8 @@ export function isPrinterProjectFile(value: unknown): value is PrinterProjectFil
     Boolean(candidate.metadata) &&
     Boolean(candidate.payload) &&
     (candidate.metadata?.tool === 'booklet-montage' ||
-      candidate.metadata?.tool === 'cutter-montage')
+      candidate.metadata?.tool === 'cutter-montage' ||
+      candidate.metadata?.tool === 'hardcover-cover')
   )
 }
 
@@ -269,7 +310,8 @@ function createProjectMetadata(input: MetadataInput): ProjectMetadata {
     updatedAt: now,
     sourceCount: input.sourceCount,
     itemCount: input.itemCount,
-    summary: input.summary
+    summary: input.summary,
+    ...(input.price !== undefined ? { price: input.price } : {})
   }
 }
 
@@ -354,6 +396,14 @@ function getCutterProjectSummary(
     formatCount(placedPieces.length, 'placed piece'),
     formatCount(sources.length, 'source')
   ].join(', ')
+}
+
+function getHardcoverQuoteTotal(state: HardcoverProjectState): number {
+  const quote = state.job.quote
+  const subtotal =
+    Math.max(0, quote.materialCost + quote.printCost + quote.finishingCost + quote.designCost) *
+    Math.max(1, quote.quantity)
+  return Math.max(0, subtotal - Math.max(0, quote.discount))
 }
 
 function uint8ArrayToBase64(bytes: Uint8Array): string {

@@ -5,12 +5,14 @@ import type {
   SheetSettings
 } from '@/tools/booklet-montage/types'
 import type {
+  CutterExportSettings,
   CutterLayerVisibility,
   CutterSheetSettings,
   PiecePreset,
   PieceSourceFile,
   PlacedPiece
 } from '@/tools/cutter-montage/types'
+import type { HardcoverProjectState } from '@/tools/hardcover-cover/types'
 
 export function getBookletProjectStateKey({
   sources,
@@ -36,13 +38,15 @@ export function getCutterProjectStateKey({
   pieces,
   placedPieces,
   sheet,
-  layers
+  layers,
+  exportSettings
 }: {
   sources: PieceSourceFile[]
   pieces: PiecePreset[]
   placedPieces: PlacedPiece[]
   sheet: CutterSheetSettings
   layers: CutterLayerVisibility
+  exportSettings?: CutterExportSettings
 }): string {
   return JSON.stringify({
     sources: sources.map((source) => omitSourceBytes(source, true)),
@@ -52,8 +56,13 @@ export function getCutterProjectStateKey({
     })),
     placedPieces,
     sheet,
-    layers
+    layers,
+    exportSettings
   })
+}
+
+export function getHardcoverProjectStateKey(state: HardcoverProjectState): string {
+  return JSON.stringify(state)
 }
 
 function omitSourceBytes<T extends { bytes: Uint8Array }>(

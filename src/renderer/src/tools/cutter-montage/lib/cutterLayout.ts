@@ -11,7 +11,10 @@ export const DEFAULT_CUTTER_SHEET: CutterSheetSettings = {
   gridStepCm: 0.5,
   allowRotation: true,
   preserveManualPositions: false,
-  showGrid: true
+  showGrid: true,
+  preferSameDesignGrouping: true,
+  fillDirection: 'left-to-right',
+  sortStrategy: 'largest-first'
 }
 
 export function getSheetWarnings(settings: CutterSheetSettings): string[] {

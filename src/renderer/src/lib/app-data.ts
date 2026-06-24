@@ -17,7 +17,7 @@ export const printerTools: PrinterTool[] = [
     title: 'Hardcover Binding Cover Sheet',
     shortTitle: 'Hardcover Cover Sheet',
     description: 'Generate graduation or mémoire cover sheets with spine and layout guides',
-    status: 'coming-soon',
+    status: 'active',
     accent: 'violet',
     requiredFeature: 'paid-tools'
   },

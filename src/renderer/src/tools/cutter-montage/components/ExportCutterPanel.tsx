@@ -1,18 +1,23 @@
 import { Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import type { CutterExportSettings } from '../types'
 
 interface ExportCutterPanelProps {
   canExport: boolean
   onExportSvg: () => void
   onExportPdf: () => void
   onExportEps: () => void
+  settings: CutterExportSettings
+  onModeChange: (mode: NonNullable<CutterExportSettings['mode']>) => void
 }
 
 export function ExportCutterPanel({
   canExport,
   onExportSvg,
   onExportPdf,
-  onExportEps
+  onExportEps,
+  settings,
+  onModeChange
 }: ExportCutterPanelProps): JSX.Element {
   return (
     <section className="rounded-lg border bg-card p-4">
@@ -22,6 +27,20 @@ export function ExportCutterPanel({
         limitations.
       </p>
       <div className="mt-4 grid grid-cols-1 gap-2">
+        <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+          Export mode
+          <select
+            className="rounded-md border bg-background px-3 py-2 text-sm"
+            value={settings.mode ?? 'print-cut'}
+            onChange={(event) =>
+              onModeChange(event.target.value as NonNullable<CutterExportSettings['mode']>)
+            }
+          >
+            <option value="print-cut">Print + Cut</option>
+            <option value="print-only">Print only</option>
+            <option value="cut-only">Cut only</option>
+          </select>
+        </label>
         <Button type="button" onClick={onExportSvg} disabled={!canExport}>
           <Download data-icon="inline-start" />
           Export SVG

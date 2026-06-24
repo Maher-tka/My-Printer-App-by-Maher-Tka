@@ -23,7 +23,7 @@ interface ProjectWindowState {
 
 const projectWindowStates = new WeakMap<BrowserWindow, ProjectWindowState>()
 
-type ProjectToolId = 'booklet-montage' | 'cutter-montage'
+type ProjectToolId = 'booklet-montage' | 'cutter-montage' | 'hardcover-cover'
 
 interface ProjectMetadata {
   id: string
@@ -35,6 +35,7 @@ interface ProjectMetadata {
   sourceCount: number
   itemCount: number
   summary: string
+  price?: number
 }
 
 interface ProjectFile {
@@ -65,6 +66,7 @@ interface RecentJob {
   updatedAt: string
   status: 'Saved' | 'Missing'
   summary?: string
+  price?: number
 }
 
 export function registerProjectHandlers(): void {
@@ -356,7 +358,7 @@ function isProjectFile(value: unknown): value is ProjectFile {
   const commonPayloadIsValid =
     value.schema === PROJECT_SCHEMA &&
     value.version === PROJECT_VERSION &&
-    (tool === 'booklet-montage' || tool === 'cutter-montage') &&
+    (tool === 'booklet-montage' || tool === 'cutter-montage' || tool === 'hardcover-cover') &&
     isNonEmptyString(metadata.id) &&
     isNonEmptyString(metadata.jobName) &&
     isNonEmptyString(metadata.toolLabel) &&
@@ -364,7 +366,8 @@ function isProjectFile(value: unknown): value is ProjectFile {
     isNonEmptyString(metadata.updatedAt) &&
     typeof metadata.sourceCount === 'number' &&
     typeof metadata.itemCount === 'number' &&
-    typeof metadata.summary === 'string'
+    typeof metadata.summary === 'string' &&
+    (metadata.price === undefined || typeof metadata.price === 'number')
 
   if (!commonPayloadIsValid) {
     return false
@@ -376,6 +379,17 @@ function isProjectFile(value: unknown): value is ProjectFile {
       isRecord(value.payload.sheetBoardState) &&
       Array.isArray(value.payload.sources) &&
       Array.isArray(value.payload.pages)
+    )
+  }
+
+  if (tool === 'hardcover-cover') {
+    return (
+      isRecord(value.payload.setup) &&
+      isRecord(value.payload.content) &&
+      isRecord(value.payload.template) &&
+      Array.isArray(value.payload.batchStudents) &&
+      isRecord(value.payload.exportSettings) &&
+      isRecord(value.payload.job)
     )
   }
 
@@ -428,7 +442,9 @@ function isRecentProjectEntry(value: unknown): value is RecentProjectEntry {
     isRecord(value) &&
     isNonEmptyString(value.filePath) &&
     isRecord(value.metadata) &&
-    (value.metadata.tool === 'booklet-montage' || value.metadata.tool === 'cutter-montage') &&
+    (value.metadata.tool === 'booklet-montage' ||
+      value.metadata.tool === 'cutter-montage' ||
+      value.metadata.tool === 'hardcover-cover') &&
     isNonEmptyString(value.metadata.id) &&
     isNonEmptyString(value.metadata.jobName) &&
     isNonEmptyString(value.metadata.toolLabel) &&
@@ -436,7 +452,8 @@ function isRecentProjectEntry(value: unknown): value is RecentProjectEntry {
     isNonEmptyString(value.metadata.updatedAt) &&
     typeof value.metadata.sourceCount === 'number' &&
     typeof value.metadata.itemCount === 'number' &&
-    typeof value.metadata.summary === 'string'
+    typeof value.metadata.summary === 'string' &&
+    (value.metadata.price === undefined || typeof value.metadata.price === 'number')
   )
 }
 
@@ -454,7 +471,8 @@ function toRecentJob(
     date: metadata.updatedAt,
     updatedAt: metadata.updatedAt,
     status,
-    summary: metadata.summary
+    summary: metadata.summary,
+    price: metadata.price
   }
 }
 

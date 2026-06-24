@@ -10,7 +10,8 @@ import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
 import {
   isPrinterProjectFile,
   type BookletProjectPayload,
-  type CutterProjectPayload
+  type CutterProjectPayload,
+  type HardcoverProjectPayload
 } from '@/projects/projectFiles'
 import { SettingsPage } from '@/settings/SettingsPage'
 import { BookletMontagePage } from '@/tools/booklet-montage/BookletMontagePage'
@@ -294,7 +295,18 @@ export function App(): JSX.Element {
         />
       )}
       {activeRoute === 'hardcover-cover' && !showToolAccessOverlay && (
-        <HardcoverCoverPage onNavigate={navigate} />
+        <HardcoverCoverPage
+          key={openedProject?.instanceId ?? 'new-hardcover'}
+          onNavigate={navigate}
+          onOpenProject={openProject}
+          onProjectSessionChange={setActiveProjectSession}
+          onConfirmUnsavedChanges={confirmUnsavedChanges}
+          openedProject={
+            openedProject?.project.metadata.tool === 'hardcover-cover'
+              ? (openedProject as OpenedPrinterProject<HardcoverProjectPayload>)
+              : null
+          }
+        />
       )}
       {activeRoute === 'cutter-montage' && !showToolAccessOverlay && (
         <CutterMontagePage
@@ -319,6 +331,8 @@ export function App(): JSX.Element {
           activationMessage={license.activationMessage}
           onActivateSerial={license.activateSerial}
           onRefresh={license.refresh}
+          onResetLocal={license.resetLocal}
+          isDeveloperMode={license.isDeveloperMode}
           onNavigate={navigate}
         />
       )}

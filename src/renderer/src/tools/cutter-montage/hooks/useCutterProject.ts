@@ -26,8 +26,11 @@ import {
 import { exportCutterPdf } from '../lib/pdfCutExport'
 import { exportCutterSvg } from '../lib/svgExport'
 import { synchronizePieceEditorModel } from '../lib/editorObjects'
+import { runCutterPreflight, type CutterPreflightReport } from '../lib/preflight'
 import type {
   CutterExportResult,
+  CutterExportSettings,
+  AlignmentCommand,
   CutterLayerVisibility,
   CutterMode,
   CutterProject,
@@ -57,6 +60,8 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   selectedEditorObjects: EditorObjectType[]
   keyObject: KeyObjectState
   warnings: string[]
+  preflight: CutterPreflightReport
+  exportSettings: CutterExportSettings
   canExport: boolean
   status: string
   error: string | null
@@ -66,12 +71,15 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   importDesignFiles: (files: File[]) => Promise<void>
   updatePiece: (updatedPiece: PiecePreset) => void
   updatePieceQuantity: (pieceId: string, quantity: number) => void
+  renamePiece: (pieceId: string, name: string) => void
   updatePieceRotationAllowed: (pieceId: string, rotationAllowed: boolean) => void
   duplicatePiece: (pieceId: string) => void
   deletePiece: (pieceId: string) => void
   editPiece: (pieceId: string) => void
   addPieceToSheet: (pieceId: string) => void
   runAutoArrange: () => void
+  undoAutoArrange: () => void
+  createTestMontage: (count?: number) => void
   selectPlacedPiece: (pieceId: string, additive: boolean) => void
   movePlacedPiece: (pieceId: string, xCm: number, yCm: number) => void
   resizePlacedPiece: (pieceId: string, widthCm: number, heightCm: number) => void
@@ -80,9 +88,11 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   rotatePlacedPiece: (pieceId: string) => void
   togglePlacedLock: (pieceId: string) => void
   nudgeSelected: (dxCm: number, dyCm: number) => void
+  alignSelected: (command: AlignmentCommand) => void
   handleExportSvg: () => Promise<void>
   handleExportPdf: () => Promise<void>
   handleExportEps: () => Promise<void>
+  setExportMode: (mode: NonNullable<CutterExportSettings['mode']>) => void
   markPieceSaved: () => void
   clearProject: () => void
 } {
@@ -103,6 +113,16 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   const [layers, setLayers] = useState<CutterLayerVisibility>(
     () => initialState?.layers ?? defaultLayers
   )
+  const [exportSettings, setExportSettings] = useState<CutterExportSettings>(
+    () =>
+      initialProject?.payload.exportSettings ?? {
+        strokeName: normalizeSpotName(CUT_CONTOUR_NAME),
+        includeArtwork: true,
+        includeCutlines: true,
+        mode: 'print-cut',
+        preset: 'svg-illustrator'
+      }
+  )
   const [activePieceId, setActivePieceId] = useState<string | null>(
     () => initialState?.activePieceId ?? null
   )
@@ -116,6 +136,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   )
   const [error, setError] = useState<string | null>(null)
   const sourcesRef = useRef<PieceSourceFile[]>([])
+  const layoutBeforeAutoArrangeRef = useRef<PlacedPiece[] | null>(null)
   const warnings = getSheetWarnings(sheet)
   const canExport = placedPieces.length > 0
   const activePiece = pieces.find((piece) => piece.id === activePieceId) ?? null
@@ -143,14 +164,11 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
       pieces,
       placedPieces,
       layers,
-      exportSettings: {
-        strokeName: normalizeSpotName(CUT_CONTOUR_NAME),
-        includeArtwork: layers.artwork,
-        includeCutlines: layers.cutlines
-      }
+      exportSettings
     }),
-    [layers, pieces, placedPieces, sheet, sources]
+    [exportSettings, layers, pieces, placedPieces, sheet, sources]
   )
+  const preflight = useMemo(() => runCutterPreflight(project), [project])
 
   const updateSheet = useCallback((patch: Partial<CutterSheetSettings>): void => {
     setSheet((current) => ({
@@ -228,6 +246,17 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
       current.map((piece) =>
         piece.id === pieceId ? { ...piece, quantity: Math.max(1, Math.round(quantity)) } : piece
       )
+    )
+  }, [])
+
+  const renamePiece = useCallback((pieceId: string, name: string): void => {
+    const displayName = name.trim()
+    if (!displayName) return
+    setPieces((current) =>
+      current.map((piece) => (piece.id === pieceId ? { ...piece, displayName } : piece))
+    )
+    setPlacedPieces((current) =>
+      current.map((piece) => (piece.presetId === pieceId ? { ...piece, displayName } : piece))
     )
   }, [])
 
@@ -336,6 +365,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
       return
     }
 
+    layoutBeforeAutoArrangeRef.current = placedPieces
     const result = autoArrangePieces(pieces, sheet, placedPieces)
 
     setPlacedPieces(result.placedPieces)
@@ -343,10 +373,48 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     setMode('montage-sheet')
     setStatus(
       result.warning ??
-        `Auto arranged ${result.placedCount} of ${result.requestedCount} piece(s). Used height: ${result.usedHeightCm.toFixed(1)} cm.`
+        `Auto arranged ${result.placedCount} of ${result.requestedCount} piece(s). Used ${result.usedAreaPercent?.toFixed(1) ?? '0'}%; estimated waste ${result.wasteAreaPercent?.toFixed(1) ?? '100'}%.`
     )
     setError(result.warning ?? null)
   }, [pieces, placedPieces, sheet])
+
+  const undoAutoArrange = useCallback((): void => {
+    if (!layoutBeforeAutoArrangeRef.current) return
+    setPlacedPieces(layoutBeforeAutoArrangeRef.current)
+    layoutBeforeAutoArrangeRef.current = null
+    setStatus('Restored the layout from before Auto Arrange.')
+  }, [])
+
+  const createTestMontage = useCallback((count = 100): void => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><circle cx="200" cy="200" r="180" fill="#2563eb"/><text x="200" y="220" text-anchor="middle" font-size="64" fill="white">TEST</text></svg>'
+    const bytes = new TextEncoder().encode(svg)
+    const previewUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/svg+xml' }))
+    const source: PieceSourceFile = {
+      id: createCutterId('source'),
+      fileName: 'test-sticker.svg',
+      displayName: 'Test Sticker',
+      mimeType: 'image/svg+xml',
+      bytes,
+      previewUrl,
+      naturalWidthPx: 400,
+      naturalHeightPx: 400
+    }
+    const piece = createPiecePresetFromSource(source, [])
+    piece.quantity = Math.max(1, count)
+    piece.displayName = count === 20 ? 'Ellipse Test Sticker' : 'Stress Test Sticker'
+    setSources((current) => [...current, source])
+    setPieces([piece])
+    setActivePieceId(piece.id)
+    const result = autoArrangePieces(
+      [piece],
+      { ...DEFAULT_CUTTER_SHEET, widthCm: 95, heightCm: 120 },
+      []
+    )
+    setPlacedPieces(result.placedPieces)
+    setMode('montage-sheet')
+    setStatus(`Created a development test montage with ${result.placedCount} placed copies.`)
+  }, [])
 
   const selectPlacedPiece = useCallback((pieceId: string, additive: boolean): void => {
     setSelectedPlacedIds((current) => {
@@ -456,6 +524,17 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     [selectedPlacedIds, sheet.heightCm, sheet.widthCm]
   )
 
+  const alignSelected = useCallback(
+    (command: AlignmentCommand): void => {
+      if (selectedPlacedIds.length < 2) return
+      setPlacedPieces((current) => alignPlacedPieces(current, selectedPlacedIds, command))
+      setStatus(
+        `Aligned ${selectedPlacedIds.length} placed pieces; the first selected piece stayed fixed.`
+      )
+    },
+    [selectedPlacedIds]
+  )
+
   const saveExport = useCallback(async (result: CutterExportResult): Promise<void> => {
     const extension = result.fileName.split('.').pop() ?? 'svg'
 
@@ -486,32 +565,44 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   const handleExportSvg = useCallback(async (): Promise<void> => {
     try {
       setError(null)
+      if (!confirmPreflight(preflight)) return
       setStatus('Creating SVG export...')
       await saveExport(await exportCutterSvg(project))
     } catch (exportError) {
       setError(getErrorMessage(exportError))
     }
-  }, [project, saveExport])
+  }, [preflight, project, saveExport])
 
   const handleExportPdf = useCallback(async (): Promise<void> => {
     try {
       setError(null)
+      if (!confirmPreflight(preflight)) return
       setStatus('Creating PDF export...')
       await saveExport(await exportCutterPdf(project))
     } catch (exportError) {
       setError(getErrorMessage(exportError))
     }
-  }, [project, saveExport])
+  }, [preflight, project, saveExport])
 
   const handleExportEps = useCallback(async (): Promise<void> => {
     try {
       setError(null)
+      if (!confirmPreflight(preflight)) return
       setStatus('Creating EPS export...')
       await saveExport(exportCutterEps(project))
     } catch (exportError) {
       setError(getErrorMessage(exportError))
     }
-  }, [project, saveExport])
+  }, [preflight, project, saveExport])
+
+  const setExportMode = useCallback((mode: NonNullable<CutterExportSettings['mode']>): void => {
+    setExportSettings((current) => ({
+      ...current,
+      mode,
+      includeArtwork: mode !== 'cut-only',
+      includeCutlines: mode !== 'print-only'
+    }))
+  }, [])
 
   const markPieceSaved = useCallback((): void => {
     setMode('montage-sheet')
@@ -529,6 +620,13 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     setPieces([])
     setPlacedPieces([])
     setLayers(defaultLayers)
+    setExportSettings({
+      strokeName: normalizeSpotName(CUT_CONTOUR_NAME),
+      includeArtwork: true,
+      includeCutlines: true,
+      mode: 'print-cut',
+      preset: 'svg-illustrator'
+    })
     setActivePieceId(null)
     setSelectedPlacedIds([])
     setStatus('Started a new cutter project. Import artwork to begin.')
@@ -548,6 +646,8 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     selectedEditorObjects,
     keyObject,
     warnings,
+    preflight,
+    exportSettings,
     canExport,
     status,
     error,
@@ -557,12 +657,15 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     importDesignFiles,
     updatePiece,
     updatePieceQuantity,
+    renamePiece,
     updatePieceRotationAllowed,
     duplicatePiece,
     deletePiece,
     editPiece,
     addPieceToSheet,
     runAutoArrange,
+    undoAutoArrange,
+    createTestMontage,
     selectPlacedPiece,
     movePlacedPiece,
     resizePlacedPiece,
@@ -571,12 +674,21 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     rotatePlacedPiece,
     togglePlacedLock,
     nudgeSelected,
+    alignSelected,
     handleExportSvg,
     handleExportPdf,
     handleExportEps,
+    setExportMode,
     markPieceSaved,
     clearProject
   }
+}
+
+function confirmPreflight(preflight: CutterPreflightReport): boolean {
+  if (preflight.issues.length === 0) return true
+  return window.confirm(
+    `Preflight found ${preflight.issues.length} issue(s):\n\n${preflight.issues.map((item) => `• ${item.message}`).join('\n')}\n\nContinue export anyway?`
+  )
 }
 
 function getLegacyEditorState(
@@ -674,6 +786,43 @@ function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
+}
+
+function alignPlacedPieces(
+  pieces: PlacedPiece[],
+  selectedIds: string[],
+  command: AlignmentCommand
+): PlacedPiece[] {
+  const selected = pieces.filter((piece) => selectedIds.includes(piece.id))
+  const key = pieces.find((piece) => piece.id === selectedIds[0])
+  if (!key || selected.length < 2) return pieces
+  if (command === 'distribute-horizontal' || command === 'distribute-vertical') {
+    const horizontal = command === 'distribute-horizontal'
+    const sorted = [...selected].sort((a, b) => (horizontal ? a.xCm - b.xCm : a.yCm - b.yCm))
+    const first = sorted[0]
+    const last = sorted[sorted.length - 1]
+    const start = horizontal ? first.xCm : first.yCm
+    const end = horizontal ? last.xCm : last.yCm
+    const step = (end - start) / Math.max(sorted.length - 1, 1)
+    const positions = new Map(sorted.map((piece, index) => [piece.id, start + step * index]))
+    return pieces.map((piece) =>
+      !positions.has(piece.id) || piece.locked
+        ? piece
+        : horizontal
+          ? { ...piece, xCm: positions.get(piece.id)! }
+          : { ...piece, yCm: positions.get(piece.id)! }
+    )
+  }
+  return pieces.map((piece) => {
+    if (!selectedIds.includes(piece.id) || piece.id === key.id || piece.locked) return piece
+    if (command === 'left') return { ...piece, xCm: key.xCm }
+    if (command === 'right') return { ...piece, xCm: key.xCm + key.widthCm - piece.widthCm }
+    if (command === 'center-horizontal')
+      return { ...piece, xCm: key.xCm + (key.widthCm - piece.widthCm) / 2 }
+    if (command === 'top') return { ...piece, yCm: key.yCm }
+    if (command === 'bottom') return { ...piece, yCm: key.yCm + key.heightCm - piece.heightCm }
+    return { ...piece, yCm: key.yCm + (key.heightCm - piece.heightCm) / 2 }
+  })
 }
 
 function getErrorMessage(error: unknown): string {

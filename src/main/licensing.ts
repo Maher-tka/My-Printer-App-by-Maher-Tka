@@ -1,6 +1,6 @@
 import { app, ipcMain, safeStorage } from 'electron'
 import { createHmac, randomBytes, randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type {
   LicenseActivationResult,
@@ -57,6 +57,14 @@ export function registerLicenseHandlers(): void {
   ipcMain.handle('license:activate-serial', async (_event, serialKey: string) =>
     runLicenseOperation(() => activateSerialKey(serialKey))
   )
+  if (!app.isPackaged) {
+    ipcMain.handle('license:reset-local', async () =>
+      runLicenseOperation(async () => {
+        await rm(getLicenseFilePath(), { force: true })
+        return getLicenseSnapshot()
+      })
+    )
+  }
 }
 
 function runLicenseOperation<T>(operation: () => Promise<T>): Promise<T> {

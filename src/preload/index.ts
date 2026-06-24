@@ -8,7 +8,8 @@ contextBridge.exposeInMainWorld('printerApp', {
   license: {
     getState: (): Promise<LicenseSnapshot> => ipcRenderer.invoke('license:get-state'),
     activateSerial: (serialKey: string): Promise<LicenseActivationResult> =>
-      ipcRenderer.invoke('license:activate-serial', serialKey)
+      ipcRenderer.invoke('license:activate-serial', serialKey),
+    resetLocal: (): Promise<LicenseSnapshot> => ipcRenderer.invoke('license:reset-local')
   },
   saveFile: (request: {
     suggestedName: string

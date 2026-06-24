@@ -12,11 +12,12 @@
     "format:check": "prettier --check .",
     "license:keygen": "tsx scripts/license-keygen.ts",
     "license:generate": "tsx src/main/license-generator-cli.ts",
-    "test": "npm run test:license && npm run test:booklet && npm run test:projects && npm run test:cutter",
+    "test": "npm run test:license && npm run test:booklet && npm run test:projects && npm run test:cutter && npm run test:hardcover",
     "test:license": "tsx src/main/license-serial.test.ts",
     "test:booklet": "tsx src/renderer/src/tools/booklet-montage/lib/bookletImposition.test.ts",
     "test:projects": "tsx --tsconfig tsconfig.web.json src/renderer/src/projects/projectFiles.test.ts",
     "test:cutter": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/editorWorkflow.test.ts",
+    "test:hardcover": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/coverCalculations.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/spineTextLayout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/hardcoverExport.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "preview": "electron-vite preview --config electron.vite.config.ts"
   },

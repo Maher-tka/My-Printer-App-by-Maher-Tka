@@ -10,6 +10,7 @@ interface LicenseStateController {
   activationMessage: string | null
   refresh: () => Promise<void>
   activateSerial: (serialKey: string) => Promise<LicenseActivationResult>
+  resetLocal: () => Promise<void>
 }
 
 const TICK_MS = 1000
@@ -104,6 +105,21 @@ export function useLicenseState(): LicenseStateController {
     [state]
   )
 
+  const resetLocal = useCallback(async (): Promise<void> => {
+    if (!IS_DEVELOPER_TEST_MODE || !window.printerApp?.license.resetLocal) return
+    try {
+      setIsLoading(true)
+      setError(null)
+      setActivationMessage(null)
+      setSnapshot(await window.printerApp.license.resetLocal())
+      setActivationMessage('Local license and trial data reset for development testing.')
+    } catch (requestError) {
+      setError(getErrorMessage(requestError))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
   return {
     state,
     isDeveloperMode: IS_DEVELOPER_TEST_MODE,
@@ -112,7 +128,8 @@ export function useLicenseState(): LicenseStateController {
     error,
     activationMessage,
     refresh,
-    activateSerial
+    activateSerial,
+    resetLocal
   }
 }
 

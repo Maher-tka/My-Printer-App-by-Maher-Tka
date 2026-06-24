@@ -92,7 +92,7 @@ export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.El
               <FolderOpen className="mx-auto mb-3 size-8 text-muted-foreground" />
               <p className="font-medium">No saved jobs yet</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Saved booklet and cutter projects will appear here.
+                Saved booklet, cutter, and hardcover projects will appear here.
               </p>
             </div>
           </div>
@@ -120,6 +120,11 @@ export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.El
                         <p className="truncate text-xs text-muted-foreground" title={job.filePath}>
                           {job.filePath}
                         </p>
+                        {job.price !== undefined && (
+                          <p className="mt-1 text-xs font-medium text-foreground">
+                            Price: {job.price.toFixed(2)}
+                          </p>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{job.tool}</TableCell>

@@ -10,6 +10,8 @@ interface CutterToolbarProps {
   onModeChange: (mode: CutterMode) => void
   onSettingsChange: (settings: Partial<CutterSheetSettings>) => void
   onAutoArrange: () => void
+  onUndoAutoArrange: () => void
+  onCreateTestProject?: (count: number) => void
 }
 
 export function CutterToolbar({
@@ -19,7 +21,9 @@ export function CutterToolbar({
   hasPieces,
   onModeChange,
   onSettingsChange,
-  onAutoArrange
+  onAutoArrange,
+  onUndoAutoArrange,
+  onCreateTestProject
 }: CutterToolbarProps): JSX.Element {
   return (
     <div className="sticky top-0 z-10 rounded-lg border bg-card/95 p-3 shadow-sm backdrop-blur">
@@ -54,6 +58,32 @@ export function CutterToolbar({
           step={0.5}
           onChange={(widthCm) => onSettingsChange({ widthCm })}
         />
+        <NumberControl
+          label="Sheet margin"
+          suffix="mm"
+          value={settings.safeMarginCm * 10}
+          min={0}
+          max={100}
+          step={1}
+          onChange={(value) => onSettingsChange({ safeMarginCm: value / 10 })}
+        />
+        <label className="flex w-40 flex-col gap-1 text-xs font-medium text-muted-foreground">
+          Sort strategy
+          <select
+            className="h-10 rounded-md border bg-background px-2 text-sm"
+            value={settings.sortStrategy ?? 'largest-first'}
+            onChange={(event) =>
+              onSettingsChange({
+                sortStrategy: event.target.value as NonNullable<CutterSheetSettings['sortStrategy']>
+              })
+            }
+          >
+            <option value="largest-first">Largest first</option>
+            <option value="smallest-first">Smallest first</option>
+            <option value="piece-name">Piece name</option>
+            <option value="quantity">Quantity</option>
+          </select>
+        </label>
         <NumberControl
           label="Sheet height"
           suffix="cm"
@@ -94,6 +124,29 @@ export function CutterToolbar({
           <Wand2 data-icon="inline-start" />
           Auto Arrange
         </Button>
+        <Button type="button" variant="outline" onClick={onUndoAutoArrange}>
+          Undo Arrange
+        </Button>
+        {onCreateTestProject && (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onCreateTestProject(20)}
+            >
+              Create Test Cutter Project
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onCreateTestProject(100)}
+            >
+              Create Test Montage (100)
+            </Button>
+          </>
+        )}
       </div>
       <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1">

@@ -14,6 +14,7 @@ interface PieceLibraryProps {
   onAddToSheet: (pieceId: string) => void
   onPieceQuantityChange: (pieceId: string, quantity: number) => void
   onPieceRotationAllowedChange: (pieceId: string, rotationAllowed: boolean) => void
+  onRename: (pieceId: string, name: string) => void
 }
 
 export function PieceLibrary({
@@ -25,7 +26,8 @@ export function PieceLibrary({
   onDeletePiece,
   onAddToSheet,
   onPieceQuantityChange,
-  onPieceRotationAllowedChange
+  onPieceRotationAllowedChange,
+  onRename
 }: PieceLibraryProps): JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -61,6 +63,7 @@ export function PieceLibrary({
               onAddToSheet={onAddToSheet}
               onQuantityChange={onPieceQuantityChange}
               onRotationAllowedChange={onPieceRotationAllowedChange}
+              onRename={onRename}
             />
           ))
         )}

@@ -12,6 +12,7 @@ interface PieceCardProps {
   onAddToSheet: (pieceId: string) => void
   onQuantityChange: (pieceId: string, quantity: number) => void
   onRotationAllowedChange: (pieceId: string, rotationAllowed: boolean) => void
+  onRename: (pieceId: string, name: string) => void
 }
 
 export function PieceCard({
@@ -22,7 +23,8 @@ export function PieceCard({
   onDelete,
   onAddToSheet,
   onQuantityChange,
-  onRotationAllowedChange
+  onRotationAllowedChange,
+  onRename
 }: PieceCardProps): JSX.Element {
   return (
     <article
@@ -39,10 +41,18 @@ export function PieceCard({
           />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{piece.displayName}</p>
+          <input
+            className="w-full rounded border bg-background px-2 py-1 text-sm font-semibold"
+            value={piece.displayName}
+            aria-label="Piece name"
+            onChange={(event) => onRename(piece.id, event.target.value)}
+          />
           <p className="truncate text-xs text-muted-foreground">{piece.sourceFileName}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {formatCm(piece.widthCm)} x {formatCm(piece.heightCm)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {piece.mask.enabled ? 'Mask active' : 'No mask'} · {piece.cutline.shape} cutline
           </p>
           <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
             Qty
