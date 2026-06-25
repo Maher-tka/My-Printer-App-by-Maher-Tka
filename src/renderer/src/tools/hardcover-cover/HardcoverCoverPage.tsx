@@ -7,6 +7,9 @@ import { useJobStore } from '@/jobs/useJobStore'
 import { batchCoverFileName, safeFileName } from '@/lib/fileNaming'
 import { createProjectFolderPlan } from '@/lib/projectFolders'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
+import { runHardcoverPreflight } from '@/preflight/hardcoverPreflight'
+import { PreflightDialog } from '@/preflight/preflightUI'
+import type { PreflightReport } from '@/preflight/preflightTypes'
 import { ProjectFileActions } from '@/projects/ProjectFileActions'
 import { getHardcoverProjectStateKey } from '@/projects/projectDirtyState'
 import {
@@ -74,6 +77,10 @@ export function HardcoverCoverPage({
   )
   const [batchProgress, setBatchProgress] = useState<string | null>(null)
   const [showLowEndMockup, setShowLowEndMockup] = useState(false)
+  const [pendingExport, setPendingExport] = useState<{
+    report: PreflightReport
+    run: () => void
+  } | null>(null)
   const stateKey = useMemo(() => getHardcoverProjectStateKey(hardcover.state), [hardcover.state])
   const isDirty = stateKey !== savedStateKey
   const projectName =
@@ -81,6 +88,32 @@ export function HardcoverCoverPage({
     hardcover.state.job.jobTitle ||
     hardcover.state.content.front.studentName ||
     'Untitled Hardcover Cover'
+  const hardcoverPreflight = useMemo(() => {
+    const wrap = hardcover.state.setup.wrap
+    return runHardcoverPreflight({
+      bookWidthMm: hardcover.state.setup.bookWidthMm,
+      bookHeightMm: hardcover.state.setup.bookHeightMm,
+      spineWidthMm: hardcover.state.setup.spineWidthMm,
+      wrapMarginsMm: [wrap.topMm, wrap.rightMm, wrap.bottomMm, wrap.leftMm],
+      fullWidthMm: hardcover.dimensions.fullWidthMm,
+      fullHeightMm: hardcover.dimensions.fullHeightMm,
+      title: hardcover.state.content.front.title,
+      studentName: hardcover.state.content.front.studentName,
+      studentNameRequired: true,
+      spineTextFits: hardcover.spineLayout.fits,
+      textInsideSafeZones: !hardcover.warnings.some((warning) => /safe/i.test(warning)),
+      exportMode: hardcover.state.exportSettings.mode
+    })
+  }, [hardcover.dimensions, hardcover.spineLayout.fits, hardcover.state, hardcover.warnings])
+
+  const createProjectSnapshot = useCallback(
+    () =>
+      createHardcoverProjectFile({
+        state: hardcover.state,
+        existingMetadata: projectMetadata
+      }),
+    [hardcover.state, projectMetadata]
+  )
 
   const saveProject = useCallback(
     async (saveAs: boolean): Promise<boolean> => {
@@ -91,12 +124,12 @@ export function HardcoverCoverPage({
       const keyAtSave = stateKey
       setIsBusy(true)
       try {
-        const project = createHardcoverProjectFile({
-          state: hardcover.state,
-          existingMetadata: projectMetadata
-        })
+        const project = createProjectSnapshot()
         const result = await window.printerApp.saveProject({
-          suggestedName: getSuggestedProjectFileName(project.metadata.jobName),
+          suggestedName: getSuggestedProjectFileName(
+            project.metadata.jobName,
+            project.metadata.tool
+          ),
           filePath: saveAs ? null : projectFilePath,
           project
         })
@@ -130,17 +163,36 @@ export function HardcoverCoverPage({
     [
       hardcover.quote.finalPrice,
       hardcover.quote.remaining,
+      createProjectSnapshot,
       hardcover.state,
       projectFilePath,
-      projectMetadata,
       saveJob,
       stateKey
     ]
   )
 
   useEffect(() => {
-    onProjectSessionChange({ isDirty, projectName, save: () => saveProject(false) })
-  }, [isDirty, onProjectSessionChange, projectName, saveProject])
+    onProjectSessionChange({
+      isDirty,
+      projectName,
+      filePath: projectFilePath,
+      snapshot: createProjectSnapshot(),
+      preflight: {
+        warningsCount: hardcoverPreflight.warnings.length,
+        preflightStatus: hardcoverPreflight.status
+      },
+      save: () => saveProject(false)
+    })
+  }, [
+    createProjectSnapshot,
+    hardcoverPreflight.status,
+    hardcoverPreflight.warnings.length,
+    isDirty,
+    onProjectSessionChange,
+    projectFilePath,
+    projectName,
+    saveProject
+  ])
   useEffect(() => () => onProjectSessionChange(null), [onProjectSessionChange])
 
   const startNew = async (): Promise<void> => {
@@ -196,6 +248,13 @@ export function HardcoverCoverPage({
     } finally {
       setIsBusy(false)
     }
+  }
+
+  const requestHardcoverExport = (run: () => void): void => {
+    setPendingExport({
+      report: hardcoverPreflight,
+      run
+    })
   }
 
   const saveTemplateFile = async (): Promise<void> => {
@@ -423,14 +482,25 @@ export function HardcoverCoverPage({
             batchCount={hardcover.state.batchStudents.length}
             isBusy={isBusy}
             onChange={hardcover.updateExportSettings}
-            onPdf={() => void runExport('pdf')}
-            onSvg={() => void runExport('svg')}
-            onImage={() => void runExport('image')}
-            onBatchSeparate={() => void exportBatchSeparate()}
-            onBatchCombined={() => void exportBatchCombined()}
+            onPdf={() => requestHardcoverExport(() => void runExport('pdf'))}
+            onSvg={() => requestHardcoverExport(() => void runExport('svg'))}
+            onImage={() => requestHardcoverExport(() => void runExport('image'))}
+            onBatchSeparate={() => requestHardcoverExport(() => void exportBatchSeparate())}
+            onBatchCombined={() => requestHardcoverExport(() => void exportBatchCombined())}
           />
         </CardContent>
       </Card>
+      {pendingExport && (
+        <PreflightDialog
+          report={pendingExport.report}
+          onCancel={() => setPendingExport(null)}
+          onConfirm={() => {
+            const run = pendingExport.run
+            setPendingExport(null)
+            run()
+          }}
+        />
+      )}
     </div>
   )
 }

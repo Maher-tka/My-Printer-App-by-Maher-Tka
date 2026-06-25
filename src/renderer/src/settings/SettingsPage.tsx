@@ -1,4 +1,4 @@
-import { ArrowLeft, Gauge, Settings } from 'lucide-react'
+import { Activity, ArrowLeft, Gauge, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -94,11 +94,19 @@ export function SettingsPage({ onNavigate }: SettingsPageProps): JSX.Element {
           </section>
 
           <section className="rounded-lg border bg-card p-4">
-            <h3 className="font-semibold">Local-first workspace</h3>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Printer presets, folders, and shop defaults will stay on this computer. No cloud login
-              or payment integration is configured.
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">Local-first workspace</h3>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Printer presets, folders, and shop defaults will stay on this computer. No cloud
+                  login or payment integration is configured.
+                </p>
+              </div>
+              <Button type="button" variant="outline" onClick={() => onNavigate('app-health')}>
+                <Activity data-icon="inline-start" />
+                Open App Health
+              </Button>
+            </div>
           </section>
         </CardContent>
       </Card>

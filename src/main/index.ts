@@ -3,6 +3,12 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { registerLicenseHandlers } from './licensing.js'
 import { attachProjectWindowProtection, registerProjectHandlers } from './project-persistence.js'
+import {
+  recordAppError,
+  recordExportResult,
+  registerReleaseRuntimeHandlers
+} from './release-runtime.js'
+import type { ExportContext } from '../shared/release-types.js'
 
 const isDevelopment = Boolean(process.env.ELECTRON_RENDERER_URL)
 
@@ -46,6 +52,7 @@ app.whenReady().then(() => {
   registerBookletExportHandlers()
   registerLicenseHandlers()
   registerProjectHandlers()
+  registerReleaseRuntimeHandlers()
   createMainWindow()
 
   app.on('activate', () => {
@@ -73,29 +80,50 @@ interface WriteOutputFileRequest {
 }
 
 function registerBookletExportHandlers(): void {
-  ipcMain.handle('booklet:save-file', async (event, request: SaveFileRequest) => {
-    try {
-      const owner = BrowserWindow.fromWebContents(event.sender)
-      const options = {
-        title: 'Save booklet montage file',
-        defaultPath: request.suggestedName,
-        filters: request.filters
+  ipcMain.handle(
+    'booklet:save-file',
+    async (event, request: SaveFileRequest, context?: ExportContext) => {
+      try {
+        const owner = BrowserWindow.fromWebContents(event.sender)
+        const options = {
+          title: 'Save booklet montage file',
+          defaultPath: request.suggestedName,
+          filters: request.filters
+        }
+        const result = owner
+          ? await dialog.showSaveDialog(owner, options)
+          : await dialog.showSaveDialog(options)
+
+        if (result.canceled || !result.filePath) {
+          await recordExportResult({
+            status: 'canceled',
+            context,
+            suggestedName: request.suggestedName
+          })
+          return { ok: false, canceled: true }
+        }
+
+        await writeFile(result.filePath, toBuffer(request.bytes))
+        await recordExportResult({
+          status: 'success',
+          context,
+          suggestedName: request.suggestedName,
+          filePath: result.filePath
+        })
+
+        return { ok: true, filePath: result.filePath }
+      } catch (error) {
+        recordAppError('save-file', error)
+        await recordExportResult({
+          status: 'failed',
+          context,
+          suggestedName: request?.suggestedName ?? 'export',
+          error
+        })
+        return { ok: false, error: getErrorMessage(error) }
       }
-      const result = owner
-        ? await dialog.showSaveDialog(owner, options)
-        : await dialog.showSaveDialog(options)
-
-      if (result.canceled || !result.filePath) {
-        return { ok: false, canceled: true }
-      }
-
-      await writeFile(result.filePath, toBuffer(request.bytes))
-
-      return { ok: true, filePath: result.filePath }
-    } catch (error) {
-      return { ok: false, error: getErrorMessage(error) }
     }
-  })
+  )
 
   ipcMain.handle('booklet:select-output-folder', async (event) => {
     try {
@@ -120,7 +148,12 @@ function registerBookletExportHandlers(): void {
 
   ipcMain.handle(
     'booklet:write-files-to-folder',
-    async (_event, folderPath: string, files: WriteOutputFileRequest[]) => {
+    async (
+      _event,
+      folderPath: string,
+      files: WriteOutputFileRequest[],
+      context?: ExportContext
+    ) => {
       try {
         const folder = resolve(folderPath)
         const writtenPaths: string[] = []
@@ -141,8 +174,21 @@ function registerBookletExportHandlers(): void {
           writtenPaths.push(targetPath)
         }
 
+        await recordExportResult({
+          status: 'success',
+          context,
+          suggestedName: files[0]?.fileName ?? 'folder-export',
+          filePath: writtenPaths[0] ?? folderPath
+        })
         return { ok: true, filePaths: writtenPaths }
       } catch (error) {
+        recordAppError('write-files-to-folder', error)
+        await recordExportResult({
+          status: 'failed',
+          context,
+          suggestedName: files[0]?.fileName ?? 'folder-export',
+          error
+        })
         return { ok: false, error: getErrorMessage(error) }
       }
     }

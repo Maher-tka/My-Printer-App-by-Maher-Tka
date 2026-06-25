@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { createProjectPrinterJob } from '@/jobs/projectJob'
+import { useJobStore } from '@/jobs/useJobStore'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
 import { ProjectFileActions } from '@/projects/ProjectFileActions'
 import { getCutterProjectStateKey } from '@/projects/projectDirtyState'
@@ -47,6 +49,7 @@ export function CutterMontagePage({
 }: CutterMontagePageProps): JSX.Element {
   const { settings: performanceSettings } = usePerformanceSettings()
   const cutter = useCutterProject(openedProject?.project)
+  const { saveJob } = useJobStore()
   const [projectFilePath, setProjectFilePath] = useState<string | null>(
     openedProject?.filePath ?? null
   )
@@ -84,6 +87,38 @@ export function CutterMontagePage({
     cutter.sources[0]?.displayName ??
     'Untitled Cutter Project'
 
+  const createProjectSnapshot = useCallback(
+    () =>
+      createCutterProjectFile({
+        mode: cutter.mode,
+        activePieceId: cutter.activePieceId,
+        selectedPlacedIds: cutter.selectedPlacedIds,
+        selectedEditorObjects: cutter.selectedEditorObjects,
+        keyObject: cutter.keyObject,
+        sheet: cutter.sheet,
+        sources: cutter.sources,
+        pieces: cutter.pieces,
+        placedPieces: cutter.placedPieces,
+        layers: cutter.layers,
+        exportSettings: cutter.exportSettings,
+        existingMetadata: projectMetadata
+      }),
+    [
+      cutter.activePieceId,
+      cutter.exportSettings,
+      cutter.keyObject,
+      cutter.layers,
+      cutter.mode,
+      cutter.pieces,
+      cutter.placedPieces,
+      cutter.selectedEditorObjects,
+      cutter.selectedPlacedIds,
+      cutter.sheet,
+      cutter.sources,
+      projectMetadata
+    ]
+  )
+
   const saveProject = useCallback(
     async (saveAs: boolean): Promise<boolean> => {
       if (!window.printerApp?.saveProject) {
@@ -96,22 +131,12 @@ export function CutterMontagePage({
       setProjectMessage('Saving project...')
 
       try {
-        const project = createCutterProjectFile({
-          mode: cutter.mode,
-          activePieceId: cutter.activePieceId,
-          selectedPlacedIds: cutter.selectedPlacedIds,
-          selectedEditorObjects: cutter.selectedEditorObjects,
-          keyObject: cutter.keyObject,
-          sheet: cutter.sheet,
-          sources: cutter.sources,
-          pieces: cutter.pieces,
-          placedPieces: cutter.placedPieces,
-          layers: cutter.layers,
-          exportSettings: cutter.exportSettings,
-          existingMetadata: projectMetadata
-        })
+        const project = createProjectSnapshot()
         const result = await window.printerApp.saveProject({
-          suggestedName: getSuggestedProjectFileName(project.metadata.jobName),
+          suggestedName: getSuggestedProjectFileName(
+            project.metadata.jobName,
+            project.metadata.tool
+          ),
           filePath: saveAs ? null : projectFilePath,
           project
         })
@@ -127,6 +152,15 @@ export function CutterMontagePage({
 
         setProjectFilePath(result.filePath)
         setProjectMetadata(project.metadata)
+        saveJob(
+          createProjectPrinterJob({
+            id: project.metadata.id,
+            tool: 'cutter',
+            title: project.metadata.jobName,
+            filePath: result.filePath,
+            createdAt: project.metadata.createdAt
+          })
+        )
         setSavedProjectStateKey(stateKeyAtSave)
         setProjectMessage(`Saved ${project.metadata.jobName}`)
         return true
@@ -137,22 +171,7 @@ export function CutterMontagePage({
         setProjectIsBusy(false)
       }
     },
-    [
-      cutter.activePieceId,
-      cutter.keyObject,
-      cutter.layers,
-      cutter.exportSettings,
-      cutter.mode,
-      cutter.pieces,
-      cutter.placedPieces,
-      cutter.selectedEditorObjects,
-      cutter.selectedPlacedIds,
-      cutter.sheet,
-      cutter.sources,
-      projectFilePath,
-      projectMetadata,
-      projectStateKey
-    ]
+    [createProjectSnapshot, projectFilePath, projectStateKey, saveJob]
   )
 
   const openProject = async (): Promise<void> => {
@@ -185,9 +204,28 @@ export function CutterMontagePage({
     onProjectSessionChange({
       isDirty,
       projectName,
+      filePath: projectFilePath,
+      snapshot: createProjectSnapshot(),
+      preflight: {
+        warningsCount: cutter.preflight.issues.length,
+        preflightStatus: cutter.preflight.canExport
+          ? cutter.preflight.issues.length
+            ? 'warnings'
+            : 'passed'
+          : 'errors'
+      },
       save: () => saveProject(false)
     })
-  }, [isDirty, onProjectSessionChange, projectName, saveProject])
+  }, [
+    createProjectSnapshot,
+    cutter.preflight.canExport,
+    cutter.preflight.issues.length,
+    isDirty,
+    onProjectSessionChange,
+    projectFilePath,
+    projectName,
+    saveProject
+  ])
 
   useEffect(() => () => onProjectSessionChange(null), [onProjectSessionChange])
 

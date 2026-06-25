@@ -14,7 +14,8 @@ interface LicenseStateController {
 }
 
 const TICK_MS = 1000
-const IS_DEVELOPER_TEST_MODE = import.meta.env.DEV && import.meta.env.VITE_DEV_UNLOCK_ALL === 'true'
+const IS_DEVELOPMENT = import.meta.env.DEV
+const IS_DEVELOPER_TEST_MODE = IS_DEVELOPMENT && import.meta.env.VITE_DEV_UNLOCK_ALL === 'true'
 
 export function useLicenseState(): LicenseStateController {
   const [snapshot, setSnapshot] = useState<LicenseSnapshot | null>(null)
@@ -122,7 +123,7 @@ export function useLicenseState(): LicenseStateController {
 
   return {
     state,
-    isDeveloperMode: IS_DEVELOPER_TEST_MODE,
+    isDeveloperMode: IS_DEVELOPMENT,
     isLoading,
     isActivating,
     error,

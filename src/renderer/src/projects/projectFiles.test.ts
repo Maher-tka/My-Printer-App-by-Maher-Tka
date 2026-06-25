@@ -196,8 +196,8 @@ expectEqual(
 )
 
 expectEqual(
-  getSuggestedProjectFileName('Client: Job/01'),
-  'Client- Job-01.mpjob',
+  getSuggestedProjectFileName('Client: Job/01', 'booklet-montage'),
+  'Client- Job-01.myprinter-booklet.json',
   'safe suggested file name'
 )
 

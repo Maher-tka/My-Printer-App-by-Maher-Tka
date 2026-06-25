@@ -1,8 +1,12 @@
 import {
   BookOpen,
+  Activity,
+  BriefcaseBusiness,
   ContactRound,
   Home,
   PenLine,
+  FlaskConical,
+  History,
   Settings,
   ShieldCheck,
   SquareStack
@@ -14,6 +18,7 @@ import type { AppRoute } from '@/types/navigation'
 interface SidebarProps {
   activeRoute: AppRoute
   onNavigate: (route: AppRoute) => void
+  isDeveloperMode?: boolean
 }
 
 const navItems = [
@@ -25,11 +30,21 @@ const navItems = [
     icon: SquareStack
   },
   { route: 'cutter-montage' as const, label: 'Cutter Montage', icon: PenLine },
+  { route: 'jobs' as const, label: 'Shop Jobs', icon: BriefcaseBusiness },
+  { route: 'exports' as const, label: 'Export Center', icon: History },
+  { route: 'app-health' as const, label: 'App Health', icon: Activity },
   { route: 'license' as const, label: 'License', icon: ShieldCheck },
   { route: 'settings' as const, label: 'Settings', icon: Settings }
 ]
 
-export function Sidebar({ activeRoute, onNavigate }: SidebarProps): JSX.Element {
+export function Sidebar({
+  activeRoute,
+  onNavigate,
+  isDeveloperMode = false
+}: SidebarProps): JSX.Element {
+  const visibleNavItems = isDeveloperMode
+    ? [...navItems, { route: 'quality-lab' as const, label: 'Quality Lab', icon: FlaskConical }]
+    : navItems
   return (
     <aside className="flex w-[280px] shrink-0 flex-col bg-sidebar text-sidebar-foreground shadow-sidebar">
       <div className="flex h-20 items-center gap-3 px-6">
@@ -43,7 +58,7 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps): JSX.Element 
       </div>
 
       <nav className="flex flex-1 flex-col gap-1.5 px-4">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon
           const isActive = activeRoute === item.route
 

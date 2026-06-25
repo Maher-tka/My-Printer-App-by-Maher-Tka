@@ -2,6 +2,7 @@
   "name": "my-printer-app-by-maher-tka",
   "version": "0.1.0",
   "description": "Local-first printer-shop hub desktop app by Maher Tka.",
+  "author": "Maher Tka",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
@@ -12,25 +13,33 @@
     "format:check": "prettier --check .",
     "license:keygen": "tsx scripts/license-keygen.ts",
     "license:generate": "tsx src/main/license-generator-cli.ts",
-    "test": "npm run test:license && npm run test:booklet && npm run test:projects && npm run test:cutter && npm run test:hardcover",
+    "test": "npm run test:license && npm run test:booklet && npm run test:projects && npm run test:cutter && npm run test:hardcover && npm run test:preflight",
     "test:license": "tsx src/main/license-serial.test.ts",
     "test:booklet": "tsx src/renderer/src/tools/booklet-montage/lib/bookletImposition.test.ts",
     "test:projects": "tsx --tsconfig tsconfig.web.json src/renderer/src/projects/projectFiles.test.ts",
     "test:cutter": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/editorWorkflow.test.ts",
     "test:hardcover": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/coverCalculations.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/spineTextLayout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/hardcoverExport.test.ts",
+    "test:preflight": "tsx --tsconfig tsconfig.web.json src/renderer/src/preflight/preflight.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "preview": "electron-vite preview --config electron.vite.config.ts"
+    "preview": "electron-vite preview --config electron.vite.config.ts",
+    "pack": "npm run build && electron-builder --dir",
+    "dist:dir": "npm run pack",
+    "dist:win": "npm run build && electron-builder --win nsis portable",
+    "release:check": "npm run format:check && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@pdf-lib/fontkit": "^1.1.1",
     "@radix-ui/react-slot": "^1.1.0",
+    "arabic-persian-reshaper": "^1.0.1",
+    "bidi-js": "^1.0.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.468.0",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^5.7.284",
+    "pdfjs-dist": "5.4.624",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-pageflip": "^2.0.3",
@@ -43,6 +52,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.4.19",
     "electron": "^39.8.5",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "postcss": "^8.4.39",
     "prettier": "3.8.4",
@@ -50,5 +60,43 @@
     "tsx": "^4.22.3",
     "typescript": "^5.5.3",
     "vite": "^7.3.3"
+  },
+  "build": {
+    "appId": "com.mahertka.myprinterapp",
+    "productName": "My Printer App by Maher Tka",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "artifactName": "My Printer App by Maher Tka Setup ${version}.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "My Printer App by Maher Tka Portable ${version}.${ext}"
+    }
   }
 }

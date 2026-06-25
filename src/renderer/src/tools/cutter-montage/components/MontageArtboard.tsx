@@ -1,6 +1,7 @@
 import { Copy, LockKeyhole, RotateCw, Trash2 } from 'lucide-react'
 import { useMemo } from 'react'
 import { Button } from '@/components/ui/button'
+import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
 import type {
   AlignmentCommand,
   CutterLayerVisibility,
@@ -52,6 +53,7 @@ export function MontageArtboard({
   overlapPieceIds = [],
   onAlignSelected
 }: MontageArtboardProps): JSX.Element {
+  const { preset: performancePreset } = usePerformanceSettings()
   const pieceMap = useMemo(() => new Map(pieces.map((piece) => [piece.id, piece])), [pieces])
   const selectedPieces = placedPieces.filter((piece) => selectedPieceIds.includes(piece.id))
   const safeArea = getSafeArea(settings)
@@ -242,6 +244,7 @@ export function MontageArtboard({
                 sheetWidthCm={settings.widthCm}
                 sheetHeightCm={settings.heightCm}
                 snapStepCm={settings.snapToGrid ? settings.gridStepCm : 0.1}
+                simplifiedPreview={performancePreset === 'low-end'}
                 onSelect={onSelectPiece}
                 onMove={(pieceId, xCm, yCm) => {
                   const dragged = placedPieces.find((candidate) => candidate.id === pieceId)

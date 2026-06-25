@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DashboardPage } from '@/app/DashboardPage'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { LicensePage } from '@/licensing/LicensePage'
@@ -14,6 +14,10 @@ import {
   type HardcoverProjectPayload
 } from '@/projects/projectFiles'
 import { SettingsPage } from '@/settings/SettingsPage'
+import { AutosaveRecoveryBanner } from '@/projects/AutosaveRecoveryBanner'
+import { AppHealthPage } from '@/settings/AppHealthPage'
+import { ExportCenterPage } from '@/exports/ExportCenterPage'
+import { JobsPage } from '@/jobs/JobsPage'
 import { BookletMontagePage } from '@/tools/booklet-montage/BookletMontagePage'
 import { CutterMontagePage } from '@/tools/cutter-montage/CutterMontagePage'
 import { HardcoverCoverPage } from '@/tools/hardcover-cover/HardcoverCoverPage'
@@ -24,6 +28,10 @@ import type {
   PrinterAppProjectResult
 } from '@/types/projects'
 import type { UnsavedChangesAction } from '../../../shared/project-types'
+import type { AutosaveEntry } from '../../../shared/release-types'
+
+const AUTOSAVE_INTERVAL_MS = 60_000
+const QualityLabPage = lazy(() => import('@/quality/QualityLabPage'))
 
 const pageMeta: Record<AppRoute, PageMeta> = {
   dashboard: {
@@ -42,6 +50,22 @@ const pageMeta: Record<AppRoute, PageMeta> = {
     title: 'Cutter Montage',
     subtitle: 'Plotter and big-sheet preparation module'
   },
+  jobs: {
+    title: 'Shop Jobs',
+    subtitle: 'Local customer jobs and quotes'
+  },
+  exports: {
+    title: 'Export Center',
+    subtitle: 'Local production export history'
+  },
+  'app-health': {
+    title: 'App Health',
+    subtitle: 'Release diagnostics and recovery tools'
+  },
+  'quality-lab': {
+    title: 'Quality Lab',
+    subtitle: 'Development-only release checks'
+  },
   license: {
     title: 'License',
     subtitle: 'Local activation and trial status'
@@ -57,6 +81,10 @@ const appRoutes = new Set<AppRoute>([
   'booklet-montage',
   'hardcover-cover',
   'cutter-montage',
+  'jobs',
+  'exports',
+  'app-health',
+  'quality-lab',
   'license',
   'settings'
 ])
@@ -81,6 +109,9 @@ export function App(): JSX.Element {
   >(null)
   const [pendingBookletPdfImport, setPendingBookletPdfImport] =
     useState<PendingBookletPdfImport | null>(null)
+  const [recoveryEntry, setRecoveryEntry] = useState<AutosaveEntry | null>(null)
+  const [recoveryError, setRecoveryError] = useState<string | null>(null)
+  const [recoveryIsBusy, setRecoveryIsBusy] = useState(false)
   const bookletPdfImportIdRef = useRef(0)
   const activeMeta = useMemo(() => pageMeta[activeRoute], [activeRoute])
   const { settings: performanceSettings } = usePerformanceSettings()
@@ -103,12 +134,76 @@ export function App(): JSX.Element {
       session?.isDirty ?? false,
       session?.projectName ?? 'Untitled Project'
     )
+    window.printerApp?.setActiveProjectSnapshot(
+      session
+        ? {
+            project: session.snapshot,
+            isDirty: session.isDirty,
+            filePath: session.filePath,
+            preflight: session.preflight
+          }
+        : null
+    )
   }, [])
 
   const clearActiveProjectSession = useCallback((): void => {
     activeProjectSessionRef.current = null
     void window.printerApp?.setProjectDirty(false, 'Untitled Project')
+    window.printerApp?.setActiveProjectSnapshot(null)
   }, [])
+
+  useEffect(() => {
+    const runtime = window.printerApp?.runtime
+    if (!runtime) return
+
+    void runtime.listAutosaves().then((entries) => setRecoveryEntry(entries[0] ?? null))
+
+    const timer = window.setInterval(() => {
+      const session = activeProjectSessionRef.current
+      if (!session?.isDirty) return
+      void runtime.writeAutosave({ project: session.snapshot, originalFilePath: session.filePath })
+    }, AUTOSAVE_INTERVAL_MS)
+
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const restoreAutosave = useCallback(async (): Promise<void> => {
+    if (!recoveryEntry || !window.printerApp?.runtime) return
+    setRecoveryIsBusy(true)
+    setRecoveryError(null)
+    const result = await window.printerApp.runtime.readAutosave(recoveryEntry.filePath)
+    if (!result.ok || !result.project || !isPrinterProjectFile(result.project)) {
+      setRecoveryError(result.error ?? 'The recovery file could not be opened.')
+      setRecoveryIsBusy(false)
+      return
+    }
+    const projectRoute = result.project.metadata.tool
+    clearActiveProjectSession()
+    setOpenedProject({
+      filePath: recoveryEntry.originalFilePath ?? null,
+      project: result.project,
+      instanceId: Date.now()
+    })
+    activeRouteRef.current = projectRoute
+    setActiveRoute(projectRoute)
+    window.location.hash = `#/${projectRoute}`
+    setRecoveryEntry(null)
+    setRecoveryIsBusy(false)
+  }, [clearActiveProjectSession, recoveryEntry])
+
+  const discardAutosave = useCallback(async (): Promise<void> => {
+    if (!recoveryEntry || !window.printerApp?.runtime) return
+    setRecoveryIsBusy(true)
+    const result = await window.printerApp.runtime.discardAutosave(recoveryEntry.filePath)
+    if (result.ok) {
+      const remaining = await window.printerApp.runtime.listAutosaves()
+      setRecoveryEntry(remaining[0] ?? null)
+      setRecoveryError(null)
+    } else {
+      setRecoveryError(result.error ?? 'The autosave could not be discarded.')
+    }
+    setRecoveryIsBusy(false)
+  }, [recoveryEntry])
 
   const confirmUnsavedChanges = useCallback(
     async (action: UnsavedChangesAction): Promise<boolean> => {
@@ -268,6 +363,16 @@ export function App(): JSX.Element {
       onNavigate={navigate}
       isDeveloperMode={license.isDeveloperMode}
     >
+      {recoveryEntry && (
+        <AutosaveRecoveryBanner
+          entry={recoveryEntry}
+          isBusy={recoveryIsBusy}
+          error={recoveryError}
+          onRestore={() => void restoreAutosave()}
+          onDiscard={() => void discardAutosave()}
+          onOpenFolder={() => void window.printerApp?.runtime.openAutosaveFolder()}
+        />
+      )}
       {activeRoute === 'dashboard' && (
         <DashboardPage
           licenseState={license.state}
@@ -337,6 +442,21 @@ export function App(): JSX.Element {
         />
       )}
       {activeRoute === 'settings' && <SettingsPage onNavigate={navigate} />}
+      {activeRoute === 'jobs' && <JobsPage />}
+      {activeRoute === 'exports' && <ExportCenterPage onNavigate={navigate} />}
+      {activeRoute === 'app-health' && (
+        <AppHealthPage
+          license={license.state}
+          performance={performanceSettings}
+          isDeveloperMode={license.isDeveloperMode}
+          onResetLicense={license.resetLocal}
+        />
+      )}
+      {activeRoute === 'quality-lab' && license.isDeveloperMode && (
+        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading Quality Lab…</p>}>
+          <QualityLabPage />
+        </Suspense>
+      )}
       {showToolAccessOverlay && activeTool && activeToolAccess && (
         <ToolAccessOverlay
           toolName={activeTool.title}

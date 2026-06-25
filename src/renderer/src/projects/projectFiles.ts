@@ -19,7 +19,7 @@ import type {
 import { synchronizePieceEditorModel } from '@/tools/cutter-montage/lib/editorObjects'
 import type { HardcoverProjectState } from '@/tools/hardcover-cover/types'
 import {
-  PRINTER_PROJECT_EXTENSION,
+  PRINTER_PROJECT_EXTENSIONS,
   PRINTER_PROJECT_SCHEMA,
   PRINTER_PROJECT_VERSION,
   type PrinterProjectFile,
@@ -294,8 +294,8 @@ export function isPrinterProjectFile(value: unknown): value is PrinterProjectFil
   )
 }
 
-export function getSuggestedProjectFileName(jobName: string): string {
-  return `${sanitizeProjectFileName(jobName || 'Untitled Project')}.${PRINTER_PROJECT_EXTENSION}`
+export function getSuggestedProjectFileName(jobName: string, tool: ProjectToolId): string {
+  return `${sanitizeProjectFileName(jobName || 'Untitled Project')}.${PRINTER_PROJECT_EXTENSIONS[tool]}`
 }
 
 function createProjectMetadata(input: MetadataInput): ProjectMetadata {

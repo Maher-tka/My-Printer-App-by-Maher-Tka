@@ -1,6 +1,5 @@
 import {
   PDFDocument,
-  StandardFonts,
   degrees,
   rgb,
   type PDFImage,
@@ -10,6 +9,8 @@ import {
 import { safeFileName } from '@/lib/fileNaming'
 import type { BatchStudent, HardcoverProjectState } from '../types'
 import { calculateCoverDimensions } from './coverCalculations'
+import { embedHardcoverPdfFonts, type HardcoverPdfFonts } from './hardcoverPdfFonts'
+import { preparePdfDisplayText } from './pdfText'
 import { calculateSpineTextLayout } from './spineTextLayout'
 import { wrapTextByCharacters } from './textFit'
 import { mmToPoints } from './units'
@@ -66,11 +67,10 @@ async function buildHardcoverPdf(states: HardcoverProjectState[]): Promise<Uint8
   const document = await PDFDocument.create()
   document.setTitle('Hardcover Cover Sheet')
   document.setCreator('My Printer App by Maher Tka')
-  const regular = await document.embedFont(StandardFonts.Helvetica)
-  const bold = await document.embedFont(StandardFonts.HelveticaBold)
+  const fonts = await embedHardcoverPdfFonts(document)
 
   for (const state of states) {
-    await drawCoverPage(document, state, regular, bold)
+    await drawCoverPage(document, state, fonts)
   }
 
   return document.save()
@@ -79,8 +79,7 @@ async function buildHardcoverPdf(states: HardcoverProjectState[]): Promise<Uint8
 async function drawCoverPage(
   document: PDFDocument,
   state: HardcoverProjectState,
-  regular: PDFFont,
-  bold: PDFFont
+  fonts: HardcoverPdfFonts
 ): Promise<void> {
   const dimensions = calculateCoverDimensions(state.setup)
   const page = document.addPage([
@@ -136,7 +135,7 @@ async function drawCoverPage(
     dimensions.front.xMm + dimensions.front.widthMm / 2,
     dimensions.front.yMm + dimensions.front.heightMm * 0.17,
     18,
-    bold,
+    fonts.bold,
     foreground
   )
   const titleLines = wrapTextByCharacters(safePdfText(state.content.front.title), 34).slice(0, 4)
@@ -147,7 +146,7 @@ async function drawCoverPage(
       dimensions.front.xMm + dimensions.front.widthMm / 2,
       dimensions.front.yMm + dimensions.front.heightMm * 0.34 + index * 13,
       24,
-      bold,
+      fonts.bold,
       foreground
     )
   )
@@ -157,7 +156,7 @@ async function drawCoverPage(
     dimensions.front.xMm + dimensions.front.widthMm / 2,
     dimensions.front.yMm + dimensions.front.heightMm * 0.69,
     12,
-    regular,
+    fonts.regular,
     muted
   )
   drawCentered(
@@ -166,7 +165,7 @@ async function drawCoverPage(
     dimensions.front.xMm + dimensions.front.widthMm / 2,
     dimensions.front.yMm + dimensions.front.heightMm * 0.77,
     12,
-    regular,
+    fonts.regular,
     muted
   )
   drawCentered(
@@ -175,7 +174,7 @@ async function drawCoverPage(
     dimensions.front.xMm + dimensions.front.widthMm / 2,
     dimensions.front.yMm + dimensions.front.heightMm * 0.87,
     14,
-    bold,
+    fonts.bold,
     foreground
   )
   wrapTextByCharacters(safePdfText(state.content.back.summary), 48)
@@ -187,7 +186,7 @@ async function drawCoverPage(
         dimensions.back.xMm + 14,
         dimensions.back.yMm + dimensions.back.heightMm * 0.28 + index * 7,
         10,
-        regular,
+        fonts.regular,
         muted
       )
     )
@@ -197,10 +196,10 @@ async function drawCoverPage(
     dimensions.back.xMm + dimensions.back.widthMm / 2,
     dimensions.back.yMm + dimensions.back.heightMm * 0.88,
     9,
-    regular,
+    fonts.regular,
     muted
   )
-  drawSpineText(page, state, dimensions, bold, foreground)
+  drawSpineText(page, state, dimensions, fonts.bold, foreground)
 
   if (state.exportSettings.mode === 'production-guide' || state.exportSettings.includeFoldLines)
     drawFoldLines(page, dimensions)
@@ -255,7 +254,7 @@ function drawSpineText(
     state.setup.spineWidthMm,
     dimensions.spine.heightMm - state.setup.hingeMm * 2
   )
-  const text = safePdfText(layout.lines.join(' - '))
+  const text = preparePdfDisplayText(safePdfText(layout.lines.join(' - ')))
   const size = layout.fontSizePt
   const textWidth = font.widthOfTextAtSize(text, size)
   const centerX = mmToPoints(dimensions.spine.xMm + dimensions.spine.widthMm / 2)
@@ -296,8 +295,9 @@ function drawCentered(
   font: PDFFont,
   color: ReturnType<typeof rgb>
 ): void {
-  const width = font.widthOfTextAtSize(text, size)
-  page.drawText(text, {
+  const displayText = preparePdfDisplayText(text)
+  const width = font.widthOfTextAtSize(displayText, size)
+  page.drawText(displayText, {
     x: mmToPoints(centerXMm) - width / 2,
     y: page.getHeight() - mmToPoints(yMm),
     size,
@@ -315,7 +315,7 @@ function drawTextAt(
   font: PDFFont,
   color: ReturnType<typeof rgb>
 ): void {
-  page.drawText(text, {
+  page.drawText(preparePdfDisplayText(text), {
     x: mmToPoints(xMm),
     y: page.getHeight() - mmToPoints(yMm),
     size,
@@ -417,5 +417,5 @@ function parseHex(value: string): ReturnType<typeof rgb> {
 }
 
 function safePdfText(value: string): string {
-  return value.normalize('NFC').replace(/[^\x20-\x7e\u00a0-\u00ff]/g, '?')
+  return value.normalize('NFC').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
 }

@@ -1,16 +1,17 @@
 import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron'
 import { access, readFile, writeFile } from 'node:fs/promises'
-import { extname, join } from 'node:path'
+import { join } from 'node:path'
 import type {
   UnsavedChangesAction,
   UnsavedChangesChoice,
   UnsavedChangesRequest,
   UnsavedChangesResult
 } from '../shared/project-types.js'
+import { clearProjectAutosaves, recordAppError } from './release-runtime.js'
 
 const PROJECT_SCHEMA = 'com.maher-tka.my-printer-app.project'
 const PROJECT_VERSION = 1
-const PROJECT_EXTENSION = 'mpjob'
+const LEGACY_PROJECT_EXTENSION = 'mpjob'
 const MAX_RECENT_PROJECTS = 20
 const APP_TITLE = 'My Printer App by Maher Tka'
 
@@ -24,6 +25,13 @@ interface ProjectWindowState {
 const projectWindowStates = new WeakMap<BrowserWindow, ProjectWindowState>()
 
 type ProjectToolId = 'booklet-montage' | 'cutter-montage' | 'hardcover-cover'
+
+const PROJECT_EXTENSIONS: Record<ProjectToolId, string> = {
+  'booklet-montage': 'myprinter-booklet.json',
+  'cutter-montage': 'myprinter-cutter.json',
+  'hardcover-cover': 'myprinter-hardcover.json'
+}
+const ACCEPTED_PROJECT_EXTENSIONS = [...Object.values(PROJECT_EXTENSIONS), LEGACY_PROJECT_EXTENSION]
 
 interface ProjectMetadata {
   id: string
@@ -132,7 +140,10 @@ export function registerProjectHandlers(): void {
         const owner = BrowserWindow.fromWebContents(event.sender)
         const options = {
           title: 'Save My Printer App job',
-          defaultPath: ensureProjectExtension(request.suggestedName || 'Untitled Project'),
+          defaultPath: ensureProjectExtension(
+            request.suggestedName || 'Untitled Project',
+            request.project.metadata.tool
+          ),
           filters: [projectFileFilter]
         }
         const result = owner
@@ -146,9 +157,10 @@ export function registerProjectHandlers(): void {
         filePath = result.filePath
       }
 
-      filePath = ensureProjectExtension(filePath)
+      filePath = ensureProjectExtension(filePath, request.project.metadata.tool)
       await writeFile(filePath, `${JSON.stringify(request.project, null, 2)}\n`, 'utf8')
       await rememberProject(filePath, request.project.metadata)
+      await clearProjectAutosaves(request.project.metadata.id)
 
       return {
         ok: true,
@@ -157,6 +169,7 @@ export function registerProjectHandlers(): void {
         recentJob: toRecentJob(filePath, request.project.metadata, 'Saved')
       }
     } catch (error) {
+      recordAppError('project-save', error)
       return { ok: false, error: getErrorMessage(error) }
     }
   })
@@ -183,8 +196,8 @@ export function registerProjectHandlers(): void {
         filePath = result.filePaths[0]
       }
 
-      if (extname(filePath).toLowerCase() !== `.${PROJECT_EXTENSION}`) {
-        throw new Error(`Choose a .${PROJECT_EXTENSION} project file.`)
+      if (!hasAcceptedProjectExtension(filePath)) {
+        throw new Error('Choose a My Printer App project file.')
       }
 
       const project = parseProjectFile(await readFile(filePath, 'utf8'))
@@ -197,6 +210,7 @@ export function registerProjectHandlers(): void {
         recentJob: toRecentJob(filePath, project.metadata, 'Saved')
       }
     } catch (error) {
+      recordAppError('project-open', error)
       return { ok: false, error: getErrorMessage(error) }
     }
   })
@@ -216,6 +230,7 @@ export function registerProjectHandlers(): void {
 
       return { ok: true, jobs }
     } catch (error) {
+      recordAppError('project-list', error)
       return { ok: false, error: getErrorMessage(error) }
     }
   })
@@ -329,7 +344,7 @@ function updateWindowEditedState(window: BrowserWindow, state: ProjectWindowStat
 
 const projectFileFilter = {
   name: 'My Printer App Jobs',
-  extensions: [PROJECT_EXTENSION]
+  extensions: ACCEPTED_PROJECT_EXTENSIONS
 }
 
 function parseProjectFile(contents: string): ProjectFile {
@@ -480,10 +495,15 @@ function getRecentProjectsPath(): string {
   return join(app.getPath('userData'), 'recent-projects.json')
 }
 
-function ensureProjectExtension(filePath: string): string {
-  return extname(filePath).toLowerCase() === `.${PROJECT_EXTENSION}`
+function ensureProjectExtension(filePath: string, tool: ProjectToolId): string {
+  return hasAcceptedProjectExtension(filePath)
     ? filePath
-    : `${filePath}.${PROJECT_EXTENSION}`
+    : `${filePath}.${PROJECT_EXTENSIONS[tool]}`
+}
+
+function hasAcceptedProjectExtension(filePath: string): boolean {
+  const lowerPath = filePath.toLowerCase()
+  return ACCEPTED_PROJECT_EXTENSIONS.some((extension) => lowerPath.endsWith(`.${extension}`))
 }
 
 async function fileExists(filePath: string): Promise<boolean> {

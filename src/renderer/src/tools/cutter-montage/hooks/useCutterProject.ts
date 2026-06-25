@@ -138,7 +138,6 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   const sourcesRef = useRef<PieceSourceFile[]>([])
   const layoutBeforeAutoArrangeRef = useRef<PlacedPiece[] | null>(null)
   const warnings = getSheetWarnings(sheet)
-  const canExport = placedPieces.length > 0
   const activePiece = pieces.find((piece) => piece.id === activePieceId) ?? null
   const { selectedEditorObjects, keyObject } = useMemo(
     () => getLegacyEditorState(activePiece, initialState),
@@ -169,6 +168,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     [exportSettings, layers, pieces, placedPieces, sheet, sources]
   )
   const preflight = useMemo(() => runCutterPreflight(project), [project])
+  const canExport = placedPieces.length > 0 && preflight.canExport
 
   const updateSheet = useCallback((patch: Partial<CutterSheetSettings>): void => {
     setSheet((current) => ({
@@ -685,6 +685,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
 }
 
 function confirmPreflight(preflight: CutterPreflightReport): boolean {
+  if (!preflight.canExport) return false
   if (preflight.issues.length === 0) return true
   return window.confirm(
     `Preflight found ${preflight.issues.length} issue(s):\n\n${preflight.issues.map((item) => `• ${item.message}`).join('\n')}\n\nContinue export anyway?`

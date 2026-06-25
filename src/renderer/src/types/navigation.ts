@@ -3,6 +3,10 @@ export type AppRoute =
   | 'booklet-montage'
   | 'hardcover-cover'
   | 'cutter-montage'
+  | 'jobs'
+  | 'exports'
+  | 'app-health'
+  | 'quality-lab'
   | 'license'
   | 'settings'
 

@@ -1,8 +1,14 @@
 export const PRINTER_PROJECT_SCHEMA = 'com.maher-tka.my-printer-app.project'
 export const PRINTER_PROJECT_VERSION = 1
-export const PRINTER_PROJECT_EXTENSION = 'mpjob'
+export const LEGACY_PRINTER_PROJECT_EXTENSION = 'mpjob'
 
 export type ProjectToolId = 'booklet-montage' | 'cutter-montage' | 'hardcover-cover'
+
+export const PRINTER_PROJECT_EXTENSIONS: Record<ProjectToolId, string> = {
+  'booklet-montage': 'myprinter-booklet.json',
+  'cutter-montage': 'myprinter-cutter.json',
+  'hardcover-cover': 'myprinter-hardcover.json'
+}
 
 export type JobStatus = 'Saved' | 'Missing'
 
@@ -55,12 +61,18 @@ export interface PrinterAppRecentProjectsResult {
 }
 
 export interface OpenedPrinterProject<TPayload = unknown> {
-  filePath: string
+  filePath: string | null
   project: PrinterProjectFile<TPayload>
 }
 
 export interface ActiveProjectSession {
   isDirty: boolean
   projectName: string
+  filePath: string | null
+  snapshot: PrinterProjectFile
+  preflight?: {
+    warningsCount: number
+    preflightStatus: 'passed' | 'warnings' | 'errors'
+  }
   save: () => Promise<boolean>
 }

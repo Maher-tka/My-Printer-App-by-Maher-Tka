@@ -16,6 +16,7 @@ interface PlacedPieceItemProps {
   sheetWidthCm: number
   sheetHeightCm: number
   snapStepCm: number
+  simplifiedPreview?: boolean
   onSelect: (pieceId: string, additive: boolean) => void
   onMove: (pieceId: string, xCm: number, yCm: number) => void
   onDuplicate: (pieceId: string) => void
@@ -34,6 +35,7 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
   sheetWidthCm,
   sheetHeightCm,
   snapStepCm,
+  simplifiedPreview = false,
   onSelect,
   onMove,
   onDuplicate,
@@ -163,9 +165,11 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
         onMove(placed.id, latestPositionRef.current.xCm, latestPositionRef.current.yCm)
       }}
     >
-      {layers.artwork &&
-      piece.objectVisibility.artwork &&
-      (piece.clippingMaskEnabled ?? piece.mask.enabled) ? (
+      {simplifiedPreview && dragging ? (
+        <div className="absolute inset-0 bg-primary/15" aria-label="Simplified drag preview" />
+      ) : layers.artwork &&
+        piece.objectVisibility.artwork &&
+        (piece.clippingMaskEnabled ?? piece.mask.enabled) ? (
         <div
           className="absolute overflow-hidden"
           style={{

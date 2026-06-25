@@ -3,6 +3,8 @@ import { useRef, useState } from 'react'
 import { LicenseStatusCard } from '@/app/LicenseStatusCard'
 import { QuickActionList } from '@/app/QuickActionList'
 import { RecentJobsTable } from '@/app/RecentJobsTable'
+import { RecentExportsCard } from '@/app/RecentExportsCard'
+import { JobSummaryCard } from '@/app/JobSummaryCard'
 import { PdfFilePickerInput } from '@/components/file-input/PdfFilePickerInput'
 import { ToolCard } from '@/components/tool-card/ToolCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -56,7 +58,7 @@ export function DashboardPage({
     },
     {
       label: 'Open Saved Job',
-      description: 'Browse and open a local .mpjob project',
+      description: 'Browse and open a local My Printer project',
       icon: FolderOpen,
       onClick: () => void openSavedProject()
     },
@@ -77,6 +79,7 @@ export function DashboardPage({
         error={licenseError}
         onActivate={() => onNavigate('license')}
       />
+      <JobSummaryCard onNavigate={onNavigate} />
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         {printerTools.map((tool) => {
@@ -111,6 +114,7 @@ export function DashboardPage({
           </CardContent>
         </Card>
       </section>
+      <RecentExportsCard onNavigate={onNavigate} />
     </div>
   )
 }
