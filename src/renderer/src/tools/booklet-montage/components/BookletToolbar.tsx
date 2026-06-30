@@ -188,6 +188,38 @@ export function BookletToolbar({
           ))}
         </ToolbarSelect>
 
+        <details className="min-w-[280px] rounded-md border bg-muted/30 px-3 py-2">
+          <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
+            Advanced print layout
+          </summary>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <ToolbarNumber
+              label="Outer margin mm"
+              value={settings.outerMarginMm}
+              min={0}
+              step={0.5}
+              onChange={(value) => onSettingsChange({ outerMarginMm: value })}
+            />
+            <ToolbarNumber
+              label="Page gap mm"
+              value={settings.pageGapMm}
+              min={0}
+              step={0.5}
+              onChange={(value) => onSettingsChange({ pageGapMm: value })}
+            />
+            <ToolbarCheckbox
+              label="Crop marks"
+              checked={settings.cropMarks}
+              onChange={(cropMarks) => onSettingsChange({ cropMarks })}
+            />
+            <ToolbarCheckbox
+              label="Registration marks"
+              checked={settings.registrationMarks}
+              onChange={(registrationMarks) => onSettingsChange({ registrationMarks })}
+            />
+          </div>
+        </details>
+
         <div className="flex rounded-md border bg-muted/40 p-1">
           {viewModes.map((mode) => {
             const Icon = mode.icon
@@ -306,10 +338,14 @@ function ToolbarSelect({
 function ToolbarNumber({
   label,
   value,
+  min = 1,
+  step = 1,
   onChange
 }: {
   label: string
   value: number
+  min?: number
+  step?: number
   onChange: (value: number) => void
 }): JSX.Element {
   return (
@@ -318,11 +354,32 @@ function ToolbarNumber({
       <input
         className="h-10 rounded-md border bg-background px-3 text-sm text-foreground"
         type="number"
-        min={1}
-        step={1}
+        min={min}
+        step={step}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
       />
+    </label>
+  )
+}
+
+function ToolbarCheckbox({
+  label,
+  checked,
+  onChange
+}: {
+  label: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}): JSX.Element {
+  return (
+    <label className="flex h-10 items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium text-foreground">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      {label}
     </label>
   )
 }

@@ -22,16 +22,11 @@ export function SpineEditor({
         onChange={(studentName) => onChange({ studentName })}
       />
       <TextField
-        label="Short title"
+        label="Title / mémoire title"
         value={value.shortTitle}
         onChange={(shortTitle) => onChange({ shortTitle })}
       />
       <TextField label="Year" value={value.year} onChange={(year) => onChange({ year })} />
-      <TextField
-        label="University initials"
-        value={value.universityInitials}
-        onChange={(universityInitials) => onChange({ universityInitials })}
-      />
       <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
         Text direction
         <select
@@ -75,7 +70,7 @@ export function SpineEditor({
       {layout.warning && <p className="text-xs text-warning-foreground">{layout.warning}</p>}
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" variant="outline" onClick={onUseFrontTitle}>
-          Use front title
+          Use main title
         </Button>
         <Button
           type="button"

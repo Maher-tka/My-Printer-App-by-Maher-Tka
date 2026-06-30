@@ -54,6 +54,8 @@ export interface SheetSettings {
   customHeightMm: number
   scaleMode: BookletScaleMode
   readingDirection: BookletReadingDirection
+  outerMarginMm: number
+  pageGapMm: number
   cropMarks: boolean
   registrationMarks: boolean
   exportQuality: ExportQuality

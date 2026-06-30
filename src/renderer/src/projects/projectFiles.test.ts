@@ -8,7 +8,7 @@ import {
   createPiecePresetFromSource,
   createPlacedPieceFromPreset
 } from '../tools/cutter-montage/lib/piecePresets'
-import type { BookletPage, BookletSource } from '../tools/booklet-montage/types'
+import type { BookletPage, BookletSource, SheetSettings } from '../tools/booklet-montage/types'
 import type { PieceSourceFile } from '../tools/cutter-montage/types'
 import { createDefaultHardcoverProject } from '../tools/hardcover-cover/hooks/useHardcoverProject'
 import {
@@ -65,6 +65,8 @@ const bookletFile = createBookletProjectFile({
     customHeightMm: 210,
     scaleMode: 'fit',
     readingDirection: 'rtl',
+    outerMarginMm: 0,
+    pageGapMm: 0,
     cropMarks: true,
     registrationMarks: false,
     exportQuality: 'standard'
@@ -78,7 +80,31 @@ const restoredBooklet = deserializeBookletProjectPayload(bookletFile.payload)
 expectEqual([...restoredBooklet.sources[0].bytes], [1, 2, 3, 254], 'booklet source bytes')
 expectEqual(restoredBooklet.pages[0].thumbnailUrl, undefined, 'temporary thumbnail omitted')
 expectEqual(restoredBooklet.settings.readingDirection, 'rtl', 'booklet reading direction')
+expectEqual(restoredBooklet.settings.outerMarginMm, 0, 'booklet outer margin restored')
+expectEqual(restoredBooklet.settings.pageGapMm, 0, 'booklet page gap restored')
+expectEqual(restoredBooklet.settings.cropMarks, true, 'explicit old crop marks true is preserved')
 expectEqual(bookletFile.metadata.tool, 'booklet-montage', 'booklet metadata tool')
+const legacyBooklet = deserializeBookletProjectPayload({
+  ...bookletFile.payload,
+  settings: {
+    paperSize: 'A4',
+    orientation: 'landscape',
+    outputMode: 'front-back-pairs',
+    customWidthMm: 297,
+    customHeightMm: 210,
+    scaleMode: 'fit',
+    readingDirection: 'ltr',
+    exportQuality: 'standard'
+  } as SheetSettings
+})
+expectEqual(legacyBooklet.settings.outerMarginMm, 0, 'legacy booklet outer margin defaults to zero')
+expectEqual(legacyBooklet.settings.pageGapMm, 0, 'legacy booklet page gap defaults to zero')
+expectEqual(legacyBooklet.settings.cropMarks, false, 'legacy booklet crop marks default off')
+expectEqual(
+  legacyBooklet.settings.registrationMarks,
+  false,
+  'legacy booklet registration marks default off'
+)
 const bookletStateKey = getBookletProjectStateKey({
   sources: [bookletSource],
   pages: [bookletPage],
@@ -182,17 +208,51 @@ expectNotEqual(
 URL.revokeObjectURL(restoredCutter.sources[0].previewUrl)
 
 const hardcoverState = createDefaultHardcoverProject()
+hardcoverState.sourcePdf = {
+  fileName: 'memoire.pdf',
+  pageCount: 12,
+  frontPageNumber: 1,
+  backCoverEnabled: true,
+  backPageNumber: 12,
+  fitMode: 'fit',
+  thumbnailDataUrl: 'blob:temporary-hardcover-thumbnail',
+  backThumbnailDataUrl: 'blob:temporary-hardcover-back-thumbnail',
+  pagePreviews: [
+    { pageNumber: 1, rotation: 0, thumbnailDataUrl: 'blob:temporary-hardcover-thumbnail' },
+    { pageNumber: 12, rotation: 0, thumbnailDataUrl: 'blob:temporary-hardcover-back-thumbnail' }
+  ],
+  bytes: new Uint8Array([37, 80, 68, 70])
+}
 const hardcoverFile = createHardcoverProjectFile({ state: hardcoverState })
 const parsedHardcover = JSON.parse(JSON.stringify(hardcoverFile)) as unknown
 expectEqual(isPrinterProjectFile(parsedHardcover), true, 'hardcover project validation')
 const restoredHardcover = deserializeHardcoverProjectPayload(hardcoverFile.payload)
 expectEqual(restoredHardcover.setup.bookWidthMm, 210, 'hardcover book width restored')
 expectEqual(restoredHardcover.setup.spineWidthMm, 20, 'hardcover spine restored')
+expectEqual(restoredHardcover.sourcePdf?.fileName, 'memoire.pdf', 'hardcover PDF metadata saved')
+expectEqual(restoredHardcover.sourcePdf?.bytes, undefined, 'hardcover PDF bytes omitted')
+expectEqual(
+  restoredHardcover.sourcePdf?.thumbnailDataUrl,
+  undefined,
+  'hardcover temporary PDF thumbnail omitted'
+)
+expectEqual(
+  restoredHardcover.sourcePdf?.backThumbnailDataUrl,
+  undefined,
+  'hardcover temporary back PDF thumbnail omitted'
+)
+expectEqual(
+  restoredHardcover.sourcePdf?.pagePreviews,
+  undefined,
+  'hardcover PDF carousel thumbnails omitted'
+)
+expectEqual(restoredHardcover.sourcePdf?.backCoverEnabled, true, 'hardcover back toggle saved')
+expectEqual(restoredHardcover.sourcePdf?.backPageNumber, 12, 'hardcover back page saved')
 expectEqual(hardcoverFile.metadata.tool, 'hardcover-cover', 'hardcover metadata tool')
 expectEqual(
   getHardcoverProjectStateKey(restoredHardcover),
   getHardcoverProjectStateKey(hardcoverState),
-  'hardcover dirty state survives save/open'
+  'hardcover dirty state survives save/open and ignores PDF bytes'
 )
 
 expectEqual(

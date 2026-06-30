@@ -53,7 +53,7 @@ export function ExportHardcoverPanel({
           </select>
         </label>
         <Toggle
-          label="Fold lines"
+          label="Binding edge marks"
           checked={settings.includeFoldLines}
           onChange={(includeFoldLines) => onChange({ includeFoldLines })}
         />

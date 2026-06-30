@@ -62,7 +62,20 @@ export function getCutterProjectStateKey({
 }
 
 export function getHardcoverProjectStateKey(state: HardcoverProjectState): string {
-  return JSON.stringify(state)
+  const sourcePdf = state.sourcePdf
+    ? {
+        ...state.sourcePdf,
+        bytes: undefined,
+        thumbnailDataUrl: undefined,
+        backThumbnailDataUrl: undefined,
+        pagePreviews: undefined
+      }
+    : undefined
+
+  return JSON.stringify({
+    ...state,
+    sourcePdf
+  })
 }
 
 function omitSourceBytes<T extends { bytes: Uint8Array }>(

@@ -18,9 +18,6 @@ import { AutosaveRecoveryBanner } from '@/projects/AutosaveRecoveryBanner'
 import { AppHealthPage } from '@/settings/AppHealthPage'
 import { ExportCenterPage } from '@/exports/ExportCenterPage'
 import { JobsPage } from '@/jobs/JobsPage'
-import { BookletMontagePage } from '@/tools/booklet-montage/BookletMontagePage'
-import { CutterMontagePage } from '@/tools/cutter-montage/CutterMontagePage'
-import { HardcoverCoverPage } from '@/tools/hardcover-cover/HardcoverCoverPage'
 import type { AppRoute, PageMeta } from '@/types/navigation'
 import type {
   ActiveProjectSession,
@@ -32,6 +29,15 @@ import type { AutosaveEntry } from '../../../shared/release-types'
 
 const AUTOSAVE_INTERVAL_MS = 60_000
 const QualityLabPage = lazy(() => import('@/quality/QualityLabPage'))
+const BookletMontagePage = lazy(async () => ({
+  default: (await import('@/tools/booklet-montage/BookletMontagePage')).BookletMontagePage
+}))
+const CutterMontagePage = lazy(async () => ({
+  default: (await import('@/tools/cutter-montage/CutterMontagePage')).CutterMontagePage
+}))
+const HardcoverCoverPage = lazy(async () => ({
+  default: (await import('@/tools/hardcover-cover/HardcoverCoverPage')).HardcoverCoverPage
+}))
 
 const pageMeta: Record<AppRoute, PageMeta> = {
   dashboard: {
@@ -92,6 +98,14 @@ const appRoutes = new Set<AppRoute>([
 interface PendingBookletPdfImport {
   id: number
   files: File[]
+}
+
+function ToolLoadingFallback({ label }: { label: string }): JSX.Element {
+  return (
+    <div className="rounded-md border bg-card px-4 py-3 text-sm font-medium text-muted-foreground">
+      {label}
+    </div>
+  )
 }
 
 function getRouteFromHash(): AppRoute {
@@ -384,48 +398,54 @@ export function App(): JSX.Element {
         />
       )}
       {activeRoute === 'booklet-montage' && !showToolAccessOverlay && (
-        <BookletMontagePage
-          key={openedProject?.instanceId ?? 'new-booklet'}
-          onNavigate={navigate}
-          onOpenProject={openProject}
-          initialPdfImport={pendingBookletPdfImport}
-          onInitialPdfImportConsumed={consumeBookletPdfImport}
-          onProjectSessionChange={setActiveProjectSession}
-          onConfirmUnsavedChanges={confirmUnsavedChanges}
-          openedProject={
-            openedProject?.project.metadata.tool === 'booklet-montage'
-              ? (openedProject as OpenedPrinterProject<BookletProjectPayload>)
-              : null
-          }
-        />
+        <Suspense fallback={<ToolLoadingFallback label="Loading Booklet Montage..." />}>
+          <BookletMontagePage
+            key={openedProject?.instanceId ?? 'new-booklet'}
+            onNavigate={navigate}
+            onOpenProject={openProject}
+            initialPdfImport={pendingBookletPdfImport}
+            onInitialPdfImportConsumed={consumeBookletPdfImport}
+            onProjectSessionChange={setActiveProjectSession}
+            onConfirmUnsavedChanges={confirmUnsavedChanges}
+            openedProject={
+              openedProject?.project.metadata.tool === 'booklet-montage'
+                ? (openedProject as OpenedPrinterProject<BookletProjectPayload>)
+                : null
+            }
+          />
+        </Suspense>
       )}
       {activeRoute === 'hardcover-cover' && !showToolAccessOverlay && (
-        <HardcoverCoverPage
-          key={openedProject?.instanceId ?? 'new-hardcover'}
-          onNavigate={navigate}
-          onOpenProject={openProject}
-          onProjectSessionChange={setActiveProjectSession}
-          onConfirmUnsavedChanges={confirmUnsavedChanges}
-          openedProject={
-            openedProject?.project.metadata.tool === 'hardcover-cover'
-              ? (openedProject as OpenedPrinterProject<HardcoverProjectPayload>)
-              : null
-          }
-        />
+        <Suspense fallback={<ToolLoadingFallback label="Loading Hardcover Cover..." />}>
+          <HardcoverCoverPage
+            key={openedProject?.instanceId ?? 'new-hardcover'}
+            onNavigate={navigate}
+            onOpenProject={openProject}
+            onProjectSessionChange={setActiveProjectSession}
+            onConfirmUnsavedChanges={confirmUnsavedChanges}
+            openedProject={
+              openedProject?.project.metadata.tool === 'hardcover-cover'
+                ? (openedProject as OpenedPrinterProject<HardcoverProjectPayload>)
+                : null
+            }
+          />
+        </Suspense>
       )}
       {activeRoute === 'cutter-montage' && !showToolAccessOverlay && (
-        <CutterMontagePage
-          key={openedProject?.instanceId ?? 'new-cutter'}
-          onNavigate={navigate}
-          onOpenProject={openProject}
-          onProjectSessionChange={setActiveProjectSession}
-          onConfirmUnsavedChanges={confirmUnsavedChanges}
-          openedProject={
-            openedProject?.project.metadata.tool === 'cutter-montage'
-              ? (openedProject as OpenedPrinterProject<CutterProjectPayload>)
-              : null
-          }
-        />
+        <Suspense fallback={<ToolLoadingFallback label="Loading Cutter Montage..." />}>
+          <CutterMontagePage
+            key={openedProject?.instanceId ?? 'new-cutter'}
+            onNavigate={navigate}
+            onOpenProject={openProject}
+            onProjectSessionChange={setActiveProjectSession}
+            onConfirmUnsavedChanges={confirmUnsavedChanges}
+            openedProject={
+              openedProject?.project.metadata.tool === 'cutter-montage'
+                ? (openedProject as OpenedPrinterProject<CutterProjectPayload>)
+                : null
+            }
+          />
+        </Suspense>
       )}
       {activeRoute === 'license' && (
         <LicensePage

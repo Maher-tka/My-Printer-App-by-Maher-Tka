@@ -222,7 +222,7 @@ function BookletSideCard({
     widthMm: Math.max(rawPaperSize.widthMm, 1),
     heightMm: Math.max(rawPaperSize.heightMm, 1)
   }
-  const slots = getPreviewSlots(paperSize)
+  const slots = getPreviewSlots(paperSize, settings)
 
   return (
     <div className="relative h-[300px] rounded-md bg-card p-3">
@@ -249,12 +249,15 @@ function BookletSideCard({
   )
 }
 
-function getPreviewSlots(paperSize: { widthMm: number; heightMm: number }): {
+function getPreviewSlots(
+  paperSize: { widthMm: number; heightMm: number },
+  settings: SheetSettings
+): {
   left: Rect
   right: Rect
 } {
   try {
-    return getBookletSlotRects(paperSize)
+    return getBookletSlotRects(paperSize, settings.outerMarginMm, settings.pageGapMm)
   } catch {
     return {
       left: { x: 0, y: 0, width: paperSize.widthMm / 2, height: paperSize.heightMm },
@@ -280,7 +283,7 @@ function DetailedSidePreview({
     widthMm: Math.max(rawPaperSize.widthMm, 1),
     heightMm: Math.max(rawPaperSize.heightMm, 1)
   }
-  const slots = getPreviewSlots(paperSize)
+  const slots = getPreviewSlots(paperSize, settings)
 
   return (
     <div className="grid min-h-[560px] grid-cols-1 gap-4 rounded-lg border bg-slate-100/70 p-4 xl:grid-cols-[minmax(0,1fr)_260px]">

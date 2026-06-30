@@ -29,7 +29,11 @@ import {
   releasePageThumbnail,
   releasePageThumbnails
 } from '../lib/memoryCleanup'
-import { validatePrintSettings } from '../lib/printSizes'
+import {
+  DEFAULT_SHEET_SETTINGS,
+  normalizeSheetSettings,
+  validatePrintSettings
+} from '../lib/printSizes'
 import {
   applyImportPageOrder,
   normalizeCurrentOrder,
@@ -68,16 +72,7 @@ const idleExportProgress: ExportProgress = {
 }
 
 export const defaultSheetSettings: SheetSettings = {
-  paperSize: 'A4',
-  orientation: 'landscape',
-  outputMode: 'front-back-pairs',
-  customWidthMm: 297,
-  customHeightMm: 210,
-  scaleMode: 'fit',
-  readingDirection: 'ltr',
-  cropMarks: true,
-  registrationMarks: false,
-  exportQuality: 'standard'
+  ...DEFAULT_SHEET_SETTINGS
 }
 
 export function useBookletMontage(initialProject?: PrinterProjectFile<BookletProjectPayload>) {
@@ -87,8 +82,8 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
   )
   const [pages, setPages] = useState<BookletPage[]>(() => initialState?.pages ?? [])
   const [sources, setSources] = useState<BookletSource[]>(() => initialState?.sources ?? [])
-  const [settings, setSettings] = useState<SheetSettings>(
-    () => initialState?.settings ?? defaultSheetSettings
+  const [settings, setSettings] = useState<SheetSettings>(() =>
+    normalizeSheetSettings(initialState?.settings ?? defaultSheetSettings)
   )
   const [sheetBoardState, setSheetBoardState] = useState<SheetBoardState>(
     () => initialState?.sheetBoardState ?? createInitialSheetBoardState()
@@ -336,7 +331,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
   }, [])
 
   const updateSettings = useCallback((nextSettings: Partial<SheetSettings>): void => {
-    setSettings((current) => ({ ...current, ...nextSettings }))
+    setSettings((current) => normalizeSheetSettings({ ...current, ...nextSettings }))
   }, [])
 
   const addEmptySheet = useCallback((): void => {

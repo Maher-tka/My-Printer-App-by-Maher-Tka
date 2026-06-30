@@ -1,4 +1,11 @@
-import { ArrowLeft, CheckCircle2, CircleDollarSign, ClipboardCheck, UserRound } from 'lucide-react'
+import {
+  ArrowLeft,
+  CheckCircle2,
+  CircleDollarSign,
+  ClipboardCheck,
+  Settings2,
+  UserRound
+} from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -91,10 +98,15 @@ export function HardcoverCoverPage({
   const hardcoverPreflight = useMemo(() => {
     const wrap = hardcover.state.setup.wrap
     return runHardcoverPreflight({
-      bookWidthMm: hardcover.state.setup.bookWidthMm,
-      bookHeightMm: hardcover.state.setup.bookHeightMm,
+      bookWidthMm: hardcover.state.setup.boardWidthMm,
+      bookHeightMm: hardcover.state.setup.boardHeightMm,
       spineWidthMm: hardcover.state.setup.spineWidthMm,
-      wrapMarginsMm: [wrap.topMm, wrap.rightMm, wrap.bottomMm, wrap.leftMm],
+      wrapMarginsMm: [
+        hardcover.state.setup.leftBandWidthMm,
+        hardcover.state.setup.rightBandWidthMm,
+        wrap.topMm,
+        wrap.bottomMm
+      ],
       fullWidthMm: hardcover.dimensions.fullWidthMm,
       fullHeightMm: hardcover.dimensions.fullHeightMm,
       title: hardcover.state.content.front.title,
@@ -392,33 +404,50 @@ export function HardcoverCoverPage({
               <CoverSetupPanel
                 setup={hardcover.state.setup}
                 dimensions={hardcover.dimensions}
+                sourcePdf={hardcover.state.sourcePdf}
+                productionPreset={hardcover.state.productionPreset}
                 onChange={hardcover.updateSetup}
+                onImportPdf={hardcover.importSourcePdf}
+                onSelectPdfFrontPage={hardcover.selectSourcePdfFrontPage}
+                onSelectPdfBackPage={hardcover.selectSourcePdfBackPage}
+                onTogglePdfBackCover={hardcover.setSourcePdfBackCoverEnabled}
+                onSavePreset={hardcover.saveProductionPreset}
+                onUpdatePreset={hardcover.updateProductionPreset}
+                onResetFactoryPreset={hardcover.resetProductionPreset}
               />
-              <CoverTemplatePanel
-                template={hardcover.state.template}
-                customTemplates={hardcover.state.customTemplates}
-                onChoose={hardcover.chooseTemplate}
-                onDuplicate={hardcover.duplicateTemplate}
-                onReset={hardcover.resetTemplate}
-                onChange={hardcover.updateTemplate}
-                onSave={() => void saveTemplateFile()}
-              />
-              <FrontCoverEditor
-                value={hardcover.state.content.front}
-                onChange={hardcover.updateFront}
-              />
-              <SpineEditor
-                value={hardcover.state.content.spine}
-                layout={hardcover.spineLayout}
-                onChange={hardcover.updateSpine}
-                onUseFrontTitle={() =>
-                  hardcover.updateSpine({ shortTitle: hardcover.state.content.front.title })
-                }
-              />
-              <BackCoverEditor
-                value={hardcover.state.content.back}
-                onChange={hardcover.updateBack}
-              />
+              <details className="rounded-lg border bg-card p-4">
+                <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
+                  <Settings2 className="size-4" />
+                  Advanced / Manual Design
+                </summary>
+                <div className="mt-4 flex flex-col gap-4">
+                  <CoverTemplatePanel
+                    template={hardcover.state.template}
+                    customTemplates={hardcover.state.customTemplates}
+                    onChoose={hardcover.chooseTemplate}
+                    onDuplicate={hardcover.duplicateTemplate}
+                    onReset={hardcover.resetTemplate}
+                    onChange={hardcover.updateTemplate}
+                    onSave={() => void saveTemplateFile()}
+                  />
+                  <FrontCoverEditor
+                    value={hardcover.state.content.front}
+                    onChange={hardcover.updateFront}
+                  />
+                  <SpineEditor
+                    value={hardcover.state.content.spine}
+                    layout={hardcover.spineLayout}
+                    onChange={hardcover.updateSpine}
+                    onUseFrontTitle={() =>
+                      hardcover.updateSpine({ shortTitle: hardcover.state.content.front.title })
+                    }
+                  />
+                  <BackCoverEditor
+                    value={hardcover.state.content.back}
+                    onChange={hardcover.updateBack}
+                  />
+                </div>
+              </details>
             </aside>
             <main className="flex min-w-0 flex-col gap-4">
               <CoverCanvas state={hardcover.state} />

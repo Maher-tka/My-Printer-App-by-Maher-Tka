@@ -10,6 +10,10 @@ export type HardcoverExportMode = 'print-final' | 'production-guide' | 'customer
 
 export type CoverPresetId = 'a4' | 'a5' | 'custom'
 
+export type BookDirection = 'ltr' | 'rtl'
+
+export type HardcoverPdfFitMode = 'fit' | 'fill'
+
 export interface CoverMargins {
   topMm: number
   rightMm: number
@@ -20,9 +24,17 @@ export interface CoverMargins {
 export interface CoverSetup {
   preset: CoverPresetId
   unit: CoverUnit
+  bookDirection: BookDirection
+  boardWidthMm: number
+  boardHeightMm: number
   bookWidthMm: number
   bookHeightMm: number
   spineWidthMm: number
+  leftBandWidthMm: number
+  rightBandWidthMm: number
+  useSameBandWidth: boolean
+  markLengthMm: number
+  centerOnSheet: boolean
   wrap: CoverMargins
   hingeMm: number
   bleedMm: number
@@ -37,17 +49,73 @@ export interface CoverZone {
   heightMm: number
 }
 
+export interface CoverGuideMark {
+  xMm: number
+  yStartMm: number
+  yEndMm: number
+  edge: 'top' | 'bottom'
+}
+
 export interface CoverDimensions {
   fullWidthMm: number
   fullHeightMm: number
+  structureWidthMm: number
+  structureHeightMm: number
+  horizontalMarginMm: number
+  verticalMarginMm: number
   orientation: 'portrait' | 'landscape'
+  sheet: CoverZone
+  leftBoard: CoverZone
+  rightBoard: CoverZone
+  leftBand: CoverZone
+  rightBand: CoverZone
   back: CoverZone
   spine: CoverZone
   front: CoverZone
   safeBack: CoverZone
   safeSpine: CoverZone
   safeFront: CoverZone
+  guideMarkPositionsMm: number[]
+  guideMarks: CoverGuideMark[]
   warnings: string[]
+}
+
+export interface HardcoverPdfSource {
+  fileName: string
+  filePath?: string
+  pageCount: number
+  frontPageNumber: number
+  backPageNumber?: number
+  backCoverEnabled: boolean
+  frontPageRotation?: number
+  backPageRotation?: number
+  fitMode: HardcoverPdfFitMode
+  thumbnailDataUrl?: string
+  backThumbnailDataUrl?: string
+  pagePreviews?: HardcoverPdfPagePreview[]
+  bytes?: Uint8Array
+}
+
+export interface HardcoverPdfPagePreview {
+  pageNumber: number
+  thumbnailDataUrl: string
+  rotation: number
+}
+
+export interface HardcoverProductionPreset {
+  id: string
+  name: string
+  paperWidthMm: number
+  paperHeightMm: number
+  boardWidthMm: number
+  boardHeightMm: number
+  spineWidthMm: number
+  leftBandWidthMm: number
+  rightBandWidthMm: number
+  markLengthMm: number
+  centerOnSheet: boolean
+  cropMarks: boolean
+  defaultDirection: BookDirection
 }
 
 export interface FrontCoverContent {
@@ -150,6 +218,8 @@ export interface HardcoverJobDetails {
 
 export interface HardcoverProjectState {
   setup: CoverSetup
+  sourcePdf?: HardcoverPdfSource
+  productionPreset: HardcoverProductionPreset
   content: CoverContent
   template: CoverTemplate
   customTemplates: CoverTemplate[]
@@ -167,8 +237,16 @@ export interface HardcoverProjectState {
 export interface SpineTextLayout {
   fontSizePt: number
   lines: string[]
+  items: SpineTextLayoutItem[]
   fits: boolean
   warning?: string
+}
+
+export interface SpineTextLayoutItem {
+  role: 'year' | 'title' | 'studentName'
+  lines: string[]
+  fontSizePt: number
+  centerFromTopMm: number
 }
 
 export interface HardcoverExportResult {

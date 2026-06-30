@@ -1,10 +1,20 @@
 import { blanksNeededForBooklet, createBlankPage, generateBookletSheets } from './bookletImposition'
-import { getPrintSizeMm, validatePrintSettings } from './printSizes'
-import { getPlacement } from './renderSheet'
+import {
+  DEFAULT_SHEET_SETTINGS,
+  getPrintSizeMm,
+  getSheetLayoutMm,
+  validatePrintSettings
+} from './printSizes'
+import {
+  createCanvasRenderAssets,
+  getPlacement,
+  renderCanvasSheetSide,
+  renderPdfSheetSide
+} from './renderSheet'
 import { naturalSortFileNames } from './naturalSort'
 import { getBookletImageExportFolderName, getNumberedMontageImageFileName } from './exportNaming'
 import { normalizeCurrentOrder, reorderPagesByDrag, resetToOriginalOrder } from './pageOrdering'
-import type { BookletPage, SheetSettings } from '../types'
+import type { BookletPage, BookletSide, SheetSettings } from '../types'
 
 interface TestPage {
   label: string
@@ -77,18 +87,15 @@ function testAutoBlankCount(): void {
 
 function testPrintSizes(): void {
   const baseSettings: SheetSettings = {
-    paperSize: 'A4',
-    orientation: 'landscape',
-    outputMode: 'front-back-pairs',
+    ...DEFAULT_SHEET_SETTINGS,
     customWidthMm: 500,
-    customHeightMm: 700,
-    scaleMode: 'fit',
-    readingDirection: 'ltr',
-    cropMarks: true,
-    registrationMarks: false,
-    exportQuality: 'standard'
+    customHeightMm: 700
   }
 
+  expectEqual(DEFAULT_SHEET_SETTINGS.cropMarks, false, 'default crop marks off')
+  expectEqual(DEFAULT_SHEET_SETTINGS.registrationMarks, false, 'default registration marks off')
+  expectEqual(DEFAULT_SHEET_SETTINGS.outerMarginMm, 0, 'default outer margin is zero')
+  expectEqual(DEFAULT_SHEET_SETTINGS.pageGapMm, 0, 'default page gap is zero')
   expectEqual(
     getPrintSizeMm({ ...baseSettings, paperSize: 'A4', orientation: 'landscape' }),
     { widthMm: 297, heightMm: 210 },
@@ -114,6 +121,36 @@ function testPrintSizes(): void {
     true,
     'invalid custom size validation'
   )
+  expectEqual(
+    validatePrintSettings({ ...baseSettings, outerMarginMm: -1 }).length > 0,
+    true,
+    'negative outer margin validation'
+  )
+  expectEqual(
+    validatePrintSettings({ ...baseSettings, pageGapMm: -1 }).length > 0,
+    true,
+    'negative page gap validation'
+  )
+  expectEqual(
+    validatePrintSettings({ ...baseSettings, outerMarginMm: 150 }).length > 0,
+    true,
+    'oversized margin validation'
+  )
+}
+
+function testDefaultZeroGapLayout(): void {
+  const layout = getSheetLayoutMm(DEFAULT_SHEET_SETTINGS)
+  const { left, right } = layout.trimSlots
+
+  expectEqual(left.x, 0, 'default A4 left slot x')
+  expectEqual(left.y, 0, 'default A4 left slot y')
+  expectEqual(left.width, 148.5, 'default A4 left slot width')
+  expectEqual(left.height, 210, 'default A4 left slot height')
+  expectEqual(right.x, 148.5, 'default A4 right slot x')
+  expectEqual(right.y, 0, 'default A4 right slot y')
+  expectEqual(right.width, 148.5, 'default A4 right slot width')
+  expectEqual(right.height, 210, 'default A4 right slot height')
+  expectEqual(left.x + left.width, right.x, 'left right edge touches right left edge')
 }
 
 function testScaleModes(): void {
@@ -226,17 +263,75 @@ function bookletPages(count: number): BookletPage[] {
   }))
 }
 
+async function testMarksDisabledByDefault(): Promise<void> {
+  const side: BookletSide = {
+    sheetNumber: 1,
+    side: 'front',
+    left: { pageNumber: 4, page: createBlankPage(1) },
+    right: { pageNumber: 1, page: createBlankPage(2) }
+  }
+  const layout = getSheetLayoutMm(DEFAULT_SHEET_SETTINGS)
+  const pdfPage = {
+    drawLine: () => {
+      throw new Error('PDF crop or registration marks should not be drawn by default.')
+    },
+    drawRectangle: () => undefined
+  }
+  const canvas = new CanvasSpy()
+
+  await renderPdfSheetSide(
+    pdfPage as unknown as Parameters<typeof renderPdfSheetSide>[0],
+    side,
+    DEFAULT_SHEET_SETTINGS,
+    layout,
+    {
+      pdf: {} as Parameters<typeof renderPdfSheetSide>[4]['pdf'],
+      sourceMap: new Map(),
+      pdfPages: new Map(),
+      images: new Map()
+    }
+  )
+  await renderCanvasSheetSide(
+    canvas as unknown as CanvasRenderingContext2D,
+    side,
+    DEFAULT_SHEET_SETTINGS,
+    layout,
+    createCanvasRenderAssets([]),
+    72
+  )
+  expectEqual(canvas.strokeCount, 0, 'canvas crop and registration marks are not drawn by default')
+}
+
+class CanvasSpy {
+  fillStyle = '#ffffff'
+  strokeStyle = '#000000'
+  lineWidth = 1
+  strokeCount = 0
+
+  save(): void {}
+  restore(): void {}
+  fillRect(): void {}
+  beginPath(): void {}
+  moveTo(): void {}
+  lineTo(): void {}
+  stroke(): void {
+    this.strokeCount += 1
+  }
+}
+
 testFourPages()
 testEightPages()
 testEightPagesRtl()
 testTwelvePages()
 testAutoBlankCount()
 testPrintSizes()
+testDefaultZeroGapLayout()
 testScaleModes()
 testNaturalImageSorting()
 testDragOrderDrivesImposition()
 testResetOriginalOrder()
 testImageExportNaming()
+await testMarksDisabledByDefault()
 
 console.log(
   'Booklet tests passed: imposition, auto blanks, print sizes, scale modes, sorting, page ordering, and export naming.'

@@ -5,7 +5,7 @@ import type { SpineContent } from '../types'
 const base: SpineContent = {
   studentName: 'Maher Tka',
   shortTitle: 'Smart Printing Workflow',
-  year: '2026',
+  year: '2025/2026',
   universityInitials: 'ISAMM',
   direction: 'bottom-to-top',
   autoFit: true,
@@ -14,6 +14,16 @@ const base: SpineContent = {
 
 const normal = calculateSpineTextLayout(base, 20, 280)
 assert.equal(normal.fits, true, 'normal title fits a 20 mm spine')
+assert.deepEqual(
+  normal.items.map((item) => item.role),
+  ['year', 'title', 'studentName'],
+  'spine layout keeps academic year, title, and student name as separate items'
+)
+assert.ok(
+  normal.items[0].centerFromTopMm < normal.items[1].centerFromTopMm &&
+    normal.items[1].centerFromTopMm < normal.items[2].centerFromTopMm,
+  'spine items are ordered top, middle, bottom'
+)
 assert.ok(
   normal.fontSizePt >= 6 && normal.fontSizePt <= 18,
   'auto-fit stays within safe font range'

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type {
@@ -15,10 +15,15 @@ import type {
 const MAX_EXPORT_HISTORY = 200
 const MAX_RECENT_ERRORS = 30
 const MAX_AUTOSAVES_PER_PROJECT = 5
+const LARGE_AUTOSAVE_WARNING_BYTES = 25 * 1024 * 1024
+const MAX_AUTOSAVE_METADATA_BYTES = 256 * 1024
 const EXPORT_HISTORY_FILE = 'export-history.json'
 const AUTOSAVE_FOLDER = 'autosaves'
+const AUTOSAVE_FILE_EXTENSION = '.myprinter-autosave.json'
+const AUTOSAVE_METADATA_EXTENSION = '.meta.json'
 
 const recentErrors: AppHealthSnapshot['recentErrors'] = []
+const reportedAutosaveIssues = new Set<string>()
 
 export function registerReleaseRuntimeHandlers(): void {
   ipcMain.handle('runtime:get-health', getAppHealthSnapshot)
@@ -95,7 +100,7 @@ export async function clearProjectAutosaves(projectId: string): Promise<void> {
   await Promise.all(
     entries
       .filter((entry) => entry.projectId === projectId)
-      .map((entry) => rm(entry.filePath, { force: true }))
+      .map((entry) => removeAutosaveFiles(entry.filePath))
   )
 }
 
@@ -205,6 +210,11 @@ async function writeProjectAutosave(
     }
     await mkdir(folder, { recursive: true })
     await writeJson(filePath, { autosave: entry, project })
+    try {
+      await writeJson(getAutosaveMetadataPath(filePath), { autosave: entry })
+    } catch (error) {
+      recordAutosaveIssue('autosave-metadata-write', filePath, error)
+    }
     await pruneProjectAutosaves(project.metadata.id)
     return { ok: true, entry }
   } catch (error) {
@@ -219,12 +229,8 @@ async function listProjectAutosaves(): Promise<AutosaveEntry[]> {
     const names = await readdir(folder)
     const entries = await Promise.all(
       names
-        .filter((name) => name.endsWith('.myprinter-autosave.json'))
-        .map(async (name) => {
-          const filePath = join(folder, name)
-          const value = await readJsonRecord(filePath)
-          return isAutosaveEntry(value.autosave) ? { ...value.autosave, filePath } : null
-        })
+        .filter((name) => name.endsWith(AUTOSAVE_FILE_EXTENSION))
+        .map((name) => readAutosaveEntrySummary(join(folder, name)))
     )
     return entries
       .filter((entry): entry is AutosaveEntry => Boolean(entry))
@@ -241,12 +247,15 @@ async function readProjectAutosave(
 ): Promise<{ ok: boolean; project?: unknown; entry?: AutosaveEntry; error?: string }> {
   try {
     const value = await readJsonRecord(filePath)
-    if (!isProjectEnvelope(value.project) || !isAutosaveEntry(value.autosave)) {
+    if (!isProjectEnvelope(value.project)) {
       throw new Error('This autosave is damaged or unsupported.')
     }
-    return { ok: true, project: value.project, entry: { ...value.autosave, filePath } }
+    const fallbackEntry = await readAutosaveEntrySummary(filePath)
+    const entry = isAutosaveEntry(value.autosave) ? { ...value.autosave, filePath } : fallbackEntry
+
+    return { ok: true, project: value.project, ...(entry ? { entry } : {}) }
   } catch (error) {
-    recordAppError('autosave-read', error)
+    recordAutosaveIssue('autosave-read', filePath, error)
     return { ok: false, error: getErrorMessage(error) }
   }
 }
@@ -256,7 +265,7 @@ async function discardProjectAutosave(filePath: string): Promise<{ ok: boolean; 
     if (dirname(filePath).toLowerCase() !== getAutosavePath().toLowerCase()) {
       throw new Error('Only files inside the autosave folder can be discarded.')
     }
-    await rm(filePath, { force: true })
+    await removeAutosaveFiles(filePath)
     return { ok: true }
   } catch (error) {
     recordAppError('autosave-discard', error)
@@ -272,7 +281,7 @@ async function openAutosaveFolder(): Promise<string> {
 async function pruneProjectAutosaves(projectId: string): Promise<void> {
   const entries = (await listProjectAutosaves()).filter((entry) => entry.projectId === projectId)
   await Promise.all(
-    entries.slice(MAX_AUTOSAVES_PER_PROJECT).map((entry) => rm(entry.filePath, { force: true }))
+    entries.slice(MAX_AUTOSAVES_PER_PROJECT).map((entry) => removeAutosaveFiles(entry.filePath))
   )
 }
 
@@ -331,6 +340,141 @@ async function writeJson(filePath: string, value: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
 }
 
+async function readAutosaveEntrySummary(filePath: string): Promise<AutosaveEntry | null> {
+  const metadataEntry = await readAutosaveMetadataEntry(filePath)
+
+  if (metadataEntry) {
+    return metadataEntry
+  }
+
+  try {
+    const stats = await stat(filePath)
+    if (stats.size >= LARGE_AUTOSAVE_WARNING_BYTES) {
+      recordAutosaveIssue(
+        'autosave-summary',
+        filePath,
+        new Error(
+          `Large autosave (${formatBytes(stats.size)}) has no readable metadata sidecar; using a filename fallback so startup can continue.`
+        )
+      )
+    }
+    return createFallbackAutosaveEntry(filePath, stats.mtime)
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return null
+    recordAutosaveIssue('autosave-summary', filePath, error)
+    return null
+  }
+}
+
+async function readAutosaveMetadataEntry(filePath: string): Promise<AutosaveEntry | null> {
+  const metadataPath = getAutosaveMetadataPath(filePath)
+  try {
+    const metadataStats = await stat(metadataPath)
+    if (metadataStats.size > MAX_AUTOSAVE_METADATA_BYTES) {
+      recordAutosaveIssue(
+        'autosave-metadata',
+        filePath,
+        new Error(
+          `Autosave metadata sidecar is too large (${formatBytes(metadataStats.size)} at ${metadataPath}); using the autosave file details instead.`
+        )
+      )
+      return null
+    }
+
+    const value = await readJsonRecord(metadataPath)
+    const entry = isAutosaveEntry(value.autosave) ? value.autosave : value
+
+    if (isAutosaveEntry(entry)) {
+      return { ...entry, filePath }
+    }
+
+    recordAutosaveIssue(
+      'autosave-metadata',
+      filePath,
+      new Error(
+        `Autosave metadata sidecar is damaged or unsupported at ${metadataPath}; using the autosave file details instead.`
+      )
+    )
+    return null
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      return null
+    }
+
+    recordAutosaveIssue('autosave-metadata', filePath, error, { metadataPath })
+    return null
+  }
+}
+
+function createFallbackAutosaveEntry(filePath: string, modifiedAt: Date): AutosaveEntry {
+  const fileName = filePath.split(/[\\/]/).pop() ?? 'autosave'
+  const parsed = parseAutosaveFileName(fileName)
+
+  return {
+    id: parsed.id,
+    projectId: parsed.projectId,
+    projectName: 'Recovered unsaved project',
+    toolType: 'unknown',
+    createdAt: parsed.createdAt ?? modifiedAt.toISOString(),
+    filePath
+  }
+}
+
+function parseAutosaveFileName(fileName: string): {
+  id: string
+  projectId: string
+  createdAt?: string
+} {
+  const baseName = fileName.endsWith(AUTOSAVE_FILE_EXTENSION)
+    ? fileName.slice(0, -AUTOSAVE_FILE_EXTENSION.length)
+    : fileName
+  const match = /^(.*)-(\d+)$/.exec(baseName)
+  const timestamp = match ? Number(match[2]) : NaN
+  const createdAt = Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined
+  const projectId = match?.[1] || baseName || 'unknown-project'
+
+  return {
+    id: baseName || randomUUID(),
+    projectId,
+    createdAt
+  }
+}
+
+async function removeAutosaveFiles(filePath: string): Promise<void> {
+  await Promise.all([
+    rm(filePath, { force: true }),
+    rm(getAutosaveMetadataPath(filePath), { force: true })
+  ])
+}
+
+function recordAutosaveIssue(
+  area: string,
+  filePath: string,
+  error: unknown,
+  details?: unknown
+): void {
+  const cause = getErrorMessage(error)
+  const message = `Autosave issue in ${filePath}: ${cause}`
+  const key = `${area}:${message}`
+
+  if (reportedAutosaveIssues.has(key)) {
+    return
+  }
+
+  if (reportedAutosaveIssues.size > MAX_RECENT_ERRORS * 4) {
+    reportedAutosaveIssues.clear()
+  }
+  reportedAutosaveIssues.add(key)
+
+  if (details === undefined) {
+    console.error(`[runtime:${area}] ${message}`)
+  } else {
+    console.error(`[runtime:${area}] ${message}`, details)
+  }
+
+  recordAppError(area, new Error(message))
+}
+
 function isProjectEnvelope(
   value: unknown
 ): value is { metadata: { id: string; jobName: string; tool: string } } {
@@ -359,6 +503,24 @@ function getExportHistoryPath(): string {
 
 function getAutosavePath(): string {
   return join(app.getPath('userData'), AUTOSAVE_FOLDER)
+}
+
+function getAutosaveMetadataPath(filePath: string): string {
+  return `${filePath}${AUTOSAVE_METADATA_EXTENSION}`
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let value = bytes / 1024
+  let unitIndex = 0
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`
 }
 
 function safeSegment(value: string): string {

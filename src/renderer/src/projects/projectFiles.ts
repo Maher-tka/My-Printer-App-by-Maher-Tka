@@ -4,6 +4,7 @@ import type {
   SheetBoardState,
   SheetSettings
 } from '@/tools/booklet-montage/types'
+import { normalizeSheetSettings } from '@/tools/booklet-montage/lib/printSizes'
 import type {
   CutterExportSettings,
   CutterLayerVisibility,
@@ -120,7 +121,7 @@ export function createBookletProjectFile({
       existingMetadata
     }),
     payload: {
-      settings,
+      settings: normalizeSheetSettings(settings),
       sheetBoardState,
       sources: sources.map(serializeBookletSource),
       pages: pages.map(serializeBookletPage)
@@ -135,7 +136,7 @@ export function deserializeBookletProjectPayload(payload: BookletProjectPayload)
   sheetBoardState: SheetBoardState
 } {
   return {
-    settings: payload.settings,
+    settings: normalizeSheetSettings(payload.settings),
     sheetBoardState: payload.sheetBoardState,
     sources: payload.sources.map((source) => ({
       ...source,
@@ -248,6 +249,8 @@ export function createHardcoverProjectFile({
   state: HardcoverProjectState
   existingMetadata?: ProjectMetadata | null
 }): PrinterProjectFile<HardcoverProjectPayload> {
+  const payload = serializeHardcoverProjectState(state)
+
   return {
     schema: PRINTER_PROJECT_SCHEMA,
     version: PRINTER_PROJECT_VERSION,
@@ -258,15 +261,16 @@ export function createHardcoverProjectFile({
         state.content.front.studentName.trim() ||
         'Untitled Hardcover Cover',
       sourceCount:
+        Number(Boolean(state.sourcePdf?.fileName)) +
         Number(Boolean(state.content.front.logoDataUrl)) +
         Number(Boolean(state.content.front.backgroundDataUrl)) +
         Number(Boolean(state.content.back.logoDataUrl)),
       itemCount: Math.max(1, state.batchStudents.length),
-      summary: `${state.content.front.studentName || 'Unnamed student'}, ${state.setup.bookWidthMm} x ${state.setup.bookHeightMm} mm, ${state.setup.spineWidthMm} mm spine`,
+      summary: `${state.content.front.studentName || 'Unnamed student'}, ${state.setup.boardWidthMm} x ${state.setup.boardHeightMm} mm board, ${state.setup.spineWidthMm} mm spine`,
       price: getHardcoverQuoteTotal(state),
       existingMetadata
     }),
-    payload: state
+    payload
   }
 }
 
@@ -274,6 +278,23 @@ export function deserializeHardcoverProjectPayload(
   payload: HardcoverProjectPayload
 ): HardcoverProjectState {
   return structuredClone(payload)
+}
+
+function serializeHardcoverProjectState(state: HardcoverProjectState): HardcoverProjectState {
+  const payload = structuredClone(state)
+
+  if (payload.sourcePdf) {
+    const {
+      bytes: _bytes,
+      thumbnailDataUrl: _thumbnailDataUrl,
+      backThumbnailDataUrl: _backThumbnailDataUrl,
+      pagePreviews: _pagePreviews,
+      ...sourcePdf
+    } = payload.sourcePdf
+    payload.sourcePdf = sourcePdf
+  }
+
+  return payload
 }
 
 export function isPrinterProjectFile(value: unknown): value is PrinterProjectFile {
