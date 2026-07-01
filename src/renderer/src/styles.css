@@ -52,7 +52,8 @@
   body {
     @apply bg-background text-foreground;
     margin: 0;
-    min-width: 1100px;
+    min-width: 0;
+    overflow-x: hidden;
     font-family:
       Inter,
       Segoe UI,
@@ -97,5 +98,18 @@
     margin: 0 !important;
     padding: 0 !important;
     gap: 0 !important;
+  }
+
+  .hardcover-carousel-scroll {
+    scrollbar-gutter: stable;
+  }
+
+  .hardcover-carousel-scroll::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .hardcover-carousel-scroll::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: hsl(var(--border));
   }
 }

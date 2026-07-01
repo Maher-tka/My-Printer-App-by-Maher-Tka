@@ -114,6 +114,12 @@ assert.ok(
 )
 const sourceSvg = buildHardcoverSvg(sourceState)
 assert.match(sourceSvg, /front-cover-thumbnail/)
+assert.match(sourceSvg, /id="SpineText-year"/)
+assert.match(
+  sourceSvg,
+  /id="SpineText-year"[\s\S]*fill="#0f172a"/,
+  'source PDF spine text uses dark ink on the light spine preview'
+)
 assert.doesNotMatch(sourceSvg, /back-cover-thumbnail/, 'back cover stays blank while toggle is off')
 assert.doesNotMatch(
   sourceSvg,

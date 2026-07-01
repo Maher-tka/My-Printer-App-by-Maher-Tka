@@ -60,6 +60,8 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
   selectSourcePdfFrontPage: (pageNumber: number) => Promise<void>
   selectSourcePdfBackPage: (pageNumber: number) => Promise<void>
   setSourcePdfBackCoverEnabled: (enabled: boolean) => Promise<void>
+  loadSourcePdfPagePreviews: (startPage: number, count?: number) => Promise<void>
+  updateSourcePdfFitMode: (fitMode: HardcoverPdfSource['fitMode']) => void
   saveProductionPreset: () => void
   updateProductionPreset: () => void
   resetProductionPreset: () => void
@@ -252,6 +254,31 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     },
     [patchState, state.sourcePdf]
   )
+  const loadSourcePdfPagePreviews = useCallback(
+    async (startPage: number, count?: number): Promise<void> => {
+      const currentSource = state.sourcePdf
+      if (!currentSource) throw new Error('Upload a memoire PDF first.')
+      const { loadHardcoverPdfPagePreviews } = await import('../lib/sourcePdf')
+      const sourcePdf = await loadHardcoverPdfPagePreviews(currentSource, startPage, count)
+      patchState((current) => ({ ...current, sourcePdf }))
+    },
+    [patchState, state.sourcePdf]
+  )
+  const updateSourcePdfFitMode = useCallback(
+    (fitMode: HardcoverPdfSource['fitMode']): void =>
+      patchState((current) =>
+        current.sourcePdf
+          ? {
+              ...current,
+              sourcePdf: {
+                ...current.sourcePdf,
+                fitMode
+              }
+            }
+          : current
+      ),
+    [patchState]
+  )
   const saveProductionPreset = useCallback((): void => {
     patchState((current) => {
       const productionPreset = createPresetFromState(current)
@@ -394,6 +421,8 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     selectSourcePdfFrontPage,
     selectSourcePdfBackPage,
     setSourcePdfBackCoverEnabled,
+    loadSourcePdfPagePreviews,
+    updateSourcePdfFitMode,
     saveProductionPreset,
     updateProductionPreset,
     resetProductionPreset,
@@ -437,7 +466,7 @@ export function createDefaultHardcoverProject(): HardcoverProjectState {
         shortTitle: DEFAULT_PROJECT_TITLE,
         year: academicYear,
         universityInitials: '',
-        direction: 'bottom-to-top',
+        direction: 'top-to-bottom',
         autoFit: true,
         fontSizePt: 14
       },

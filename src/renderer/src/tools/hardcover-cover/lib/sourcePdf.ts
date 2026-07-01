@@ -11,6 +11,9 @@ import { isValidHardcoverPageNumber } from './coverCalculations'
 
 type HardcoverPdfPageTarget = 'front' | 'back'
 
+const INITIAL_PAGE_PREVIEW_LIMIT = 10
+export const HARDCOVER_PAGE_PREVIEW_BATCH_SIZE = 10
+
 export async function importHardcoverPdfSource(file: File): Promise<HardcoverPdfSource> {
   if (file.type && file.type !== 'application/pdf') {
     throw new Error(`${file.name} is not a PDF file.`)
@@ -35,7 +38,12 @@ export async function importHardcoverPdfSource(file: File): Promise<HardcoverPdf
 
   try {
     pdf = await loadPdfDocument(bytes)
-    const pagePreviews = await renderHardcoverPdfPagePreviews(file.name, pdf)
+    const pagePreviews = await renderHardcoverPdfPagePreviews(
+      file.name,
+      pdf,
+      1,
+      Math.min(INITIAL_PAGE_PREVIEW_LIMIT, pdf.numPages)
+    )
     const firstPage = pagePreviews[0]
 
     return {
@@ -57,6 +65,43 @@ export async function selectHardcoverPdfFrontPage(
   pageNumber: number
 ): Promise<HardcoverPdfSource> {
   return selectHardcoverPdfPage(source, 'front', pageNumber)
+}
+
+export async function loadHardcoverPdfPagePreviews(
+  source: HardcoverPdfSource,
+  startPage: number,
+  count = HARDCOVER_PAGE_PREVIEW_BATCH_SIZE
+): Promise<HardcoverPdfSource> {
+  if (!source.bytes) return source
+  if (!isValidHardcoverPageNumber(startPage, source.pageCount)) {
+    throw new Error(`Choose a page between 1 and ${source.pageCount}.`)
+  }
+
+  const safeCount = Math.max(1, Math.floor(count))
+  const endPage = Math.min(source.pageCount, startPage + safeCount - 1)
+  let pdf: Awaited<ReturnType<typeof loadPdfDocument>> | undefined
+
+  try {
+    pdf = await loadPdfDocument(source.bytes)
+    const nextPreviews = await renderHardcoverPdfPagePreviews(
+      source.fileName,
+      pdf,
+      startPage,
+      endPage
+    )
+
+    return {
+      ...source,
+      pagePreviews: nextPreviews.reduce(
+        (previews, preview) => upsertPagePreview(previews, preview),
+        source.pagePreviews ?? []
+      )
+    }
+  } catch (error) {
+    throw normalizePdfError(error)
+  } finally {
+    await pdf?.destroy()
+  }
 }
 
 export async function selectHardcoverPdfBackPage(
@@ -118,11 +163,15 @@ async function selectHardcoverPdfPage(
 
 async function renderHardcoverPdfPagePreviews(
   fileName: string,
-  pdf: Awaited<ReturnType<typeof loadPdfDocument>>
+  pdf: Awaited<ReturnType<typeof loadPdfDocument>>,
+  startPage: number,
+  endPage: number
 ): Promise<HardcoverPdfPagePreview[]> {
   const previews: HardcoverPdfPagePreview[] = []
+  const firstPage = Math.max(1, startPage)
+  const lastPage = Math.min(pdf.numPages, endPage)
 
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+  for (let pageNumber = firstPage; pageNumber <= lastPage; pageNumber += 1) {
     previews.push(await renderHardcoverPdfPagePreview(fileName, pdf, pageNumber))
   }
 

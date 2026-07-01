@@ -3,13 +3,15 @@ import {
   CheckCircle2,
   CircleDollarSign,
   ClipboardCheck,
+  Download,
+  FileText,
+  Ruler,
   Settings2,
   UserRound
 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useJobStore } from '@/jobs/useJobStore'
 import { batchCoverFileName, safeFileName } from '@/lib/fileNaming'
 import { createProjectFolderPlan } from '@/lib/projectFolders'
@@ -61,6 +63,52 @@ interface HardcoverCoverPageProps {
 
 const LazyCoverMockupPreview = lazy(() => import('./components/CoverMockupPreview'))
 
+type HardcoverWorkflowStep = 'source' | 'measurements' | 'spine' | 'design' | 'batch' | 'export'
+
+const WORKFLOW_STEPS: Array<{
+  id: HardcoverWorkflowStep
+  label: string
+  description: string
+  icon: typeof FileText
+}> = [
+  {
+    id: 'source',
+    label: 'Source PDF',
+    description: 'Choose front and optional back pages.',
+    icon: FileText
+  },
+  {
+    id: 'measurements',
+    label: 'Book Measurements',
+    description: 'Set board, spine, wrap, and direction.',
+    icon: Ruler
+  },
+  {
+    id: 'spine',
+    label: 'Spine Text',
+    description: 'Year, title, and student name.',
+    icon: Settings2
+  },
+  {
+    id: 'design',
+    label: 'Manual Design',
+    description: 'Tune templates, front, and back content.',
+    icon: Settings2
+  },
+  {
+    id: 'batch',
+    label: 'Batch Students',
+    description: 'Prepare multiple personalized covers.',
+    icon: UserRound
+  },
+  {
+    id: 'export',
+    label: 'Export',
+    description: 'Preflight and save production files.',
+    icon: Download
+  }
+]
+
 export function HardcoverCoverPage({
   onNavigate,
   openedProject,
@@ -84,6 +132,7 @@ export function HardcoverCoverPage({
   )
   const [batchProgress, setBatchProgress] = useState<string | null>(null)
   const [showLowEndMockup, setShowLowEndMockup] = useState(false)
+  const [activeStep, setActiveStep] = useState<HardcoverWorkflowStep>('source')
   const [pendingExport, setPendingExport] = useState<{
     report: PreflightReport
     run: () => void
@@ -341,41 +390,225 @@ export function HardcoverCoverPage({
     }
   }
 
+  const setupPanelProps = {
+    setup: hardcover.state.setup,
+    dimensions: hardcover.dimensions,
+    sourcePdf: hardcover.state.sourcePdf,
+    productionPreset: hardcover.state.productionPreset,
+    onChange: hardcover.updateSetup,
+    onImportPdf: hardcover.importSourcePdf,
+    onSelectPdfFrontPage: hardcover.selectSourcePdfFrontPage,
+    onSelectPdfBackPage: hardcover.selectSourcePdfBackPage,
+    onTogglePdfBackCover: hardcover.setSourcePdfBackCoverEnabled,
+    onLoadPdfPagePreviews: hardcover.loadSourcePdfPagePreviews,
+    onChangePdfFitMode: hardcover.updateSourcePdfFitMode,
+    onSavePreset: hardcover.saveProductionPreset,
+    onUpdatePreset: hardcover.updateProductionPreset,
+    onResetFactoryPreset: hardcover.resetProductionPreset
+  }
+  const completedSteps = useMemo(() => {
+    const completed = new Set<HardcoverWorkflowStep>()
+    if (hardcover.state.sourcePdf) completed.add('source')
+    if (hardcover.dimensions.warnings.length === 0) completed.add('measurements')
+    if (
+      hardcover.spineLayout.fits &&
+      hardcover.state.content.spine.year.trim() &&
+      hardcover.state.content.spine.shortTitle.trim() &&
+      hardcover.state.content.spine.studentName.trim()
+    ) {
+      completed.add('spine')
+    }
+    if (
+      hardcover.state.content.front.title.trim() &&
+      hardcover.state.content.front.studentName.trim()
+    ) {
+      completed.add('design')
+    }
+    if (hardcover.state.batchStudents.some((student) => student.studentName.trim())) {
+      completed.add('batch')
+    }
+    if (hardcoverPreflight.canExport) completed.add('export')
+    return completed
+  }, [
+    hardcover.dimensions.warnings.length,
+    hardcover.spineLayout.fits,
+    hardcover.state.batchStudents,
+    hardcover.state.content.front.studentName,
+    hardcover.state.content.front.title,
+    hardcover.state.content.spine.shortTitle,
+    hardcover.state.content.spine.studentName,
+    hardcover.state.content.spine.year,
+    hardcover.state.sourcePdf,
+    hardcoverPreflight.canExport
+  ])
+
+  const renderWorkflowStep = (): JSX.Element => {
+    switch (activeStep) {
+      case 'source':
+        return <CoverSetupPanel section="source" {...setupPanelProps} />
+      case 'measurements':
+        return <CoverSetupPanel section="measurements" {...setupPanelProps} />
+      case 'spine':
+        return (
+          <div className="flex flex-col gap-4">
+            <SpineEditor
+              value={hardcover.state.content.spine}
+              layout={hardcover.spineLayout}
+              onChange={hardcover.updateSpine}
+              onUseFrontTitle={() =>
+                hardcover.updateSpine({ shortTitle: hardcover.state.content.front.title })
+              }
+            />
+            <section className="rounded-lg border bg-card p-4">
+              <h3 className="font-semibold">Spine placement</h3>
+              <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-3">
+                <span className="rounded-md border bg-muted/30 p-3">Top: academic year</span>
+                <span className="rounded-md border bg-muted/30 p-3">Middle: mémoire title</span>
+                <span className="rounded-md border bg-muted/30 p-3">Bottom: student name</span>
+              </div>
+            </section>
+          </div>
+        )
+      case 'design':
+        return (
+          <div className="flex flex-col gap-4">
+            <CoverTemplatePanel
+              template={hardcover.state.template}
+              customTemplates={hardcover.state.customTemplates}
+              onChoose={hardcover.chooseTemplate}
+              onDuplicate={hardcover.duplicateTemplate}
+              onReset={hardcover.resetTemplate}
+              onChange={hardcover.updateTemplate}
+              onSave={() => void saveTemplateFile()}
+            />
+            <FrontCoverEditor
+              value={hardcover.state.content.front}
+              onChange={hardcover.updateFront}
+            />
+            <BackCoverEditor value={hardcover.state.content.back} onChange={hardcover.updateBack} />
+          </div>
+        )
+      case 'batch':
+        return (
+          <BatchStudentsPanel
+            students={hardcover.state.batchStudents}
+            progress={batchProgress}
+            onAdd={hardcover.addBatchStudent}
+            onChange={hardcover.updateBatchStudent}
+            onRemove={hardcover.removeBatchStudent}
+            onImportCsv={(csv) =>
+              setMessage(`Imported ${hardcover.importBatchCsv(csv)} batch student(s).`)
+            }
+            onPreview={(student) => hardcover.setState((current) => applyStudent(current, student))}
+          />
+        )
+      case 'export':
+        return (
+          <div className="flex flex-col gap-4">
+            <ExportHardcoverPanel
+              settings={hardcover.state.exportSettings}
+              warnings={hardcover.warnings}
+              batchCount={hardcover.state.batchStudents.length}
+              isBusy={isBusy}
+              onChange={hardcover.updateExportSettings}
+              onPdf={() => requestHardcoverExport(() => void runExport('pdf'))}
+              onSvg={() => requestHardcoverExport(() => void runExport('svg'))}
+              onImage={() => requestHardcoverExport(() => void runExport('image'))}
+              onBatchSeparate={() => requestHardcoverExport(() => void exportBatchSeparate())}
+              onBatchCombined={() => requestHardcoverExport(() => void exportBatchCombined())}
+            />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <JobAndQuote
+                state={hardcover.state}
+                quote={hardcover.quote}
+                onJobChange={hardcover.updateJob}
+                onQuoteChange={hardcover.updateQuote}
+              />
+              <Checklist items={hardcover.checklist} />
+            </div>
+          </div>
+        )
+      default:
+        return <CoverSetupPanel section="source" {...setupPanelProps} />
+    }
+  }
+
   return (
-    <div className="mx-auto flex max-w-[1780px] flex-col gap-5">
-      <Button variant="ghost" className="w-fit" onClick={() => onNavigate('dashboard')}>
-        <ArrowLeft />
-        Back to Dashboard
-      </Button>
-      <Card>
-        <CardHeader className="flex-row items-start justify-between gap-4">
-          <div>
+    <div className="mx-auto flex w-full max-w-[1880px] flex-col gap-4 overflow-hidden">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Button variant="ghost" className="w-fit" onClick={() => onNavigate('dashboard')}>
+          <ArrowLeft />
+          Back to Dashboard
+        </Button>
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <ProjectFileActions
+            filePath={projectFilePath}
+            isBusy={isBusy}
+            isDirty={isDirty}
+            message={message}
+            onOpen={() => void openProject()}
+            onSave={() => void saveProject(false)}
+            onSaveAs={() => void saveProject(true)}
+          />
+          <Button type="button" size="sm" variant="ghost" onClick={() => void startNew()}>
+            New Project
+          </Button>
+        </div>
+      </div>
+
+      <section className="min-w-0 max-w-full overflow-hidden rounded-lg border bg-card p-4 sm:p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <CardTitle>Hardcover Binding Cover Sheet</CardTitle>
+              <h1 className="text-xl font-semibold tracking-normal text-foreground sm:text-2xl">
+                Hardcover Binding Cover Sheet
+              </h1>
               <Badge variant="success">Production workflow</Badge>
               <Badge variant="secondary">{performanceSettings.label}</Badge>
             </div>
-            <CardDescription>
-              Measure the book block, design front/spine/back, then export an exact-size production
-              sheet.
-            </CardDescription>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Upload the mémoire PDF, pick the cover pages, set the physical book measurements, and
+              export the same sheet shown in the preview.
+            </p>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <ProjectFileActions
-              filePath={projectFilePath}
-              isBusy={isBusy}
-              isDirty={isDirty}
-              message={message}
-              onOpen={() => void openProject()}
-              onSave={() => void saveProject(false)}
-              onSaveAs={() => void saveProject(true)}
-            />
-            <Button type="button" size="sm" variant="ghost" onClick={() => void startNew()}>
-              New Project
-            </Button>
+          <div className="grid min-w-0 grid-cols-3 gap-2 text-xs text-muted-foreground sm:min-w-[360px]">
+            <div className="rounded-md border bg-muted/30 p-2">
+              <span className="block font-medium text-foreground">
+                {hardcover.state.sourcePdf ? 'PDF ready' : 'No PDF'}
+              </span>
+              Source
+            </div>
+            <div className="rounded-md border bg-muted/30 p-2">
+              <span className="block font-medium text-foreground">{hardcoverPreflight.status}</span>
+              Preflight
+            </div>
+            <div className="rounded-md border bg-muted/30 p-2">
+              <span className="block font-medium text-foreground">
+                {hardcover.state.content.spine.year || 'Year'}
+              </span>
+              Spine top
+            </div>
           </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        </div>
+      </section>
+
+      <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 overflow-hidden xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
+        <aside
+          className="w-full min-w-0 max-w-full overflow-hidden xl:w-[360px] 2xl:w-[400px]"
+          data-hardcover-settings-column
+        >
+          <WorkflowStepNav
+            activeStep={activeStep}
+            completedSteps={completedSteps}
+            onStepChange={setActiveStep}
+          />
+          <div className="mt-4 min-w-0 max-w-full overflow-hidden">{renderWorkflowStep()}</div>
+        </aside>
+
+        <main
+          className="flex min-w-0 max-w-full flex-col gap-4 overflow-hidden xl:sticky xl:top-4 xl:self-start"
+          data-hardcover-preview-column
+        >
           <HardcoverToolbar
             viewMode={hardcover.state.viewMode}
             zoom={hardcover.state.zoom}
@@ -386,6 +619,7 @@ export function HardcoverCoverPage({
               hardcover.setState((current) => ({ ...current, viewMode }))
             }
             onZoomChange={(zoom) => hardcover.setState((current) => ({ ...current, zoom }))}
+            onFitToScreen={() => hardcover.setState((current) => ({ ...current, zoom: 1 }))}
             onToggleGuides={() =>
               hardcover.setState((current) => ({ ...current, showGuides: !current.showGuides }))
             }
@@ -399,126 +633,48 @@ export function HardcoverCoverPage({
               hardcover.setState((current) => ({ ...current, snapToGuides: !current.snapToGuides }))
             }
           />
-          <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[380px_minmax(0,1fr)]">
-            <aside className="flex flex-col gap-4">
-              <CoverSetupPanel
-                setup={hardcover.state.setup}
-                dimensions={hardcover.dimensions}
-                sourcePdf={hardcover.state.sourcePdf}
-                productionPreset={hardcover.state.productionPreset}
-                onChange={hardcover.updateSetup}
-                onImportPdf={hardcover.importSourcePdf}
-                onSelectPdfFrontPage={hardcover.selectSourcePdfFrontPage}
-                onSelectPdfBackPage={hardcover.selectSourcePdfBackPage}
-                onTogglePdfBackCover={hardcover.setSourcePdfBackCoverEnabled}
-                onSavePreset={hardcover.saveProductionPreset}
-                onUpdatePreset={hardcover.updateProductionPreset}
-                onResetFactoryPreset={hardcover.resetProductionPreset}
-              />
-              <details className="rounded-lg border bg-card p-4">
-                <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
-                  <Settings2 className="size-4" />
-                  Advanced / Manual Design
-                </summary>
-                <div className="mt-4 flex flex-col gap-4">
-                  <CoverTemplatePanel
-                    template={hardcover.state.template}
-                    customTemplates={hardcover.state.customTemplates}
-                    onChoose={hardcover.chooseTemplate}
-                    onDuplicate={hardcover.duplicateTemplate}
-                    onReset={hardcover.resetTemplate}
-                    onChange={hardcover.updateTemplate}
-                    onSave={() => void saveTemplateFile()}
-                  />
-                  <FrontCoverEditor
-                    value={hardcover.state.content.front}
-                    onChange={hardcover.updateFront}
-                  />
-                  <SpineEditor
-                    value={hardcover.state.content.spine}
-                    layout={hardcover.spineLayout}
-                    onChange={hardcover.updateSpine}
-                    onUseFrontTitle={() =>
-                      hardcover.updateSpine({ shortTitle: hardcover.state.content.front.title })
-                    }
-                  />
-                  <BackCoverEditor
-                    value={hardcover.state.content.back}
-                    onChange={hardcover.updateBack}
-                  />
-                </div>
-              </details>
-            </aside>
-            <main className="flex min-w-0 flex-col gap-4">
-              <CoverCanvas state={hardcover.state} />
-              {performanceSettings.preset !== 'low-end' || showLowEndMockup ? (
-                <Suspense
-                  fallback={
-                    <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
-                      Loading customer mockup...
-                    </div>
-                  }
-                >
-                  <LazyCoverMockupPreview
-                    state={hardcover.state}
-                    onModeChange={(mockupMode) =>
-                      hardcover.setState((current) => ({ ...current, mockupMode }))
-                    }
-                  />
-                </Suspense>
-              ) : (
-                <div className="rounded-lg border bg-card p-5">
-                  <p className="font-medium">Customer mockup paused in Low-end PC mode</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Load it only when a customer preview is needed.
-                  </p>
-                  <Button
-                    className="mt-3"
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setShowLowEndMockup(true)}
-                  >
-                    Load mockup
-                  </Button>
-                </div>
-              )}
-            </main>
-          </div>
-          <BatchStudentsPanel
-            students={hardcover.state.batchStudents}
-            progress={batchProgress}
-            onAdd={hardcover.addBatchStudent}
-            onChange={hardcover.updateBatchStudent}
-            onRemove={hardcover.removeBatchStudent}
-            onImportCsv={(csv) =>
-              setMessage(`Imported ${hardcover.importBatchCsv(csv)} batch student(s).`)
-            }
-            onPreview={(student) => hardcover.setState((current) => applyStudent(current, student))}
-          />
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <JobAndQuote
-              state={hardcover.state}
-              quote={hardcover.quote}
-              onJobChange={hardcover.updateJob}
-              onQuoteChange={hardcover.updateQuote}
-            />
-            <Checklist items={hardcover.checklist} />
-          </div>
-          <ExportHardcoverPanel
-            settings={hardcover.state.exportSettings}
+          <CoverCanvas state={hardcover.state} />
+          <PreviewSummary
+            report={hardcoverPreflight}
             warnings={hardcover.warnings}
-            batchCount={hardcover.state.batchStudents.length}
-            isBusy={isBusy}
-            onChange={hardcover.updateExportSettings}
-            onPdf={() => requestHardcoverExport(() => void runExport('pdf'))}
-            onSvg={() => requestHardcoverExport(() => void runExport('svg'))}
-            onImage={() => requestHardcoverExport(() => void runExport('image'))}
-            onBatchSeparate={() => requestHardcoverExport(() => void exportBatchSeparate())}
-            onBatchCombined={() => requestHardcoverExport(() => void exportBatchCombined())}
+            checklist={hardcover.checklist}
+            sourcePdf={hardcover.state.sourcePdf}
           />
-        </CardContent>
-      </Card>
+          {performanceSettings.preset !== 'low-end' || showLowEndMockup ? (
+            <Suspense
+              fallback={
+                <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
+                  Loading customer mockup...
+                </div>
+              }
+            >
+              <LazyCoverMockupPreview
+                state={hardcover.state}
+                onModeChange={(mockupMode) =>
+                  hardcover.setState((current) => ({ ...current, mockupMode }))
+                }
+              />
+            </Suspense>
+          ) : (
+            <div className="rounded-lg border bg-card p-4">
+              <p className="font-medium">Customer mockup paused in Low-end PC mode</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Load it only when a customer preview is needed.
+              </p>
+              <Button
+                className="mt-3"
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setShowLowEndMockup(true)}
+              >
+                Load mockup
+              </Button>
+            </div>
+          )}
+        </main>
+      </div>
+
       {pendingExport && (
         <PreflightDialog
           report={pendingExport.report}
@@ -531,6 +687,119 @@ export function HardcoverCoverPage({
         />
       )}
     </div>
+  )
+}
+
+function WorkflowStepNav({
+  activeStep,
+  completedSteps,
+  onStepChange
+}: {
+  activeStep: HardcoverWorkflowStep
+  completedSteps: ReadonlySet<HardcoverWorkflowStep>
+  onStepChange: (step: HardcoverWorkflowStep) => void
+}): JSX.Element {
+  return (
+    <nav className="min-w-0 max-w-full overflow-hidden rounded-lg border bg-card p-2">
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-2 xl:grid-cols-1">
+        {WORKFLOW_STEPS.map((step, index) => {
+          const Icon = step.icon
+          const active = activeStep === step.id
+          const complete = completedSteps.has(step.id)
+
+          return (
+            <button
+              key={step.id}
+              type="button"
+              aria-current={active ? 'step' : undefined}
+              className={`min-w-0 rounded-md border p-3 text-left transition ${
+                active
+                  ? 'border-primary bg-primary/10 text-primary shadow-sm'
+                  : 'border-transparent bg-transparent text-foreground hover:border-border hover:bg-muted/60'
+              }`}
+              onClick={() => onStepChange(step.id)}
+            >
+              <span className="flex items-start gap-3">
+                <span
+                  className={`flex size-8 shrink-0 items-center justify-center rounded-md border ${
+                    active ? 'border-primary/30 bg-background' : 'bg-muted/50'
+                  }`}
+                >
+                  <Icon className="size-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    {index + 1}. {step.label}
+                    {complete && <CheckCircle2 className="size-4 text-success" />}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {step.description}
+                  </span>
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </nav>
+  )
+}
+
+function PreviewSummary({
+  report,
+  warnings,
+  checklist,
+  sourcePdf
+}: {
+  report: PreflightReport
+  warnings: string[]
+  checklist: Array<{ label: string; passed: boolean }>
+  sourcePdf: HardcoverProjectPayload['sourcePdf']
+}): JSX.Element {
+  const passedItems = checklist.filter((item) => item.passed).length
+  const reportVariant =
+    report.status === 'passed'
+      ? 'success'
+      : report.status === 'warnings'
+        ? 'warning'
+        : 'destructive'
+
+  return (
+    <section className="grid min-w-0 max-w-full gap-2 overflow-hidden rounded-lg border bg-card p-3 text-sm sm:grid-cols-3">
+      <div className="rounded-md bg-muted/40 p-3">
+        <div className="flex items-center gap-2 font-medium">
+          <FileText className="size-4" />
+          PDF pages
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {sourcePdf
+            ? `Front ${sourcePdf.frontPageNumber}${
+                sourcePdf.backCoverEnabled && sourcePdf.backPageNumber
+                  ? `, back ${sourcePdf.backPageNumber}`
+                  : ', back off'
+              }`
+            : 'Upload a source PDF'}
+        </p>
+      </div>
+      <div className="rounded-md bg-muted/40 p-3">
+        <div className="flex items-center justify-between gap-2 font-medium">
+          Preflight
+          <Badge variant={reportVariant}>{report.status}</Badge>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {report.issues.length + warnings.length} issue(s) before export.
+        </p>
+      </div>
+      <div className="rounded-md bg-muted/40 p-3">
+        <div className="flex items-center gap-2 font-medium">
+          <ClipboardCheck className="size-4" />
+          Checklist
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {passedItems} of {checklist.length} item(s) ready.
+        </p>
+      </div>
+    </section>
   )
 }
 

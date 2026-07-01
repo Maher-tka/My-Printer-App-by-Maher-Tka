@@ -100,6 +100,7 @@ async function drawCoverPage(
   const foreground = parseHex(state.template.foreground)
   const muted = parseHex(state.template.mutedForeground)
   const sourcePages = await embedSelectedSourcePages(document, state)
+  const spineTextColor = sourcePages.front ? rgb(0.06, 0.09, 0.16) : foreground
 
   page.drawRectangle({
     x: 0,
@@ -125,7 +126,7 @@ async function drawCoverPage(
         state.sourcePdf?.fitMode ?? 'fit'
       )
     }
-    drawSpineText(page, state, dimensions, fonts.bold, foreground)
+    drawSpineText(page, state, dimensions, fonts.bold, spineTextColor)
   } else {
     const frontBackground = await embedDataImage(document, state.content.front.backgroundDataUrl)
     const frontLogo = await embedDataImage(document, state.content.front.logoDataUrl)

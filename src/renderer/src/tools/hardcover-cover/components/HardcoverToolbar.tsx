@@ -11,6 +11,7 @@ interface HardcoverToolbarProps {
   snapToGuides: boolean
   onViewModeChange: (viewMode: CoverViewMode) => void
   onZoomChange: (zoom: number) => void
+  onFitToScreen: () => void
   onToggleGuides: () => void
   onToggleSafeZones: () => void
   onToggleSnap: () => void
@@ -47,6 +48,9 @@ export function HardcoverToolbar(props: HardcoverToolbarProps): JSX.Element {
         <ZoomOut />
       </Button>
       <Badge variant="secondary">{Math.round(props.zoom * 100)}%</Badge>
+      <Button type="button" size="sm" variant="outline" onClick={props.onFitToScreen}>
+        Fit
+      </Button>
       <Button
         type="button"
         size="sm"

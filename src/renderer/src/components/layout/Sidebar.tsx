@@ -46,18 +46,18 @@ export function Sidebar({
     ? [...navItems, { route: 'quality-lab' as const, label: 'Quality Lab', icon: FlaskConical }]
     : navItems
   return (
-    <aside className="flex w-[280px] shrink-0 flex-col bg-sidebar text-sidebar-foreground shadow-sidebar">
-      <div className="flex h-20 items-center gap-3 px-6">
-        <div className="grid size-12 place-items-center rounded-xl bg-primary text-lg font-black text-primary-foreground shadow-lg shadow-primary/25">
+    <aside className="flex w-[72px] shrink-0 flex-col bg-sidebar text-sidebar-foreground shadow-sidebar xl:w-[248px] 2xl:w-[264px]">
+      <div className="flex h-16 items-center justify-center gap-3 px-3 xl:h-20 xl:justify-start xl:px-5">
+        <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-base font-black text-primary-foreground shadow-lg shadow-primary/25 xl:size-11">
           M
         </div>
-        <div className="flex min-w-0 flex-col gap-0.5">
+        <div className="hidden min-w-0 flex-col gap-0.5 xl:flex">
           <p className="truncate text-lg font-bold leading-tight">My Printer App</p>
           <p className="text-sm text-sidebar-muted">by Maher Tka</p>
         </div>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1.5 px-4">
+      <nav className="flex flex-1 flex-col gap-1.5 px-2 xl:px-3">
         {visibleNavItems.map((item) => {
           const Icon = item.icon
           const isActive = activeRoute === item.route
@@ -68,33 +68,34 @@ export function Sidebar({
               type="button"
               onClick={() => onNavigate(item.route)}
               className={cn(
-                'relative flex h-11 w-full items-center gap-3 rounded-md px-4 text-left text-sm font-semibold transition',
+                'relative flex h-11 w-full items-center justify-center gap-3 rounded-md px-0 text-left text-sm font-semibold transition xl:justify-start xl:px-3',
                 isActive
                   ? 'bg-sidebar-active text-white shadow-md shadow-primary/20'
                   : 'text-sidebar-foreground/82 hover:bg-white/8 hover:text-white'
               )}
+              title={item.label}
             >
               {isActive && (
-                <span className="absolute -left-4 h-full w-1 rounded-r-full bg-primary" />
+                <span className="absolute -left-2 h-full w-1 rounded-r-full bg-primary xl:-left-3" />
               )}
-              <Icon className="size-5" aria-hidden="true" />
-              <span className="truncate">{item.label}</span>
+              <Icon className="size-5 shrink-0" aria-hidden="true" />
+              <span className="hidden truncate xl:block">{item.label}</span>
             </button>
           )
         })}
       </nav>
 
-      <div className="flex flex-col gap-4 px-5 pb-5">
+      <div className="hidden flex-col gap-4 px-4 pb-5 xl:flex">
         <Separator className="bg-sidebar-border" />
-        <div className="rounded-lg border border-sidebar-border bg-white/5 p-4">
+        <div className="rounded-md border border-sidebar-border bg-white/5 p-3">
           <div className="flex items-start gap-3">
-            <div className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/25 text-white">
+            <div className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/25 text-white">
               <ContactRound className="size-5" aria-hidden="true" />
             </div>
             <div className="flex min-w-0 flex-col gap-1.5">
-              <p className="font-semibold text-white">Need Help?</p>
+              <p className="font-semibold text-white">Shop workspace</p>
               <p className="text-xs leading-5 text-sidebar-muted">
-                Local support area placeholder.
+                Local files, print exports, and production checks stay on this PC.
               </p>
             </div>
           </div>

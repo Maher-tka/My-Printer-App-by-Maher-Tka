@@ -17,16 +17,20 @@ export function SpineEditor({
   return (
     <EditorSection title="Spine editor">
       <TextField
-        label="Student name"
-        value={value.studentName}
-        onChange={(studentName) => onChange({ studentName })}
+        label="Academic year - top of spine"
+        value={value.year}
+        onChange={(year) => onChange({ year })}
       />
       <TextField
-        label="Title / mémoire title"
+        label="Title / mémoire title - middle of spine"
         value={value.shortTitle}
         onChange={(shortTitle) => onChange({ shortTitle })}
       />
-      <TextField label="Year" value={value.year} onChange={(year) => onChange({ year })} />
+      <TextField
+        label="Student name - bottom of spine"
+        value={value.studentName}
+        onChange={(studentName) => onChange({ studentName })}
+      />
       <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
         Text direction
         <select
@@ -36,8 +40,8 @@ export function SpineEditor({
             onChange({ direction: event.target.value as SpineContent['direction'] })
           }
         >
-          <option value="bottom-to-top">Bottom to top</option>
           <option value="top-to-bottom">Top to bottom</option>
+          <option value="bottom-to-top">Bottom to top</option>
         </select>
       </label>
       <label className="flex items-center gap-2 text-sm">

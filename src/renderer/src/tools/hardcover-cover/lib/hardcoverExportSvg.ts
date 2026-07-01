@@ -4,6 +4,8 @@ import { calculateCoverDimensions } from './coverCalculations'
 import { calculateSpineTextLayout } from './spineTextLayout'
 import { isRtlText, wrapTextByCharacters } from './textFit'
 
+const SOURCE_PDF_SPINE_TEXT_COLOR = '#0f172a'
+
 export function buildHardcoverSvg(state: HardcoverProjectState): string {
   const dimensions = calculateCoverDimensions(state.setup)
   const { content, exportSettings } = state
@@ -148,6 +150,7 @@ function spineTextMarkup(
   const x = dimensions.spine.xMm + dimensions.spine.widthMm / 2
   const topY = dimensions.spine.yMm + state.setup.hingeMm
   const angle = state.content.spine.direction === 'bottom-to-top' ? -90 : 90
+  const textColor = state.sourcePdf ? SOURCE_PDF_SPINE_TEXT_COLOR : state.template.foreground
   const groups = layout.items
     .map((item) => {
       const y = topY + item.centerFromTopMm
@@ -158,7 +161,7 @@ function spineTextMarkup(
         .map((line, index) => {
           const offset = firstLineOffset + index * lineHeightMm
 
-          return `<text x="0" y="${round(offset)}" fill="${escapeXml(state.template.foreground)}" font-family="${escapeXml(state.template.fontFamily)}" font-size="${round(fontSizeMm)}" font-weight="700" text-anchor="middle" dominant-baseline="middle" direction="${isRtlText(line) ? 'rtl' : 'ltr'}">${escapeXml(line)}</text>`
+          return `<text x="0" y="${round(offset)}" fill="${escapeXml(textColor)}" font-family="${escapeXml(state.template.fontFamily)}" font-size="${round(fontSizeMm)}" font-weight="700" text-anchor="middle" dominant-baseline="middle" direction="${isRtlText(line) ? 'rtl' : 'ltr'}">${escapeXml(line)}</text>`
         })
         .join('')
 
