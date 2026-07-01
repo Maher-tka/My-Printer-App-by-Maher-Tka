@@ -10,7 +10,8 @@ import {
   popGraphicsState,
   pushGraphicsState,
   rectangle,
-  rgb
+  rgb,
+  type PDFImage
 } from 'pdf-lib'
 import type {
   CutterExportResult,
