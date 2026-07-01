@@ -82,24 +82,30 @@ async function drawArtwork(
   const hasMask = piece.clippingMaskEnabled ?? piece.mask.enabled
 
   if (source.mimeType === 'image/svg+xml') {
-    const rect = hasMask ? maskRect : artworkRect
-    const pdfRect = toPdfRect(rect, sheetHeightCm)
+    const image = await embedSvgSourceAsPng(pdf, source)
 
-    page.drawRectangle({
+    if (!image) {
+      drawSvgFallback(page, hasMask ? maskRect : artworkRect, sheetHeightCm)
+      return
+    }
+
+    if (hasMask) {
+      pushMaskClip(page, maskRect, sheetHeightCm, piece.mask.shape)
+    }
+
+    const pdfRect = toPdfRect(artworkRect, sheetHeightCm)
+    page.drawImage(image, {
       x: pdfRect.x,
       y: pdfRect.y,
       width: pdfRect.width,
       height: pdfRect.height,
-      rotate: degrees(-rect.rotation),
-      borderColor: rgb(0.75, 0.78, 0.84),
-      borderWidth: 0.5
+      rotate: degrees(-artworkRect.rotation)
     })
-    page.drawText('SVG artwork', {
-      x: cmToPoints(rect.xCm + 0.2),
-      y: cmToPoints(sheetHeightCm - rect.yCm - 0.6),
-      size: 8,
-      color: rgb(0.37, 0.42, 0.5)
-    })
+
+    if (hasMask) {
+      page.pushOperators(popGraphicsState())
+    }
+
     return
   }
 
@@ -124,6 +130,131 @@ async function drawArtwork(
   if (hasMask) {
     page.pushOperators(popGraphicsState())
   }
+}
+
+async function embedSvgSourceAsPng(
+  pdf: PDFDocument,
+  source: PieceSourceFile
+): Promise<PDFImage | null> {
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  const svgText = new TextDecoder().decode(source.bytes)
+  const svgSize = getSvgIntrinsicSize(svgText, source.naturalWidthPx, source.naturalHeightPx)
+  const url = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' }))
+
+  try {
+    const image = await loadSvgImage(url)
+    const width = Math.max(image.naturalWidth || image.width || svgSize.width || 800, 1)
+    const height = Math.max(image.naturalHeight || image.height || svgSize.height || 800, 1)
+    const pixelRatio =
+      typeof window === 'undefined' ? 1 : Math.min(Math.max(window.devicePixelRatio || 1, 1), 2)
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+
+    if (!context) {
+      return null
+    }
+
+    canvas.width = Math.ceil(width * pixelRatio)
+    canvas.height = Math.ceil(height * pixelRatio)
+    context.scale(pixelRatio, pixelRatio)
+    context.drawImage(image, 0, 0, width, height)
+
+    const pngBytes = await canvasToPngBytes(canvas)
+    resetCanvas(canvas)
+
+    return pngBytes ? pdf.embedPng(pngBytes) : null
+  } catch {
+    return null
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+function loadSvgImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Could not render SVG artwork for PDF export.'))
+    image.src = url
+  })
+}
+
+function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        resolve(null)
+        return
+      }
+
+      blob
+        .arrayBuffer()
+        .then((buffer) => resolve(new Uint8Array(buffer)))
+        .catch(() => resolve(null))
+    }, 'image/png')
+  })
+}
+
+function resetCanvas(canvas: HTMLCanvasElement): void {
+  canvas.width = 1
+  canvas.height = 1
+}
+
+function getSvgIntrinsicSize(
+  svgText: string,
+  fallbackWidth: number,
+  fallbackHeight: number
+): { width: number; height: number } {
+  const width = readSvgLength(svgText, 'width')
+  const height = readSvgLength(svgText, 'height')
+
+  if (width && height) {
+    return { width, height }
+  }
+
+  const viewBox = /viewBox=["']\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)\s*["']/i.exec(svgText)
+  if (viewBox) {
+    return {
+      width: Number(viewBox[1]) || fallbackWidth || 800,
+      height: Number(viewBox[2]) || fallbackHeight || 800
+    }
+  }
+
+  return {
+    width: fallbackWidth || 800,
+    height: fallbackHeight || 800
+  }
+}
+
+function readSvgLength(svgText: string, attribute: 'width' | 'height'): number | null {
+  const match = new RegExp(`${attribute}=["']([\\d.]+)(?:px|pt|mm|cm|in)?["']`, 'i').exec(svgText)
+  const value = match ? Number(match[1]) : Number.NaN
+
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function drawSvgFallback(page: PdfPage, rect: RectLike, sheetHeightCm: number): void {
+  const pdfRect = toPdfRect(rect, sheetHeightCm)
+
+  page.drawRectangle({
+    x: pdfRect.x,
+    y: pdfRect.y,
+    width: pdfRect.width,
+    height: pdfRect.height,
+    rotate: degrees(-rect.rotation),
+    borderColor: rgb(0.75, 0.78, 0.84),
+    borderWidth: 0.5
+  })
+  page.drawText('SVG preview unavailable', {
+    x: cmToPoints(rect.xCm + 0.2),
+    y: cmToPoints(sheetHeightCm - rect.yCm - 0.6),
+    size: 8,
+    color: rgb(0.37, 0.42, 0.5)
+  })
 }
 
 function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
