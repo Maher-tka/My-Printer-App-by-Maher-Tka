@@ -1,4 +1,4 @@
-import { ArrowRight, FileImage, FilePlus2, FolderOpen, Import, Sparkles, Zap } from 'lucide-react'
+import { FileImage, FilePlus2, FolderOpen, Import, Zap } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { JobSummaryCard } from '@/app/JobSummaryCard'
 import { QuickActionList } from '@/app/QuickActionList'
@@ -6,7 +6,6 @@ import { RecentExportsCard } from '@/app/RecentExportsCard'
 import { RecentJobsTable } from '@/app/RecentJobsTable'
 import { PdfFilePickerInput } from '@/components/file-input/PdfFilePickerInput'
 import { ToolCard } from '@/components/tool-card/ToolCard'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getToolAccessState } from '@/licensing/tool-access'
@@ -81,46 +80,26 @@ export function DashboardPage({
   ]
 
   return (
-    <div className="mx-auto flex max-w-[1580px] flex-col gap-7">
-      <section className="relative overflow-hidden rounded-[1.6rem] border border-blue-400/20 bg-[linear-gradient(120deg,#0b1933_0%,#112b59_52%,#164cb0_100%)] p-5 text-white shadow-elevated sm:p-6">
-        <div className="pointer-events-none absolute -right-24 -top-32 size-96 rounded-full bg-blue-400/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-40 left-1/3 size-80 rounded-full bg-violet-500/15 blur-3xl" />
-
-        <div className="relative flex flex-wrap items-center justify-between gap-5">
-          <div className="max-w-3xl">
-            <Badge className="border-white/15 bg-white/10 text-blue-50 shadow-sm" variant="outline">
-              <Sparkles className="mr-1.5 size-3.5" aria-hidden="true" />
-              Print production, organized
-            </Badge>
-            <h2 className="mt-3 text-2xl font-bold leading-tight tracking-[-0.03em] sm:text-3xl">
-              What are we printing today?
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100/80">
-              Prepare booklets, covers, cut layouts, and sequentially numbered tickets.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Button
-                type="button"
-                size="lg"
-                className="rounded-xl bg-white text-slate-950 shadow-lg shadow-blue-950/25 hover:bg-blue-50"
-                onClick={() => onNavigate('booklet-montage')}
-              >
-                <FilePlus2 aria-hidden="true" />
-                New booklet
-                <ArrowRight aria-hidden="true" />
-              </Button>
-              <Button
-                type="button"
-                size="lg"
-                variant="outline"
-                className="rounded-xl border-white/20 bg-white/5 text-white shadow-none hover:bg-white/12 hover:text-white"
-                onClick={() => void openSavedProject()}
-              >
-                <FolderOpen aria-hidden="true" />
-                Open saved project
-              </Button>
-            </div>
-          </div>
+    <div className="mx-auto flex max-w-[1500px] flex-col gap-6">
+      <section className="flex flex-wrap items-center justify-between gap-4 py-1">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+            Your production desk
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-[30px]">
+            Ready for the next job.
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Choose a tool, prepare your artwork, and make it print-ready.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => void openSavedProject()}>
+            <FolderOpen aria-hidden="true" /> Open project
+          </Button>
+          <Button type="button" onClick={openBookletPdfPicker}>
+            <Import aria-hidden="true" /> Import PDF
+          </Button>
         </div>
       </section>
 
@@ -133,15 +112,12 @@ export function DashboardPage({
         </div>
       ) : null}
 
-      <JobSummaryCard onNavigate={onNavigate} />
-
       <section className="flex flex-col gap-4">
         <SectionHeading
-          eyebrow="Production suite"
-          title="Choose your workspace"
-          description="Purpose-built tools that keep print preparation accurate and repeatable."
+          title="Production tools"
+          description="From source artwork to the finished sheet."
         />
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {printerTools.map((tool) => {
             const access = getToolAccessState(tool, licenseState, isLicenseLoading)
 
@@ -157,13 +133,14 @@ export function DashboardPage({
         </div>
       </section>
 
+      <JobSummaryCard onNavigate={onNavigate} />
+
       <section className="flex flex-col gap-4">
         <SectionHeading
-          eyebrow="Daily operations"
-          title="Continue where you left off"
-          description="Open recent project files or jump directly into a common action."
+          title="Pick up where you left off"
+          description="Your saved work and everyday shortcuts."
         />
-        <div className="grid grid-cols-1 gap-5 2xl:grid-cols-[minmax(0,1fr)_520px]">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
           <RecentJobsTable onOpenProject={onOpenProject} />
           <Card className="overflow-hidden">
             <CardHeader className="flex-row items-center gap-3 border-b bg-muted/25 px-5 py-4">
@@ -186,20 +163,17 @@ export function DashboardPage({
 }
 
 function SectionHeading({
-  eyebrow,
   title,
   description
 }: {
-  eyebrow: string
   title: string
   description: string
 }): JSX.Element {
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">{eyebrow}</p>
       <div className="flex flex-col gap-1 lg:flex-row lg:items-end lg:justify-between">
-        <h2 className="text-xl font-bold tracking-[-0.025em] sm:text-2xl">{title}</h2>
-        <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
+        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+        <p className="max-w-2xl text-xs text-muted-foreground">{description}</p>
       </div>
     </div>
   )

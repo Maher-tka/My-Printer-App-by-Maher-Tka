@@ -66,9 +66,9 @@ const scaleOptions: Array<{ value: BookletScaleMode; label: string }> = [
   { value: 'stretch', label: 'Stretch' }
 ]
 const viewModes: Array<{ value: BookletViewMode; label: string; icon: typeof Grid2X2 }> = [
-  { value: 'sheet', label: 'Sheet Mode', icon: Files },
-  { value: 'montage', label: 'Montage Mode', icon: Grid2X2 },
-  { value: 'book', label: '3D Book Mode', icon: BookOpen }
+  { value: 'sheet', label: 'Source pages', icon: Files },
+  { value: 'montage', label: 'Print sheets', icon: Grid2X2 },
+  { value: 'book', label: '3D preview', icon: BookOpen }
 ]
 
 export function BookletToolbar({
@@ -108,26 +108,76 @@ export function BookletToolbar({
     exportProgress.phase === 'creating-pdf'
 
   return (
-    <div className="sticky top-0 z-10 rounded-lg border bg-card/95 p-3 shadow-sm backdrop-blur">
-      <div className="flex flex-wrap items-end gap-3">
-        <Button type="button" onClick={() => pdfInputRef.current?.click()} disabled={isBusy}>
-          <FileText data-icon="inline-start" />
-          PDF
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => imageInputRef.current?.click()}
-          disabled={isBusy}
+    <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b p-3">
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="Import source files"
         >
-          <FileImage data-icon="inline-start" />
-          Images
-        </Button>
-        <Button type="button" variant="ghost" onClick={onClear} disabled={isBusy}>
-          <RotateCcw data-icon="inline-start" />
-          New
-        </Button>
-
+          <Button type="button" onClick={() => pdfInputRef.current?.click()} disabled={isBusy}>
+            <FileText data-icon="inline-start" />
+            Import PDF
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={isBusy}
+          >
+            <FileImage data-icon="inline-start" />
+            Images
+          </Button>
+          <Button type="button" variant="ghost" onClick={onClear} disabled={isBusy}>
+            <RotateCcw data-icon="inline-start" />
+            New
+          </Button>
+        </div>
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="Export and print"
+        >
+          <Button type="button" onClick={onExportPdf} disabled={!canExport || isBusy}>
+            <FileDown data-icon="inline-start" />
+            Export PDF
+          </Button>
+          <PrintButton label="Print" disabled={!canExport} isBusy={isBusy} onPrint={onPrintPdf} />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onExportImages('png')}
+            disabled={!canExport || isBusy}
+          >
+            <ImageDown data-icon="inline-start" />
+            PNG
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onExportImages('jpg')}
+            disabled={!canExport || isBusy}
+          >
+            <ImageDown data-icon="inline-start" />
+            JPG
+          </Button>
+          {(importCanCancel || exportCanCancel) && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={importCanCancel ? onCancelImport : onCancelExport}
+            >
+              <CircleStop data-icon="inline-start" />
+              Cancel
+            </Button>
+          )}
+        </div>
+      </div>
+      <div
+        className="flex flex-wrap items-end gap-3 border-b bg-muted/30 p-3"
+        role="group"
+        aria-label="Print layout settings"
+      >
         <ToolbarSelect
           label="Paper"
           value={settings.paperSize}
@@ -170,12 +220,12 @@ export function BookletToolbar({
         {settings.paperSize === 'custom' && (
           <>
             <ToolbarNumber
-              label="Width"
+              label="Width (mm)"
               value={settings.customWidthMm}
               onChange={(value) => onSettingsChange({ customWidthMm: value })}
             />
             <ToolbarNumber
-              label="Height"
+              label="Height (mm)"
               value={settings.customHeightMm}
               onChange={(value) => onSettingsChange({ customHeightMm: value })}
             />
@@ -194,9 +244,20 @@ export function BookletToolbar({
           ))}
         </ToolbarSelect>
 
-        <details className="min-w-[280px] rounded-md border bg-muted/30 px-3 py-2">
+        <ToolbarCheckbox
+          label="Creep compensation"
+          checked={settings.creep.enabled}
+          title="Shift inner-sheet artwork progressively toward the saddle-stitch spine."
+          onChange={(enabled) =>
+            onSettingsChange({
+              creep: getSimpleCreepToggleSettings(settings.creep, enabled, physicalSheetCount)
+            })
+          }
+        />
+
+        <details className="min-w-0 w-full sm:w-auto rounded-md border bg-muted/30 px-3 py-2">
           <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
-            Advanced print layout
+            Margins & print marks
           </summary>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <ToolbarNumber
@@ -225,19 +286,13 @@ export function BookletToolbar({
             />
           </div>
         </details>
-
-        <ToolbarCheckbox
-          label="Creep Compensation"
-          checked={settings.creep.enabled}
-          title="Shift inner-sheet artwork progressively toward the saddle-stitch spine."
-          onChange={(enabled) =>
-            onSettingsChange({
-              creep: getSimpleCreepToggleSettings(settings.creep, enabled, physicalSheetCount)
-            })
-          }
-        />
-
-        <div className="flex rounded-md border bg-muted/40 p-1">
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+        <div
+          role="group"
+          aria-label="Booklet view"
+          className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-1"
+        >
           {viewModes.map((mode) => {
             const Icon = mode.icon
 
@@ -246,7 +301,8 @@ export function BookletToolbar({
                 key={mode.value}
                 type="button"
                 size="sm"
-                variant={viewMode === mode.value ? 'default' : 'ghost'}
+                variant={viewMode === mode.value ? 'outline' : 'ghost'}
+                aria-pressed={viewMode === mode.value}
                 onClick={() => onViewModeChange(mode.value)}
               >
                 <Icon data-icon="inline-start" />
@@ -256,74 +312,40 @@ export function BookletToolbar({
           })}
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onAutoAddBlankPages}
-          disabled={blanksNeeded === 0 || isBusy}
-        >
-          Auto blanks
-        </Button>
-        {viewMode === 'montage' && (
-          <>
-            <Button type="button" variant="outline" onClick={onAddEmptySheet} disabled={isBusy}>
-              <Plus data-icon="inline-start" />
-              Add Empty Sheet
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onResetSheetLayout}
-              disabled={!hasBoardItems || isBusy}
-            >
-              <LayoutGrid data-icon="inline-start" />
-              Reset layout
-            </Button>
-          </>
-        )}
-        <Button type="button" onClick={onExportPdf} disabled={!canExport || isBusy}>
-          <FileDown data-icon="inline-start" />
-          Export PDF
-        </Button>
-        <PrintButton
-          label="Print Booklet"
-          disabled={!canExport}
-          isBusy={isBusy}
-          onPrint={onPrintPdf}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onExportImages('png')}
-          disabled={!canExport || isBusy}
-        >
-          <ImageDown data-icon="inline-start" />
-          PNG Sheets
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onExportImages('jpg')}
-          disabled={!canExport || isBusy}
-        >
-          <ImageDown data-icon="inline-start" />
-          JPG Sheets
-        </Button>
-        {(importCanCancel || exportCanCancel) && (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Sheet actions">
           <Button
             type="button"
             variant="outline"
-            onClick={importCanCancel ? onCancelImport : onCancelExport}
+            onClick={onAutoAddBlankPages}
+            disabled={blanksNeeded === 0 || isBusy}
           >
-            <CircleStop data-icon="inline-start" />
-            Cancel
+            Auto blanks
           </Button>
-        )}
+          {viewMode === 'montage' && (
+            <>
+              <Button type="button" variant="outline" onClick={onAddEmptySheet} disabled={isBusy}>
+                <Plus data-icon="inline-start" />
+                Add Empty Sheet
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onResetSheetLayout}
+                disabled={!hasBoardItems || isBusy}
+              >
+                <LayoutGrid data-icon="inline-start" />
+                Reset layout
+              </Button>
+            </>
+          )}
+        </div>
       </div>
-
-      <div className="mt-3 grid gap-2 lg:grid-cols-2">
+      <div className="grid gap-2 border-t px-3 py-2 lg:grid-cols-2">
         {importProgress.phase === 'idle' && exportProgress.phase === 'idle' ? (
-          <p className="text-sm text-muted-foreground">Ready for local PDF or image input.</p>
+          <p className="text-xs text-muted-foreground">
+            Import a PDF or images to begin. Your reading direction applies to the preview and
+            export.
+          </p>
         ) : (
           <>
             {importProgress.phase !== 'idle' && <ProgressLine progress={importProgress} />}
@@ -363,7 +385,7 @@ function ToolbarSelect({
     <label className="flex min-w-[126px] flex-col gap-1 text-xs font-medium text-muted-foreground">
       {label}
       <select
-        className="h-10 rounded-md border bg-background px-3 text-sm text-foreground"
+        className="h-9 rounded-md border bg-card px-3 text-sm text-foreground"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
@@ -390,7 +412,7 @@ function ToolbarNumber({
     <label className="flex w-24 flex-col gap-1 text-xs font-medium text-muted-foreground">
       {label}
       <input
-        className="h-10 rounded-md border bg-background px-3 text-sm text-foreground"
+        className="h-9 rounded-md border bg-card px-3 text-sm text-foreground"
         type="number"
         min={min}
         step={step}
@@ -414,7 +436,7 @@ function ToolbarCheckbox({
 }): JSX.Element {
   return (
     <label
-      className="flex h-10 items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium text-foreground"
+      className="flex h-9 items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium text-foreground"
       title={title}
     >
       <input

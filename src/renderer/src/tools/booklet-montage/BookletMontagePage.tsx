@@ -1,4 +1,5 @@
-import { ArrowLeft } from 'lucide-react'
+import { BookOpen } from 'lucide-react'
+import { WorkspaceHeader } from '@/components/layout/WorkspaceHeader'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { createPrintedJob } from '@/jobs/printHistory'
@@ -17,7 +18,7 @@ import { runBookletPreflight } from '@/preflight/bookletPreflight'
 import { PreflightDialog } from '@/preflight/preflightUI'
 import type { PreflightReport } from '@/preflight/preflightTypes'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import type { AppRoute } from '@/types/navigation'
 import type {
   ActiveProjectSession,
@@ -354,35 +355,24 @@ export function BookletMontagePage({
 
   return (
     <div className="workspace-shell mx-auto flex max-w-[1680px] flex-col gap-5">
-      <Button
-        variant="ghost"
-        className="w-fit"
-        onClick={() => onNavigate('dashboard')}
-        type="button"
+      <WorkspaceHeader
+        title="Booklet Montage"
+        description="Arrange pages, inspect print sheets, and preview your booklet."
+        icon={BookOpen}
+        onBack={() => onNavigate('dashboard')}
       >
-        <ArrowLeft data-icon="inline-start" />
-        Back to Dashboard
-      </Button>
-
+        <ProjectFileActions
+          filePath={projectFilePath}
+          isBusy={projectIsBusy || importIsBusy || exportIsBusy}
+          isDirty={isDirty}
+          message={projectMessage}
+          onOpen={() => void openProject()}
+          onSave={() => void saveProject(false)}
+          onSaveAs={() => void saveProject(true)}
+        />
+      </WorkspaceHeader>
       <Card className="overflow-hidden">
-        <CardHeader className="flex-row items-start justify-between gap-4 border-b bg-muted/25 px-5 py-4">
-          <div className="flex flex-col gap-1.5">
-            <CardTitle className="text-xl">Booklet Montage</CardTitle>
-            <CardDescription>
-              Arrange source pages, inspect imposed print sheets, and preview the final booklet.
-            </CardDescription>
-          </div>
-          <ProjectFileActions
-            filePath={projectFilePath}
-            isBusy={projectIsBusy || importIsBusy || exportIsBusy}
-            isDirty={isDirty}
-            message={projectMessage}
-            onOpen={() => void openProject()}
-            onSave={() => void saveProject(false)}
-            onSaveAs={() => void saveProject(true)}
-          />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 p-5">
+        <CardContent className="flex flex-col gap-4 p-3 sm:p-4">
           <BookletToolbar
             settings={montage.settings}
             viewMode={viewMode}
@@ -433,8 +423,8 @@ export function BookletMontagePage({
               {viewMode === 'sheet' && (
                 <>
                   <ModePurposeBanner
-                    title="Sheet Mode"
-                    description={`Manage the source page sequence before booklet imposition. Current order drives Montage Mode, 3D Book Mode, and export in ${readingDirectionLabel}.`}
+                    title="Source pages"
+                    description={`Reorder source pages before imposition. This order drives the print sheets, 3D preview, and export in ${readingDirectionLabel}.`}
                   />
                   <PageManager
                     pages={montage.pages}
@@ -459,8 +449,8 @@ export function BookletMontagePage({
               {viewMode === 'montage' && (
                 <>
                   <ModePurposeBanner
-                    title="Montage Mode"
-                    description={`Inspect every imposed front/back print sheet generated from the current Sheet Mode order. ${readingDirectionLabel} is active.`}
+                    title="Print sheets"
+                    description={`Inspect the imposed front/back print sheets generated from your source page order. ${readingDirectionLabel} is active.`}
                   />
                   <SheetPreview
                     sheets={montage.sheets}
@@ -483,8 +473,8 @@ export function BookletMontagePage({
               {viewMode === 'book' && (
                 <>
                   <ModePurposeBanner
-                    title="3D Book Mode"
-                    description={`Flip through the current booklet visually in ${readingDirectionLabel}. Print accuracy still comes from Montage Mode and export.`}
+                    title="3D preview"
+                    description={`Flip through the current booklet visually in ${readingDirectionLabel}. Check print sheets and export for production accuracy.`}
                   />
                   <BookFlipPreview
                     orderedPages={montage.pages}
@@ -540,9 +530,9 @@ function ModePurposeBanner({
   description: string
 }): JSX.Element {
   return (
-    <div className="rounded-lg border bg-muted/35 px-4 py-3">
+    <div className="rounded-lg border-l-2 border-l-primary bg-muted/50 px-4 py-2">
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
     </div>
   )
 }
