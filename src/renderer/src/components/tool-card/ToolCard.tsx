@@ -1,7 +1,5 @@
-import { ArrowRight, BookOpen, Hash, Lock, PenLine, ShieldCheck, SquareStack } from 'lucide-react'
+import { ArrowUpRight, BookOpen, Hash, Lock, PenLine, SquareStack } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { PrinterTool } from '@/types/tools'
 
@@ -13,37 +11,38 @@ interface ToolCardProps {
   licenseReason?: string | null
 }
 
-const iconByToolId = {
-  'sequential-number': Hash,
-  'booklet-montage': BookOpen,
-  'hardcover-cover': SquareStack,
-  'cutter-montage': PenLine
-}
-
-const toolPresentation = {
-  'sequential-number': {
-    surface: 'from-cyan-500/12 via-cyan-500/5 to-transparent',
-    icon: 'bg-cyan-700 text-white shadow-cyan-600/25',
-    line: 'from-cyan-400 to-cyan-700',
-    capabilities: ['Sequential numbers', 'Cut & stack', 'Front & back']
-  },
+const presentations = {
   'booklet-montage': {
-    surface: 'from-blue-500/12 via-blue-500/5 to-transparent',
-    icon: 'bg-blue-600 text-white shadow-blue-600/25',
-    line: 'from-blue-400 to-blue-700',
-    capabilities: ['PDF imposition', 'Print preview', 'Production export']
+    icon: BookOpen,
+    title: 'Booklet Montage',
+    detail: 'Impose, arrange, and preview your pages.',
+    color: 'text-sky-700',
+    surface: 'bg-sky-50',
+    tag: 'PDF · Images · 3D preview'
   },
   'hardcover-cover': {
-    surface: 'from-violet-500/12 via-violet-500/5 to-transparent',
-    icon: 'bg-violet-600 text-white shadow-violet-600/25',
-    line: 'from-violet-400 to-violet-700',
-    capabilities: ['Cover layout', 'Spine fitting', 'Batch students']
+    icon: SquareStack,
+    title: 'Hardcover Cover',
+    detail: 'Build a cover with a perfectly fitted spine.',
+    color: 'text-violet-700',
+    surface: 'bg-violet-50',
+    tag: 'Cover · Spine · Wrap guides'
   },
   'cutter-montage': {
-    surface: 'from-emerald-500/12 via-emerald-500/5 to-transparent',
-    icon: 'bg-emerald-600 text-white shadow-emerald-600/25',
-    line: 'from-emerald-400 to-emerald-700',
-    capabilities: ['CutContour', 'Auto nesting', 'Mimaki marks']
+    icon: PenLine,
+    title: 'Cutter Montage',
+    detail: 'Prepare artwork, cut lines, and sheet layouts.',
+    color: 'text-emerald-700',
+    surface: 'bg-emerald-50',
+    tag: 'AI stickers · CutContour · Nesting'
+  },
+  'sequential-number': {
+    icon: Hash,
+    title: 'Sequential Number',
+    detail: 'Number tickets and forms, ready to cut & stack.',
+    color: 'text-amber-700',
+    surface: 'bg-amber-50',
+    tag: 'Tickets · Duplex · Cut & stack'
   }
 }
 
@@ -54,102 +53,214 @@ export function ToolCard({
   isLicenseLocked = false,
   licenseReason
 }: ToolCardProps): JSX.Element {
-  const Icon = iconByToolId[tool.id as keyof typeof iconByToolId]
-  const presentation = toolPresentation[tool.id as keyof typeof toolPresentation]
-  const isActive = tool.status === 'active' || tool.status === 'mvp'
-  const canOpen = isActive && !isCheckingLicense
-  const buttonLabel = getToolButtonLabel({ isActive, isCheckingLicense, isLicenseLocked })
-
+  const p = presentations[tool.id as keyof typeof presentations]
+  const Icon = p.icon
+  const active = tool.status === 'active' || tool.status === 'mvp'
+  const label = !active
+    ? 'Coming soon'
+    : isCheckingLicense
+      ? 'Checking access'
+      : isLicenseLocked
+        ? 'View locked tool'
+        : 'Open workspace'
   return (
-    <Card
-      className={cn(
-        'group relative flex min-h-[300px] flex-col overflow-hidden transition duration-300',
-        isActive
-          ? 'hover:-translate-y-1 hover:border-primary/20 hover:shadow-elevated'
-          : 'opacity-95'
-      )}
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={!active || isCheckingLicense}
+      aria-label={`${label} — ${tool.shortTitle}`}
+      className="group flex min-w-0 flex-col overflow-hidden rounded-xl border bg-card text-left shadow-panel transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
     >
-      <div className={cn('absolute inset-x-0 top-0 h-1 bg-gradient-to-r', presentation.line)} />
       <div
         className={cn(
-          'pointer-events-none absolute inset-0 bg-gradient-to-br opacity-80',
-          presentation.surface
+          'tool-preview relative flex h-[108px] w-full items-center justify-center border-b',
+          p.surface,
+          p.color
         )}
-      />
-
-      <CardHeader className="relative flex-row items-start justify-between gap-4 p-6 pb-4">
-        <div
-          className={cn(
-            'grid size-14 shrink-0 place-items-center rounded-2xl shadow-lg ring-1 ring-white/50 transition-transform duration-300 group-hover:scale-105',
-            presentation.icon
-          )}
-        >
-          <Icon className="size-7" aria-hidden="true" />
+      >
+        <ToolIllustration id={tool.id} />
+        {tool.status === 'mvp' && (
+          <Badge variant="outline" className="absolute right-3 top-3 bg-card/90 text-[10px]">
+            Beta
+          </Badge>
+        )}
+      </div>
+      <div className="flex w-full flex-1 flex-col p-4">
+        <div className="flex items-center gap-2">
+          <Icon className={cn('size-4 shrink-0', p.color)} aria-hidden="true" />
+          <h3 className="text-[15px] font-semibold tracking-tight">{p.title}</h3>
+          <ArrowUpRight
+            className="ml-auto size-4 shrink-0 text-muted-foreground group-hover:text-primary"
+            aria-hidden="true"
+          />
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          {tool.status === 'mvp' ? <Badge variant="warning">MVP Beta</Badge> : null}
-          {isActive && isLicenseLocked ? (
-            <Badge variant="warning">{licenseReason ?? 'License required'}</Badge>
-          ) : null}
-        </div>
-      </CardHeader>
-
-      <CardContent className="relative flex flex-1 flex-col px-6 pb-5 pt-1">
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-          Production module
-        </p>
-        <CardTitle className="mt-2 text-xl leading-7 tracking-[-0.02em]">{tool.title}</CardTitle>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">{tool.description}</p>
-
-        <div className="mt-auto flex flex-wrap gap-2 pt-5">
-          {presentation.capabilities.map((capability) => (
-            <span
-              key={capability}
-              className="rounded-full border bg-card/75 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm"
-            >
-              {capability}
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">{p.detail}</p>
+        <p className="mt-auto pt-3 text-[10px] font-medium text-muted-foreground">
+          {isLicenseLocked ? (
+            <span className="flex items-center gap-1.5 text-amber-800">
+              <Lock className="size-3" aria-hidden="true" />
+              {licenseReason ?? 'License required'}
             </span>
-          ))}
-        </div>
-      </CardContent>
-
-      <CardFooter className="relative border-t border-border/70 bg-card/60 px-6 py-4">
-        <Button
-          className="w-full justify-between rounded-xl"
-          variant={canOpen && !isLicenseLocked ? 'default' : 'secondary'}
-          disabled={!canOpen}
-          onClick={onOpen}
-          aria-label={buttonLabel + ' — ' + tool.shortTitle}
-          type="button"
-        >
-          <span className="flex items-center gap-2">
-            {isCheckingLicense ? (
-              <ShieldCheck aria-hidden="true" />
-            ) : isLicenseLocked || !isActive ? (
-              <Lock aria-hidden="true" />
-            ) : (
-              <Icon aria-hidden="true" />
-            )}
-            {buttonLabel}
-          </span>
-          <ArrowRight aria-hidden="true" />
-        </Button>
-      </CardFooter>
-    </Card>
+          ) : isCheckingLicense ? (
+            'Checking access…'
+          ) : !active ? (
+            'Coming soon'
+          ) : (
+            p.tag
+          )}
+        </p>
+      </div>
+    </button>
   )
 }
 
-function getToolButtonLabel({
-  isActive,
-  isCheckingLicense,
-  isLicenseLocked
-}: {
-  isActive: boolean
-  isCheckingLicense: boolean
-  isLicenseLocked: boolean
-}): string {
-  if (!isActive) return 'Coming soon'
-  if (isCheckingLicense) return 'Checking access'
-  if (isLicenseLocked) return 'View locked tool'
-  return 'Open workspace'
+/** Local illustrations of each tool's output. No downloads or animation. */
+function ToolIllustration({ id }: { id: string }): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 240 108"
+      className="h-full w-full max-w-[260px]"
+      fill="none"
+      aria-hidden="true"
+    >
+      {id === 'booklet-montage' ? (
+        <>
+          <path d="M62 29h126v66H62z" fill="currentColor" opacity=".09" />
+          <rect
+            x="54"
+            y="19"
+            width="130"
+            height="70"
+            rx="3"
+            fill="white"
+            stroke="currentColor"
+            strokeOpacity=".3"
+          />
+          <path d="M119 19v70" stroke="currentColor" strokeDasharray="3 3" strokeOpacity=".4" />
+          <rect x="63" y="28" width="47" height="34" rx="2" fill="currentColor" opacity=".17" />
+          <rect x="128" y="28" width="47" height="19" rx="2" fill="currentColor" opacity=".55" />
+          <path
+            d="M64 70h36m-36 5h26m38-21h45m-45 6h39m-39 6h45m-45 6h32"
+            stroke="currentColor"
+            strokeOpacity=".3"
+            strokeWidth="2"
+          />
+          <path
+            d="M48 19h-6m12-6V7m130 6V7m6 12h6M48 89h-6m12 6v6m130-6v6m6-12h6"
+            stroke="currentColor"
+            strokeOpacity=".5"
+          />
+        </>
+      ) : id === 'hardcover-cover' ? (
+        <>
+          <rect x="49" y="17" width="142" height="77" rx="2" fill="currentColor" opacity=".08" />
+          <rect
+            x="56"
+            y="23"
+            width="128"
+            height="65"
+            rx="2"
+            fill="white"
+            stroke="currentColor"
+            strokeOpacity=".3"
+          />
+          <rect x="111" y="23" width="16" height="65" fill="currentColor" opacity=".8" />
+          <rect x="134" y="30" width="42" height="51" rx="1" fill="currentColor" opacity=".14" />
+          <circle cx="155" cy="45" r="8" stroke="currentColor" strokeOpacity=".5" />
+          <path
+            d="M140 62h30m-25 5h20M65 39h35m-35 6h30m-30 6h35m-35 6h21"
+            stroke="currentColor"
+            strokeOpacity=".4"
+            strokeWidth="2"
+          />
+          <path
+            d="M111 12v85m16-85v85"
+            stroke="currentColor"
+            strokeOpacity=".35"
+            strokeDasharray="3 3"
+          />
+        </>
+      ) : id === 'cutter-montage' ? (
+        <>
+          <rect
+            x="57"
+            y="12"
+            width="126"
+            height="85"
+            rx="2"
+            fill="white"
+            stroke="currentColor"
+            strokeOpacity=".25"
+          />
+          <path
+            d="M65 26v-6h6m98 0h6v6M65 83v6h6m98 0h6v-6"
+            stroke="currentColor"
+            strokeWidth="2"
+          />
+          {[0, 1, 2].map((i) => (
+            <g key={i} transform={`translate(${i * 34} 0)`}>
+              <circle cx="85" cy="40" r="12" fill="currentColor" opacity=".14" />
+              <circle
+                cx="85"
+                cy="40"
+                r="14"
+                stroke="currentColor"
+                strokeOpacity=".6"
+                strokeDasharray="2 2"
+              />
+              <rect x="73" y="64" width="24" height="16" rx="5" fill="currentColor" opacity=".55" />
+              <rect
+                x="71"
+                y="62"
+                width="28"
+                height="20"
+                rx="7"
+                stroke="currentColor"
+                strokeOpacity=".6"
+                strokeDasharray="2 2"
+              />
+            </g>
+          ))}
+        </>
+      ) : (
+        <>
+          {[0, 1, 2].map((i) => (
+            <g key={i} transform={`translate(${i * 6} ${i * -6})`}>
+              <rect
+                x="49"
+                y="35"
+                width="127"
+                height="51"
+                rx="4"
+                fill="white"
+                stroke="currentColor"
+                strokeOpacity=".35"
+              />
+              <path d="M143 35v51" stroke="currentColor" strokeOpacity=".4" strokeDasharray="3 3" />
+              <rect x="59" y="46" width="31" height="6" rx="1" fill="currentColor" opacity=".2" />
+              <path
+                d="M59 71h56m-56 5h36"
+                stroke="currentColor"
+                strokeOpacity=".2"
+                strokeWidth="2"
+              />
+              <text
+                x="104"
+                y="62"
+                fill="currentColor"
+                fontFamily="monospace"
+                fontSize="16"
+                fontWeight="700"
+              >
+                00{i + 1}
+              </text>
+              <text x="151" y="63" fill="currentColor" fontFamily="monospace" fontSize="9">
+                0{i + 1}
+              </text>
+            </g>
+          ))}
+        </>
+      )}
+    </svg>
+  )
 }

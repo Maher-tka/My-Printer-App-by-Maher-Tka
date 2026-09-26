@@ -1,4 +1,4 @@
-import { ChevronDown, FileImage, HardDrive, LogOut, Search } from 'lucide-react'
+import { ChevronDown, FileImage, LogOut, Search } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -48,24 +48,17 @@ export function TopBar({
   const accountInitials = getInitials(account?.displayName ?? 'SA')
 
   return (
-    <header className="relative z-10 flex min-h-[76px] shrink-0 items-center justify-between gap-4 border-b bg-card/95 px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)] lg:px-7">
-      <div className="flex min-w-0 flex-1 items-center gap-4">
-        <div className="hidden size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/45 text-muted-foreground 2xl:flex">
-          <HardDrive className="size-4" aria-hidden="true" />
-        </div>
+    <header className="relative z-10 flex min-h-16 shrink-0 items-center justify-between gap-3 border-b bg-card px-4 py-2 lg:px-6">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <div className="min-w-0">
-          <p className="mb-1 hidden text-[10px] font-bold uppercase tracking-[0.18em] text-primary sm:block">
-            Local production workspace
-          </p>
           <div className="flex min-w-0 items-baseline gap-3">
-            <h1 className="truncate text-xl font-bold tracking-[-0.025em] text-foreground lg:text-[22px]">
+            <h1 className="truncate text-sm font-semibold text-foreground sm:text-base">
               {pageMeta.title}
             </h1>
-            <span className="hidden h-4 w-px bg-border lg:block" />
-            <p className="hidden truncate text-sm text-muted-foreground lg:block">
-              {pageMeta.subtitle}
-            </p>
           </div>
+          <p className="mt-0.5 hidden truncate text-xs text-muted-foreground sm:block">
+            {pageMeta.subtitle}
+          </p>
         </div>
       </div>
 
@@ -73,12 +66,12 @@ export function TopBar({
         <button
           type="button"
           onClick={onOpenCommandCenter}
-          className="hidden h-10 min-w-52 items-center gap-2 rounded-xl border bg-background px-3 text-left text-sm text-muted-foreground shadow-sm transition-colors hover:border-primary/35 hover:bg-accent/50 lg:flex"
+          className="hidden h-9 items-center gap-2 rounded-lg border bg-background/70 px-3 text-left text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent lg:flex"
           aria-label="Quick open"
           title="Quick open (Ctrl+K)"
         >
           <Search className="size-4" aria-hidden="true" />
-          <span className="flex-1">Search tools & actions</span>
+          <span className="mr-4 flex-1">Find a tool or action</span>
           <kbd className="rounded-md border bg-card px-1.5 py-0.5 font-sans text-[10px] font-semibold text-muted-foreground">
             Ctrl K
           </kbd>
@@ -97,10 +90,10 @@ export function TopBar({
         <Button
           aria-label="Import artwork"
           title="Import artwork into Cutter Montage"
-          variant="default"
+          variant="outline"
           type="button"
           onClick={onOpenImageFile}
-          className="rounded-xl"
+          className="h-9 rounded-lg"
         >
           <FileImage className="size-4" aria-hidden="true" />
           <span className="hidden sm:inline">Import artwork</span>
@@ -116,7 +109,7 @@ export function TopBar({
         >
           <button
             type="button"
-            className="flex h-10 items-center gap-2 rounded-xl border border-transparent px-1.5 text-sm font-medium transition hover:border-border hover:bg-accent/60"
+            className="flex h-9 items-center gap-2 rounded-lg border border-transparent px-1.5 text-sm font-medium transition-colors hover:border-border hover:bg-accent/60"
             ref={accountButtonRef}
             aria-expanded={accountMenuOpen}
             aria-controls={accountMenuOpen ? 'account-details' : undefined}

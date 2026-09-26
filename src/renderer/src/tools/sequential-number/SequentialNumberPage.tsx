@@ -2,7 +2,6 @@ import { NumberColorInput } from './NumberColorInput'
 import { NumberDesignEditor } from './NumberDesignEditor'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -14,6 +13,7 @@ import {
   Upload
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { WorkspaceHeader } from '@/components/layout/WorkspaceHeader'
 import { ProjectFileActions } from '@/projects/ProjectFileActions'
 import type { AppRoute } from '@/types/navigation'
 import type {
@@ -383,22 +383,12 @@ export function SequentialNumberPage({
   }
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Button variant="ghost" size="sm" onClick={() => onNavigate('dashboard')}>
-            <ArrowLeft className="mr-2 size-4" />
-            All tools
-          </Button>
-          <h1 className="mt-2 flex items-center gap-3 text-2xl font-semibold tracking-tight">
-            <span className="rounded-xl bg-primary/10 p-2 text-primary">
-              <Hash className="size-6" />
-            </span>
-            Sequential Number
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Number tickets, invoices, vouchers and forms. Ready to print, cut and collect.
-          </p>
-        </div>
+      <WorkspaceHeader
+        title="Sequential Number"
+        description="Number tickets, invoices, and forms. Ready to print, cut, and collect."
+        icon={Hash}
+        onBack={() => onNavigate('dashboard')}
+      >
         <ProjectFileActions
           filePath={filePath}
           isBusy={busy}
@@ -415,8 +405,8 @@ export function SequentialNumberPage({
           onSave={() => void save()}
           onSaveAs={() => void save(true)}
         />
-      </header>
-      <div className="grid items-start gap-6 xl:grid-cols-[410px_minmax(0,1fr)]">
+      </WorkspaceHeader>
+      <div className="grid items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
         <fieldset disabled={busy} className="min-w-0 space-y-4 disabled:opacity-70">
           <Card step="1" title="Your design">
             <Field label="Project name">

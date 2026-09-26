@@ -101,12 +101,12 @@ export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.El
             Loading recent projects…
           </p>
         ) : jobs.length === 0 ? (
-          <div className="grid min-h-48 place-items-center rounded-lg border border-dashed bg-muted/30 p-6 text-center">
+          <div className="grid min-h-40 place-items-center rounded-lg border border-dashed bg-muted/30 p-6 text-center">
             <div>
               <FolderOpen className="mx-auto mb-3 size-8 text-muted-foreground" />
               <p className="font-medium">No saved projects yet</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Saved production projects, including numbered tickets, will appear here.
+                Save a project from any production tool to find it here next time.
               </p>
             </div>
           </div>

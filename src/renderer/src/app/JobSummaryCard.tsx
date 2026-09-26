@@ -27,22 +27,22 @@ export function JobSummaryCard({
 
   return (
     <Card className="overflow-hidden">
-      <CardContent className="grid grid-cols-2 p-0 lg:grid-cols-[260px_repeat(4,minmax(0,1fr))]">
+      <CardContent className="grid grid-cols-2 p-0 xl:grid-cols-[180px_repeat(4,minmax(0,1fr))]">
         <button
           type="button"
-          className="group col-span-2 flex min-h-24 lg:col-span-1 items-center justify-between gap-4 border-b bg-slate-950 px-5 py-4 text-left text-white transition hover:bg-slate-900 lg:border-b-0 lg:border-r"
+          className="group col-span-2 flex min-h-20 xl:col-span-1 items-center justify-between gap-4 border-b bg-accent px-5 py-4 text-left text-foreground transition-colors hover:bg-primary/10 xl:border-b-0 xl:border-r"
           onClick={() => onNavigate('jobs')}
         >
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300">
-              Live shop queue
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
+              Shop queue
             </p>
             <p className="mt-2 text-lg font-bold">
               {activeJobs.length} active {activeJobs.length === 1 ? 'job' : 'jobs'}
             </p>
-            <p className="mt-1 text-xs text-slate-400">Open production tracking</p>
+            <p className="mt-1 text-xs text-muted-foreground">View all jobs</p>
           </div>
-          <ArrowUpRight className="size-5 text-slate-400 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-white" />
+          <ArrowUpRight className="size-5 text-muted-foreground transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary" />
         </button>
         <Summary icon={CalendarClock} label="Due today" value={counts.today} tone="blue" />
         <Summary icon={Clock3} label="Next 7 days" value={counts.week} tone="violet" />
@@ -72,12 +72,12 @@ function Summary({
   tone: keyof typeof tones
 }): JSX.Element {
   return (
-    <div className="flex min-h-28 items-center gap-3 border-b px-4 py-4 last:border-b-0 sm:px-5 lg:border-b-0 lg:border-r lg:last:border-r-0">
-      <div className={cn('grid size-10 shrink-0 place-items-center rounded-xl', tones[tone])}>
-        <Icon className="size-5" aria-hidden="true" />
+    <div className="flex min-h-20 items-center gap-3 border-b px-4 py-3 last:border-b-0 xl:border-b-0 xl:border-r xl:last:border-r-0">
+      <div className={cn('grid size-8 shrink-0 place-items-center rounded-xl', tones[tone])}>
+        <Icon className="size-4" aria-hidden="true" />
       </div>
       <div>
-        <p className="text-2xl font-bold tracking-tight">{value}</p>
+        <p className="text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
         <p className="mt-0.5 text-xs font-medium text-muted-foreground">{label}</p>
       </div>
     </div>

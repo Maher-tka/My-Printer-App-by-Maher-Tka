@@ -56,7 +56,7 @@ export default {
         }
       },
       boxShadow: {
-        panel: '0 1px 2px rgba(15, 23, 42, 0.03), 0 12px 32px rgba(15, 23, 42, 0.055)',
+        panel: '0 1px 3px rgba(15, 23, 42, 0.035)',
         elevated: '0 18px 48px rgba(15, 23, 42, 0.12)',
         sidebar: '8px 0 32px rgba(2, 8, 23, 0.14), inset -1px 0 0 rgba(255, 255, 255, 0.06)'
       },

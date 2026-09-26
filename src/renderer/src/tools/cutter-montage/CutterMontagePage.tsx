@@ -2,7 +2,7 @@ import { StickerLibraryRail } from './components/StickerLibraryRail'
 import { StickerQuantities } from './components/StickerQuantities'
 import { AIStickerMaker } from './components/AIStickerMaker'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -385,7 +385,7 @@ export function CutterMontagePage({
   useEffect(() => () => onProjectSessionChange(null), [onProjectSessionChange])
 
   return (
-    <div className="workspace-shell mx-auto flex w-full min-w-0 max-w-none flex-col overflow-hidden lg:h-[calc(100dvh-8rem)]">
+    <div className="workspace-shell mx-auto flex w-full min-w-0 max-w-none flex-col overflow-hidden lg:h-[calc(100dvh-7rem)]">
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <CardHeader className="shrink-0 flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/25 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
@@ -414,7 +414,9 @@ export function CutterMontagePage({
               size="sm"
               variant={stickerMakerOpen ? 'default' : 'outline'}
               onClick={() => setStickerMakerOpen((current) => !current)}
+              aria-pressed={stickerMakerOpen}
             >
+              <Sparkles aria-hidden="true" />
               AI Sticker Maker
             </Button>
             <span
@@ -470,11 +472,34 @@ export function CutterMontagePage({
               onValueChange={(value) => changeStep(value as typeof step)}
               className="flex min-h-0 flex-1 flex-col gap-2"
             >
-              <TabsList className="grid h-11 w-full grid-cols-4" aria-label="Cutter workflow steps">
-                <TabsTrigger value="prepare">1. Prepare artwork</TabsTrigger>
-                <TabsTrigger value="cut">2. Cut lines</TabsTrigger>
-                <TabsTrigger value="quantity">3. Quantities</TabsTrigger>
-                <TabsTrigger value="layout">4. Layout & export</TabsTrigger>
+              <TabsList
+                className="workflow-tabs h-auto w-full shrink-0 justify-start"
+                aria-label="Cutter workflow steps"
+              >
+                <TabsTrigger value="prepare">
+                  <span className="workflow-step-number" aria-hidden="true">
+                    1
+                  </span>
+                  Prepare artwork
+                </TabsTrigger>
+                <TabsTrigger value="cut">
+                  <span className="workflow-step-number" aria-hidden="true">
+                    2
+                  </span>
+                  Cut lines
+                </TabsTrigger>
+                <TabsTrigger value="quantity">
+                  <span className="workflow-step-number" aria-hidden="true">
+                    3
+                  </span>
+                  Quantities
+                </TabsTrigger>
+                <TabsTrigger value="layout">
+                  <span className="workflow-step-number" aria-hidden="true">
+                    4
+                  </span>
+                  Layout & export
+                </TabsTrigger>
               </TabsList>
               {step === 'layout' && (
                 <>
@@ -531,7 +556,7 @@ export function CutterMontagePage({
               </div>
               <TabsContent
                 value={step}
-                className="relative mt-0 grid min-h-0 flex-1 grid-cols-[190px_minmax(0,1fr)] gap-2"
+                className="relative mt-0 grid min-h-0 flex-1 grid-cols-[160px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)] gap-2"
               >
                 <StickerLibraryRail
                   pieces={cutter.pieces}

@@ -74,7 +74,7 @@ export function AppLayout({
           ref={mainRef}
           tabIndex={-1}
           aria-label={pageMeta.title}
-          className="app-canvas min-w-0 flex-1 overflow-auto px-3 py-4 sm:px-5 lg:px-7 lg:py-6"
+          className="app-canvas min-w-0 flex-1 overflow-auto p-3 sm:p-5 lg:p-6"
         >
           <div className="relative z-[1]">{children}</div>
         </main>

@@ -1,5 +1,5 @@
 import {
-  ArrowLeft,
+  SquareStack,
   CheckCircle2,
   ClipboardCheck,
   Download,
@@ -21,6 +21,7 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
+import { WorkspaceHeader } from '@/components/layout/WorkspaceHeader'
 import { Button } from '@/components/ui/button'
 import { createPrintedJob } from '@/jobs/printHistory'
 import { useJobStore } from '@/jobs/useJobStore'
@@ -470,11 +471,12 @@ export function HardcoverCoverPage({
 
   return (
     <div className="workspace-shell mx-auto flex w-full max-w-[1880px] flex-col gap-4 overflow-hidden">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Button variant="ghost" className="w-fit" onClick={() => onNavigate('dashboard')}>
-          <ArrowLeft />
-          Back to Dashboard
-        </Button>
+      <WorkspaceHeader
+        title="Hardcover Cover"
+        description="Select cover pages, set book measurements, and fit the spine."
+        icon={SquareStack}
+        onBack={() => onNavigate('dashboard')}
+      >
         <div className="flex flex-col items-start gap-2 sm:items-end">
           <ProjectFileActions
             filePath={projectFilePath}
@@ -502,43 +504,24 @@ export function HardcoverCoverPage({
             </Button>
           </div>
         </div>
-      </div>
+      </WorkspaceHeader>
 
-      <section className="workspace-hero min-w-0 max-w-full overflow-hidden rounded-2xl border bg-gradient-to-br from-violet-500/10 via-card to-card p-4 sm:p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-semibold tracking-normal text-foreground sm:text-2xl">
-                Hardcover Binding Cover Sheet
-              </h2>
-              <Badge variant="success">Production workflow</Badge>
-              <Badge variant="secondary">{performanceSettings.label}</Badge>
-            </div>
-            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              Upload the mémoire PDF, pick the cover pages, set the physical book measurements, and
-              export the same sheet shown in the preview.
-            </p>
-          </div>
-          <div className="grid min-w-0 grid-cols-3 gap-2 text-xs text-muted-foreground sm:min-w-[360px]">
-            <div className="rounded-md border bg-muted/30 p-2">
-              <span className="block font-medium text-foreground">
-                {hardcover.state.sourcePdf ? 'PDF ready' : 'No PDF'}
-              </span>
-              Source
-            </div>
-            <div className="rounded-md border bg-muted/30 p-2">
-              <span className="block font-medium text-foreground">{hardcoverPreflight.status}</span>
-              Preflight
-            </div>
-            <div className="rounded-md border bg-muted/30 p-2">
-              <span className="block font-medium text-foreground">
-                {hardcover.state.content.spine.year || 'Year'}
-              </span>
-              Spine top
-            </div>
-          </div>
-        </div>
-      </section>
+      <div
+        className="flex flex-wrap items-center gap-2 px-1 text-xs text-muted-foreground"
+        aria-label="Cover project status"
+      >
+        <Badge variant={hardcover.state.sourcePdf ? 'success' : 'secondary'}>
+          {hardcover.state.sourcePdf ? 'Source PDF ready' : 'Start by importing a PDF'}
+        </Badge>
+        <span className="h-3 w-px bg-border" aria-hidden="true" />
+        <span>
+          Preflight:{' '}
+          <strong className="font-medium text-foreground">{hardcoverPreflight.status}</strong>
+        </span>
+        <Badge variant="secondary" className="ml-auto">
+          {performanceSettings.label}
+        </Badge>
+      </div>
 
       <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
         <aside
@@ -676,7 +659,10 @@ function WorkflowStepNav({
   onStepChange: (step: HardcoverWorkflowStep) => void
 }): JSX.Element {
   return (
-    <nav className="min-w-0 max-w-full overflow-hidden rounded-lg border bg-card p-2">
+    <nav
+      aria-label="Hardcover workflow steps"
+      className="min-w-0 max-w-full overflow-hidden rounded-lg border bg-card p-2"
+    >
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-1">
         {WORKFLOW_STEPS.map((step, index) => {
           const Icon = step.icon
@@ -706,7 +692,7 @@ function WorkflowStepNav({
                 <span className="min-w-0">
                   <span className="flex items-center gap-2 text-sm font-semibold">
                     {index + 1}. {step.label}
-                    {complete && <CheckCircle2 className="size-4 text-success" />}
+                    {complete && <CheckCircle2 className="size-4 text-success-foreground" />}
                   </span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
                     {step.description}

@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Plus, Copy, Trash2 } from 'lucide-react'
+import { Plus, Copy, ImagePlus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { PiecePreset } from '../types'
 export function StickerLibraryRail({
@@ -161,9 +161,16 @@ export function StickerLibraryRail({
           </div>
         ))}
         {!pieces.length && (
-          <p className="p-3 text-xs text-muted-foreground">
-            Import your first design. Each sticker has its own mask, cut lines and quantity.
-          </p>
+          <div className="m-2 rounded-lg border border-dashed bg-muted/30 px-3 py-6 text-center">
+            <ImagePlus className="mx-auto mb-3 size-7 text-muted-foreground" aria-hidden="true" />
+            <p className="text-xs font-semibold">Your artwork starts here</p>
+            <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+              Import a design, then prepare its cut line and quantity.
+            </p>
+            <p className="mt-3 text-[10px] text-muted-foreground">
+              PNG · JPG · WebP · SVG · PDF · AI
+            </p>
+          </div>
         )}
       </div>
       <Button variant="ghost" size="sm" className="m-1 shrink-0 text-xs" onClick={onManage}>
