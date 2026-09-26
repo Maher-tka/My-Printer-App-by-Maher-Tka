@@ -16,3 +16,17 @@ rotates the key pair and invalidates every serial issued with the previous key.
 The hardened verifier intentionally rejects the pre-release HMAC serial format.
 Version 2 local activation records are backed up and require activation with a
 new Ed25519 serial because their former shared secrets were public.
+
+## Account access
+
+The desktop app now starts behind an access screen:
+
+- New users create a local account to start the 14-day trial.
+- Returning users sign in with the account stored on that computer.
+- Customers with a Pro or Shop subscription key can use the Subscription tab
+  and open the app without creating a local account.
+
+Account credentials are stored in the Electron user-data directory. This is a
+device-local access layer; online accounts, password recovery, and recurring
+checkout still require a hosted authentication and billing service before a
+public SaaS-style release.

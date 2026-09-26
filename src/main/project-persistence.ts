@@ -1,5 +1,6 @@
+import { isSequentialProject } from '../shared/sequential-validation.js'
 import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron'
-import { access, readFile, writeFile } from 'node:fs/promises'
+import { access, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type {
   UnsavedChangesAction,
@@ -8,6 +9,7 @@ import type {
   UnsavedChangesResult
 } from '../shared/project-types.js'
 import { clearProjectAutosaves, recordAppError } from './release-runtime.js'
+import { writeJsonAtomically } from './atomic-json.js'
 
 const PROJECT_SCHEMA = 'com.maher-tka.my-printer-app.project'
 const PROJECT_VERSION = 1
@@ -24,12 +26,13 @@ interface ProjectWindowState {
 
 const projectWindowStates = new WeakMap<BrowserWindow, ProjectWindowState>()
 
-type ProjectToolId = 'booklet-montage' | 'cutter-montage' | 'hardcover-cover'
+type ProjectToolId = 'booklet-montage' | 'cutter-montage' | 'hardcover-cover' | 'sequential-number'
 
 const PROJECT_EXTENSIONS: Record<ProjectToolId, string> = {
   'booklet-montage': 'myprinter-booklet.json',
   'cutter-montage': 'myprinter-cutter.json',
-  'hardcover-cover': 'myprinter-hardcover.json'
+  'hardcover-cover': 'myprinter-hardcover.json',
+  'sequential-number': 'myprinter-sequential.json'
 }
 const ACCEPTED_PROJECT_EXTENSIONS = [...Object.values(PROJECT_EXTENSIONS), LEGACY_PROJECT_EXTENSION]
 
@@ -158,9 +161,18 @@ export function registerProjectHandlers(): void {
       }
 
       filePath = ensureProjectExtension(filePath, request.project.metadata.tool)
-      await writeFile(filePath, `${JSON.stringify(request.project, null, 2)}\n`, 'utf8')
-      await rememberProject(filePath, request.project.metadata)
-      await clearProjectAutosaves(request.project.metadata.id)
+      await writeJsonAtomically(filePath, request.project, { backupExisting: true })
+      try {
+        await rememberProject(filePath, request.project.metadata)
+      } catch (error) {
+        // The job is safely on disk; a recent-projects index failure must not invite a second save.
+        recordAppError('project-recent-index', error)
+      }
+      try {
+        await clearProjectAutosaves(request.project.metadata.id)
+      } catch (error) {
+        recordAppError('project-autosave-cleanup', error)
+      }
 
       return {
         ok: true,
@@ -282,6 +294,10 @@ export function attachProjectWindowProtection(window: BrowserWindow): void {
   })
 }
 
+export function hasUnsavedProject(window: BrowserWindow): boolean {
+  return projectWindowStates.get(window)?.dirty ?? false
+}
+
 function getProjectWindowState(window: BrowserWindow): ProjectWindowState {
   const existing = projectWindowStates.get(window)
 
@@ -373,7 +389,10 @@ function isProjectFile(value: unknown): value is ProjectFile {
   const commonPayloadIsValid =
     value.schema === PROJECT_SCHEMA &&
     value.version === PROJECT_VERSION &&
-    (tool === 'booklet-montage' || tool === 'cutter-montage' || tool === 'hardcover-cover') &&
+    (tool === 'booklet-montage' ||
+      tool === 'cutter-montage' ||
+      tool === 'hardcover-cover' ||
+      tool === 'sequential-number') &&
     isNonEmptyString(metadata.id) &&
     isNonEmptyString(metadata.jobName) &&
     isNonEmptyString(metadata.toolLabel) &&
@@ -387,6 +406,8 @@ function isProjectFile(value: unknown): value is ProjectFile {
   if (!commonPayloadIsValid) {
     return false
   }
+
+  if (tool === 'sequential-number') return isSequentialProject(value.payload)
 
   if (tool === 'booklet-montage') {
     return (
@@ -427,7 +448,7 @@ async function rememberProject(filePath: string, metadata: ProjectMetadata): Pro
     ...entries.filter((entry) => entry.filePath.toLowerCase() !== normalizedPath)
   ].slice(0, MAX_RECENT_PROJECTS)
 
-  await writeFile(getRecentProjectsPath(), JSON.stringify(nextEntries, null, 2), 'utf8')
+  await writeJsonAtomically(getRecentProjectsPath(), nextEntries)
 }
 
 async function readRecentProjects(): Promise<RecentProjectEntry[]> {
@@ -459,7 +480,8 @@ function isRecentProjectEntry(value: unknown): value is RecentProjectEntry {
     isRecord(value.metadata) &&
     (value.metadata.tool === 'booklet-montage' ||
       value.metadata.tool === 'cutter-montage' ||
-      value.metadata.tool === 'hardcover-cover') &&
+      value.metadata.tool === 'hardcover-cover' ||
+      value.metadata.tool === 'sequential-number') &&
     isNonEmptyString(value.metadata.id) &&
     isNonEmptyString(value.metadata.jobName) &&
     isNonEmptyString(value.metadata.toolLabel) &&

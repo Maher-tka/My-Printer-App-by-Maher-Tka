@@ -42,11 +42,28 @@ export function CutlineToolsPanel({
           type="button"
           size="sm"
           variant="outline"
+          onClick={() => onPieceChange(createCutlineFromArtwork(piece))}
+        >
+          From Artwork
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => onPieceChange(createCutlineFromMask(piece))}
+          disabled={!piece.mask.enabled}
+        >
+          From Mask
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
           onClick={onDuplicateShapeAsCutline}
           disabled={!piece.mask.enabled && !piece.helperShape}
         >
           <Copy data-icon="inline-start" />
-          Duplicate Shape
+          From Shape
         </Button>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -74,17 +91,39 @@ export function CutlineToolsPanel({
             onPieceChange(updateCutlineTransform(piece, { heightCm: Math.max(heightCm, 0.2) }))
           }
         />
-        <NumberField
-          label="Offset mm"
-          value={piece.cutline.transform.offsetMm}
-          onChange={(offsetMm) => onPieceChange(updateCutlineTransform(piece, { offsetMm }))}
-        />
+        {piece.stickerMakerOffsetMm === undefined ? (
+          <NumberField
+            label="Offset mm"
+            value={piece.cutline.transform.offsetMm}
+            onChange={(offsetMm) => onPieceChange(updateCutlineTransform(piece, { offsetMm }))}
+          />
+        ) : (
+          <div className="rounded border bg-muted/40 p-2 text-xs">
+            Cut offset: {piece.stickerMakerOffsetMm} mm, built into path
+          </div>
+        )}
         <NumberField
           label="Rotate"
           value={piece.cutline.transform.rotation}
           onChange={(rotation) => onPieceChange(updateCutlineTransform(piece, { rotation }))}
         />
       </div>
+      <label className="mt-3 flex flex-col gap-1 text-xs text-muted-foreground">
+        Spot name
+        <span className="flex h-9 items-center overflow-hidden rounded border bg-background">
+          <input
+            className="min-w-0 flex-1 bg-transparent px-2 text-sm text-foreground outline-none"
+            value={piece.cutline.strokeName}
+            onChange={(event) =>
+              onPieceChange({
+                ...piece,
+                cutline: { ...piece.cutline, strokeName: event.target.value || 'CutContour' }
+              })
+            }
+          />
+          <span className="mr-2 size-4 rounded-full border" style={{ background: '#ff00ff' }} />
+        </span>
+      </label>
     </section>
   )
 }
@@ -149,4 +188,39 @@ function updateCutlineTransform(
       transform: { ...piece.cutline.transform, ...patch }
     }
   }
+}
+
+function createCutlineFromArtwork(piece: PiecePreset): PiecePreset {
+  return {
+    ...piece,
+    cutline: {
+      ...piece.cutline,
+      shape: 'rectangle',
+      transform: {
+        ...piece.artwork.transform,
+        offsetMm: piece.cutline.transform.offsetMm
+      }
+    }
+  }
+}
+
+function createCutlineFromMask(piece: PiecePreset): PiecePreset {
+  return {
+    ...piece,
+    cutline: {
+      ...piece.cutline,
+      shape: getCutlineShapeFromMask(piece.mask.shape),
+      transform: {
+        ...piece.mask.transform,
+        offsetMm: piece.cutline.transform.offsetMm
+      }
+    }
+  }
+}
+
+function getCutlineShapeFromMask(shape: PiecePreset['mask']['shape']): CutlineShape {
+  if (shape === 'ellipse') return 'ellipse'
+  if (shape === 'rounded-rectangle') return 'rounded-rectangle'
+  if (shape === 'custom-polygon') return 'custom-path'
+  return 'rectangle'
 }

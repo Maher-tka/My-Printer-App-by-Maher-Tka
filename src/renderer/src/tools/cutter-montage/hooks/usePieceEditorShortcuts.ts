@@ -1,4 +1,5 @@
-import { useCallback, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback } from 'react'
+import type { EditorTool } from '../types'
 
 interface PieceEditorShortcutActions {
   clearSelection: () => void
@@ -16,25 +17,60 @@ interface PieceEditorShortcutActions {
   redo: () => void
   setZoom: (updater: (value: number) => number) => void
   resetZoom: () => void
+  setTool: (tool: EditorTool) => void
 }
 
 export function usePieceEditorShortcuts(
   actions: PieceEditorShortcutActions
-): (event: ReactKeyboardEvent<HTMLElement>) => void {
+): (event: KeyboardEvent) => void {
   return useCallback(
-    (event: ReactKeyboardEvent<HTMLElement>): void => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+    (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || event.isComposing) return
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement &&
+          (target.isContentEditable || Boolean(target.closest('button, [contenteditable="true"]'))))
+      )
         return
       const ctrl = event.ctrlKey || event.metaKey
       const key = event.key.toLowerCase()
 
       if (key === 'escape') {
+        event.preventDefault()
         actions.clearSelection()
         return
       }
       if (key === 'delete' || key === 'backspace') {
         event.preventDefault()
         actions.deleteSelection()
+        return
+      }
+      if (!ctrl && !event.altKey && key === 'v') {
+        event.preventDefault()
+        actions.setTool('pan')
+        return
+      }
+      if (!ctrl && !event.altKey && key === 's') {
+        event.preventDefault()
+        actions.setTool('select')
+        return
+      }
+      if (!ctrl && !event.altKey && key === 'p') {
+        event.preventDefault()
+        actions.setTool('line')
+        return
+      }
+      if (!ctrl && !event.altKey && key === 'r') {
+        event.preventDefault()
+        actions.setTool(event.shiftKey ? 'rounded-rectangle' : 'rectangle')
+        return
+      }
+      if (!ctrl && !event.altKey && key === 'o') {
+        event.preventDefault()
+        actions.setTool('ellipse')
         return
       }
       if (key.startsWith('arrow')) {

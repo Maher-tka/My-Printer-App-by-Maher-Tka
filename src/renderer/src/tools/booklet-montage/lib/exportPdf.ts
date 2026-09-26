@@ -124,7 +124,7 @@ export function assertExportCanStart(
     throw new Error('No valid booklet or empty sheets to export.')
   }
 
-  const settingsErrors = validatePrintSettings(settings)
+  const settingsErrors = validatePrintSettings(settings, sheets.length)
 
   if (settingsErrors.length > 0) {
     throw new Error(settingsErrors[0])

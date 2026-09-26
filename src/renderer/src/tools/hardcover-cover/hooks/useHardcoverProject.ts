@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction
@@ -20,14 +21,32 @@ import {
   duplicateCoverTemplate,
   getCoverTemplate
 } from '../lib/coverTemplates'
-import { calculateSpineTextLayout } from '../lib/spineTextLayout'
+import { DEFAULT_SPINE_BACKGROUND_COLOR, normalizeHexColor } from '../lib/spineBackground'
+import { normalizePdfPagePosition } from '../lib/pdfPosition'
+import { calculateSpineTextLayout, syncSpineAutoFitFontSize } from '../lib/spineTextLayout'
+import {
+  consumeHardcoverPdfImportTarget,
+  hasHardcoverPdfSourceBytes,
+  importHardcoverPdfCoverSource,
+  importHardcoverPdfSource,
+  loadHardcoverPdfPagePreviews,
+  releaseHardcoverPdfCoverSourceRuntime,
+  releaseHardcoverPdfSourceRuntime,
+  selectHardcoverPdfBackPage,
+  selectHardcoverPdfFrontPage,
+  setHardcoverPdfBackCoverEnabled,
+  updateHardcoverSeparatePdfSource
+} from '../lib/sourcePdf'
 import type {
   BackCoverContent,
   BatchStudent,
   CoverContent,
   CoverSetup,
   CoverTemplate,
+  HardcoverPdfCoverSource,
   FrontCoverContent,
+  HardcoverPdfCoverTarget,
+  HardcoverPdfPagePosition,
   HardcoverExportSettings,
   HardcoverJobDetails,
   HardcoverPdfSource,
@@ -60,8 +79,19 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
   selectSourcePdfFrontPage: (pageNumber: number) => Promise<void>
   selectSourcePdfBackPage: (pageNumber: number) => Promise<void>
   setSourcePdfBackCoverEnabled: (enabled: boolean) => Promise<void>
-  loadSourcePdfPagePreviews: (startPage: number, count?: number) => Promise<void>
-  updateSourcePdfFitMode: (fitMode: HardcoverPdfSource['fitMode']) => void
+  loadSourcePdfPagePreviews: (
+    startPage: number,
+    count?: number,
+    target?: HardcoverPdfCoverTarget
+  ) => Promise<void>
+  updateSourcePdfFitMode: (
+    fitMode: HardcoverPdfSource['fitMode'],
+    target?: HardcoverPdfCoverTarget
+  ) => void
+  updateSourcePdfPosition: (
+    position: HardcoverPdfPagePosition,
+    target?: HardcoverPdfCoverTarget
+  ) => void
   saveProductionPreset: () => void
   updateProductionPreset: () => void
   resetProductionPreset: () => void
@@ -84,6 +114,18 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     const storedTemplates = readCustomTemplates()
     return { ...initial, customTemplates: mergeTemplates(initial.customTemplates, storedTemplates) }
   })
+  const sourceRuntimeRef = useRef<HardcoverPdfSource | undefined>(undefined)
+  const sourceReady = useMemo(
+    () => (state.sourcePdf ? hasHardcoverPdfSourceBytes(state.sourcePdf) : false),
+    [state.sourcePdf]
+  )
+
+  useEffect(() => {
+    sourceRuntimeRef.current = state.sourcePdf
+  }, [state.sourcePdf])
+
+  useEffect(() => () => releaseHardcoverPdfSourceRuntime(sourceRuntimeRef.current), [])
+
   const dimensions = useMemo(() => calculateCoverDimensions(state.setup), [state.setup])
   const spineLayout = useMemo(
     () =>
@@ -92,15 +134,55 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
         state.setup.spineWidthMm,
         dimensions.spine.heightMm - state.setup.hingeMm * 2
       ),
-    [dimensions.spine.heightMm, state.content.spine, state.setup.hingeMm, state.setup.spineWidthMm]
+    [
+      dimensions.spine.heightMm,
+      state.content.spine.autoFit,
+      state.content.spine.fontSizePt,
+      state.content.spine.shortTitle,
+      state.content.spine.studentName,
+      state.content.spine.year,
+      state.setup.hingeMm,
+      state.setup.spineWidthMm
+    ]
   )
+
+  useEffect(() => {
+    if (!state.content.spine.autoFit) return
+
+    setState((current) => {
+      if (!current.content.spine.autoFit) return current
+
+      const currentDimensions = calculateCoverDimensions(current.setup)
+      const currentLayout = calculateSpineTextLayout(
+        current.content.spine,
+        current.setup.spineWidthMm,
+        currentDimensions.spine.heightMm - current.setup.hingeMm * 2
+      )
+      const nextSpine = syncSpineAutoFitFontSize(current.content.spine, currentLayout)
+
+      if (nextSpine === current.content.spine) return current
+
+      return {
+        ...current,
+        content: {
+          ...current.content,
+          spine: nextSpine
+        }
+      }
+    })
+  }, [spineLayout.fontSizePt, state.content.spine.autoFit])
+
   const quote = useMemo(() => calculateQuote(state.job.quote), [state.job.quote])
   const warnings = useMemo(() => {
     const next = [...dimensions.warnings]
     if (spineLayout.warning) next.push(spineLayout.warning)
     if (!state.sourcePdf) next.push('Upload a memoire PDF before exporting the production sheet.')
-    if (state.sourcePdf && !state.sourcePdf.bytes)
-      next.push('The saved PDF source is missing. Upload the memoire PDF again before exporting.')
+    if (state.sourcePdf && !sourceReady)
+      next.push(
+        state.sourcePdf.sourceMode === 'separate'
+          ? 'One or more independent cover PDFs are missing. Upload the front and back sources again before exporting.'
+          : 'The saved PDF source is missing. Upload the memoire PDF again before exporting.'
+      )
     if (!state.content.front.studentName.trim()) next.push('Student name is missing.')
     if (!state.content.front.title.trim()) next.push('Project title is missing.')
     return next
@@ -108,12 +190,13 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     dimensions.warnings,
     spineLayout.warning,
     state.sourcePdf,
+    sourceReady,
     state.content.front.studentName,
     state.content.front.title
   ])
   const checklist = useMemo(
     () => [
-      { label: 'Source PDF loaded', passed: Boolean(state.sourcePdf?.bytes) },
+      { label: 'Source PDF loaded', passed: sourceReady },
       { label: 'Board width entered', passed: state.setup.boardWidthMm > 0 },
       { label: 'Board height entered', passed: state.setup.boardHeightMm > 0 },
       { label: 'Spine thickness entered', passed: state.setup.spineWidthMm > 0 },
@@ -140,7 +223,7 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     [
       dimensions.warnings,
       spineLayout.fits,
-      state.sourcePdf,
+      sourceReady,
       state.exportSettings.includeCropMarks,
       state.exportSettings.includeFoldLines,
       state.exportSettings.includeSafeZones,
@@ -218,9 +301,28 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
   )
   const importSourcePdf = useCallback(
     async (file: File): Promise<void> => {
-      const { importHardcoverPdfSource } = await import('../lib/sourcePdf')
-      const sourcePdf = await importHardcoverPdfSource(file)
-      patchState((current) => ({ ...current, sourcePdf }))
+      const target = consumeHardcoverPdfImportTarget(file)
+
+      if (target === 'single') {
+        const sourcePdf = await importHardcoverPdfSource(file)
+        patchState((current) => {
+          releaseHardcoverPdfSourceRuntime(current.sourcePdf)
+          return { ...current, sourcePdf }
+        })
+        return
+      }
+
+      const coverSource = await importHardcoverPdfCoverSource(file)
+      patchState((current) => {
+        const previousCover =
+          target === 'front' ? current.sourcePdf?.frontSource : current.sourcePdf?.backSource
+        if (previousCover) releaseHardcoverPdfCoverSourceRuntime(previousCover)
+
+        return {
+          ...current,
+          sourcePdf: updateHardcoverSeparatePdfSource(current.sourcePdf, target, coverSource)
+        }
+      })
     },
     [patchState]
   )
@@ -228,7 +330,6 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     async (pageNumber: number): Promise<void> => {
       const currentSource = state.sourcePdf
       if (!currentSource) throw new Error('Upload a memoire PDF first.')
-      const { selectHardcoverPdfFrontPage } = await import('../lib/sourcePdf')
       const sourcePdf = await selectHardcoverPdfFrontPage(currentSource, pageNumber)
       patchState((current) => ({ ...current, sourcePdf }))
     },
@@ -238,7 +339,6 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     async (pageNumber: number): Promise<void> => {
       const currentSource = state.sourcePdf
       if (!currentSource) throw new Error('Upload a memoire PDF first.')
-      const { selectHardcoverPdfBackPage } = await import('../lib/sourcePdf')
       const sourcePdf = await selectHardcoverPdfBackPage(currentSource, pageNumber)
       patchState((current) => ({ ...current, sourcePdf }))
     },
@@ -248,35 +348,85 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     async (enabled: boolean): Promise<void> => {
       const currentSource = state.sourcePdf
       if (!currentSource) throw new Error('Upload a memoire PDF first.')
-      const { setHardcoverPdfBackCoverEnabled } = await import('../lib/sourcePdf')
       const sourcePdf = await setHardcoverPdfBackCoverEnabled(currentSource, enabled)
       patchState((current) => ({ ...current, sourcePdf }))
     },
     [patchState, state.sourcePdf]
   )
   const loadSourcePdfPagePreviews = useCallback(
-    async (startPage: number, count?: number): Promise<void> => {
+    async (
+      startPage: number,
+      count?: number,
+      target: HardcoverPdfCoverTarget = 'front'
+    ): Promise<void> => {
       const currentSource = state.sourcePdf
       if (!currentSource) throw new Error('Upload a memoire PDF first.')
-      const { loadHardcoverPdfPagePreviews } = await import('../lib/sourcePdf')
-      const sourcePdf = await loadHardcoverPdfPagePreviews(currentSource, startPage, count)
+      const sourcePdf = await loadHardcoverPdfPagePreviews(currentSource, startPage, count, target)
       patchState((current) => ({ ...current, sourcePdf }))
     },
     [patchState, state.sourcePdf]
   )
   const updateSourcePdfFitMode = useCallback(
-    (fitMode: HardcoverPdfSource['fitMode']): void =>
+    (fitMode: HardcoverPdfSource['fitMode'], target: HardcoverPdfCoverTarget = 'front'): void =>
       patchState((current) =>
         current.sourcePdf
           ? {
               ...current,
               sourcePdf: {
                 ...current.sourcePdf,
-                fitMode
+                fitMode:
+                  current.sourcePdf.sourceMode === 'separate' && target === 'back'
+                    ? current.sourcePdf.fitMode
+                    : fitMode,
+                frontSource:
+                  current.sourcePdf.sourceMode === 'separate' && target === 'front'
+                    ? current.sourcePdf.frontSource
+                      ? { ...current.sourcePdf.frontSource, fitMode }
+                      : undefined
+                    : current.sourcePdf.frontSource,
+                backSource:
+                  current.sourcePdf.sourceMode === 'separate' && target === 'back'
+                    ? current.sourcePdf.backSource
+                      ? { ...current.sourcePdf.backSource, fitMode }
+                      : undefined
+                    : current.sourcePdf.backSource
               }
             }
           : current
       ),
+    [patchState]
+  )
+  const updateSourcePdfPosition = useCallback(
+    (position: HardcoverPdfPagePosition, target: HardcoverPdfCoverTarget = 'front'): void =>
+      patchState((current) => {
+        if (!current.sourcePdf) return current
+
+        const normalizedPosition = normalizePdfPagePosition(position)
+        const separate =
+          current.sourcePdf.sourceMode === 'separate' ||
+          Boolean(current.sourcePdf.frontSource || current.sourcePdf.backSource)
+
+        return {
+          ...current,
+          sourcePdf: {
+            ...current.sourcePdf,
+            frontPosition:
+              !separate && target === 'front'
+                ? normalizedPosition
+                : current.sourcePdf.frontPosition,
+            backPosition:
+              !separate && target === 'back' ? normalizedPosition : current.sourcePdf.backPosition,
+            frontSource:
+              separate && target === 'front' && current.sourcePdf.frontSource
+                ? { ...current.sourcePdf.frontSource, position: normalizedPosition }
+                : current.sourcePdf.frontSource,
+            backSource:
+              separate && target === 'back' && current.sourcePdf.backSource
+                ? { ...current.sourcePdf.backSource, position: normalizedPosition }
+                : current.sourcePdf.backSource
+          }
+        }
+      }),
     [patchState]
   )
   const saveProductionPreset = useCallback((): void => {
@@ -402,7 +552,10 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     },
     [patchState]
   )
-  const clearProject = useCallback((): void => setState(createDefaultHardcoverProject()), [])
+  const clearProject = useCallback((): void => {
+    releaseHardcoverPdfSourceRuntime(sourceRuntimeRef.current)
+    setState(createDefaultHardcoverProject())
+  }, [])
 
   return {
     state,
@@ -423,6 +576,7 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     setSourcePdfBackCoverEnabled,
     loadSourcePdfPagePreviews,
     updateSourcePdfFitMode,
+    updateSourcePdfPosition,
     saveProductionPreset,
     updateProductionPreset,
     resetProductionPreset,
@@ -468,7 +622,9 @@ export function createDefaultHardcoverProject(): HardcoverProjectState {
         universityInitials: '',
         direction: 'top-to-bottom',
         autoFit: true,
-        fontSizePt: 14
+        fontSizePt: 14,
+        spineColorMode: 'auto',
+        spineBackgroundColor: DEFAULT_SPINE_BACKGROUND_COLOR
       },
       back: { summary: '', contactInfo: '', qrText: '', plain: false, direction: 'auto' }
     },
@@ -501,7 +657,8 @@ export function createDefaultHardcoverProject(): HardcoverProjectState {
         designCost: 0,
         quantity: 1,
         discount: 0,
-        depositPaid: 0
+        depositPaid: 0,
+        totalPrice: 0
       }
     }
   }
@@ -515,14 +672,19 @@ export function getCurrentAcademicYear(date = new Date()): string {
 
 export function calculateQuote(quote: QuoteBreakdown): QuoteSummary {
   const quantity = Math.max(1, quote.quantity)
-  const subtotal =
+  const itemizedSubtotal =
     Math.max(0, quote.materialCost + quote.printCost + quote.finishingCost + quote.designCost) *
     quantity
-  const finalPrice = Math.max(0, subtotal - Math.max(0, quote.discount))
+  const directTotal =
+    typeof quote.totalPrice === 'number' && Number.isFinite(quote.totalPrice)
+      ? Math.max(0, quote.totalPrice)
+      : undefined
+  const legacyFinalPrice = Math.max(0, itemizedSubtotal - Math.max(0, quote.discount))
+  const finalPrice = directTotal ?? legacyFinalPrice
   return {
     ...quote,
     quantity,
-    subtotal,
+    subtotal: finalPrice,
     finalPrice,
     remaining: Math.max(0, finalPrice - Math.max(0, quote.depositPaid))
   }
@@ -598,12 +760,26 @@ function normalizeHardcoverProject(project: HardcoverProjectState): HardcoverPro
 
   const front = { ...fallback.content.front, ...project.content?.front }
   const spine = { ...fallback.content.spine, ...project.content?.spine }
+  spine.spineColorMode = project.content?.spine?.spineColorMode === 'custom' ? 'custom' : 'auto'
+  spine.spineBackgroundColor = normalizeHexColor(
+    project.content?.spine?.spineBackgroundColor,
+    fallback.content.spine.spineBackgroundColor
+  )
 
   if (!project.content?.spine?.shortTitle || spine.shortTitle === LEGACY_DEFAULT_SPINE_TITLE) {
     spine.shortTitle = front.title
   }
   if (!project.content?.spine?.year) {
     spine.year = fallback.content.spine.year
+  }
+
+  const incomingQuote = project.job?.quote
+  const normalizedQuote: QuoteBreakdown = { ...fallback.job.quote, ...incomingQuote }
+  if (incomingQuote && incomingQuote.totalPrice === undefined) {
+    normalizedQuote.totalPrice = calculateQuote({
+      ...normalizedQuote,
+      totalPrice: undefined
+    }).finalPrice
   }
 
   return {
@@ -624,7 +800,7 @@ function normalizeHardcoverProject(project: HardcoverProjectState): HardcoverPro
     job: {
       ...fallback.job,
       ...project.job,
-      quote: { ...fallback.job.quote, ...project.job?.quote }
+      quote: normalizedQuote
     }
   }
 }
@@ -643,19 +819,53 @@ function normalizePdfSource(
     backCoverEnabled && source.backPageNumber !== undefined
       ? Math.min(Math.max(1, Number(source.backPageNumber) || 1), Math.max(1, pageCount))
       : undefined
+  const frontSource = normalizePdfCoverSource(source.frontSource)
+  const backSource = normalizePdfCoverSource(source.backSource)
+  const separate = source.sourceMode === 'separate' || Boolean(frontSource || backSource)
+  const normalizedFrontPageNumber = separate ? (frontSource?.pageNumber ?? 1) : frontPageNumber
+  const normalizedBackPageNumber = separate
+    ? backCoverEnabled
+      ? backSource?.pageNumber
+      : undefined
+    : backPageNumber
 
   return {
     fileName: source.fileName,
     filePath: source.filePath,
     pageCount,
-    frontPageNumber,
-    backCoverEnabled,
-    backPageNumber,
-    frontPageRotation: source.frontPageRotation,
-    backPageRotation: backCoverEnabled ? source.backPageRotation : undefined,
+    frontPageNumber: normalizedFrontPageNumber,
+    backCoverEnabled: separate ? Boolean(backSource && backCoverEnabled) : backCoverEnabled,
+    backPageNumber: normalizedBackPageNumber,
+    frontPageRotation: separate ? frontSource?.rotation : source.frontPageRotation,
+    backPageRotation: separate
+      ? backSource?.rotation
+      : backCoverEnabled
+        ? source.backPageRotation
+        : undefined,
     fitMode: source.fitMode === 'fill' ? 'fill' : 'fit',
+    frontPosition: normalizePdfPagePosition(
+      separate ? frontSource?.position : source.frontPosition
+    ),
+    backPosition: normalizePdfPagePosition(separate ? backSource?.position : source.backPosition),
     thumbnailDataUrl: source.thumbnailDataUrl,
-    backThumbnailDataUrl: backCoverEnabled ? source.backThumbnailDataUrl : undefined,
+    backThumbnailDataUrl: separate
+      ? backSource?.thumbnailDataUrl
+      : backCoverEnabled
+        ? source.backThumbnailDataUrl
+        : undefined,
+    frontPageGeometry: separate ? frontSource?.pageGeometry : source.frontPageGeometry,
+    backPageGeometry: separate
+      ? backSource?.pageGeometry
+      : backCoverEnabled
+        ? source.backPageGeometry
+        : undefined,
+    ...(separate
+      ? {
+          sourceMode: 'separate' as const,
+          frontSource,
+          backSource
+        }
+      : {}),
     pagePreviews: Array.isArray(source.pagePreviews)
       ? source.pagePreviews.filter(
           (preview) =>
@@ -667,6 +877,36 @@ function normalizePdfSource(
         )
       : [],
     ...(source.bytes instanceof Uint8Array ? { bytes: source.bytes } : {})
+  }
+}
+
+function normalizePdfCoverSource(
+  source: HardcoverPdfCoverSource | undefined
+): HardcoverPdfCoverSource | undefined {
+  if (!source?.fileName || !source.sourceId) return undefined
+  const pageCount = Math.max(0, Number(source.pageCount) || 0)
+
+  return {
+    sourceId: source.sourceId,
+    fileName: source.fileName,
+    filePath: source.filePath,
+    pageCount,
+    pageNumber: Math.min(Math.max(1, Number(source.pageNumber) || 1), Math.max(1, pageCount)),
+    rotation: Number.isFinite(source.rotation) ? source.rotation : undefined,
+    fitMode: source.fitMode === 'fill' ? 'fill' : 'fit',
+    position: normalizePdfPagePosition(source.position),
+    thumbnailDataUrl: source.thumbnailDataUrl,
+    pageGeometry: source.pageGeometry,
+    pagePreviews: Array.isArray(source.pagePreviews)
+      ? source.pagePreviews.filter(
+          (preview) =>
+            preview &&
+            Number.isInteger(preview.pageNumber) &&
+            preview.pageNumber >= 1 &&
+            preview.pageNumber <= Math.max(1, pageCount) &&
+            typeof preview.thumbnailDataUrl === 'string'
+        )
+      : []
   }
 }
 

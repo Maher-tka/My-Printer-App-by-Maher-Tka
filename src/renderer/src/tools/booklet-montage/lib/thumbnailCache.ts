@@ -3,6 +3,16 @@ import { getPerformanceSettingsSnapshot } from '../../../performance/performance
 const thumbnailUrlByKey = new Map<string, string>()
 const thumbnailKeyByUrl = new Map<string, string>()
 const thumbnailLastUsedByKey = new Map<string, number>()
+const pendingThumbnailByKey = new Map<string, Promise<string>>()
+
+/**
+ * Keep the import path responsive for long PDFs. The first pages are useful
+ * for immediate ordering work and the last page is useful for cover/back
+ * checks; the remaining pages can be rendered by the existing preview path.
+ */
+export const DEFAULT_INITIAL_THUMBNAIL_PAGE_LIMIT = 24
+
+let thumbnailCacheGeneration = 0
 
 export async function getOrCreateThumbnailUrl(
   key: string,
@@ -15,15 +25,47 @@ export async function getOrCreateThumbnailUrl(
     return cached
   }
 
-  const blob = await renderBlob()
-  const url = URL.createObjectURL(blob)
+  const pending = pendingThumbnailByKey.get(key)
 
-  thumbnailUrlByKey.set(key, url)
-  thumbnailKeyByUrl.set(url, key)
-  thumbnailLastUsedByKey.set(key, Date.now())
-  trimThumbnailCache()
+  if (pending) {
+    return pending
+  }
 
-  return url
+  const generation = thumbnailCacheGeneration
+  const next = Promise.resolve()
+    .then(() => renderBlob())
+    .then((blob) => {
+      const url = URL.createObjectURL(blob)
+
+      if (generation !== thumbnailCacheGeneration) {
+        URL.revokeObjectURL(url)
+        throw new Error('Thumbnail cache was cleared while a thumbnail was rendering.')
+      }
+
+      const existing = thumbnailUrlByKey.get(key)
+
+      if (existing) {
+        URL.revokeObjectURL(url)
+        thumbnailLastUsedByKey.set(key, Date.now())
+        return existing
+      }
+
+      thumbnailUrlByKey.set(key, url)
+      thumbnailKeyByUrl.set(url, key)
+      thumbnailLastUsedByKey.set(key, Date.now())
+      trimThumbnailCache()
+
+      return url
+    })
+    .finally(() => {
+      if (pendingThumbnailByKey.get(key) === next) {
+        pendingThumbnailByKey.delete(key)
+      }
+    })
+
+  pendingThumbnailByKey.set(key, next)
+
+  return next
 }
 
 export function revokeThumbnailUrl(url: string): void {
@@ -40,6 +82,8 @@ export function revokeThumbnailUrl(url: string): void {
 }
 
 export function clearThumbnailCache(): void {
+  thumbnailCacheGeneration += 1
+
   for (const url of thumbnailUrlByKey.values()) {
     URL.revokeObjectURL(url)
   }
@@ -47,6 +91,7 @@ export function clearThumbnailCache(): void {
   thumbnailUrlByKey.clear()
   thumbnailKeyByUrl.clear()
   thumbnailLastUsedByKey.clear()
+  pendingThumbnailByKey.clear()
 }
 
 export function clearUnusedThumbnailUrls(activeKeys: Set<string>): void {
@@ -58,6 +103,43 @@ export function clearUnusedThumbnailUrls(activeKeys: Set<string>): void {
       thumbnailLastUsedByKey.delete(key)
     }
   }
+}
+
+export function getThumbnailCacheSize(): number {
+  return thumbnailUrlByKey.size
+}
+
+export function getPendingThumbnailCount(): number {
+  return pendingThumbnailByKey.size
+}
+
+export function getInitialThumbnailPageIndexes(
+  pageCount: number,
+  requestedLimit = DEFAULT_INITIAL_THUMBNAIL_PAGE_LIMIT
+): number[] {
+  const normalizedPageCount = Number.isFinite(pageCount) ? Math.max(0, Math.floor(pageCount)) : 0
+  const normalizedLimit = Number.isFinite(requestedLimit)
+    ? Math.max(0, Math.floor(requestedLimit))
+    : DEFAULT_INITIAL_THUMBNAIL_PAGE_LIMIT
+
+  if (normalizedPageCount === 0 || normalizedLimit === 0) {
+    return []
+  }
+
+  const limit = Math.min(normalizedPageCount, normalizedLimit)
+
+  if (limit === 1) {
+    return [0]
+  }
+
+  const indexes = Array.from({ length: limit - 1 }, (_, index) => index)
+  const lastPageIndex = normalizedPageCount - 1
+
+  if (indexes[indexes.length - 1] !== lastPageIndex) {
+    indexes.push(lastPageIndex)
+  }
+
+  return indexes
 }
 
 export function canvasToThumbnailBlob(

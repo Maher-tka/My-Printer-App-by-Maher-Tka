@@ -14,6 +14,17 @@ export type BookDirection = 'ltr' | 'rtl'
 
 export type HardcoverPdfFitMode = 'fit' | 'fill'
 
+export interface HardcoverPdfPagePosition {
+  xPercent: number
+  yPercent: number
+}
+
+export type HardcoverPdfSourceMode = 'single' | 'separate'
+
+export type HardcoverPdfCoverTarget = 'front' | 'back'
+
+export type SpineColorMode = 'auto' | 'custom'
+
 export interface CoverMargins {
   topMm: number
   rightMm: number
@@ -90,16 +101,62 @@ export interface HardcoverPdfSource {
   frontPageRotation?: number
   backPageRotation?: number
   fitMode: HardcoverPdfFitMode
+  frontPosition?: HardcoverPdfPagePosition
+  backPosition?: HardcoverPdfPagePosition
   thumbnailDataUrl?: string
   backThumbnailDataUrl?: string
   pagePreviews?: HardcoverPdfPagePreview[]
+  frontPageGeometry?: HardcoverPdfPageGeometry
+  backPageGeometry?: HardcoverPdfPageGeometry
+  sourceMode?: HardcoverPdfSourceMode
+  frontSource?: HardcoverPdfCoverSource
+  backSource?: HardcoverPdfCoverSource
   bytes?: Uint8Array
+}
+
+/**
+ * A cover-specific PDF descriptor. PDF bytes are deliberately not part of this
+ * type: independent front/back files are held in an in-memory runtime registry
+ * and only this serializable metadata is stored in a project.
+ */
+export interface HardcoverPdfCoverSource {
+  sourceId: string
+  fileName: string
+  filePath?: string
+  pageCount: number
+  pageNumber: number
+  rotation?: number
+  fitMode: HardcoverPdfFitMode
+  position?: HardcoverPdfPagePosition
+  thumbnailDataUrl?: string
+  pagePreviews?: HardcoverPdfPagePreview[]
+  pageGeometry?: HardcoverPdfPageGeometry
+}
+
+export interface HardcoverPdfRectangle {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface HardcoverPdfPageGeometry {
+  widthPt: number
+  heightPt: number
+  rotation: number
+  mediaBox?: HardcoverPdfRectangle
+  cropBox?: HardcoverPdfRectangle
+  bleedBox?: HardcoverPdfRectangle
+  trimBox?: HardcoverPdfRectangle
+  artBox?: HardcoverPdfRectangle
+  warnings: string[]
 }
 
 export interface HardcoverPdfPagePreview {
   pageNumber: number
   thumbnailDataUrl: string
   rotation: number
+  geometry?: HardcoverPdfPageGeometry
 }
 
 export interface HardcoverProductionPreset {
@@ -140,6 +197,8 @@ export interface SpineContent {
   direction: SpineDirection
   autoFit: boolean
   fontSizePt: number
+  spineColorMode: SpineColorMode
+  spineBackgroundColor: string
 }
 
 export interface BackCoverContent {
@@ -199,6 +258,7 @@ export interface QuoteBreakdown {
   quantity: number
   discount: number
   depositPaid: number
+  totalPrice?: number
 }
 
 export interface QuoteSummary extends QuoteBreakdown {

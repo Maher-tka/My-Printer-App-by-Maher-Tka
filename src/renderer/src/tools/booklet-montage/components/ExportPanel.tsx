@@ -63,7 +63,14 @@ export function ExportPanel({
           </Button>
         )}
       </div>
-      <ProgressLine progress={exportProgress} />
+      <ProgressLine
+        progress={exportProgress}
+        idleMessage={
+          canExport
+            ? 'Ready to export. Choose PDF for printing, or PNG/JPG for individual sheet images.'
+            : 'Import pages and prepare your sheets to enable export.'
+        }
+      />
     </div>
   )
 }

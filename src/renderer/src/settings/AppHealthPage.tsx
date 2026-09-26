@@ -1,9 +1,19 @@
-import { Activity, Database, Download, FolderOpen, RefreshCw, Trash2, Wrench } from 'lucide-react'
+import {
+  Activity,
+  ArrowLeft,
+  Database,
+  Download,
+  FolderOpen,
+  RefreshCw,
+  Trash2,
+  Wrench
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { PerformanceSettings } from '@/performance/performanceTypes'
+import type { AppRoute } from '@/types/navigation'
 import type { LicenseSnapshot } from '../../../shared/licensing-types'
 import type { AppHealthSnapshot } from '../../../shared/release-types'
 
@@ -11,19 +21,50 @@ export function AppHealthPage({
   license,
   performance,
   isDeveloperMode,
-  onResetLicense
+  onResetLicense,
+  onNavigate
 }: {
   license: LicenseSnapshot | null
   performance: PerformanceSettings
   isDeveloperMode: boolean
   onResetLicense: () => Promise<void>
+  onNavigate: (route: AppRoute) => void
 }): JSX.Element {
   const [health, setHealth] = useState<AppHealthSnapshot | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [isBusy, setIsBusy] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const isAvailable = Boolean(window.printerApp?.runtime)
+
+  const runAction = async (action: () => Promise<unknown>): Promise<void> => {
+    setIsBusy(true)
+    setMessage(null)
+    try {
+      const result = await action()
+      if (typeof result === 'string' && result) setMessage(result)
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : 'The action could not be completed. Please try again.'
+      )
+    } finally {
+      setIsBusy(false)
+    }
+  }
 
   const refresh = useCallback(async (): Promise<void> => {
-    if (!window.printerApp?.runtime) return
-    setHealth(await window.printerApp.runtime.getHealth())
+    setIsLoading(true)
+    try {
+      if (!window.printerApp?.runtime) return
+      setHealth(await window.printerApp.runtime.getHealth())
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'Could not read app health. Try refreshing.'
+      )
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -48,9 +89,18 @@ export function AppHealthPage({
   }
 
   return (
-    <div className="mx-auto flex max-w-[1300px] flex-col gap-5">
-      <Card>
-        <CardHeader className="flex-row items-start justify-between gap-4">
+    <div className="workspace-shell mx-auto flex max-w-[1300px] flex-col gap-5">
+      <Button
+        variant="ghost"
+        className="w-fit"
+        onClick={() => onNavigate('settings')}
+        type="button"
+      >
+        <ArrowLeft data-icon="inline-start" />
+        Back to Settings
+      </Button>
+      <Card className="overflow-hidden">
+        <CardHeader className="flex-row items-start justify-between gap-4 border-b bg-muted/25">
           <div>
             <CardTitle className="flex items-center gap-2">
               <Activity className="text-primary" />
@@ -60,9 +110,17 @@ export function AppHealthPage({
               Release, storage, licensing, exports, and performance diagnostics.
             </CardDescription>
           </div>
-          <Button type="button" variant="outline" onClick={() => void refresh()}>
-            <RefreshCw data-icon="inline-start" />
-            Refresh
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!isAvailable || isLoading || isBusy}
+            onClick={() => void runAction(refresh)}
+          >
+            <RefreshCw
+              data-icon="inline-start"
+              className={isLoading ? 'animate-spin' : undefined}
+            />
+            {isLoading ? 'Refreshing�' : 'Refresh'}
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
@@ -107,25 +165,51 @@ export function AppHealthPage({
               </div>
             </>
           )}
-          {message && <p className="rounded-md bg-muted p-3 text-sm">{message}</p>}
+          {message && (
+            <p
+              className="break-words rounded-md bg-muted p-3 text-sm"
+              role="status"
+              aria-live="polite"
+            >
+              {message}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              onClick={() => void window.printerApp?.runtime.openAppDataFolder()}
+              disabled={!isAvailable || isBusy}
+              onClick={() =>
+                void runAction(async () => window.printerApp?.runtime.openAppDataFolder())
+              }
             >
               <FolderOpen data-icon="inline-start" />
               Open App Data Folder
             </Button>
-            <Button type="button" variant="outline" onClick={() => void exportReport()}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!isAvailable || isBusy}
+              onClick={() => void runAction(exportReport)}
+            >
               <Download data-icon="inline-start" />
               Export Diagnostic Report
             </Button>
-            <Button type="button" variant="outline" onClick={() => void clearCache()}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!isAvailable || isBusy}
+              onClick={() => void runAction(clearCache)}
+            >
               <Trash2 data-icon="inline-start" />
               Clear Temporary Cache
             </Button>
             {isDeveloperMode && (
-              <Button type="button" variant="outline" onClick={() => void onResetLicense()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!isAvailable || isBusy}
+                onClick={() => void runAction(onResetLicense)}
+              >
                 <Wrench data-icon="inline-start" />
                 Reset Local Trial / License
               </Button>
@@ -134,15 +218,18 @@ export function AppHealthPage({
               <Button
                 type="button"
                 variant="outline"
-                onClick={async () => {
-                  const result =
-                    await window.printerApp?.runtime.createQualityFixtures('test-projects')
-                  setMessage(
-                    result?.ok
-                      ? `Test fixture created in ${result.folderPath}`
-                      : (result?.error ?? 'Could not create test fixture.')
-                  )
-                }}
+                disabled={!isAvailable || isBusy}
+                onClick={() =>
+                  void runAction(async () => {
+                    const result =
+                      await window.printerApp?.runtime.createQualityFixtures('test-projects')
+                    setMessage(
+                      result?.ok
+                        ? `Test fixture created in ${result.folderPath}`
+                        : (result?.error ?? 'Could not create test fixture.')
+                    )
+                  })
+                }
               >
                 <Database data-icon="inline-start" />
                 Create Test Projects
@@ -157,7 +244,7 @@ export function AppHealthPage({
 
 function HealthStat({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-lg border bg-muted/25 p-4">
+    <div className="rounded-xl border bg-muted/25 p-4">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className="mt-1 truncate font-semibold" title={value}>
         {value}
@@ -167,7 +254,7 @@ function HealthStat({ label, value }: { label: string; value: string }): JSX.Ele
 }
 function PathRow({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div className="rounded-lg border p-3">
+    <div className="rounded-xl border bg-muted/15 p-3">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className="mt-1 break-all text-sm">{value}</p>
     </div>

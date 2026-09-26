@@ -1,7 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
-import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
+import { registerAccountHandlers } from './account.js'
+import { registerAppUpdaterHandlers } from './app-updater.js'
 import { registerLicenseHandlers } from './licensing.js'
+import { registerPrintHandlers } from './print-service.js'
+import { isFastPrintCommand, runFastPrintCommand } from './fast-print.js'
 import { attachProjectWindowProtection, registerProjectHandlers } from './project-persistence.js'
 import {
   recordAppError,
@@ -36,7 +40,7 @@ function createMainWindow(): void {
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.cjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -71,6 +75,12 @@ function createMainWindow(): void {
   }
 
   attachProjectWindowProtection(mainWindow)
+
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'Alt') {
+      event.preventDefault()
+    }
+  })
 
   mainWindow.once('ready-to-show', () => {
     clearDevFallbackTimer()
@@ -150,11 +160,19 @@ registerAppDiagnostics()
 logDevStartup('app.whenReady start')
 app
   .whenReady()
-  .then(() => {
+  .then(async () => {
     logDevStartup('app.whenReady resolved')
+    if (isFastPrintCommand) {
+      await runFastPrintCommand()
+      return
+    }
     registerBookletExportHandlers()
+    registerNativeFileHandlers()
+    registerAccountHandlers()
+    registerAppUpdaterHandlers()
     registerLicenseHandlers()
     registerProjectHandlers()
+    registerPrintHandlers()
     registerReleaseRuntimeHandlers()
     createMainWindow()
 
@@ -167,7 +185,7 @@ app
   .catch((error) => logMainError('app-when-ready', error))
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if (!isFastPrintCommand && process.platform !== 'darwin') {
     app.quit()
   }
 })
@@ -181,6 +199,53 @@ interface SaveFileRequest {
 interface WriteOutputFileRequest {
   fileName: string
   bytes: Uint8Array | ArrayBuffer | number[]
+}
+
+function imageMimeType(filePath: string): string {
+  const normalizedPath = filePath.toLowerCase()
+
+  if (normalizedPath.endsWith('.png')) return 'image/png'
+  if (normalizedPath.endsWith('.svg')) return 'image/svg+xml'
+  return 'image/jpeg'
+}
+
+function registerNativeFileHandlers(): void {
+  ipcMain.handle('files:open-image', async (event) => {
+    try {
+      const owner = BrowserWindow.fromWebContents(event.sender)
+      const options: OpenDialogOptions = {
+        title: 'Open image file',
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+          {
+            name: 'Image files',
+            extensions: ['png', 'jpg', 'jpeg', 'svg']
+          }
+        ]
+      }
+      const result = owner
+        ? await dialog.showOpenDialog(owner, options)
+        : await dialog.showOpenDialog(options)
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { ok: false, canceled: true }
+      }
+
+      const files = await Promise.all(
+        result.filePaths.map(async (filePath) => ({
+          fileName: basename(filePath),
+          filePath,
+          mimeType: imageMimeType(filePath),
+          bytes: new Uint8Array(await readFile(filePath))
+        }))
+      )
+
+      return { ok: true, files }
+    } catch (error) {
+      recordAppError('open-image-file', error)
+      return { ok: false, error: getErrorMessage(error) }
+    }
+  })
 }
 
 function registerBookletExportHandlers(): void {

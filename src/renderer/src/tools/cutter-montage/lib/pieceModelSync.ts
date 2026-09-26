@@ -1,13 +1,18 @@
 import type { EditorObject, EditorShapeType, MaskShape, PiecePreset } from '../types'
 import { CUT_CONTOUR_COLOR, CUT_CONTOUR_NAME } from './colorSpot'
+import { fitArtworkToCoverMask } from './maskUtils'
+
+const PREVIOUS_MASK_WORKFLOW_VERSION = 2 as const
+const CURRENT_MASK_WORKFLOW_VERSION = 3 as const
 
 export function normalizePiecePreset(piece: PiecePreset): PiecePreset {
   const objects = Array.isArray(piece.objects) ? piece.objects : []
+  const hasObjectModel = Array.isArray(piece.objects)
   const hasCanonicalArtwork = objects.some(
     (object) => object.id === piece.artworkObjectId || object.role === 'artwork'
   )
 
-  return hasCanonicalArtwork
+  return hasObjectModel || hasCanonicalArtwork
     ? syncLegacyFieldsFromObjects({ ...piece, objects })
     : syncObjectsFromLegacyFields({ ...piece, objects })
 }
@@ -36,7 +41,7 @@ export function updateObject(
 ): PiecePreset {
   let changed = false
   const objects = piece.objects.map((object) => {
-    if (object.id !== objectId) return object
+    if (object.id !== objectId || object.locked) return object
     changed = true
     return {
       ...object,
@@ -53,12 +58,52 @@ export function updateObject(
 
 export function syncLegacyFieldsFromObjects(piece: PiecePreset): PiecePreset {
   const objects = dedupeObjects(piece.objects ?? [])
-  const artwork = getObjectByIdOrRole({ ...piece, objects }, piece.artworkObjectId, 'artwork')
-  const mask = getObjectByIdOrRole({ ...piece, objects }, piece.maskObjectId, 'clipping-mask')
-  const cutline = getObjectByIdOrRole({ ...piece, objects }, piece.cutlineObjectId, 'cutline')
-  const helpers = objects.filter((object) => object.role === 'helper')
+  const sourceMask = getObjectByIdOrRole({ ...piece, objects }, piece.maskObjectId, 'clipping-mask')
+  const sourceArtwork = getObjectByIdOrRole({ ...piece, objects }, piece.artworkObjectId, 'artwork')
+  const clippingMaskEnabled = Boolean(
+    sourceMask && (piece.clippingMaskEnabled ?? piece.mask.enabled)
+  )
+  const shouldMigrateActiveMask = Boolean(
+    clippingMaskEnabled &&
+    sourceMask &&
+    piece.maskWorkflowVersion !== CURRENT_MASK_WORKFLOW_VERSION &&
+    sourceArtwork &&
+    (piece.maskWorkflowVersion === PREVIOUS_MASK_WORKFLOW_VERSION || !sourceArtwork.locked)
+  )
+  const normalizedObjects =
+    clippingMaskEnabled && sourceMask && !piece.maskEditingEnabled
+      ? objects.map((object) => {
+          if (object.id === sourceMask.id) return { ...object, locked: true }
+          if (sourceArtwork && object.id === sourceArtwork.id) {
+            return {
+              ...object,
+              locked: true,
+              transform: shouldMigrateActiveMask
+                ? fitArtworkToCoverMask(object.transform, sourceMask.transform)
+                : { ...object.transform }
+            }
+          }
+          return object
+        })
+      : objects
+  const artwork = getObjectByIdOrRole(
+    { ...piece, objects: normalizedObjects },
+    piece.artworkObjectId,
+    'artwork'
+  )
+  const mask = getObjectByIdOrRole(
+    { ...piece, objects: normalizedObjects },
+    piece.maskObjectId,
+    'clipping-mask'
+  )
+  const cutline = getObjectByIdOrRole(
+    { ...piece, objects: normalizedObjects },
+    piece.cutlineObjectId,
+    'cutline'
+  )
+  const helpers = normalizedObjects.filter((object) => object.role === 'helper')
   const selectedObjectIds = (piece.selectedObjectIds ?? []).filter((id) =>
-    objects.some((object) => object.id === id)
+    normalizedObjects.some((object) => object.id === id)
   )
   const keyObjectId =
     piece.keyObjectId && selectedObjectIds.includes(piece.keyObjectId)
@@ -68,17 +113,27 @@ export function syncLegacyFieldsFromObjects(piece: PiecePreset): PiecePreset {
 
   return {
     ...piece,
-    objects,
-    artworkObjectId: artwork?.id ?? piece.artworkObjectId,
+    objects: normalizedObjects,
+    artworkObjectId: artwork?.id,
     maskObjectId: mask?.id,
     cutlineObjectId: cutline?.id,
     helperObjectIds: helpers.map((object) => object.id),
     selectedObjectIds,
     keyObjectId,
-    groupLinked: objects.some((object) => Boolean(object.groupId)) || Boolean(piece.groupLinked),
-    artworkCutlineGrouped:
-      objects.some((object) => Boolean(object.groupId)) || Boolean(piece.groupLinked),
-    clippingMaskEnabled: Boolean(mask && (piece.clippingMaskEnabled ?? piece.mask.enabled)),
+    groupLinked: objects.some((object) => Boolean(object.groupId)),
+    artworkCutlineGrouped: objects.some((object) => Boolean(object.groupId)),
+    clippingMaskEnabled,
+    maskWorkflowVersion: clippingMaskEnabled
+      ? CURRENT_MASK_WORKFLOW_VERSION
+      : piece.maskWorkflowVersion,
+    artworkLockBeforeMask:
+      clippingMaskEnabled &&
+      piece.maskWorkflowVersion !== CURRENT_MASK_WORKFLOW_VERSION &&
+      piece.maskWorkflowVersion !== PREVIOUS_MASK_WORKFLOW_VERSION &&
+      piece.artworkLockBeforeMask === undefined &&
+      sourceArtwork
+        ? sourceArtwork.locked
+        : piece.artworkLockBeforeMask,
     artwork: artwork
       ? {
           ...piece.artwork,
@@ -125,7 +180,7 @@ export function syncLegacyFieldsFromObjects(piece: PiecePreset): PiecePreset {
     },
     objectLocks: {
       artwork: artwork?.locked ?? piece.objectLocks.artwork,
-      mask: mask?.locked ?? piece.objectLocks.mask,
+      mask: mask?.locked ?? false,
       cutline: cutline?.locked ?? piece.objectLocks.cutline,
       helper: primaryHelper?.locked ?? piece.objectLocks.helper
     }
@@ -134,6 +189,14 @@ export function syncLegacyFieldsFromObjects(piece: PiecePreset): PiecePreset {
 
 export function syncObjectsFromLegacyFields(piece: PiecePreset): PiecePreset {
   const current = Array.isArray(piece.objects) ? piece.objects : []
+  const activeMask = Boolean(piece.mask.enabled || piece.clippingMaskEnabled)
+  const shouldMigrateActiveMask =
+    activeMask &&
+    piece.maskWorkflowVersion !== CURRENT_MASK_WORKFLOW_VERSION &&
+    (piece.maskWorkflowVersion === PREVIOUS_MASK_WORKFLOW_VERSION || !piece.objectLocks.artwork)
+  const artworkTransform = shouldMigrateActiveMask
+    ? fitArtworkToCoverMask(piece.artwork.transform, piece.mask.transform)
+    : { ...piece.artwork.transform }
   const artworkId = piece.artworkObjectId || `artwork-${piece.id}`
   const artwork = mergeObject(findByIdOrRole(current, artworkId, 'artwork'), {
     id: artworkId,
@@ -142,8 +205,8 @@ export function syncObjectsFromLegacyFields(piece: PiecePreset): PiecePreset {
     role: 'artwork',
     name: 'Artwork',
     visible: piece.objectVisibility.artwork,
-    locked: piece.objectLocks.artwork,
-    transform: { ...piece.artwork.transform },
+    locked: activeMask ? true : piece.objectLocks.artwork,
+    transform: artworkTransform,
     sourceId: piece.sourceId,
     exportEnabled: true
   })
@@ -156,7 +219,7 @@ export function syncObjectsFromLegacyFields(piece: PiecePreset): PiecePreset {
           role: 'clipping-mask',
           name: 'Clipping Mask',
           visible: piece.objectVisibility.mask,
-          locked: piece.objectLocks.mask,
+          locked: true,
           transform: { ...piece.mask.transform },
           fillColor: 'transparent',
           exportEnabled: false
@@ -222,7 +285,15 @@ export function syncObjectsFromLegacyFields(piece: PiecePreset): PiecePreset {
     selectedObjectIds: (piece.selectedObjectIds ?? []).filter((id) =>
       objects.some((object) => object.id === id)
     ),
-    keyObjectId: piece.keyObjectId
+    keyObjectId: piece.keyObjectId,
+    maskWorkflowVersion: activeMask ? CURRENT_MASK_WORKFLOW_VERSION : piece.maskWorkflowVersion,
+    artworkLockBeforeMask:
+      activeMask &&
+      piece.maskWorkflowVersion !== CURRENT_MASK_WORKFLOW_VERSION &&
+      piece.maskWorkflowVersion !== PREVIOUS_MASK_WORKFLOW_VERSION &&
+      piece.artworkLockBeforeMask === undefined
+        ? piece.objectLocks.artwork
+        : piece.artworkLockBeforeMask
   })
 }
 

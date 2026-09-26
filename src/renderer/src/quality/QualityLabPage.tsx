@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, FolderOpen, FlaskConical, Play } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Clock, FolderOpen, FlaskConical, Play } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,6 +7,7 @@ import { runSharedCutterPreflight } from '@/preflight/cutterPreflight'
 import { runHardcoverPreflight } from '@/preflight/hardcoverPreflight'
 import { PreflightSummary } from '@/preflight/preflightUI'
 import type { PreflightReport } from '@/preflight/preflightTypes'
+import type { AppRoute } from '@/types/navigation'
 
 const TESTS = [
   'Create 8-page booklet test',
@@ -15,7 +16,11 @@ const TESTS = [
   'Create hardcover A4 mémoire test'
 ]
 
-export default function QualityLabPage(): JSX.Element {
+export default function QualityLabPage({
+  onNavigate
+}: {
+  onNavigate: (route: AppRoute) => void
+}): JSX.Element {
   const [results, setResults] = useState<
     Array<{ label: string; durationMs: number; report?: PreflightReport; path?: string }>
   >([])
@@ -77,6 +82,15 @@ export default function QualityLabPage(): JSX.Element {
   }
   return (
     <div className="mx-auto flex max-w-[1300px] flex-col gap-5">
+      <Button
+        variant="ghost"
+        className="w-fit"
+        onClick={() => onNavigate('settings')}
+        type="button"
+      >
+        <ArrowLeft data-icon="inline-start" />
+        Back to Settings
+      </Button>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

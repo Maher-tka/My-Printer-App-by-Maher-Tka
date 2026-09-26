@@ -16,7 +16,7 @@ export function usePieceEditorTransforms(): {
       syncLegacyFieldsFromObjects({
         ...piece,
         objects: piece.objects.map((object) =>
-          object.id === objectId && !object.locked
+          object.id === objectId && !object.locked && !isActiveMaskPairObject(piece, object.id)
             ? { ...object, transform: { ...object.transform, ...patch } }
             : object
         )
@@ -36,8 +36,11 @@ export function usePieceEditorTransforms(): {
         ...piece,
         objects: piece.objects.map((object) =>
           (selected.has(object.id) ||
-            Boolean(object.groupId && selectedGroups.has(object.groupId))) &&
-          !object.locked
+            Boolean(
+              !piece.maskEditingEnabled && object.groupId && selectedGroups.has(object.groupId)
+            )) &&
+          !object.locked &&
+          !isActiveMaskPairObject(piece, object.id)
             ? {
                 ...object,
                 transform: {
@@ -58,10 +61,20 @@ export function usePieceEditorTransforms(): {
     return syncLegacyFieldsFromObjects({
       ...piece,
       objects: piece.objects.map((object) =>
-        selected.has(object.id) ? { ...object, locked } : object
+        selected.has(object.id)
+          ? { ...object, locked: isActiveMaskPairObject(piece, object.id) ? true : locked }
+          : object
       )
     })
   }, [])
 
   return { updateTransform, moveSelection, setSelectionLock }
+}
+
+function isActiveMaskPairObject(piece: PiecePreset, objectId: string): boolean {
+  return (
+    piece.clippingMaskEnabled &&
+    !piece.maskEditingEnabled &&
+    (piece.maskObjectId === objectId || piece.artworkObjectId === objectId)
+  )
 }

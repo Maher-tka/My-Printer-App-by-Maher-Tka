@@ -1,0 +1,246 @@
+import type { CutterProject, PiecePreset, PieceSourceFile } from '../types'
+import { createCutlineFromArtworkBounds } from './cutlineValidation'
+import { DEFAULT_CUTTER_SHEET } from './cutterLayout'
+import { createPiecePresetFromSource, createPlacedPieceFromPreset } from './piecePresets'
+import { runCutterPreflight } from './preflight'
+
+function run(): void {
+  const source = createSource()
+  const piece = createPieceWithRotatedOffsetCutline(source)
+  const safeAreaPlaced = createPlacedPieceFromPreset(piece, 3.5, 3.5)
+  const staleNominalBounds = {
+    xCm: safeAreaPlaced.xCm,
+    yCm: safeAreaPlaced.yCm,
+    widthCm: safeAreaPlaced.widthCm,
+    heightCm: safeAreaPlaced.heightCm
+  }
+  const safeAreaReport = runCutterPreflight(
+    createProject(source, piece, {
+      ...safeAreaPlaced,
+      productionBoundsCm: staleNominalBounds
+    })
+  )
+
+  expect(
+    safeAreaReport.safeAreaOutOfBoundsIds.includes(safeAreaPlaced.id),
+    'rotated CutContour offset intruding into the unsafe margin is reported'
+  )
+  expect(
+    safeAreaReport.issues.some(
+      (issue) =>
+        issue.id === 'outside-safe-area' && issue.placedPieceIds.includes(safeAreaPlaced.id)
+    ),
+    'unsafe-margin intrusion creates the safe-area warning'
+  )
+  expect(
+    !safeAreaReport.outOfBoundsIds.includes(safeAreaPlaced.id),
+    'production footprint that remains on the physical sheet is not a sheet-bounds error'
+  )
+
+  const sheetEdgePlaced = createPlacedPieceFromPreset(piece, 2, 2)
+  const sheetEdgeReport = runCutterPreflight(
+    createProject(source, piece, {
+      ...sheetEdgePlaced,
+      productionBoundsCm: {
+        xCm: sheetEdgePlaced.xCm,
+        yCm: sheetEdgePlaced.yCm,
+        widthCm: sheetEdgePlaced.widthCm,
+        heightCm: sheetEdgePlaced.heightCm
+      }
+    })
+  )
+  expect(
+    sheetEdgeReport.outOfBoundsIds.includes(sheetEdgePlaced.id),
+    'rotated CutContour offset outside the sheet is detected even when nominal bounds fit'
+  )
+
+  const placedWithInvalidRotation = createPlacedPieceFromPreset(piece, 3, 3)
+  const invalidPlaced = {
+    ...placedWithInvalidRotation,
+    cutlineTransform: {
+      ...placedWithInvalidRotation.cutlineTransform,
+      rotation: Number.NaN
+    }
+  }
+  const invalidReport = runCutterPreflight(createProject(source, piece, invalidPlaced))
+  const invalidIssue = invalidReport.issues.find(
+    (issue) => issue.id === 'invalid-production-geometry'
+  )
+
+  expect(Boolean(invalidIssue), 'non-finite production geometry creates an explicit issue')
+  expect(invalidIssue?.severity === 'error', 'invalid production geometry is blocking')
+  expect(
+    invalidIssue?.placedPieceIds.includes(invalidPlaced.id) === true,
+    'invalid production geometry identifies the affected placed piece'
+  )
+  expect(invalidReport.canExport === false, 'invalid production geometry fails preflight closed')
+  expect(
+    Number.isFinite(invalidReport.usedAreaPercent) &&
+      Number.isFinite(invalidReport.wasteAreaPercent),
+    'invalid production geometry does not contaminate utilization metrics'
+  )
+
+  for (const invalidOffset of [Number.NaN, Number.POSITIVE_INFINITY]) {
+    const placedWithInvalidOffset = createPlacedPieceFromPreset(piece, 3, 3)
+    const invalidOffsetPlaced = {
+      ...placedWithInvalidOffset,
+      cutlineTransform: {
+        ...placedWithInvalidOffset.cutlineTransform,
+        offsetMm: invalidOffset
+      }
+    }
+    const invalidOffsetReport = runCutterPreflight(
+      createProject(source, piece, invalidOffsetPlaced)
+    )
+    const invalidOffsetIssue = invalidOffsetReport.issues.find(
+      (issue) => issue.id === 'invalid-production-geometry'
+    )
+
+    expect(
+      invalidOffsetIssue?.placedPieceIds.includes(invalidOffsetPlaced.id) === true,
+      `placed CutContour offset ${String(invalidOffset)} fails production geometry closed`
+    )
+    expect(
+      invalidOffsetReport.canExport === false,
+      `placed CutContour offset ${String(invalidOffset)} blocks export`
+    )
+  }
+
+  const edgeSource = { ...source, id: 'quarter-turn-edge-source', naturalHeightPx: 400 }
+  const edgePiece = createPieceWithZeroOffsetCutline(edgeSource)
+  for (const rotation of [90, 180, 270] as const) {
+    const edgePlaced = createPlacedPieceFromPreset(edgePiece, 1.5, 1.5, rotation)
+    const edgeReport = runCutterPreflight(createProject(edgeSource, edgePiece, edgePlaced))
+
+    expect(
+      !edgeReport.outOfBoundsIds.includes(edgePlaced.id),
+      `${rotation} degree placement exactly on the sheet edge is not out of bounds`
+    )
+    expect(
+      !edgeReport.safeAreaOutOfBoundsIds.includes(edgePlaced.id),
+      `${rotation} degree placement exactly on the safe-area edge has no false warning`
+    )
+  }
+
+  const floatingNoisePlaced = createPlacedPieceFromPreset(edgePiece, 1.5 - 5e-10, 1.5 - 5e-10)
+  const floatingNoiseReport = runCutterPreflight(
+    createProject(edgeSource, edgePiece, floatingNoisePlaced)
+  )
+  expect(
+    !floatingNoiseReport.safeAreaOutOfBoundsIds.includes(floatingNoisePlaced.id),
+    'sub-nanometer floating-point drift at the safe-area edge is tolerated'
+  )
+
+  const materiallyOutsidePlaced = createPlacedPieceFromPreset(edgePiece, 1.5 - 0.001, 1.5)
+  const materiallyOutsideReport = runCutterPreflight(
+    createProject(edgeSource, edgePiece, materiallyOutsidePlaced)
+  )
+  expect(
+    materiallyOutsideReport.safeAreaOutOfBoundsIds.includes(materiallyOutsidePlaced.id),
+    'a real 0.001 cm safe-area intrusion is still reported'
+  )
+
+  const missingPresetPlaced = createPlacedPieceFromPreset(edgePiece, 2, 2)
+  const missingPresetReport = runCutterPreflight({
+    ...createProject(edgeSource, edgePiece, missingPresetPlaced),
+    pieces: []
+  })
+  expect(
+    missingPresetReport.issues.some(
+      (issue) =>
+        issue.id === 'missing-source' && issue.placedPieceIds.includes(missingPresetPlaced.id)
+    ),
+    'a missing preset remains a missing-source error'
+  )
+  expect(
+    !missingPresetReport.issues.some(
+      (issue) =>
+        issue.id === 'invalid-production-geometry' &&
+        issue.placedPieceIds.includes(missingPresetPlaced.id)
+    ),
+    'a valid cached footprint for a missing preset is not misreported as invalid geometry'
+  )
+
+  console.log('Preflight production-bounds tests passed.')
+}
+
+function createPieceWithRotatedOffsetCutline(source: PieceSourceFile): PiecePreset {
+  const piece = createCutlineFromArtworkBounds(createPiecePresetFromSource(source, []))
+
+  return {
+    ...piece,
+    cutline: {
+      ...piece.cutline,
+      transform: { ...piece.cutline.transform, offsetMm: 2, rotation: 45 }
+    },
+    objects: piece.objects.map((object) =>
+      object.role === 'cutline'
+        ? {
+            ...object,
+            offsetMm: 2,
+            transform: { ...object.transform, rotation: 45 }
+          }
+        : object
+    )
+  }
+}
+
+function createPieceWithZeroOffsetCutline(source: PieceSourceFile): PiecePreset {
+  const piece = createCutlineFromArtworkBounds(createPiecePresetFromSource(source, []))
+
+  return {
+    ...piece,
+    cutline: {
+      ...piece.cutline,
+      transform: { ...piece.cutline.transform, offsetMm: 0 }
+    },
+    objects: piece.objects.map((object) =>
+      object.role === 'cutline'
+        ? {
+            ...object,
+            offsetMm: 0,
+            transform: { ...object.transform, rotation: 0 }
+          }
+        : object
+    )
+  }
+}
+
+function createProject(
+  source: PieceSourceFile,
+  piece: PiecePreset,
+  placedPiece: CutterProject['placedPieces'][number]
+): CutterProject {
+  return {
+    sheet: { ...DEFAULT_CUTTER_SHEET, widthCm: 20, heightCm: 20, safeMarginCm: 1.5 },
+    sources: [source],
+    pieces: [piece],
+    placedPieces: [placedPiece],
+    layers: { artwork: true, cutlines: true },
+    exportSettings: {
+      strokeName: 'CutContour',
+      includeArtwork: true,
+      includeCutlines: true
+    }
+  }
+}
+
+function createSource(): PieceSourceFile {
+  return {
+    id: 'preflight-production-source',
+    sourceKind: 'image',
+    fileName: 'production-bounds.png',
+    displayName: 'Production bounds',
+    mimeType: 'image/png',
+    bytes: new Uint8Array([137, 80, 78, 71]),
+    previewUrl: 'blob:preflight-production-source',
+    naturalWidthPx: 800,
+    naturalHeightPx: 800
+  }
+}
+
+function expect(condition: boolean, message: string): void {
+  if (!condition) throw new Error(`Expected ${message}`)
+}
+
+run()

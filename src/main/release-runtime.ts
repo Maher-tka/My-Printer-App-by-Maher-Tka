@@ -1,7 +1,18 @@
-import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
+import { prepareFineCutJob } from './finecut-handoff.js'
+import { writeJsonAtomically } from './atomic-json.js'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  session,
+  shell,
+  type OpenDialogOptions
+} from 'electron'
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
-import { dirname, extname, join } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { spawn } from 'node:child_process'
 import type {
   AppHealthSnapshot,
   AutosaveEntry,
@@ -9,23 +20,45 @@ import type {
   DiagnosticContext,
   ExportContext,
   ExportHistoryEntry,
-  ExportStatus
+  ExportStatus,
+  ShopBackupRendererData,
+  ShopBackupResult,
+  ShopRestoreResult
 } from '../shared/release-types.js'
+import {
+  MAX_SHOP_BACKUP_BYTES,
+  MAX_SHOP_BACKUP_PROJECTS,
+  SHOP_BACKUP_SCHEMA,
+  SHOP_BACKUP_VERSION,
+  isShopBackupEnvelope,
+  sanitizeShopBackupRendererData,
+  type ShopBackupEnvelope,
+  type ShopBackupProject
+} from '../shared/shop-backup-validation.js'
+
+import {
+  mergeRestoredExportHistory,
+  remapRestoredProjectPaths
+} from '../shared/shop-backup-restore.js'
 
 const MAX_EXPORT_HISTORY = 200
 const MAX_RECENT_ERRORS = 30
-const MAX_AUTOSAVES_PER_PROJECT = 5
+const MAX_AUTOSAVES = 3
 const LARGE_AUTOSAVE_WARNING_BYTES = 25 * 1024 * 1024
 const MAX_AUTOSAVE_METADATA_BYTES = 256 * 1024
 const EXPORT_HISTORY_FILE = 'export-history.json'
 const AUTOSAVE_FOLDER = 'autosaves'
 const AUTOSAVE_FILE_EXTENSION = '.myprinter-autosave.json'
 const AUTOSAVE_METADATA_EXTENSION = '.meta.json'
+const SHOP_BACKUP_FOLDER = 'backups'
 
 const recentErrors: AppHealthSnapshot['recentErrors'] = []
 const reportedAutosaveIssues = new Set<string>()
 
 export function registerReleaseRuntimeHandlers(): void {
+  ipcMain.handle('runtime:prepare-finecut-job', (_event, request: unknown) =>
+    prepareFineCutJob(request)
+  )
   ipcMain.handle('runtime:get-health', getAppHealthSnapshot)
   ipcMain.handle('runtime:open-app-data', () => shell.openPath(app.getPath('userData')))
   ipcMain.handle('runtime:clear-cache', clearTemporaryCache)
@@ -34,6 +67,9 @@ export function registerReleaseRuntimeHandlers(): void {
   )
   ipcMain.handle('runtime:list-exports', readExportHistory)
   ipcMain.handle('runtime:open-path', async (_event, filePath: string) => shell.openPath(filePath))
+  ipcMain.handle('runtime:open-in-illustrator', async (_event, filePath: string) =>
+    openInIllustrator(filePath)
+  )
   ipcMain.handle('runtime:open-parent-folder', (_event, filePath: string) => {
     shell.showItemInFolder(filePath)
   })
@@ -51,6 +87,40 @@ export function registerReleaseRuntimeHandlers(): void {
   ipcMain.handle('runtime:create-quality-fixtures', (_event, label: string) =>
     createQualityFixtures(label)
   )
+  ipcMain.handle('runtime:create-shop-backup', (event, rendererData: ShopBackupRendererData) =>
+    createShopBackup(BrowserWindow.fromWebContents(event.sender), rendererData, false)
+  )
+  ipcMain.handle('runtime:create-auto-backup', (_event, rendererData: ShopBackupRendererData) =>
+    createShopBackup(null, rendererData, true)
+  )
+  ipcMain.handle('runtime:restore-shop-backup', (event) =>
+    restoreShopBackup(BrowserWindow.fromWebContents(event.sender))
+  )
+  ipcMain.handle('runtime:open-backups', openShopBackupFolder)
+}
+
+async function openInIllustrator(filePath: string): Promise<{ ok: boolean; error?: string }> {
+  if (extname(filePath).toLowerCase() !== '.svg') {
+    return { ok: false, error: 'FineCut handoff requires an SVG file.' }
+  }
+
+  try {
+    await stat(filePath)
+    const illustratorPath =
+      'C:\\Program Files\\Adobe\\Adobe Illustrator 2026\\Support Files\\Contents\\Windows\\Illustrator.exe'
+    await stat(illustratorPath)
+    const child = spawn(illustratorPath, [filePath], {
+      detached: true,
+      stdio: 'ignore'
+    })
+    child.unref()
+    return { ok: true }
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Adobe Illustrator 2026 could not be opened.'
+    }
+  }
 }
 
 export function recordAppError(area: string, error: unknown): void {
@@ -122,7 +192,7 @@ async function getAppHealthSnapshot(): Promise<AppHealthSnapshot> {
     recentErrors: [...recentErrors],
     recentJobsCount,
     recentExportsCount: exports.length,
-    availableTools: ['Booklet Montage', 'Cutter Montage', 'Hardcover Cover']
+    availableTools: ['Booklet Montage', 'Cutter Montage', 'Hardcover Cover', 'Sequential Number']
   }
 }
 
@@ -183,6 +253,209 @@ async function exportDiagnosticReport(
   }
 }
 
+async function createShopBackup(
+  owner: BrowserWindow | null,
+  rendererData: ShopBackupRendererData,
+  automatic: boolean
+): Promise<ShopBackupResult> {
+  try {
+    const backup = await buildShopBackup(rendererData)
+    let filePath: string
+
+    if (automatic) {
+      const folder = getShopBackupPath()
+      await mkdir(folder, { recursive: true })
+      filePath = join(
+        folder,
+        `my-printer-auto-${backup.createdAt.slice(0, 10)}.myprinter-backup.json`
+      )
+      try {
+        await stat(filePath)
+        return { ok: true, filePath, projectCount: backup.projects.length }
+      } catch (error) {
+        if (!isNodeError(error) || error.code !== 'ENOENT') throw error
+      }
+    } else {
+      const options = {
+        title: 'Back up My Printer App shop data',
+        defaultPath: `my-printer-shop-backup-${backup.createdAt.slice(0, 10)}.myprinter-backup.json`,
+        filters: [{ name: 'My Printer App backup', extensions: ['json'] }]
+      }
+      const result = owner
+        ? await dialog.showSaveDialog(owner, options)
+        : await dialog.showSaveDialog(options)
+      if (result.canceled || !result.filePath) return { ok: false, canceled: true }
+      filePath = result.filePath
+    }
+
+    await writeJson(filePath, backup)
+    return { ok: true, filePath, projectCount: backup.projects.length }
+  } catch (error) {
+    recordAppError(automatic ? 'auto-backup' : 'shop-backup', error)
+    return { ok: false, error: getErrorMessage(error) }
+  }
+}
+
+async function buildShopBackup(rendererData: ShopBackupRendererData): Promise<ShopBackupEnvelope> {
+  const safeRendererData = sanitizeShopBackupRendererData(rendererData)
+  const recentProjects = await readJsonArray<{ filePath?: unknown }>(
+    join(app.getPath('userData'), 'recent-projects.json')
+  )
+  const projects: ShopBackupProject[] = []
+
+  const linkedProjects = safeRendererData.jobs.flatMap((job) => {
+    const path = (job as { localProjectPath?: unknown }).localProjectPath
+    return typeof path === 'string' && path.trim() ? [{ filePath: path }] : []
+  })
+  const projectEntries = [...linkedProjects, ...recentProjects].filter(
+    (entry, index, all) => all.findIndex((other) => other.filePath === entry.filePath) === index
+  )
+  for (const entry of projectEntries.slice(0, MAX_SHOP_BACKUP_PROJECTS)) {
+    if (typeof entry.filePath !== 'string' || !entry.filePath.trim()) continue
+    try {
+      const project = await readJsonRecord(entry.filePath)
+      if (!isProjectEnvelope(project)) continue
+      projects.push({
+        originalPath: entry.filePath,
+        fileName: basename(entry.filePath),
+        project
+      })
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== 'ENOENT') {
+        recordAppError('backup-project-read', error)
+      }
+    }
+  }
+
+  return {
+    schema: SHOP_BACKUP_SCHEMA,
+    version: SHOP_BACKUP_VERSION,
+    createdAt: new Date().toISOString(),
+    appVersion: app.getVersion(),
+    rendererData: safeRendererData,
+    projects,
+    exportHistory: await readExportHistory()
+  }
+}
+
+async function restoreShopBackup(owner: BrowserWindow | null): Promise<ShopRestoreResult> {
+  try {
+    const openOptions: OpenDialogOptions = {
+      title: 'Choose a My Printer App backup',
+      properties: ['openFile'],
+      filters: [{ name: 'My Printer App backup', extensions: ['json'] }]
+    }
+    const selected = owner
+      ? await dialog.showOpenDialog(owner, openOptions)
+      : await dialog.showOpenDialog(openOptions)
+    if (selected.canceled || !selected.filePaths[0]) return { ok: false, canceled: true }
+
+    const backupStats = await stat(selected.filePaths[0])
+    if (backupStats.size <= 0 || backupStats.size > MAX_SHOP_BACKUP_BYTES) {
+      throw new Error(`Backup must be between 1 byte and ${formatBytes(MAX_SHOP_BACKUP_BYTES)}.`)
+    }
+
+    const candidate: unknown = JSON.parse(await readFile(selected.filePaths[0], 'utf8'))
+    if (!isShopBackupEnvelope(candidate)) {
+      throw new Error('This file is not a supported My Printer App shop backup.')
+    }
+
+    const destinationOptions: OpenDialogOptions = {
+      title: 'Choose a folder for restored project files',
+      properties: ['openDirectory', 'createDirectory']
+    }
+    const destination = owner
+      ? await dialog.showOpenDialog(owner, destinationOptions)
+      : await dialog.showOpenDialog(destinationOptions)
+    if (destination.canceled || !destination.filePaths[0]) return { ok: false, canceled: true }
+
+    const restoredProjectPaths: string[] = []
+    const restoredPathMap = new Map<string, string>()
+    const recentPath = join(app.getPath('userData'), 'recent-projects.json')
+    const existingRecent = await readJsonArray<{ filePath?: unknown; metadata?: unknown }>(
+      recentPath
+    )
+    const existingExports = await readExportHistory()
+    const restoredRecentEntries: Array<{ filePath: string; metadata: unknown }> = []
+    try {
+      for (const backedUpProject of candidate.projects) {
+        const targetPath = await getAvailableRestorePath(
+          destination.filePaths[0],
+          backedUpProject.fileName
+        )
+        await writeJson(targetPath, backedUpProject.project)
+        restoredProjectPaths.push(targetPath)
+        restoredPathMap.set(backedUpProject.originalPath, targetPath)
+        restoredRecentEntries.push({
+          filePath: targetPath,
+          metadata: backedUpProject.project.metadata
+        })
+      }
+
+      await writeJson(
+        recentPath,
+        [...restoredRecentEntries, ...existingRecent]
+          .filter(
+            (entry, index, all) =>
+              typeof entry.filePath === 'string' &&
+              all.findIndex((other) => other.filePath === entry.filePath) === index
+          )
+          .slice(0, 20)
+      )
+      await writeJson(
+        getExportHistoryPath(),
+        mergeRestoredExportHistory(candidate.exportHistory, existingExports, MAX_EXPORT_HISTORY)
+      )
+    } catch (error) {
+      const rollback = await Promise.allSettled([
+        writeJson(recentPath, existingRecent),
+        writeJson(getExportHistoryPath(), existingExports),
+        ...restoredProjectPaths.map((filePath) => rm(filePath, { force: true }))
+      ])
+      for (const result of rollback) {
+        if (result.status === 'rejected') recordAppError('shop-restore-rollback', result.reason)
+      }
+      throw error
+    }
+
+    return {
+      ok: true,
+      filePath: selected.filePaths[0],
+      projectCount: restoredProjectPaths.length,
+      restoredProjectPaths,
+      rendererData: remapRestoredProjectPaths(candidate.rendererData, restoredPathMap),
+      createdAt: candidate.createdAt
+    }
+  } catch (error) {
+    recordAppError('shop-restore', error)
+    return { ok: false, error: getErrorMessage(error) }
+  }
+}
+
+async function getAvailableRestorePath(folder: string, requestedName: string): Promise<string> {
+  const safeName = basename(requestedName) || 'restored-project.myprinter-project.json'
+  for (let suffix = 0; suffix < 1000; suffix += 1) {
+    const name = suffix === 0 ? safeName : `restored-${suffix + 1}-${safeName}`
+    const candidate = join(folder, name)
+    try {
+      await stat(candidate)
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') return candidate
+      throw error
+    }
+  }
+  throw new Error('Could not find an available filename for a restored project.')
+}
+
+async function openShopBackupFolder(): Promise<string> {
+  await mkdir(getShopBackupPath(), { recursive: true })
+  return shell.openPath(getShopBackupPath())
+}
+
+function getShopBackupPath(): string {
+  return join(app.getPath('userData'), SHOP_BACKUP_FOLDER)
+}
+
 async function readExportHistory(): Promise<ExportHistoryEntry[]> {
   return readJsonArray<ExportHistoryEntry>(getExportHistoryPath())
 }
@@ -215,7 +488,7 @@ async function writeProjectAutosave(
     } catch (error) {
       recordAutosaveIssue('autosave-metadata-write', filePath, error)
     }
-    await pruneProjectAutosaves(project.metadata.id)
+    await listProjectAutosaves()
     return { ok: true, entry }
   } catch (error) {
     recordAppError('autosave', error)
@@ -232,9 +505,20 @@ async function listProjectAutosaves(): Promise<AutosaveEntry[]> {
         .filter((name) => name.endsWith(AUTOSAVE_FILE_EXTENSION))
         .map((name) => readAutosaveEntrySummary(join(folder, name)))
     )
-    return entries
+    const sortedEntries = entries
       .filter((entry): entry is AutosaveEntry => Boolean(entry))
       .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    // Enforce the global limit on reads too, so existing recovery backlogs are trimmed.
+    await Promise.all(
+      sortedEntries.slice(MAX_AUTOSAVES).map(async (entry) => {
+        try {
+          await removeAutosaveFiles(entry.filePath)
+        } catch (error) {
+          recordAutosaveIssue('autosave-prune', entry.filePath, error)
+        }
+      })
+    )
+    return sortedEntries.slice(0, MAX_AUTOSAVES)
   } catch (error) {
     if (isNodeError(error) && error.code === 'ENOENT') return []
     recordAppError('autosave-list', error)
@@ -276,13 +560,6 @@ async function discardProjectAutosave(filePath: string): Promise<{ ok: boolean; 
 async function openAutosaveFolder(): Promise<string> {
   await mkdir(getAutosavePath(), { recursive: true })
   return shell.openPath(getAutosavePath())
-}
-
-async function pruneProjectAutosaves(projectId: string): Promise<void> {
-  const entries = (await listProjectAutosaves()).filter((entry) => entry.projectId === projectId)
-  await Promise.all(
-    entries.slice(MAX_AUTOSAVES_PER_PROJECT).map((entry) => removeAutosaveFiles(entry.filePath))
-  )
 }
 
 async function createQualityFixtures(
@@ -337,7 +614,7 @@ async function readJsonRecord(filePath: string): Promise<Record<string, unknown>
 
 async function writeJson(filePath: string, value: unknown): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true })
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  await writeJsonAtomically(filePath, value)
 }
 
 async function readAutosaveEntrySummary(filePath: string): Promise<AutosaveEntry | null> {

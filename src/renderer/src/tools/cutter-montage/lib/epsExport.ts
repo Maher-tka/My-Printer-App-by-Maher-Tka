@@ -1,5 +1,8 @@
 import type { CutterExportResult, CutterProject } from '../types'
-import { getPlacedCutlineRect } from './cutlineGenerator'
+import { objectPath } from './pdfProductionLayers'
+import { CUT_CONTOUR_NAME } from './colorSpot'
+import { getPlacedEditorObjectRect } from './cutlineGenerator'
+import { getCutterExportSemantics } from './exportPresets'
 import { cmToPoints } from './units'
 import { getCutterFileName } from './svgExport'
 
@@ -9,58 +12,54 @@ export function exportCutterEps(project: CutterProject): CutterExportResult {
   const pieceMap = new Map(project.pieces.map((piece) => [piece.id, piece]))
   const lines = [
     '%!PS-Adobe-3.0 EPSF-3.0',
-    `%%BoundingBox: 0 0 ${widthPt.toFixed(2)} ${heightPt.toFixed(2)}`,
-    '%%Title: Cutter Montage',
+    `%%BoundingBox: 0 0 ${Math.ceil(widthPt)} ${Math.ceil(heightPt)}`,
+    `%%HiResBoundingBox: 0 0 ${widthPt} ${heightPt}`,
+    `%%Title: Cutter Montage - ${CUT_CONTOUR_NAME} Only`,
     '%%Creator: My Printer App by Maher Tka',
-    '%%Note: EPS layer preservation varies between apps. CutContour vector paths are included.',
-    '%%DocumentCustomColors: (CutContour)',
-    '%%CMYKCustomColor: 0 1 0 0 (CutContour)',
+    `%%Note: EPS ${CUT_CONTOUR_NAME} Only export. Artwork is intentionally excluded.`,
+    `%%DocumentCustomColors: (${CUT_CONTOUR_NAME})`,
+    `%%CMYKCustomColor: 0 1 0 0 (${CUT_CONTOUR_NAME})`,
     '%%EndComments',
-    '/CutContour { 1 0 1 setrgbcolor } bind def',
-    'CutContour'
+    `/${CUT_CONTOUR_NAME} { 1 0 1 setrgbcolor } bind def`,
+    CUT_CONTOUR_NAME
   ]
 
-  if (project.layers.cutlines && project.exportSettings.includeCutlines) {
+  if (getCutterExportSemantics(project.exportSettings).contourRenderKind === 'production') {
     for (const placed of project.placedPieces) {
       const piece = pieceMap.get(placed.presetId)
-
-      if (!piece || !piece.objectVisibility.cutline) {
-        continue
-      }
-
-      const rect = getPlacedCutlineRect(placed, piece)
-      const x = cmToPoints(rect.xCm)
-      const y = cmToPoints(project.sheet.heightCm - rect.yCm - rect.heightCm)
-      const width = cmToPoints(rect.widthCm)
-      const height = cmToPoints(rect.heightCm)
-      const centerX = x + width / 2
-      const centerY = y + height / 2
-      const strokeWidth = Math.max(piece.cutline.strokeWidthPt, 0.1)
-
-      if (piece.cutline.shape === 'ellipse') {
+      if (!piece) continue
+      for (const object of piece.objects.filter(
+        (item) => item.role === 'cutline' && item.exportEnabled !== false
+      )) {
+        const rect = getPlacedEditorObjectRect(placed, piece, object)
         lines.push(
+          `% ${CUT_CONTOUR_NAME} geometry ${placed.id} ${object.id}`,
           'gsave',
-          `${strokeWidth.toFixed(2)} setlinewidth`,
-          `${centerX.toFixed(2)} ${centerY.toFixed(2)} translate`,
-          `${(-rect.rotation).toFixed(2)} rotate`,
-          `${(width / 2).toFixed(2)} ${(height / 2).toFixed(2)} scale`,
-          'newpath 0 0 1 0 360 arc closepath stroke',
-          'grestore'
+          CUT_CONTOUR_NAME,
+          `${object.strokeWidthPt ?? 0.25} setlinewidth`,
+          'newpath'
         )
-      } else {
-        lines.push(
-          'gsave',
-          `${strokeWidth.toFixed(2)} setlinewidth`,
-          `${centerX.toFixed(2)} ${centerY.toFixed(2)} translate`,
-          `${(-rect.rotation).toFixed(2)} rotate`,
-          'newpath',
-          `${(-width / 2).toFixed(2)} ${(-height / 2).toFixed(2)} moveto`,
-          `${width.toFixed(2)} 0 rlineto`,
-          `0 ${height.toFixed(2)} rlineto`,
-          `${(-width).toFixed(2)} 0 rlineto`,
-          'closepath stroke',
-          'grestore'
-        )
+        let current = [0, 0]
+        for (const operator of objectPath(object, rect, project.sheet.heightCm)) {
+          const tokens = operator.toString().trim().split(/\s+/)
+          const command = tokens.pop()
+          const values = tokens.map(Number)
+          if (command === 'h') lines.push('closepath')
+          else if (command === 'm' || command === 'l') {
+            lines.push(`${values.join(' ')} ${command === 'm' ? 'moveto' : 'lineto'}`)
+            current = values.slice(-2)
+          } else if (command === 'c' || command === 'v' || command === 'y') {
+            const cubic =
+              command === 'v'
+                ? [...current, ...values]
+                : command === 'y'
+                  ? [...values, ...values.slice(-2)]
+                  : values
+            lines.push(`${cubic.join(' ')} curveto`)
+            current = values.slice(-2)
+          } else throw new Error(`Unsupported cutter path operator: ${command}`)
+        }
+        lines.push('stroke', 'grestore')
       }
     }
   }

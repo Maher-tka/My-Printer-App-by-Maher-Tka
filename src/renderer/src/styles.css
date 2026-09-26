@@ -3,33 +3,35 @@
 @tailwind utilities;
 
 :root {
-  --background: 210 33% 98%;
+  --background: 216 42% 97%;
   --foreground: 222 47% 11%;
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
   --primary: 220 83% 52%;
   --primary-foreground: 0 0% 100%;
   --secondary: 214 32% 91%;
   --secondary-foreground: 222 47% 11%;
-  --muted: 214 38% 95%;
-  --muted-foreground: 219 15% 42%;
+  --muted: 216 30% 94%;
+  --muted-foreground: 218 15% 43%;
   --accent: 220 94% 96%;
   --accent-foreground: 220 83% 38%;
   --destructive: 0 78% 58%;
   --destructive-foreground: 0 0% 100%;
-  --border: 214 32% 89%;
-  --input: 214 32% 89%;
+  --border: 216 25% 88%;
+  --input: 216 25% 86%;
   --ring: 220 83% 52%;
-  --sidebar: 214 68% 12%;
+  --sidebar: 220 55% 11%;
   --sidebar-foreground: 213 32% 92%;
   --sidebar-muted: 215 22% 68%;
-  --sidebar-active: 217 88% 54%;
-  --sidebar-border: 214 36% 22%;
+  --sidebar-active: 220 83% 53%;
+  --sidebar-border: 218 34% 21%;
   --success: 139 47% 91%;
   --success-foreground: 142 56% 28%;
-  --warning: 217 91% 94%;
-  --warning-foreground: 220 83% 46%;
-  --radius: 0.75rem;
+  --warning: 43 96% 91%;
+  --warning-foreground: 28 85% 30%;
+  --radius: 0.9rem;
   color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -59,6 +61,26 @@
       Segoe UI,
       system-ui,
       sans-serif;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.18);
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
   }
 
   button,
@@ -111,5 +133,24 @@
   .hardcover-carousel-scroll::-webkit-scrollbar-thumb {
     border-radius: 999px;
     background: hsl(var(--border));
+  }
+}
+
+@layer components {
+  .app-canvas {
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(circle at 8% 0%, hsl(var(--primary) / 0.065), transparent 28rem),
+      radial-gradient(circle at 100% 100%, hsl(262 83% 58% / 0.04), transparent 34rem),
+      linear-gradient(hsl(0 0% 100% / 0.36), hsl(0 0% 100% / 0));
+  }
+
+  .workspace-shell > .workspace-hero,
+  .workspace-shell > section:first-of-type {
+    border-radius: calc(var(--radius) + 0.2rem);
+    border-color: hsl(var(--border) / 0.8);
+    box-shadow:
+      0 1px 2px rgba(15, 23, 42, 0.03),
+      0 12px 32px rgba(15, 23, 42, 0.05);
   }
 }

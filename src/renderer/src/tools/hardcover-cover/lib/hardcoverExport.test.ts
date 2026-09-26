@@ -7,8 +7,10 @@ import {
 } from '../hooks/useHardcoverProject'
 import { DEFAULT_HARDCOVER_PRODUCTION_PRESET } from './coverCalculations'
 import { exportHardcoverBatchPdf, exportHardcoverPdf } from './hardcoverExportPdf'
-import { buildHardcoverSvg } from './hardcoverExportSvg'
+import { buildHardcoverSvg, exportHardcoverSvg } from './hardcoverExportSvg'
 import { preparePdfDisplayText } from './pdfText'
+import { dragPdfPagePosition, nudgePdfPagePosition, normalizePdfPagePosition } from './pdfPosition'
+import { resolveSpineBackgroundColor } from './spineBackground'
 import { mmToPoints } from './units'
 
 const state = createDefaultHardcoverProject()
@@ -82,6 +84,11 @@ assert.match(svg, /M 235 310 V 325/)
 assert.doesNotMatch(svg, /M [\d.]+ 0 V 325/, 'no full-height binding lines are exported')
 assert.match(svg, /id="SafeZones"/)
 assert.doesNotMatch(buildHardcoverSvg(createDefaultHardcoverProject()), /id="CropMarks"/)
+const previewSvg = buildHardcoverSvg(state, { idPrefix: 'preview-a' })
+assert.match(previewSvg, /id="preview-a-coverBackground"/)
+assert.match(previewSvg, /fill="url\(#preview-a-coverBackground\)"/)
+assert.match(previewSvg, /id="preview-a-SpineText-year"/)
+assert.doesNotMatch(previewSvg, /\bid="SpineText-year"/)
 
 const sourcePdfDocument = await PDFDocument.create()
 const sourcePage = sourcePdfDocument.addPage([mmToPoints(210), mmToPoints(297)])
@@ -98,6 +105,7 @@ sourceState.sourcePdf = {
   frontPageNumber: 1,
   backCoverEnabled: false,
   fitMode: 'fit',
+  frontPosition: { xPercent: 10, yPercent: -5 },
   bytes: sourceBytes,
   thumbnailDataUrl: frontThumbnail,
   pagePreviews: [
@@ -114,7 +122,27 @@ assert.ok(
 )
 const sourceSvg = buildHardcoverSvg(sourceState)
 assert.match(sourceSvg, /front-cover-thumbnail/)
+assert.match(
+  sourceSvg,
+  /data-source-position="front" data-position-x="10" data-position-y="-5"/,
+  'source page position is applied to the SVG preview and image export source'
+)
 assert.match(sourceSvg, /id="SpineText-year"/)
+assert.equal(
+  resolveSpineBackgroundColor(sourceState),
+  '#ffffff',
+  'source PDF spine background automatically matches the white sheet by default'
+)
+assert.doesNotMatch(
+  sourceSvg,
+  /#f6f7f9/,
+  'source PDF spine no longer receives the old forced gray strip'
+)
+assert.doesNotMatch(
+  sourceSvg,
+  /#eef2f7/,
+  'source PDF side binding bands no longer receive a separate colored fill'
+)
 assert.match(
   sourceSvg,
   /id="SpineText-year"[\s\S]*fill="#0f172a"/,
@@ -140,6 +168,97 @@ assert.equal(sourceWithBackDocument.getPageCount(), 1, 'back cover PDF export ha
 const sourceWithBackSvg = buildHardcoverSvg(sourceWithBackState)
 assert.match(sourceWithBackSvg, /front-cover-thumbnail/)
 assert.match(sourceWithBackSvg, /back-cover-thumbnail/)
+
+const independentState = structuredClone(sourceState)
+const independentFrontThumbnail = 'data:image/png;base64,independent-front-cover'
+const independentBackThumbnail = 'data:image/png;base64,independent-back-cover'
+independentState.sourcePdf = {
+  fileName: 'PAGE DE GARDE.pdf',
+  pageCount: 1,
+  frontPageNumber: 1,
+  backPageNumber: 1,
+  backCoverEnabled: true,
+  fitMode: 'fit',
+  sourceMode: 'separate',
+  thumbnailDataUrl: independentFrontThumbnail,
+  backThumbnailDataUrl: independentBackThumbnail,
+  frontSource: {
+    sourceId: 'fixture-front-export',
+    fileName: 'PAGE DE GARDE.pdf',
+    pageCount: 1,
+    pageNumber: 1,
+    fitMode: 'fit',
+    position: { xPercent: -10, yPercent: 5 },
+    thumbnailDataUrl: independentFrontThumbnail
+  },
+  backSource: {
+    sourceId: 'fixture-back-export',
+    fileName: 'arriere.pdf',
+    pageCount: 1,
+    pageNumber: 1,
+    fitMode: 'fill',
+    position: { xPercent: 5, yPercent: -10 },
+    thumbnailDataUrl: independentBackThumbnail
+  }
+}
+const independentSvg = buildHardcoverSvg(independentState)
+assert.match(
+  independentSvg,
+  /data-source-position="front" data-position-x="-10" data-position-y="5"/,
+  'independent front position is preserved'
+)
+assert.match(
+  independentSvg,
+  /data-source-position="back" data-position-x="5" data-position-y="-10"/,
+  'independent back position is preserved'
+)
+assert.match(
+  independentSvg,
+  /independent-front-cover[\s\S]*preserveAspectRatio="xMidYMid meet"/,
+  'independent front source keeps Fit placement in SVG'
+)
+assert.match(
+  independentSvg,
+  /independent-back-cover[\s\S]*preserveAspectRatio="xMidYMid slice"/,
+  'independent back source keeps Fill placement in SVG'
+)
+assert.throws(
+  () => exportHardcoverSvg(independentState),
+  /Re-upload the independent front and back cover PDFs/,
+  'SVG export asks for independent source re-upload when runtime bytes are unavailable'
+)
+await assert.rejects(
+  () => exportHardcoverPdf(independentState),
+  /Re-upload the independent front-cover PDF \(PAGE DE GARDE\.pdf\)/,
+  'PDF export never silently falls back when the independent front source is unavailable'
+)
+
+assert.deepEqual(
+  nudgePdfPagePosition({ xPercent: 0, yPercent: 0 }, 5, -5),
+  { xPercent: 5, yPercent: -5 },
+  'page position nudges use predictable five-percent steps'
+)
+assert.deepEqual(
+  normalizePdfPagePosition({ xPercent: 100, yPercent: -100 }),
+  { xPercent: 40, yPercent: -40 },
+  'page position is clamped to a safe adjustment range'
+)
+assert.deepEqual(
+  dragPdfPagePosition({ xPercent: 0, yPercent: 0 }, 50, 30, 200, 300),
+  { xPercent: 25, yPercent: -10 },
+  'dragging right and down converts mouse movement into saved page offsets'
+)
+
+const customSpineState = structuredClone(sourceState)
+customSpineState.content.spine.spineColorMode = 'custom'
+customSpineState.content.spine.spineBackgroundColor = '#f4d9bd'
+const customSpineSvg = buildHardcoverSvg(customSpineState)
+assert.equal(resolveSpineBackgroundColor(customSpineState), '#f4d9bd')
+assert.match(
+  customSpineSvg,
+  /fill="#f4d9bd" opacity="1"/,
+  'custom spine color is rendered into the SVG preview/export'
+)
 
 const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
 const storage = new Map<string, string>()

@@ -16,14 +16,15 @@ interface QuickActionListProps {
 }
 
 const actionTones = [
-  'bg-primary/10 text-primary',
-  'bg-violet-100 text-violet-700',
-  'bg-emerald-100 text-emerald-700'
+  'bg-blue-500/10 text-blue-600',
+  'bg-violet-500/10 text-violet-600',
+  'bg-emerald-500/10 text-emerald-600',
+  'bg-amber-500/10 text-amber-600'
 ]
 
 export function QuickActionList({ actions, onNavigate }: QuickActionListProps): JSX.Element {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-1">
       {actions.map((action, index) => {
         const Icon = action.icon
 
@@ -38,21 +39,26 @@ export function QuickActionList({ actions, onNavigate }: QuickActionListProps): 
                 onNavigate(action.route)
               }
             }}
-            className="flex min-h-[88px] items-center gap-4 rounded-lg border bg-card p-3 text-left transition hover:bg-accent"
+            className="group flex min-h-[78px] items-center gap-3 rounded-xl border border-transparent bg-muted/35 p-3 text-left transition hover:border-primary/20 hover:bg-accent/60"
           >
             <div
               className={cn(
-                'grid size-16 shrink-0 place-items-center rounded-lg',
-                actionTones[index]
+                'grid size-11 shrink-0 place-items-center rounded-xl',
+                actionTones[index % actionTones.length]
               )}
             >
-              <Icon className="size-8" aria-hidden="true" />
+              <Icon className="size-5" aria-hidden="true" />
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="font-semibold">{action.label}</span>
-              <span className="text-sm text-muted-foreground">{action.description}</span>
+              <span className="text-sm font-semibold">{action.label}</span>
+              <span className="line-clamp-1 text-xs text-muted-foreground">
+                {action.description}
+              </span>
             </div>
-            <ChevronRight className="size-5 text-muted-foreground" aria-hidden="true" />
+            <ChevronRight
+              className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+              aria-hidden="true"
+            />
           </button>
         )
       })}

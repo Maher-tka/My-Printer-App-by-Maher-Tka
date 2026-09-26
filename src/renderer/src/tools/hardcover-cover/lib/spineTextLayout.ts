@@ -82,6 +82,17 @@ export function calculateSpineTextLayout(
   }
 }
 
+export function syncSpineAutoFitFontSize(
+  spine: SpineContent,
+  layout: SpineTextLayout
+): SpineContent {
+  if (!spine.autoFit || Math.abs(spine.fontSizePt - layout.fontSizePt) < 0.05) {
+    return spine
+  }
+
+  return { ...spine, fontSizePt: layout.fontSizePt }
+}
+
 function createLayoutItem({
   role,
   text,

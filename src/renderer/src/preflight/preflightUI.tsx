@@ -44,13 +44,39 @@ export function PreflightSummary({ report }: { report: PreflightReport }): JSX.E
         </Badge>
       </div>
       {report.issues.length > 0 && (
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+        <div className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
           {report.issues.map((issue) => (
-            <li key={issue.id}>
-              <b className="text-foreground">{issue.severity}:</b> {issue.message}
-            </li>
+            <article
+              key={issue.id}
+              className={
+                issue.severity === 'error'
+                  ? 'rounded-md border border-destructive/30 bg-destructive/5 p-3'
+                  : 'rounded-md border border-amber-500/30 bg-amber-500/5 p-3'
+              }
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={issue.severity === 'error' ? 'destructive' : 'warning'}>
+                  {issue.severity}
+                </Badge>
+                {issue.category ? <Badge variant="outline">{issue.category}</Badge> : null}
+                <p className="text-sm font-medium text-foreground">{issue.message}</p>
+              </div>
+              {issue.recommendation ? (
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  <b className="text-foreground">Recommended:</b> {issue.recommendation}
+                </p>
+              ) : null}
+              {issue.affectedItems?.length ? (
+                <p
+                  className="mt-1 truncate text-xs text-muted-foreground"
+                  title={issue.affectedItems.join(', ')}
+                >
+                  Affected: {issue.affectedItems.join(', ')}
+                </p>
+              ) : null}
+            </article>
           ))}
-        </ul>
+        </div>
       )}
     </section>
   )
@@ -58,19 +84,23 @@ export function PreflightSummary({ report }: { report: PreflightReport }): JSX.E
 
 export function PreflightDialog({
   report,
+  action = 'export',
   onCancel,
   onConfirm
 }: {
   report: PreflightReport
+  action?: 'export' | 'print'
   onCancel: () => void
   onConfirm: () => void
 }): JSX.Element {
+  const actionText = action === 'print' ? 'Print' : 'Export'
+
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="Export preflight"
+      aria-label={`${actionText} preflight`}
     >
       <div className="w-full max-w-xl rounded-xl border bg-background p-5 shadow-2xl">
         <PreflightSummary report={report} />
@@ -81,9 +111,9 @@ export function PreflightDialog({
           <Button type="button" onClick={onConfirm} disabled={!report.canExport}>
             {report.canExport
               ? report.status === 'warnings'
-                ? 'Export Anyway'
-                : 'Continue Export'
-              : 'Cannot Export'}
+                ? `${actionText} Anyway`
+                : `Continue ${actionText}`
+              : `Cannot ${actionText}`}
           </Button>
         </div>
       </div>

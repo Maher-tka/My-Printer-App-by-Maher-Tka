@@ -1,3 +1,5 @@
+import { createDefaultSequentialProject } from '../tools/sequential-number/lib/layout'
+import { createSequentialProjectFile } from '../tools/sequential-number/lib/project'
 /// <reference types="node" />
 
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -9,6 +11,7 @@ import {
   createPlacedPieceFromPreset
 } from '../tools/cutter-montage/lib/piecePresets'
 import type { BookletPage, BookletSource, SheetSettings } from '../tools/booklet-montage/types'
+import { DEFAULT_CREEP_SETTINGS } from '../tools/booklet-montage/lib/creepCompensation'
 import type { PieceSourceFile } from '../tools/cutter-montage/types'
 import { createDefaultHardcoverProject } from '../tools/hardcover-cover/hooks/useHardcoverProject'
 import {
@@ -69,7 +72,28 @@ const bookletFile = createBookletProjectFile({
     pageGapMm: 0,
     cropMarks: true,
     registrationMarks: false,
-    exportQuality: 'standard'
+    exportQuality: 'standard',
+    creep: {
+      ...DEFAULT_CREEP_SETTINGS,
+      enabled: true,
+      mode: 'measured',
+      measuredTotalCreepMm: 1.2,
+      paperCaliperMm: 0.115,
+      calibrationMultiplier: 1.08,
+      manualTotalCreepMm: 1.25,
+      distribution: 'linear',
+      showOverlay: true,
+      selectedPaperPresetId: 'paper-1',
+      paperPresets: [
+        {
+          id: 'paper-1',
+          name: 'Configured coated stock',
+          paperCaliperMm: 0.115,
+          calibrationMultiplier: 1.08,
+          machineName: 'Stitcher 1'
+        }
+      ]
+    }
   },
   sheetBoardState: { items: [], recentColors: ['#ffffff'] }
 })
@@ -84,6 +108,28 @@ expectEqual(restoredBooklet.settings.outerMarginMm, 0, 'booklet outer margin res
 expectEqual(restoredBooklet.settings.pageGapMm, 0, 'booklet page gap restored')
 expectEqual(restoredBooklet.settings.cropMarks, true, 'explicit old crop marks true is preserved')
 expectEqual(bookletFile.metadata.tool, 'booklet-montage', 'booklet metadata tool')
+expectEqual(restoredBooklet.settings.creep.enabled, true, 'booklet creep enabled state restored')
+expectEqual(
+  restoredBooklet.settings.creep.measuredTotalCreepMm,
+  1.2,
+  'booklet measured creep restored'
+)
+expectEqual(restoredBooklet.settings.creep.paperCaliperMm, 0.115, 'booklet caliper restored')
+expectEqual(
+  restoredBooklet.settings.creep.calibrationMultiplier,
+  1.08,
+  'booklet calibration restored'
+)
+expectEqual(
+  restoredBooklet.settings.creep.manualTotalCreepMm,
+  1.25,
+  'booklet manual creep restored'
+)
+expectEqual(
+  restoredBooklet.settings.creep.paperPresets[0]?.machineName,
+  'Stitcher 1',
+  'booklet paper preset and machine metadata restored'
+)
 const legacyBooklet = deserializeBookletProjectPayload({
   ...bookletFile.payload,
   settings: {
@@ -105,6 +151,7 @@ expectEqual(
   false,
   'legacy booklet registration marks default off'
 )
+expectEqual(legacyBooklet.settings.creep.enabled, false, 'legacy booklet creep defaults off')
 const bookletStateKey = getBookletProjectStateKey({
   sources: [bookletSource],
   pages: [bookletPage],
@@ -142,6 +189,24 @@ const cutterSource: PieceSourceFile = {
   naturalHeightPx: 600
 }
 const cutterPiece = createPiecePresetFromSource(cutterSource, [])
+const stablePreviewDataUrl = 'data:image/svg+xml;base64,PHN2Zy8+'
+const stablePreviewPiece = createPiecePresetFromSource(
+  {
+    ...cutterSource,
+    id: 'cutter-stable-preview-source-1',
+    fileName: 'Stable Sticker.svg',
+    mimeType: 'image/svg+xml',
+    previewUrl: 'blob:revoked-cutter-preview',
+    previewDataUrl: stablePreviewDataUrl
+  },
+  []
+)
+expectEqual(stablePreviewPiece.previewUrl, stablePreviewDataUrl, 'piece uses stable source preview')
+expectEqual(
+  stablePreviewPiece.artwork.previewUrl,
+  stablePreviewDataUrl,
+  'artwork uses stable source preview'
+)
 const placedPiece = createPlacedPieceFromPreset(cutterPiece, 2, 3)
 const cutterFile = createCutterProjectFile({
   mode: 'montage-sheet',
@@ -166,6 +231,21 @@ expectEqual(isPrinterProjectFile(parsedCutter), true, 'cutter project validation
 const restoredCutter = deserializeCutterProjectPayload(cutterFile.payload)
 expectEqual([...restoredCutter.sources[0].bytes], [137, 80, 78, 71], 'cutter source bytes')
 expectEqual(restoredCutter.mode, 'montage-sheet', 'cutter mode')
+expectEqual(
+  restoredCutter.sheet.registrationMarks?.enabled,
+  true,
+  'cutter projects use automatic Mimaki registration marks'
+)
+expectEqual(
+  cutterFile.payload.exportSettings.includeRegistrationMarks,
+  true,
+  'cutter project export keeps automatic marks enabled'
+)
+expectEqual(
+  restoredCutter.sheet.productionLabel?.enabled,
+  false,
+  'legacy cutter production label default off'
+)
 expectEqual(
   restoredCutter.pieces[0].previewUrl,
   restoredCutter.sources[0].previewUrl,
@@ -206,6 +286,56 @@ expectNotEqual(
   'cutter layout edit marks project dirty'
 )
 URL.revokeObjectURL(restoredCutter.sources[0].previewUrl)
+
+const cutterPdfPreview =
+  'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/ASP/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/ASP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Al//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z'
+const cutterPdfSource: PieceSourceFile = {
+  id: 'cutter-pdf-source-1',
+  sourceKind: 'pdf-page',
+  fileName: 'stickers - page 2.pdf',
+  displayName: 'stickers - page 2',
+  originalFileName: 'stickers.pdf',
+  mimeType: 'application/pdf',
+  bytes: new Uint8Array([37, 80, 68, 70, 45]),
+  previewUrl: cutterPdfPreview,
+  previewDataUrl: cutterPdfPreview,
+  pdfPageNumber: 2,
+  pageCount: 8,
+  naturalWidthPx: 595,
+  naturalHeightPx: 842
+}
+const cutterPdfPiece = createPiecePresetFromSource(cutterPdfSource, [cutterPiece])
+const cutterPdfFile = createCutterProjectFile({
+  mode: 'piece-editor',
+  activePieceId: cutterPdfPiece.id,
+  selectedPlacedIds: [],
+  selectedEditorObjects: ['artwork'],
+  keyObject: { object: 'artwork' },
+  sheet: DEFAULT_CUTTER_SHEET,
+  sources: [cutterPdfSource],
+  pieces: [cutterPdfPiece],
+  placedPieces: [],
+  layers: { artwork: true, cutlines: true },
+  exportSettings: {
+    strokeName: 'CutContour',
+    includeArtwork: true,
+    includeCutlines: true,
+    mode: 'print-cut'
+  }
+})
+const restoredPdfCutter = deserializeCutterProjectPayload(cutterPdfFile.payload)
+expectEqual(restoredPdfCutter.sources[0].sourceKind, 'pdf-page', 'cutter PDF source kind restored')
+expectEqual(restoredPdfCutter.sources[0].pdfPageNumber, 2, 'cutter PDF page number restored')
+expectEqual(
+  restoredPdfCutter.sources[0].previewUrl,
+  cutterPdfPreview,
+  'cutter PDF preview data restored'
+)
+expectEqual(
+  restoredPdfCutter.pieces[0].displayName,
+  'stickers - page 2',
+  'cutter PDF piece display name restored'
+)
 
 const hardcoverState = createDefaultHardcoverProject()
 hardcoverState.sourcePdf = {
@@ -255,15 +385,107 @@ expectEqual(
   'hardcover dirty state survives save/open and ignores PDF bytes'
 )
 
+const autoFitCover = createDefaultHardcoverProject()
+autoFitCover.content.spine.autoFit = true
+const initialAutoFitKey = getHardcoverProjectStateKey(autoFitCover)
+autoFitCover.content.spine.fontSizePt += 2
+expectEqual(
+  getHardcoverProjectStateKey(autoFitCover),
+  initialAutoFitKey,
+  'automatic spine sizing does not mark an untouched hardcover dirty'
+)
+autoFitCover.content.spine.shortTitle = 'Edited title'
+expectNotEqual(
+  getHardcoverProjectStateKey(autoFitCover),
+  initialAutoFitKey,
+  'spine text edits still mark hardcover dirty'
+)
+autoFitCover.content.spine.autoFit = false
+const manualFontKey = getHardcoverProjectStateKey(autoFitCover)
+autoFitCover.content.spine.fontSizePt += 2
+expectNotEqual(
+  getHardcoverProjectStateKey(autoFitCover),
+  manualFontKey,
+  'manual spine font size edits still mark hardcover dirty'
+)
+
 expectEqual(
   getSuggestedProjectFileName('Client: Job/01', 'booklet-montage'),
   'Client- Job-01.myprinter-booklet.json',
   'safe suggested file name'
 )
 
+const sequentialState = createDefaultSequentialProject()
+sequentialState.name = 'Invoice duplicate and stub'
+sequentialState.settings.backMode = 'blank'
+sequentialState.settings.startNumber = 120
+sequentialState.settings.quantity = 73
+sequentialState.positions.push({ ...sequentialState.positions[0], id: 'stub', xMm: 70 })
+sequentialState.front = {
+  name: 'invoice.png',
+  kind: 'png',
+  bytesBase64: 'iVBORw==',
+  pageNumber: 1,
+  pageCount: 1,
+  widthMm: 90,
+  heightMm: 50,
+  previewDataUrl: 'data:image/png;base64,iVBORw=='
+}
+const sequentialFile = createSequentialProjectFile(sequentialState)
+const parsedSequential = JSON.parse(JSON.stringify(sequentialFile))
+expectEqual(isPrinterProjectFile(parsedSequential), true, 'sequential project validates')
+expectEqual(
+  parsedSequential.payload,
+  sequentialState,
+  'sequential payload preserves artwork, stub and duplex settings'
+)
+expectEqual(
+  getSuggestedProjectFileName('Invoice 01', 'sequential-number'),
+  'Invoice 01.myprinter-sequential.json',
+  'sequential file extension'
+)
+for (const [label, payload] of [
+  ['missing settings', { ...sequentialState, settings: null }],
+  [
+    'invalid quantity',
+    { ...sequentialState, settings: { ...sequentialState.settings, quantity: -1 } }
+  ],
+  [
+    'invalid duplex',
+    { ...sequentialState, settings: { ...sequentialState.settings, backMode: 'unexpected' } }
+  ],
+  ['missing positions', { ...sequentialState, positions: null }],
+  [
+    'invalid font',
+    { ...sequentialState, positions: [{ ...sequentialState.positions[0], fontSizePt: Infinity }] }
+  ],
+  [
+    'invalid artwork',
+    { ...sequentialState, front: { ...sequentialState.front, bytesBase64: 'invalid!' } }
+  ],
+  [
+    'external preview',
+    {
+      ...sequentialState,
+      front: { ...sequentialState.front, previewDataUrl: 'https://example.com/image.png' }
+    }
+  ]
+] as const) {
+  expectEqual(
+    isPrinterProjectFile({ ...sequentialFile, payload }),
+    false,
+    `sequential rejects ${label}`
+  )
+}
+
 const temporaryProjectFolder = await mkdtemp(join(tmpdir(), 'my-printer-app-projects-'))
 
 try {
+  const sequentialPath = join(temporaryProjectFolder, 'invoice.myprinter-sequential.json')
+  await writeFile(sequentialPath, JSON.stringify(sequentialFile), 'utf8')
+  const sequentialFromDisk = JSON.parse(await readFile(sequentialPath, 'utf8'))
+  expectEqual(isPrinterProjectFile(sequentialFromDisk), true, 'sequential disk validation')
+  expectEqual(sequentialFromDisk.payload, sequentialState, 'sequential disk round trip')
   const bookletPath = join(temporaryProjectFolder, 'booklet-round-trip.mpjob')
   const cutterPath = join(temporaryProjectFolder, 'cutter-round-trip.mpjob')
   const hardcoverPath = join(temporaryProjectFolder, 'hardcover-round-trip.mpjob')
@@ -318,7 +540,7 @@ try {
 }
 
 console.log(
-  'Project file tests passed: booklet, cutter, and hardcover .mpjob memory and disk round trips.'
+  'Project file tests passed: booklet, cutter, hardcover, and sequential memory and disk round trips.'
 )
 
 function expectEqual(actual: unknown, expected: unknown, label: string): void {

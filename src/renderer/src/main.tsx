@@ -67,9 +67,7 @@ class RendererErrorBoundary extends React.Component<
           <p style={{ margin: '0 0 8px', color: '#64748b', fontWeight: 700 }}>
             My Printer App could not finish opening.
           </p>
-          <h1 style={{ margin: '0 0 16px', fontSize: '28px', lineHeight: 1.2 }}>
-            Renderer error
-          </h1>
+          <h1 style={{ margin: '0 0 16px', fontSize: '28px', lineHeight: 1.2 }}>Renderer error</h1>
           <p style={{ margin: '0 0 16px', lineHeight: 1.6 }}>{error.message}</p>
           {(error.stack || componentStack) && (
             <pre

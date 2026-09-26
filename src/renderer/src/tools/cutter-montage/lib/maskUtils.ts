@@ -8,6 +8,7 @@ import type {
   PlacedPiece
 } from '../types'
 import { CUT_CONTOUR_COLOR, CUT_CONTOUR_NAME } from './colorSpot'
+import { getPlacedMaskArtworkRect } from './cutlineGenerator'
 
 export interface MaskRect {
   xCm: number
@@ -178,17 +179,83 @@ export function getPieceMaskRect(mask: PieceMask): MaskRect {
   }
 }
 
-export function getPlacedMaskRect(placed: PlacedPiece, preset: PiecePreset): MaskRect {
-  const scaleX = placed.widthCm / preset.widthCm
-  const scaleY = placed.heightCm / preset.heightCm
+export function constrainArtworkToMask(
+  artwork: ArtworkTransform,
+  mask: ArtworkTransform
+): ArtworkTransform {
+  const artworkMinX =
+    artwork.widthCm >= mask.widthCm ? mask.xCm + mask.widthCm - artwork.widthCm : mask.xCm
+  const artworkMaxX =
+    artwork.widthCm >= mask.widthCm ? mask.xCm : mask.xCm + mask.widthCm - artwork.widthCm
+  const artworkMinY =
+    artwork.heightCm >= mask.heightCm ? mask.yCm + mask.heightCm - artwork.heightCm : mask.yCm
+  const artworkMaxY =
+    artwork.heightCm >= mask.heightCm ? mask.yCm : mask.yCm + mask.heightCm - artwork.heightCm
 
   return {
-    xCm: placed.xCm + placed.maskTransform.xCm * scaleX,
-    yCm: placed.yCm + placed.maskTransform.yCm * scaleY,
-    widthCm: placed.maskTransform.widthCm * scaleX,
-    heightCm: placed.maskTransform.heightCm * scaleY,
-    rotation: (placed.rotation + placed.maskTransform.rotation) % 360
+    ...artwork,
+    xCm: clamp(artwork.xCm, artworkMinX, artworkMaxX),
+    yCm: clamp(artwork.yCm, artworkMinY, artworkMaxY)
   }
+}
+
+/**
+ * Proportionally fit artwork inside a mask and center it in the mask bounds.
+ *
+ * The mask geometry is intentionally not changed. The artwork keeps its
+ * rotation and aspect ratio while its bounds are scaled using contain math.
+ */
+export function fitArtworkInsideMask(
+  artwork: ArtworkTransform,
+  mask: ArtworkTransform
+): ArtworkTransform {
+  const artworkWidth = Math.max(artwork.widthCm, 0.0001)
+  const artworkHeight = Math.max(artwork.heightCm, 0.0001)
+  const scale = Math.min(mask.widthCm / artworkWidth, mask.heightCm / artworkHeight)
+  const widthCm = artworkWidth * scale
+  const heightCm = artworkHeight * scale
+
+  return {
+    ...artwork,
+    xCm: mask.xCm + (mask.widthCm - widthCm) / 2,
+    yCm: mask.yCm + (mask.heightCm - heightCm) / 2,
+    widthCm,
+    heightCm
+  }
+}
+
+/**
+ * Proportionally fit artwork over a mask and center it in the mask bounds.
+ *
+ * The mask geometry is intentionally not changed. The artwork keeps its
+ * rotation and aspect ratio while its bounds are scaled using cover math so
+ * every point on the mask has artwork beneath it.
+ */
+export function fitArtworkToCoverMask(
+  artwork: ArtworkTransform,
+  mask: ArtworkTransform
+): ArtworkTransform {
+  const artworkWidth = Math.max(artwork.widthCm, 0.0001)
+  const artworkHeight = Math.max(artwork.heightCm, 0.0001)
+  const scale = Math.max(mask.widthCm / artworkWidth, mask.heightCm / artworkHeight)
+  const widthCm = artworkWidth * scale
+  const heightCm = artworkHeight * scale
+
+  return {
+    ...artwork,
+    xCm: mask.xCm + (mask.widthCm - widthCm) / 2,
+    yCm: mask.yCm + (mask.heightCm - heightCm) / 2,
+    widthCm,
+    heightCm
+  }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+export function getPlacedMaskRect(placed: PlacedPiece, preset: PiecePreset): MaskRect {
+  return getPlacedMaskArtworkRect(placed, preset)
 }
 
 export function getMaskClipPath(mask: PieceMask): string | undefined {

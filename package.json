@@ -11,32 +11,56 @@
     "build": "npm run typecheck && electron-vite build --config electron.vite.config.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "storybook": "storybook dev -p 6006",
+    "storybook:build": "storybook build",
     "license:keygen": "tsx scripts/license-keygen.ts",
     "license:generate": "tsx src/main/license-generator-cli.ts",
-    "test": "npm run test:license && npm run test:booklet && npm run test:projects && npm run test:cutter && npm run test:hardcover && npm run test:preflight",
+    "test": "npm run test:license && npm run test:print && npm run test:booklet && npm run test:projects && npm run test:cutter && npm run test:sticker && npm run test:hardcover && npm run test:preflight && npm run test:jobs && npm run test:backup && npm run test:sequential && npm run test:fast-print",
     "test:license": "tsx src/main/license-serial.test.ts",
-    "test:booklet": "tsx src/renderer/src/tools/booklet-montage/lib/bookletImposition.test.ts",
-    "test:projects": "tsx --tsconfig tsconfig.web.json src/renderer/src/projects/projectFiles.test.ts",
-    "test:cutter": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/editorWorkflow.test.ts",
-    "test:hardcover": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/coverCalculations.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/spineTextLayout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/hardcoverExport.test.ts",
+    "test:print": "tsx src/shared/print-types.test.ts",
+    "test:booklet": "tsx src/renderer/src/tools/booklet-montage/lib/bookletImposition.test.ts && tsx src/renderer/src/tools/booklet-montage/lib/creepCompensation.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/booklet-montage/lib/bookletImportReliability.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/booklet-montage/lib/pdfDecoderAssetConfiguration.test.ts",
+    "test:projects": "tsx --tsconfig tsconfig.web.json src/renderer/src/projects/projectFiles.test.ts && tsx src/main/atomic-json.test.ts",
+    "test:cutter": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/importOperation.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/editorWorkflow.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/nesting.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/pieceResize.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/cutlineGenerator.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/hooks/useCutterProject.reconcile.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/hooks/useCutterProject.productionBounds.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/svgRotationExport.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/preflightProductionBounds.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/mimakiDirectOutput.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/mimakiRegistration.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/productionSheetGroups.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/pdfProductionMetadata.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/productionExportSemantics.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/layeredPdf.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/editorLayers.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/artworkBackground.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/applyArtworkEdit.test.ts && tsx src/main/finecut-handoff.test.ts",
+    "test:sticker": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/stickerMaker.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/stickerCutterAdapter.test.ts",
+    "test:hardcover": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/coverCalculations.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/spineTextLayout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/hardcoverQuote.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/hardcoverExport.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/hardcoverSourcePdf.test.ts",
+    "samples:inspect": "tsx scripts/inspect-production-samples.ts",
     "test:preflight": "tsx --tsconfig tsconfig.web.json src/renderer/src/preflight/preflight.test.ts",
+    "test:jobs": "tsx --tsconfig tsconfig.web.json src/renderer/src/jobs/jobWorkflow.test.ts",
+    "test:backup": "tsx --tsconfig tsconfig.web.json src/renderer/src/backup/shopBackup.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "preview": "electron-vite preview --config electron.vite.config.ts",
-    "pack": "npm run build && electron-builder --dir",
+    "pack": "npm run build && npm run build:fast-print-shell && electron-builder --dir",
     "dist:dir": "npm run pack",
-    "dist:win": "npm run build && electron-builder --win nsis portable",
-    "release:check": "npm run format:check && npm run typecheck && npm run test && npm run build"
+    "dist:win": "npm run build && npm run build:fast-print-shell && electron-builder --win nsis portable",
+    "release:check": "npm run format:check && npm run typecheck && npm run test && npm run storybook:build && npm run build",
+    "release:win": "npm run release:check && npm run build:fast-print-shell && electron-builder --win nsis --publish always",
+    "test:sequential": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/sequential-number/lib/layout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/sequential-number/lib/exportPdf.test.ts",
+    "fast-print:install": "npm run build && npm run build:fast-print-shell && node scripts/fast-print-control.mjs install",
+    "fast-print:remove": "node scripts/fast-print-control.mjs remove",
+    "test:fast-print": "tsx src/shared/fast-print.test.ts && tsx src/shared/fast-print-menu.test.ts",
+    "build:fast-print-shell": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-fast-print-shell.ps1",
+    "fast-print:settings": "node scripts/fast-print-control.mjs manage",
+    "test:fast-print:driver": "powershell -NoProfile -STA -ExecutionPolicy Bypass -File scripts/test-fast-print-profiles.ps1"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@huggingface/transformers": "^3.8.1",
     "@pdf-lib/fontkit": "^1.1.1",
+    "@radix-ui/react-alert-dialog": "^1.1.23",
+    "@radix-ui/react-label": "^2.1.15",
+    "@radix-ui/react-select": "^2.3.7",
+    "@radix-ui/react-separator": "^1.1.15",
     "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-tabs": "^1.1.21",
+    "@radix-ui/react-tooltip": "^1.2.16",
     "arabic-persian-reshaper": "^1.0.1",
     "bidi-js": "^1.0.3",
     "class-variance-authority": "^0.7.0",
+    "clipper-lib": "^6.4.2",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^0.468.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "5.4.624",
@@ -46,6 +70,10 @@
     "tailwind-merge": "^2.4.0"
   },
   "devDependencies": {
+    "@storybook/addon-a11y": "^10.5.9",
+    "@storybook/addon-docs": "^10.5.9",
+    "@storybook/react-vite": "^10.5.9",
+    "@types/clipper-lib": "^6.4.0",
     "@types/node": "^20.14.10",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -56,10 +84,15 @@
     "electron-vite": "^5.0.0",
     "postcss": "^8.4.39",
     "prettier": "3.8.4",
+    "storybook": "^10.5.9",
     "tailwindcss": "^3.4.4",
+    "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.22.3",
     "typescript": "^5.5.3",
-    "vite": "^7.3.3"
+    "vite": "^7.3.6"
+  },
+  "overrides": {
+    "sharp": "^0.35.4"
   },
   "build": {
     "appId": "com.mahertka.myprinterapp",
@@ -93,10 +126,36 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "include": "scripts/fast-print-installer.nsh"
     },
     "portable": {
       "artifactName": "My Printer App by Maher Tka Portable ${version}.${ext}"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Maher-tka",
+        "repo": "My-Printer-App-by-Maher-Tka",
+        "releaseType": "release"
+      }
+    ],
+    "extraResources": [
+      {
+        "filter": [
+          "fast-print-menu.ps1",
+          "fast-print-job.ps1",
+          "fast-print-settings.ps1",
+          "fast-print-profiles.ps1",
+          "FastPrintDriver.cs"
+        ],
+        "from": "scripts",
+        "to": "fast-print"
+      },
+      {
+        "from": "out/native/fast-print-shell.dll",
+        "to": "fast-print/fast-print-shell.dll"
+      }
+    ]
   }
 }

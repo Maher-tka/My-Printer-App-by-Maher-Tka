@@ -1,7 +1,20 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type {
+  AccountMutationResult,
+  AccountSnapshot,
+  CreateAccountRequest,
+  SignInRequest
+} from '../shared/account-types.js'
 import type { LicenseActivationResult, LicenseSnapshot } from '../shared/licensing-types.js'
+import type { PrintPdfFileRequest, PrintPdfRequest, PrintPdfResult } from '../shared/print-types.js'
 import type { UnsavedChangesRequest, UnsavedChangesResult } from '../shared/project-types.js'
-import type { ExportContext } from '../shared/release-types.js'
+import type {
+  ExportContext,
+  ShopBackupRendererData,
+  ShopBackupResult,
+  ShopRestoreResult
+} from '../shared/release-types.js'
+import type { AppUpdateActionResult, AppUpdateSnapshot } from '../shared/update-types.js'
 
 let activeProjectState: {
   project: unknown
@@ -37,11 +50,32 @@ function getActiveExportContext(): ExportContext | undefined {
 contextBridge.exposeInMainWorld('printerApp', {
   platform: process.platform,
   storageMode: 'local-first',
+  account: {
+    getState: (): Promise<AccountSnapshot> => ipcRenderer.invoke('account:get-state'),
+    create: (request: CreateAccountRequest): Promise<AccountMutationResult> =>
+      ipcRenderer.invoke('account:create', request),
+    signIn: (request: SignInRequest): Promise<AccountMutationResult> =>
+      ipcRenderer.invoke('account:sign-in', request),
+    signOut: (): Promise<AccountMutationResult> => ipcRenderer.invoke('account:sign-out'),
+    resetLocal: (): Promise<AccountSnapshot> => ipcRenderer.invoke('account:reset-local')
+  },
   license: {
     getState: (): Promise<LicenseSnapshot> => ipcRenderer.invoke('license:get-state'),
     activateSerial: (serialKey: string): Promise<LicenseActivationResult> =>
       ipcRenderer.invoke('license:activate-serial', serialKey),
     resetLocal: (): Promise<LicenseSnapshot> => ipcRenderer.invoke('license:reset-local')
+  },
+  updates: {
+    getState: (): Promise<AppUpdateSnapshot> => ipcRenderer.invoke('updates:get-state'),
+    check: (): Promise<AppUpdateActionResult> => ipcRenderer.invoke('updates:check'),
+    install: (): Promise<AppUpdateActionResult> => ipcRenderer.invoke('updates:install'),
+    onStateChanged: (callback: (state: AppUpdateSnapshot) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: AppUpdateSnapshot): void =>
+        callback(state)
+      ipcRenderer.on('updates:state-changed', listener)
+
+      return () => ipcRenderer.removeListener('updates:state-changed', listener)
+    }
   },
   saveFile: async (request: {
     suggestedName: string
@@ -51,9 +85,16 @@ contextBridge.exposeInMainWorld('printerApp', {
     await autosaveActiveProject()
     return ipcRenderer.invoke('booklet:save-file', request, getActiveExportContext())
   },
+  printPdf: async (request: PrintPdfRequest): Promise<PrintPdfResult> => {
+    await autosaveActiveProject()
+    return ipcRenderer.invoke('print:pdf', request, getActiveExportContext())
+  },
+  printPdfFile: (request: PrintPdfFileRequest): Promise<PrintPdfResult> =>
+    ipcRenderer.invoke('print:pdf-file', request, getActiveExportContext()),
   saveProject: (request: { suggestedName: string; filePath?: string | null; project: unknown }) =>
     ipcRenderer.invoke('projects:save', request),
   openProject: (filePath?: string | null) => ipcRenderer.invoke('projects:open', filePath ?? null),
+  openImageFile: () => ipcRenderer.invoke('files:open-image'),
   confirmUnsavedChanges: (request: UnsavedChangesRequest): Promise<UnsavedChangesResult> =>
     ipcRenderer.invoke('projects:confirm-unsaved', request),
   setProjectDirty: (dirty: boolean, projectName: string): Promise<void> =>
@@ -91,6 +132,12 @@ contextBridge.exposeInMainWorld('printerApp', {
       ipcRenderer.invoke('runtime:export-diagnostics', context),
     listExports: () => ipcRenderer.invoke('runtime:list-exports'),
     openPath: (filePath: string) => ipcRenderer.invoke('runtime:open-path', filePath),
+    prepareFineCutJob: (
+      request: import('../shared/finecut-handoff.js').FineCutHandoffRequest
+    ): Promise<import('../shared/finecut-handoff.js').FineCutHandoffResult> =>
+      ipcRenderer.invoke('runtime:prepare-finecut-job', request),
+    openInIllustrator: (filePath: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('runtime:open-in-illustrator', filePath),
     openParentFolder: (filePath: string) =>
       ipcRenderer.invoke('runtime:open-parent-folder', filePath),
     writeAutosave: (request: unknown) => ipcRenderer.invoke('runtime:write-autosave', request),
@@ -99,6 +146,13 @@ contextBridge.exposeInMainWorld('printerApp', {
     discardAutosave: (filePath: string) => ipcRenderer.invoke('runtime:discard-autosave', filePath),
     openAutosaveFolder: () => ipcRenderer.invoke('runtime:open-autosaves'),
     createQualityFixtures: (label: string) =>
-      ipcRenderer.invoke('runtime:create-quality-fixtures', label)
+      ipcRenderer.invoke('runtime:create-quality-fixtures', label),
+    createShopBackup: (data: ShopBackupRendererData): Promise<ShopBackupResult> =>
+      ipcRenderer.invoke('runtime:create-shop-backup', data),
+    createAutomaticBackup: (data: ShopBackupRendererData): Promise<ShopBackupResult> =>
+      ipcRenderer.invoke('runtime:create-auto-backup', data),
+    restoreShopBackup: (): Promise<ShopRestoreResult> =>
+      ipcRenderer.invoke('runtime:restore-shop-backup'),
+    openBackupFolder: (): Promise<string> => ipcRenderer.invoke('runtime:open-backups')
   }
 })

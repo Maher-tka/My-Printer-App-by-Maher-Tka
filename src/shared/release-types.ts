@@ -61,3 +61,22 @@ export interface AutosaveWriteRequest {
   project: unknown
   originalFilePath?: string | null
 }
+
+export interface ShopBackupRendererData {
+  jobs: unknown[]
+  customers: unknown[]
+}
+
+export interface ShopBackupResult {
+  ok: boolean
+  canceled?: boolean
+  filePath?: string
+  projectCount?: number
+  error?: string
+}
+
+export interface ShopRestoreResult extends ShopBackupResult {
+  rendererData?: ShopBackupRendererData
+  restoredProjectPaths?: string[]
+  createdAt?: string
+}

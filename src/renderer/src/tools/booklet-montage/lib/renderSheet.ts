@@ -28,6 +28,7 @@ import {
   rectMmToCanvasPixels,
   rectMmToPoints
 } from './cropMarks'
+import { getSlotCreepTranslationMm } from './creepCompensation'
 import {
   assertCanvasWithinLimit,
   assertNotCanceled,
@@ -35,7 +36,7 @@ import {
   resetCanvas
 } from './memoryCleanup'
 import type { SheetLayoutMm } from './printSizes'
-import { mmToPixels, mmToPoints } from './units'
+import { mmToPixels, mmToPixelsExact, mmToPoints } from './units'
 import { getSolidFillHex, hexToRgb } from './colorUtils'
 
 export interface PdfRenderAssets {
@@ -94,8 +95,26 @@ export async function renderPdfSheetSide(
   signal?: AbortSignal
 ): Promise<void> {
   assertNotCanceled(signal)
-  await drawPdfSlot(pdfPage, side.left, layout.renderSlots.left, settings, assets, signal)
-  await drawPdfSlot(pdfPage, side.right, layout.renderSlots.right, settings, assets, signal)
+  await drawPdfSlot(
+    pdfPage,
+    side.left,
+    'left',
+    side,
+    layout.renderSlots.left,
+    settings,
+    assets,
+    signal
+  )
+  await drawPdfSlot(
+    pdfPage,
+    side.right,
+    'right',
+    side,
+    layout.renderSlots.right,
+    settings,
+    assets,
+    signal
+  )
 
   if (settings.cropMarks) {
     drawPdfCropMarks(pdfPage, layout.trimSlots.left)
@@ -120,6 +139,8 @@ export async function renderCanvasSheetSide(
   await drawCanvasSlot(
     context,
     side.left,
+    'left',
+    side,
     layout.renderSlots.left,
     settings,
     layout,
@@ -130,6 +151,8 @@ export async function renderCanvasSheetSide(
   await drawCanvasSlot(
     context,
     side.right,
+    'right',
+    side,
     layout.renderSlots.right,
     settings,
     layout,
@@ -189,6 +212,8 @@ export function flattenSheetSides(sheets: BookletSheet[]): BookletSide[] {
 async function drawPdfSlot(
   pdfPage: PDFPage,
   slot: BookletSlot,
+  pageSide: 'left' | 'right',
+  physicalSide: BookletSide,
   slotRectMm: Rect,
   settings: SheetSettings,
   assets: PdfRenderAssets,
@@ -214,6 +239,13 @@ async function drawPdfSlot(
 
   const naturalSize = { width: mmToPoints(page.widthMm), height: mmToPoints(page.heightMm) }
   const placement = getPlacement(naturalSize, slotRect, settings.scaleMode)
+  const creepTranslationPoints = mmToPoints(
+    getSlotCreepTranslationMm(physicalSide, pageSide, settings.creep)
+  )
+  const compensatedPlacement = {
+    ...placement,
+    x: placement.x + creepTranslationPoints
+  }
 
   pdfPage.pushOperators(
     pushGraphicsState(),
@@ -231,7 +263,7 @@ async function drawPdfSlot(
     )
 
     if (embeddedPage) {
-      pdfPage.drawPage(embeddedPage, placement)
+      pdfPage.drawPage(embeddedPage, compensatedPlacement)
     }
   }
 
@@ -239,7 +271,7 @@ async function drawPdfSlot(
     const image = await getEmbeddedImage(assets, page.sourceId, signal)
 
     if (image) {
-      pdfPage.drawImage(image, placement)
+      pdfPage.drawImage(image, compensatedPlacement)
     }
   }
 
@@ -249,6 +281,8 @@ async function drawPdfSlot(
 async function drawCanvasSlot(
   context: CanvasRenderingContext2D,
   slot: BookletSlot,
+  pageSide: 'left' | 'right',
+  physicalSide: BookletSide,
   slotRectMm: Rect,
   settings: SheetSettings,
   layout: SheetLayoutMm,
@@ -274,6 +308,14 @@ async function drawCanvasSlot(
     height: mmToPixels(page.heightMm, dpi)
   }
   const placement = getPlacement(naturalSize, slotRect, settings.scaleMode)
+  const creepTranslationPixels = mmToPixelsExact(
+    getSlotCreepTranslationMm(physicalSide, pageSide, settings.creep),
+    dpi
+  )
+  const compensatedPlacement = {
+    ...placement,
+    x: placement.x + creepTranslationPixels
+  }
 
   context.save()
   context.beginPath()
@@ -285,12 +327,18 @@ async function drawCanvasSlot(
       const bitmap = await getImageBitmap(page.sourceId, assets, signal)
 
       if (bitmap) {
-        context.drawImage(bitmap, placement.x, placement.y, placement.width, placement.height)
+        context.drawImage(
+          bitmap,
+          compensatedPlacement.x,
+          compensatedPlacement.y,
+          compensatedPlacement.width,
+          compensatedPlacement.height
+        )
       }
     }
 
     if (page.kind === 'pdf' && page.sourceId && page.sourcePageIndex !== undefined) {
-      await drawPdfPageToCanvas(context, page, placement, assets, signal)
+      await drawPdfPageToCanvas(context, page, compensatedPlacement, assets, signal)
     }
   } finally {
     context.restore()

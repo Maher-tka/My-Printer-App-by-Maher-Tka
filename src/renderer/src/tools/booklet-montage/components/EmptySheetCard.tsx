@@ -1,3 +1,5 @@
+import { Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import type { EmptySheetBoardItem } from '../types'
 import { getReadableTextColor } from '../lib/colorUtils'
 import { ColorPickerPopover } from './ColorPickerPopover'
@@ -35,10 +37,28 @@ export function EmptySheetCard({
         onDelete={onDelete}
         onDuplicate={onDuplicate}
         onColor={onToggleColorPicker}
+        showDelete={false}
       />
-      <div className="mb-2 flex items-center justify-between gap-2 pr-36">
+      <div className="mb-2 flex items-center justify-between gap-2 pr-28">
         <span className="truncate text-sm font-semibold">{item.label}</span>
-        <span className="text-xs text-muted-foreground">Empty</span>
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="text-xs text-muted-foreground">Empty</span>
+          <Button
+            data-no-drag="true"
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            title="Delete empty sheet"
+            aria-label={`Delete ${item.label}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              onDelete()
+            }}
+          >
+            <Trash2 />
+          </Button>
+        </div>
       </div>
       <div
         className="relative h-[236px] overflow-hidden rounded-sm border shadow-inner"

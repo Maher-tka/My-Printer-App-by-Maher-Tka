@@ -21,6 +21,10 @@ export function mmToPixels(mm: number, dpi: number): number {
   return Math.round((mm / MM_PER_INCH) * dpi)
 }
 
+export function mmToPixelsExact(mm: number, dpi: number): number {
+  return (mm / MM_PER_INCH) * dpi
+}
+
 export function getPaperSizeMm(settings: SheetSettings): SizeMm {
   const base =
     settings.paperSize === 'custom'

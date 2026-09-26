@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'"
+    />
+    <title>Fast Print</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 28px;
+        color: #172033;
+        background: #f5f7fb;
+        font:
+          14px 'Segoe UI',
+          sans-serif;
+      }
+      .eyebrow {
+        color: #2563eb;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1.4px;
+      }
+      h1 {
+        margin: 10px 0;
+        font-size: 23px;
+      }
+      #file {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 600;
+      }
+      #preset {
+        color: #566479;
+        line-height: 1.5;
+      }
+      progress {
+        width: 100%;
+        height: 7px;
+        accent-color: #2563eb;
+        margin: 16px 0 8px;
+      }
+      #status {
+        color: #566479;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="eyebrow">MY PRINTER APP</div>
+    <h1 id="heading">Preparing your print</h1>
+    <div id="file">Reading document…</div>
+    <div id="preset"></div>
+    <progress id="progress"></progress>
+    <div id="status" role="status" aria-live="polite">Close this window to cancel preparation.</div>
+    <script type="module" src="/src/fast-print/main.ts"></script>
+  </body>
+</html>

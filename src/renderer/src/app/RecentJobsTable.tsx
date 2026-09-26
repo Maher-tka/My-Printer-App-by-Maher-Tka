@@ -33,15 +33,17 @@ export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.El
 
     setIsLoading(true)
     setError(null)
-    const result = await window.printerApp.listRecentProjects()
-
-    if (result.ok) {
-      setJobs(result.jobs ?? [])
-    } else {
-      setError(result.error ?? 'Could not load recent projects.')
+    try {
+      const result = await window.printerApp.listRecentProjects()
+      if (result.ok) setJobs(result.jobs ?? [])
+      else setError(result.error ?? 'Could not load recent projects.')
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : 'Could not load recent projects. Try refreshing.'
+      )
+    } finally {
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }, [])
 
   useEffect(() => {
@@ -51,22 +53,27 @@ export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.El
   const openRecentJob = async (job: RecentJob): Promise<void> => {
     setOpeningPath(job.filePath)
     setError(null)
-    const result = await onOpenProject(job.filePath)
-
-    if (!result.ok && !result.canceled) {
-      setError(result.error ?? 'Could not open that project.')
-      await loadRecentJobs()
+    try {
+      const result = await onOpenProject(job.filePath)
+      if (!result.ok && !result.canceled) {
+        await loadRecentJobs()
+        setError(result.error ?? 'Could not open that project.')
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not open that project.')
+    } finally {
+      setOpeningPath(null)
     }
-
-    setOpeningPath(null)
   }
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between gap-4 p-5">
+      <CardHeader className="flex-row items-center justify-between gap-4 border-b bg-muted/25 px-5 py-4">
         <div className="flex items-center gap-3">
-          <FileText className="size-5 text-muted-foreground" aria-hidden="true" />
-          <CardTitle>Recent Jobs</CardTitle>
+          <div className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary">
+            <FileText className="size-4" aria-hidden="true" />
+          </div>
+          <CardTitle>Recent projects</CardTitle>
         </div>
         <Button
           variant="ghost"
@@ -79,20 +86,27 @@ export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.El
           Refresh
         </Button>
       </CardHeader>
-      <CardContent className="px-5 pb-5 pt-0">
+      <CardContent className="p-5">
         {error && (
-          <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          <div
+            role="alert"
+            className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+          >
             {error}
           </div>
         )}
 
-        {!isLoading && jobs.length === 0 ? (
+        {isLoading ? (
+          <p role="status" className="py-8 text-center text-sm text-muted-foreground">
+            Loading recent projects…
+          </p>
+        ) : jobs.length === 0 ? (
           <div className="grid min-h-48 place-items-center rounded-lg border border-dashed bg-muted/30 p-6 text-center">
             <div>
               <FolderOpen className="mx-auto mb-3 size-8 text-muted-foreground" />
-              <p className="font-medium">No saved jobs yet</p>
+              <p className="font-medium">No saved projects yet</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Saved booklet, cutter, and hardcover projects will appear here.
+                Saved production projects, including numbered tickets, will appear here.
               </p>
             </div>
           </div>

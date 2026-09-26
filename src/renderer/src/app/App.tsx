@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { DashboardPage } from '@/app/DashboardPage'
+import { useAccountState } from '@/account/useAccountState'
+import { scheduleDailyShopBackup } from '@/backup/shopBackup'
 import { AppLayout } from '@/components/layout/AppLayout'
-import { LicensePage } from '@/licensing/LicensePage'
 import { ToolAccessOverlay } from '@/licensing/ToolAccessOverlay'
 import { getToolAccessState } from '@/licensing/tool-access'
 import { useLicenseState } from '@/licensing/useLicenseState'
@@ -13,11 +13,8 @@ import {
   type CutterProjectPayload,
   type HardcoverProjectPayload
 } from '@/projects/projectFiles'
-import { SettingsPage } from '@/settings/SettingsPage'
 import { AutosaveRecoveryBanner } from '@/projects/AutosaveRecoveryBanner'
-import { AppHealthPage } from '@/settings/AppHealthPage'
-import { ExportCenterPage } from '@/exports/ExportCenterPage'
-import { JobsPage } from '@/jobs/JobsPage'
+import type { SequentialProject } from '@/tools/sequential-number/types'
 import type { AppRoute, PageMeta } from '@/types/navigation'
 import type {
   ActiveProjectSession,
@@ -27,7 +24,32 @@ import type {
 import type { UnsavedChangesAction } from '../../../shared/project-types'
 import type { AutosaveEntry } from '../../../shared/release-types'
 
+const SequentialNumberPage = lazy(async () => ({
+  default: (await import('@/tools/sequential-number/SequentialNumberPage')).SequentialNumberPage
+}))
+
 const AUTOSAVE_INTERVAL_MS = 60_000
+const AccountAccessPage = lazy(async () => ({
+  default: (await import('@/account/AccountAccessPage')).AccountAccessPage
+}))
+const DashboardPage = lazy(async () => ({
+  default: (await import('@/app/DashboardPage')).DashboardPage
+}))
+const LicensePage = lazy(async () => ({
+  default: (await import('@/licensing/LicensePage')).LicensePage
+}))
+const SettingsPage = lazy(async () => ({
+  default: (await import('@/settings/SettingsPage')).SettingsPage
+}))
+const AppHealthPage = lazy(async () => ({
+  default: (await import('@/settings/AppHealthPage')).AppHealthPage
+}))
+const JobsPage = lazy(async () => ({
+  default: (await import('@/jobs/JobsPage')).JobsPage
+}))
+const ExportCenterPage = lazy(async () => ({
+  default: (await import('@/exports/ExportCenterPage')).ExportCenterPage
+}))
 const QualityLabPage = lazy(() => import('@/quality/QualityLabPage'))
 const BookletMontagePage = lazy(async () => ({
   default: (await import('@/tools/booklet-montage/BookletMontagePage')).BookletMontagePage
@@ -40,29 +62,33 @@ const HardcoverCoverPage = lazy(async () => ({
 }))
 
 const pageMeta: Record<AppRoute, PageMeta> = {
+  'sequential-number': {
+    title: 'Sequential Number',
+    subtitle: 'Tickets, invoices, and cut-stack numbering'
+  },
   dashboard: {
-    title: 'My Printer App by Maher Tka',
-    subtitle: 'Printer shop automation hub'
+    title: 'Production Dashboard',
+    subtitle: 'Your print shop at a glance'
   },
   'booklet-montage': {
     title: 'Booklet Montage',
-    subtitle: 'Local-first booklet imposition workspace'
+    subtitle: 'PDF imposition and print preparation'
   },
   'hardcover-cover': {
-    title: 'Hardcover Cover Sheet',
-    subtitle: 'Cover-sheet automation module'
+    title: 'Hardcover Cover',
+    subtitle: 'Binding cover production'
   },
   'cutter-montage': {
     title: 'Cutter Montage',
-    subtitle: 'Plotter and big-sheet preparation module'
+    subtitle: 'Print-and-cut sheet preparation'
   },
   jobs: {
     title: 'Shop Jobs',
-    subtitle: 'Local customer jobs and quotes'
+    subtitle: 'Jobs, quotes, and deadlines'
   },
   exports: {
     title: 'Export Center',
-    subtitle: 'Local production export history'
+    subtitle: 'Production output history'
   },
   'app-health': {
     title: 'App Health',
@@ -73,12 +99,12 @@ const pageMeta: Record<AppRoute, PageMeta> = {
     subtitle: 'Development-only release checks'
   },
   license: {
-    title: 'License',
-    subtitle: 'Local activation and trial status'
+    title: 'Access & Subscription',
+    subtitle: 'Trial and offline subscription-key activation'
   },
   settings: {
     title: 'Settings',
-    subtitle: 'Local workspace preferences'
+    subtitle: 'Workspace preferences and management'
   }
 }
 
@@ -87,6 +113,7 @@ const appRoutes = new Set<AppRoute>([
   'booklet-montage',
   'hardcover-cover',
   'cutter-montage',
+  'sequential-number',
   'jobs',
   'exports',
   'app-health',
@@ -100,11 +127,49 @@ interface PendingBookletPdfImport {
   files: File[]
 }
 
+interface PendingCutterImageImport {
+  id: number
+  files: File[]
+}
+
+function openedImageToFile(image: PrinterAppOpenedImageFile): File {
+  const bytes = image.bytes instanceof Uint8Array ? image.bytes : new Uint8Array(image.bytes)
+  const copiedBytes = new Uint8Array(bytes.byteLength)
+  copiedBytes.set(bytes)
+
+  return new File([copiedBytes.buffer], image.fileName, { type: image.mimeType })
+}
+
 function ToolLoadingFallback({ label }: { label: string }): JSX.Element {
   return (
-    <div className="rounded-md border bg-card px-4 py-3 text-sm font-medium text-muted-foreground">
+    <div
+      role="status"
+      aria-live="polite"
+      className="rounded-md border bg-card px-4 py-3 text-sm font-medium text-muted-foreground"
+    >
       {label}
     </div>
+  )
+}
+
+function AccessLoadingScreen(): JSX.Element {
+  return (
+    <main className="grid min-h-screen place-items-center bg-background px-6">
+      <div className="flex max-w-sm flex-col items-center gap-4 text-center">
+        <div className="grid size-14 place-items-center rounded-2xl bg-primary text-xl font-black text-primary-foreground shadow-lg shadow-primary/25">
+          M
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <p className="text-lg font-bold text-foreground">Preparing workspace access…</p>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Checking your local account and subscription status.
+          </p>
+        </div>
+        <div className="h-1.5 w-48 overflow-hidden rounded-full bg-muted">
+          <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
+        </div>
+      </div>
+    </main>
   )
 }
 
@@ -123,13 +188,25 @@ export function App(): JSX.Element {
   >(null)
   const [pendingBookletPdfImport, setPendingBookletPdfImport] =
     useState<PendingBookletPdfImport | null>(null)
+  const [pendingCutterImageImport, setPendingCutterImageImport] =
+    useState<PendingCutterImageImport | null>(null)
   const [recoveryEntry, setRecoveryEntry] = useState<AutosaveEntry | null>(null)
   const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const [recoveryIsBusy, setRecoveryIsBusy] = useState(false)
   const bookletPdfImportIdRef = useRef(0)
+  const cutterImageImportIdRef = useRef(0)
   const activeMeta = useMemo(() => pageMeta[activeRoute], [activeRoute])
+  const account = useAccountState()
   const { settings: performanceSettings } = usePerformanceSettings()
   const license = useLicenseState()
+  const isDeveloperAccess = license.state?.statusLabel === 'Developer Test Mode'
+  const hasSubscriptionAccess = license.state?.mode === 'activated'
+  const hasTrialAccountAccess =
+    account.state?.status === 'signed-in' &&
+    license.state?.mode === 'trial' &&
+    !license.state.trial.isExpired
+  const isAccessLoading = account.isLoading || license.isLoading
+  const hasAppAccess = isDeveloperAccess || hasSubscriptionAccess || hasTrialAccountAccess
   const activeTool = printerTools.find((tool) => tool.route === activeRoute)
   const activeToolAccess = activeTool
     ? getToolAccessState(activeTool, license.state, license.isLoading)
@@ -141,6 +218,10 @@ export function App(): JSX.Element {
   useEffect(() => {
     document.documentElement.dataset.performancePreset = performanceSettings.preset
   }, [performanceSettings.preset])
+
+  useEffect(() => {
+    return scheduleDailyShopBackup()
+  }, [])
 
   const setActiveProjectSession = useCallback((session: ActiveProjectSession | null): void => {
     activeProjectSessionRef.current = session
@@ -170,60 +251,46 @@ export function App(): JSX.Element {
     const runtime = window.printerApp?.runtime
     if (!runtime) return
 
-    void runtime.listAutosaves().then((entries) => setRecoveryEntry(entries[0] ?? null))
+    void runtime
+      .listAutosaves()
+      .then((entries) => setRecoveryEntry(entries[0] ?? null))
+      .catch(() =>
+        setRecoveryError('Could not check recovery files. Open App Health to inspect autosaves.')
+      )
 
     const timer = window.setInterval(() => {
       const session = activeProjectSessionRef.current
       if (!session?.isDirty) return
-      void runtime.writeAutosave({ project: session.snapshot, originalFilePath: session.filePath })
+      void runtime
+        .writeAutosave({ project: session.snapshot, originalFilePath: session.filePath })
+        .catch(() =>
+          setRecoveryError('Automatic recovery could not be saved. Save your project manually.')
+        )
     }, AUTOSAVE_INTERVAL_MS)
 
     return () => window.clearInterval(timer)
   }, [])
-
-  const restoreAutosave = useCallback(async (): Promise<void> => {
-    if (!recoveryEntry || !window.printerApp?.runtime) return
-    setRecoveryIsBusy(true)
-    setRecoveryError(null)
-    const result = await window.printerApp.runtime.readAutosave(recoveryEntry.filePath)
-    if (!result.ok || !result.project || !isPrinterProjectFile(result.project)) {
-      setRecoveryError(result.error ?? 'The recovery file could not be opened.')
-      setRecoveryIsBusy(false)
-      return
-    }
-    const projectRoute = result.project.metadata.tool
-    clearActiveProjectSession()
-    setOpenedProject({
-      filePath: recoveryEntry.originalFilePath ?? null,
-      project: result.project,
-      instanceId: Date.now()
-    })
-    activeRouteRef.current = projectRoute
-    setActiveRoute(projectRoute)
-    window.location.hash = `#/${projectRoute}`
-    setRecoveryEntry(null)
-    setRecoveryIsBusy(false)
-  }, [clearActiveProjectSession, recoveryEntry])
-
-  const discardAutosave = useCallback(async (): Promise<void> => {
-    if (!recoveryEntry || !window.printerApp?.runtime) return
-    setRecoveryIsBusy(true)
-    const result = await window.printerApp.runtime.discardAutosave(recoveryEntry.filePath)
-    if (result.ok) {
-      const remaining = await window.printerApp.runtime.listAutosaves()
-      setRecoveryEntry(remaining[0] ?? null)
-      setRecoveryError(null)
-    } else {
-      setRecoveryError(result.error ?? 'The autosave could not be discarded.')
-    }
-    setRecoveryIsBusy(false)
-  }, [recoveryEntry])
 
   const confirmUnsavedChanges = useCallback(
     async (action: UnsavedChangesAction): Promise<boolean> => {
       const session = activeProjectSessionRef.current
 
       if (!session?.isDirty) {
+        return true
+      }
+
+      if (action === 'navigate' && activeRouteRef.current === 'hardcover-cover') {
+        try {
+          const result = await window.printerApp?.runtime?.writeAutosave({
+            project: session.snapshot,
+            originalFilePath: session.filePath
+          })
+          if (!result?.ok) {
+            setRecoveryError('Could not save Hardcover recovery before switching tools.')
+          }
+        } catch {
+          setRecoveryError('Could not save Hardcover recovery before switching tools.')
+        }
         return true
       }
 
@@ -245,6 +312,62 @@ export function App(): JSX.Element {
     []
   )
 
+  const restoreAutosave = useCallback(async (): Promise<void> => {
+    if (!recoveryEntry || !window.printerApp?.runtime || recoveryIsBusy) return
+    setRecoveryIsBusy(true)
+    setRecoveryError(null)
+    try {
+      if (!(await confirmUnsavedChanges('open-project'))) return
+      const result = await window.printerApp.runtime.readAutosave(recoveryEntry.filePath)
+      if (!result.ok || !result.project || !isPrinterProjectFile(result.project)) {
+        setRecoveryError(result.error ?? 'The recovery file could not be opened.')
+        return
+      }
+      const projectRoute = result.project.metadata.tool
+      clearActiveProjectSession()
+      setPendingBookletPdfImport(null)
+      setPendingCutterImageImport(null)
+      setOpenedProject({
+        filePath: recoveryEntry.originalFilePath ?? null,
+        project: result.project,
+        instanceId: Date.now()
+      })
+      activeRouteRef.current = projectRoute
+      setActiveRoute(projectRoute)
+      window.location.hash = '#/' + projectRoute
+      setRecoveryEntry(null)
+    } catch (error) {
+      setRecoveryError(
+        error instanceof Error ? error.message : 'Recovery could not be opened. Please try again.'
+      )
+    } finally {
+      setRecoveryIsBusy(false)
+    }
+  }, [clearActiveProjectSession, confirmUnsavedChanges, recoveryEntry, recoveryIsBusy])
+
+  const discardAutosave = useCallback(async (): Promise<void> => {
+    if (!recoveryEntry || !window.printerApp?.runtime || recoveryIsBusy) return
+    setRecoveryIsBusy(true)
+    setRecoveryError(null)
+    try {
+      const result = await window.printerApp.runtime.discardAutosave(recoveryEntry.filePath)
+      if (result.ok) {
+        const remaining = await window.printerApp.runtime.listAutosaves()
+        setRecoveryEntry(remaining[0] ?? null)
+      } else {
+        setRecoveryError(result.error ?? 'The autosave could not be discarded.')
+      }
+    } catch (error) {
+      setRecoveryError(
+        error instanceof Error
+          ? error.message
+          : 'The autosave could not be discarded. Please try again.'
+      )
+    } finally {
+      setRecoveryIsBusy(false)
+    }
+  }, [recoveryEntry, recoveryIsBusy])
+
   const navigate = useCallback(
     async (route: AppRoute): Promise<void> => {
       if (route === activeRouteRef.current) {
@@ -265,6 +388,7 @@ export function App(): JSX.Element {
       setActiveRoute(route)
       setOpenedProject(null)
       setPendingBookletPdfImport(null)
+      setPendingCutterImageImport(null)
 
       const nextHash = `#/${route}`
       if (window.location.hash !== nextHash) {
@@ -341,6 +465,7 @@ export function App(): JSX.Element {
         instanceId: Date.now()
       })
       setPendingBookletPdfImport(null)
+      setPendingCutterImageImport(null)
       activeRouteRef.current = projectRoute
       setActiveRoute(projectRoute)
       window.location.hash = `#/${projectRoute}`
@@ -357,6 +482,7 @@ export function App(): JSX.Element {
 
     bookletPdfImportIdRef.current += 1
     setOpenedProject(null)
+    setPendingCutterImageImport(null)
     setPendingBookletPdfImport({
       id: bookletPdfImportIdRef.current,
       files
@@ -370,13 +496,108 @@ export function App(): JSX.Element {
     setPendingBookletPdfImport((current) => (current?.id === requestId ? null : current))
   }, [])
 
+  const openImageFile = useCallback(async (): Promise<void> => {
+    const stayingInCutter = activeRouteRef.current === 'cutter-montage'
+
+    if (!stayingInCutter && !(await confirmUnsavedChanges('navigate'))) {
+      return
+    }
+
+    if (!window.printerApp?.openImageFile) {
+      window.alert('Opening image files is only available in the desktop app.')
+      return
+    }
+
+    const result = await window.printerApp.openImageFile()
+
+    if (result.canceled) return
+    if (!result.ok || !result.files?.length) {
+      window.alert(result.error ?? 'The selected image could not be opened.')
+      return
+    }
+
+    if (!stayingInCutter) {
+      clearActiveProjectSession()
+      setOpenedProject(null)
+    }
+
+    cutterImageImportIdRef.current += 1
+    setPendingBookletPdfImport(null)
+    setPendingCutterImageImport({
+      id: cutterImageImportIdRef.current,
+      files: result.files.map(openedImageToFile)
+    })
+    activeRouteRef.current = 'cutter-montage'
+    setActiveRoute('cutter-montage')
+    window.location.hash = '#/cutter-montage'
+  }, [clearActiveProjectSession, confirmUnsavedChanges])
+
+  const consumeCutterImageImport = useCallback((requestId: number): void => {
+    setPendingCutterImageImport((current) => (current?.id === requestId ? null : current))
+  }, [])
+
+  const signOut = useCallback(async (): Promise<void> => {
+    if (!(await confirmUnsavedChanges('navigate'))) return
+    const result = await account.signOut()
+    if (!result.ok) {
+      setRecoveryError(result.error ?? 'Could not sign out. Please try again.')
+      return
+    }
+    clearActiveProjectSession()
+    setOpenedProject(null)
+    setPendingBookletPdfImport(null)
+    setPendingCutterImageImport(null)
+  }, [account.signOut, clearActiveProjectSession, confirmUnsavedChanges])
+
+  if (isAccessLoading) {
+    return <AccessLoadingScreen />
+  }
+
+  if (!hasAppAccess) {
+    return (
+      <Suspense fallback={<AccessLoadingScreen />}>
+        <AccountAccessPage
+          accountState={account.state}
+          accountIsSubmitting={account.isSubmitting}
+          accountError={account.error}
+          onCreateAccount={account.createAccount}
+          onSignIn={account.signIn}
+          licenseState={license.state}
+          licenseIsLoading={license.isLoading}
+          licenseIsActivating={license.isActivating}
+          licenseError={license.error}
+          onActivateSerial={license.activateSerial}
+        />
+      </Suspense>
+    )
+  }
+
   return (
     <AppLayout
       activeRoute={activeRoute}
       pageMeta={activeMeta}
       onNavigate={navigate}
       isDeveloperMode={license.isDeveloperMode}
+      account={account.state?.profile ?? null}
+      onSignOut={() => void signOut()}
+      onOpenProject={() => void openProject()}
+      onOpenImageFile={() => void openImageFile()}
     >
+      {recoveryError && !recoveryEntry && (
+        <div
+          role="alert"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning-foreground/20 bg-warning p-4 text-sm text-warning-foreground"
+        >
+          <span>{recoveryError}</span>
+          <button
+            type="button"
+            className="font-semibold underline underline-offset-4"
+            onClick={() => setRecoveryError(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {recoveryEntry && (
         <AutosaveRecoveryBanner
           entry={recoveryEntry}
@@ -388,14 +609,16 @@ export function App(): JSX.Element {
         />
       )}
       {activeRoute === 'dashboard' && (
-        <DashboardPage
-          licenseState={license.state}
-          isLicenseLoading={license.isLoading}
-          licenseError={license.error}
-          onNavigate={navigate}
-          onOpenProject={openProject}
-          onImportBookletPdf={importBookletPdf}
-        />
+        <Suspense fallback={<ToolLoadingFallback label="Loading Dashboard..." />}>
+          <DashboardPage
+            licenseState={license.state}
+            isLicenseLoading={license.isLoading}
+            onNavigate={navigate}
+            onOpenProject={openProject}
+            onImportBookletPdf={importBookletPdf}
+            onOpenImageFile={() => void openImageFile()}
+          />
+        </Suspense>
       )}
       {activeRoute === 'booklet-montage' && !showToolAccessOverlay && (
         <Suspense fallback={<ToolLoadingFallback label="Loading Booklet Montage..." />}>
@@ -437,6 +660,8 @@ export function App(): JSX.Element {
             key={openedProject?.instanceId ?? 'new-cutter'}
             onNavigate={navigate}
             onOpenProject={openProject}
+            initialImageImport={pendingCutterImageImport}
+            onInitialImageImportConsumed={consumeCutterImageImport}
             onProjectSessionChange={setActiveProjectSession}
             onConfirmUnsavedChanges={confirmUnsavedChanges}
             openedProject={
@@ -447,34 +672,71 @@ export function App(): JSX.Element {
           />
         </Suspense>
       )}
-      {activeRoute === 'license' && (
-        <LicensePage
-          licenseState={license.state}
-          isLoading={license.isLoading}
-          isActivating={license.isActivating}
-          error={license.error}
-          activationMessage={license.activationMessage}
-          onActivateSerial={license.activateSerial}
-          onRefresh={license.refresh}
-          onResetLocal={license.resetLocal}
-          isDeveloperMode={license.isDeveloperMode}
-          onNavigate={navigate}
-        />
+      {activeRoute === 'sequential-number' && !showToolAccessOverlay && (
+        <Suspense fallback={<ToolLoadingFallback label="Loading Sequential Number…" />}>
+          <SequentialNumberPage
+            key={openedProject?.instanceId ?? 'new-sequential'}
+            onNavigate={navigate}
+            onOpenProject={openProject}
+            onProjectSessionChange={setActiveProjectSession}
+            onConfirmUnsavedChanges={confirmUnsavedChanges}
+            openedProject={
+              openedProject?.project.metadata.tool === 'sequential-number'
+                ? (openedProject as OpenedPrinterProject<SequentialProject>)
+                : null
+            }
+          />
+        </Suspense>
       )}
-      {activeRoute === 'settings' && <SettingsPage onNavigate={navigate} />}
-      {activeRoute === 'jobs' && <JobsPage />}
-      {activeRoute === 'exports' && <ExportCenterPage onNavigate={navigate} />}
+      {activeRoute === 'license' && (
+        <Suspense fallback={<ToolLoadingFallback label="Loading Access & Subscription..." />}>
+          <LicensePage
+            licenseState={license.state}
+            isLoading={license.isLoading}
+            isActivating={license.isActivating}
+            error={license.error}
+            activationMessage={license.activationMessage}
+            onActivateSerial={license.activateSerial}
+            onRefresh={license.refresh}
+            onResetLocal={license.resetLocal}
+            isDeveloperMode={license.isDeveloperMode}
+            onNavigate={navigate}
+          />
+        </Suspense>
+      )}
+      {activeRoute === 'settings' && (
+        <Suspense fallback={<ToolLoadingFallback label="Loading Settings..." />}>
+          <SettingsPage
+            licenseState={license.state}
+            isDeveloperMode={license.isDeveloperMode}
+            onNavigate={navigate}
+          />
+        </Suspense>
+      )}
+      {activeRoute === 'jobs' && (
+        <Suspense fallback={<ToolLoadingFallback label="Loading Shop Jobs..." />}>
+          <JobsPage />
+        </Suspense>
+      )}
+      {activeRoute === 'exports' && (
+        <Suspense fallback={<ToolLoadingFallback label="Loading Export Center..." />}>
+          <ExportCenterPage onNavigate={navigate} />
+        </Suspense>
+      )}
       {activeRoute === 'app-health' && (
-        <AppHealthPage
-          license={license.state}
-          performance={performanceSettings}
-          isDeveloperMode={license.isDeveloperMode}
-          onResetLicense={license.resetLocal}
-        />
+        <Suspense fallback={<ToolLoadingFallback label="Loading App Health..." />}>
+          <AppHealthPage
+            license={license.state}
+            performance={performanceSettings}
+            isDeveloperMode={license.isDeveloperMode}
+            onResetLicense={license.resetLocal}
+            onNavigate={navigate}
+          />
+        </Suspense>
       )}
       {activeRoute === 'quality-lab' && license.isDeveloperMode && (
         <Suspense fallback={<p className="text-sm text-muted-foreground">Loading Quality Lab…</p>}>
-          <QualityLabPage />
+          <QualityLabPage onNavigate={navigate} />
         </Suspense>
       )}
       {showToolAccessOverlay && activeTool && activeToolAccess && (

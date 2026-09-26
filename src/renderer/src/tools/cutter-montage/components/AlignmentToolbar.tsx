@@ -27,10 +27,15 @@ export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
   const artwork = props.piece.objects.find((object) => object.id === props.piece.artworkObjectId)
   const mask = props.piece.objects.find((object) => object.id === props.piece.maskObjectId)
   const cutline = props.piece.objects.find((object) => object.id === props.piece.cutlineObjectId)
+  const activeMaskPairLocked = props.piece.clippingMaskEnabled
   const primaryIds = [artwork?.id, mask?.id, cutline?.id].filter((id): id is string => Boolean(id))
+  const protectedPairSelected =
+    activeMaskPairLocked &&
+    [artwork?.id, mask?.id].some((objectId) => Boolean(objectId && selected.has(objectId)))
   const canAlign =
     props.piece.selectedObjectIds.length >= 2 &&
-    Boolean(props.piece.keyObjectId && selected.has(props.piece.keyObjectId))
+    Boolean(props.piece.keyObjectId && selected.has(props.piece.keyObjectId)) &&
+    !protectedPairSelected
 
   return (
     <div className="flex flex-col gap-4">
@@ -116,7 +121,7 @@ export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
             type="button"
             size="sm"
             variant="outline"
-            disabled={!artwork || !mask}
+            disabled={!artwork || !mask || activeMaskPairLocked}
             onClick={props.onCenterArtworkToMask}
           >
             <Crosshair data-icon="inline-start" />
@@ -126,7 +131,7 @@ export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
             type="button"
             size="sm"
             variant="outline"
-            disabled={!artwork || !cutline}
+            disabled={!artwork || !cutline || activeMaskPairLocked}
             onClick={props.onCenterArtworkToCutline}
           >
             <Crosshair data-icon="inline-start" />
@@ -155,7 +160,7 @@ export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
             type="button"
             size="sm"
             variant="outline"
-            disabled={!cutline || !mask}
+            disabled={!cutline || !mask || activeMaskPairLocked}
             onClick={props.onMatchMaskToCutline}
           >
             Match mask to cutline

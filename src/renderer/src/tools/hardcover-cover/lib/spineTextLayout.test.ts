@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { calculateSpineTextLayout } from './spineTextLayout'
+import { calculateSpineTextLayout, syncSpineAutoFitFontSize } from './spineTextLayout'
 import type { SpineContent } from '../types'
 
 const base: SpineContent = {
@@ -9,7 +9,9 @@ const base: SpineContent = {
   universityInitials: 'ISAMM',
   direction: 'bottom-to-top',
   autoFit: true,
-  fontSizePt: 14
+  fontSizePt: 14,
+  spineColorMode: 'auto',
+  spineBackgroundColor: '#ffffff'
 }
 
 const normal = calculateSpineTextLayout(base, 20, 280)
@@ -27,6 +29,33 @@ assert.ok(
 assert.ok(
   normal.fontSizePt >= 6 && normal.fontSizePt <= 18,
   'auto-fit stays within safe font range'
+)
+
+const narrowResponsive = calculateSpineTextLayout(base, 10, 280)
+const wideResponsive = calculateSpineTextLayout(base, 30, 280)
+assert.ok(
+  narrowResponsive.fontSizePt < wideResponsive.fontSizePt,
+  'auto-fit increases and decreases the font size when the spine width changes'
+)
+
+const syncedNarrowSpine = syncSpineAutoFitFontSize(base, narrowResponsive)
+assert.equal(
+  syncedNarrowSpine.fontSizePt,
+  narrowResponsive.fontSizePt,
+  'the calculated auto-fit size is stored in the spine settings'
+)
+const syncedWideSpine = syncSpineAutoFitFontSize(syncedNarrowSpine, wideResponsive)
+assert.equal(
+  syncedWideSpine.fontSizePt,
+  wideResponsive.fontSizePt,
+  'returning to measurements and widening the spine stores the new larger size'
+)
+
+const manualSpine = { ...base, autoFit: false, fontSizePt: 12 }
+assert.equal(
+  syncSpineAutoFitFontSize(manualSpine, wideResponsive),
+  manualSpine,
+  'manual font size is never overwritten when Auto Fit is off'
 )
 
 const narrow = calculateSpineTextLayout(base, 3, 280)

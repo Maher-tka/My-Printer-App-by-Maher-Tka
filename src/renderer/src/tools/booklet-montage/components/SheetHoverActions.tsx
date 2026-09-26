@@ -7,13 +7,15 @@ interface SheetHoverActionsProps {
   onDelete: () => void
   onDuplicate?: () => void
   onColor?: () => void
+  showDelete?: boolean
 }
 
 export function SheetHoverActions({
   onInspect,
   onDelete,
   onDuplicate,
-  onColor
+  onColor,
+  showDelete = true
 }: SheetHoverActionsProps): JSX.Element {
   return (
     <div className="pointer-events-none absolute right-3 top-3 z-20 flex translate-y-1 gap-1 opacity-0 transition group-hover:translate-y-0 group-hover:opacity-100">
@@ -30,9 +32,11 @@ export function SheetHoverActions({
           <Copy className="h-4 w-4" />
         </ActionButton>
       )}
-      <ActionButton title="Delete sheet" danger onClick={onDelete}>
-        <Trash2 className="h-4 w-4" />
-      </ActionButton>
+      {showDelete ? (
+        <ActionButton title="Delete sheet" danger onClick={onDelete}>
+          <Trash2 className="h-4 w-4" />
+        </ActionButton>
+      ) : null}
     </div>
   )
 }

@@ -1,12 +1,13 @@
-import { ArrowLeft, Palette } from 'lucide-react'
+import { ArrowLeft, Palette, Trash2, ZoomIn } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type {
   BookletPage,
   BookletSheet,
   BookletSide,
   BookletSlot,
+  BookletSource,
   EmptySheetBoardItem,
   Rect,
   SheetBoardPosition,
@@ -14,15 +15,17 @@ import type {
   SheetSettings
 } from '../types'
 import { getBookletSlotRects, getPrintSizeMm } from '../lib/printSizes'
+import { getSheetCreepMm, getSlotCreepTranslationMm } from '../lib/creepCompensation'
 import { SHEET_BOARD_CARD, getBoardCanvasSize, getSideKey } from '../lib/sheetLayoutState'
-import { getReadableTextColor, getSolidFillHex } from '../lib/colorUtils'
 import { ColorPickerPopover } from './ColorPickerPopover'
 import { DraggableSheetCard } from './DraggableSheetCard'
 import { EmptySheetCard } from './EmptySheetCard'
 import { SheetHoverActions } from './SheetHoverActions'
+import { BookletPageArtwork, PageInspectionDialog } from './PageInspectionDialog'
 
 interface SheetPreviewProps {
   sheets: BookletSheet[]
+  sources: BookletSource[]
   settings: SheetSettings
   pageCountIsValid: boolean
   selectedItemId: string | null
@@ -36,8 +39,9 @@ interface SheetPreviewProps {
   onEmptySheetColorChange: (itemId: string, colorHex: string) => void
 }
 
-export function SheetPreview({
+export const SheetPreview = memo(function SheetPreview({
   sheets,
+  sources,
   settings,
   pageCountIsValid,
   selectedItemId,
@@ -51,15 +55,23 @@ export function SheetPreview({
   onEmptySheetColorChange
 }: SheetPreviewProps): JSX.Element {
   const [colorPickerItemId, setColorPickerItemId] = useState<string | null>(null)
-  const sideMap = new Map(
-    sheets.flatMap((sheet) => [
-      [getSideKey(sheet.front), sheet.front] as const,
-      [getSideKey(sheet.back), sheet.back] as const
-    ])
+  const sourceMap = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources])
+  const sideMap = useMemo(
+    () =>
+      new Map(
+        sheets.flatMap((sheet) => [
+          [getSideKey(sheet.front), sheet.front] as const,
+          [getSideKey(sheet.back), sheet.back] as const
+        ])
+      ),
+    [sheets]
   )
-  const visibleItems = boardState.items.filter(
-    (item) => item.kind === 'empty-sheet' || sideMap.has(item.sideKey)
+  const visibleItems = useMemo(
+    () =>
+      boardState.items.filter((item) => item.kind === 'empty-sheet' || sideMap.has(item.sideKey)),
+    [boardState.items, sideMap]
   )
+  const previewLayout = useMemo(() => getPreviewLayout(settings), [settings])
 
   if (visibleItems.length === 0) {
     return (
@@ -94,6 +106,10 @@ export function SheetPreview({
             onColorOpen={() => setColorPickerItemId(inspectedItem.id)}
             onColorClose={() => setColorPickerItemId(null)}
             onColorChange={(colorHex) => onEmptySheetColorChange(inspectedItem.id, colorHex)}
+            onDelete={() => {
+              onDeleteItem(inspectedItem.id)
+              onCloseInspect()
+            }}
           />
         </DetailedPreviewShell>
       )
@@ -103,7 +119,7 @@ export function SheetPreview({
 
     return side ? (
       <DetailedPreviewShell onClose={onCloseInspect}>
-        <DetailedSidePreview side={side} settings={settings} />
+        <DetailedSidePreview side={side} settings={settings} sourceMap={sourceMap} />
       </DetailedPreviewShell>
     ) : (
       <div className="grid min-h-[420px] place-items-center rounded-lg border border-dashed bg-muted/35 p-8 text-center">
@@ -172,11 +188,15 @@ export function SheetPreview({
               onPositionChange={onMoveItem}
             >
               <BookletSideCard
+                itemId={item.id}
                 side={side}
+                paperSize={previewLayout.paperSize}
+                slots={previewLayout.slots}
+                sourceMap={sourceMap}
                 settings={settings}
-                onInspect={() => onInspectItem(item.id)}
-                onDelete={() => onDeleteItem(item.id)}
-                onDuplicate={() => onDuplicateItem(item.id)}
+                onInspectItem={onInspectItem}
+                onDeleteItem={onDeleteItem}
+                onDuplicateItem={onDuplicateItem}
               />
             </DraggableSheetCard>
           )
@@ -184,7 +204,7 @@ export function SheetPreview({
       </div>
     </div>
   )
-}
+})
 
 function DetailedPreviewShell({
   children,
@@ -204,35 +224,43 @@ function DetailedPreviewShell({
   )
 }
 
-function BookletSideCard({
+const BookletSideCard = memo(function BookletSideCard({
+  itemId,
   side,
+  paperSize,
+  slots,
+  sourceMap,
   settings,
-  onInspect,
-  onDelete,
-  onDuplicate
+  onInspectItem,
+  onDeleteItem,
+  onDuplicateItem
 }: {
+  itemId: string
   side: BookletSide
+  paperSize: { widthMm: number; heightMm: number }
+  slots: { left: Rect; right: Rect }
+  sourceMap: ReadonlyMap<string, BookletSource>
   settings: SheetSettings
-  onInspect: () => void
-  onDelete: () => void
-  onDuplicate: () => void
+  onInspectItem: (itemId: string) => void
+  onDeleteItem: (itemId: string) => void
+  onDuplicateItem: (itemId: string) => void
 }): JSX.Element {
-  const rawPaperSize = getPrintSizeMm(settings)
-  const paperSize = {
-    widthMm: Math.max(rawPaperSize.widthMm, 1),
-    heightMm: Math.max(rawPaperSize.heightMm, 1)
-  }
-  const slots = getPreviewSlots(paperSize, settings)
+  const creepAmountMm = getSheetCreepMm(side, settings.creep)
 
   return (
     <div className="relative h-[300px] rounded-md bg-card p-3">
-      <SheetHoverActions onInspect={onInspect} onDelete={onDelete} onDuplicate={onDuplicate} />
+      <SheetHoverActions
+        onInspect={() => onInspectItem(itemId)}
+        onDelete={() => onDeleteItem(itemId)}
+        onDuplicate={() => onDuplicateItem(itemId)}
+      />
       <div className="mb-2 flex items-center justify-between gap-2 pr-36">
         <span className="truncate text-sm font-semibold">
           Sheet {side.sheetNumber} {side.side === 'front' ? 'Front' : 'Back'}
         </span>
         <span className="shrink-0 text-xs text-muted-foreground">
           {side.left.pageNumber} | {side.right.pageNumber}
+          {settings.creep.enabled ? ` · ${creepAmountMm.toFixed(2)} mm` : ''}
         </span>
       </div>
       <div
@@ -242,11 +270,45 @@ function BookletSideCard({
           maxHeight: 236
         }}
       >
-        <PreviewSlot slot={side.left} rect={slots.left} paperSize={paperSize} />
-        <PreviewSlot slot={side.right} rect={slots.right} paperSize={paperSize} />
+        <PreviewSlot
+          slot={side.left}
+          rect={slots.left}
+          paperSize={paperSize}
+          source={side.left.page.sourceId ? sourceMap.get(side.left.page.sourceId) : undefined}
+          scaleMode={settings.scaleMode}
+          creepTranslationMm={getSlotCreepTranslationMm(side, 'left', settings.creep)}
+          showCreepOverlay={settings.creep.enabled && settings.creep.showOverlay}
+        />
+        <PreviewSlot
+          slot={side.right}
+          rect={slots.right}
+          paperSize={paperSize}
+          source={side.right.page.sourceId ? sourceMap.get(side.right.page.sourceId) : undefined}
+          scaleMode={settings.scaleMode}
+          creepTranslationMm={getSlotCreepTranslationMm(side, 'right', settings.creep)}
+          showCreepOverlay={settings.creep.enabled && settings.creep.showOverlay}
+        />
+        {settings.creep.enabled && settings.creep.showOverlay ? (
+          <div
+            className="pointer-events-none absolute left-1/2 top-0 z-20 h-full border-l border-dashed border-sky-500"
+            title="Saddle-stitch spine"
+          />
+        ) : null}
       </div>
     </div>
   )
+})
+
+function getPreviewLayout(settings: SheetSettings): {
+  paperSize: { widthMm: number; heightMm: number }
+  slots: { left: Rect; right: Rect }
+} {
+  const rawPaperSize = getPrintSizeMm(settings)
+  const paperSize = {
+    widthMm: Math.max(rawPaperSize.widthMm, 1),
+    heightMm: Math.max(rawPaperSize.heightMm, 1)
+  }
+  return { paperSize, slots: getPreviewSlots(paperSize, settings) }
 }
 
 function getPreviewSlots(
@@ -273,10 +335,12 @@ function getPreviewSlots(
 
 function DetailedSidePreview({
   side,
-  settings
+  settings,
+  sourceMap
 }: {
   side: BookletSide
   settings: SheetSettings
+  sourceMap: ReadonlyMap<string, BookletSource>
 }): JSX.Element {
   const rawPaperSize = getPrintSizeMm(settings)
   const paperSize = {
@@ -284,6 +348,7 @@ function DetailedSidePreview({
     heightMm: Math.max(rawPaperSize.heightMm, 1)
   }
   const slots = getPreviewSlots(paperSize, settings)
+  const creepAmountMm = getSheetCreepMm(side, settings.creep)
 
   return (
     <div className="grid min-h-[560px] grid-cols-1 gap-4 rounded-lg border bg-slate-100/70 p-4 xl:grid-cols-[minmax(0,1fr)_260px]">
@@ -293,8 +358,32 @@ function DetailedSidePreview({
           aspectRatio: `${paperSize.widthMm} / ${paperSize.heightMm}`
         }}
       >
-        <PreviewSlot slot={side.left} rect={slots.left} paperSize={paperSize} large />
-        <PreviewSlot slot={side.right} rect={slots.right} paperSize={paperSize} large />
+        <PreviewSlot
+          slot={side.left}
+          rect={slots.left}
+          paperSize={paperSize}
+          source={side.left.page.sourceId ? sourceMap.get(side.left.page.sourceId) : undefined}
+          scaleMode={settings.scaleMode}
+          creepTranslationMm={getSlotCreepTranslationMm(side, 'left', settings.creep)}
+          showCreepOverlay={settings.creep.enabled && settings.creep.showOverlay}
+          large
+        />
+        <PreviewSlot
+          slot={side.right}
+          rect={slots.right}
+          paperSize={paperSize}
+          source={side.right.page.sourceId ? sourceMap.get(side.right.page.sourceId) : undefined}
+          scaleMode={settings.scaleMode}
+          creepTranslationMm={getSlotCreepTranslationMm(side, 'right', settings.creep)}
+          showCreepOverlay={settings.creep.enabled && settings.creep.showOverlay}
+          large
+        />
+        {settings.creep.enabled && settings.creep.showOverlay ? (
+          <div
+            className="pointer-events-none absolute left-1/2 top-0 z-20 h-full border-l-2 border-dashed border-sky-500"
+            title="Saddle-stitch spine"
+          />
+        ) : null}
       </div>
       <div className="flex flex-col gap-3 rounded-md border bg-card p-4">
         <div>
@@ -306,6 +395,11 @@ function DetailedSidePreview({
         <div className="grid grid-cols-2 gap-3">
           <InfoBlock label="Left page" value={side.left.pageNumber} />
           <InfoBlock label="Right page" value={side.right.pageNumber} />
+          <InfoBlock
+            label="Physical sheet"
+            value={`${side.sheetNumber} / ${side.physicalSheetCount}`}
+          />
+          <InfoBlock label="Creep compensation" value={`${creepAmountMm.toFixed(2)} mm`} />
         </div>
       </div>
     </div>
@@ -318,7 +412,8 @@ function DetailedEmptySheetPreview({
   colorPickerOpen,
   onColorOpen,
   onColorClose,
-  onColorChange
+  onColorChange,
+  onDelete
 }: {
   item: EmptySheetBoardItem
   recentColors: string[]
@@ -326,6 +421,7 @@ function DetailedEmptySheetPreview({
   onColorOpen: () => void
   onColorClose: () => void
   onColorChange: (colorHex: string) => void
+  onDelete: () => void
 }): JSX.Element {
   return (
     <div className="grid min-h-[560px] grid-cols-1 gap-4 rounded-lg border bg-slate-100/70 p-4 xl:grid-cols-[minmax(0,1fr)_260px]">
@@ -349,6 +445,15 @@ function DetailedEmptySheetPreview({
           <Palette data-icon="inline-start" />
           Color
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={onDelete}
+        >
+          <Trash2 data-icon="inline-start" />
+          Delete this empty sheet
+        </Button>
         {colorPickerOpen && (
           <ColorPickerPopover
             colorHex={item.colorHex}
@@ -362,7 +467,7 @@ function DetailedEmptySheetPreview({
   )
 }
 
-function InfoBlock({ label, value }: { label: string; value: number }): JSX.Element {
+function InfoBlock({ label, value }: { label: string; value: number | string }): JSX.Element {
   return (
     <div className="rounded-md border bg-muted/30 p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
@@ -375,62 +480,86 @@ function PreviewSlot({
   slot,
   rect,
   paperSize,
+  source,
+  scaleMode,
+  creepTranslationMm = 0,
+  showCreepOverlay = false,
   large = false
 }: {
   slot: BookletSlot
   rect: Rect
   paperSize: { widthMm: number; heightMm: number }
+  source?: BookletSource
+  scaleMode: SheetSettings['scaleMode']
+  creepTranslationMm?: number
+  showCreepOverlay?: boolean
   large?: boolean
 }): JSX.Element {
   const page = slot.page
+  const [inspectionOpen, setInspectionOpen] = useState(false)
   const style = {
     left: `${(rect.x / paperSize.widthMm) * 100}%`,
     bottom: `${(rect.y / paperSize.heightMm) * 100}%`,
     width: `${(rect.width / paperSize.widthMm) * 100}%`,
     height: `${(rect.height / paperSize.heightMm) * 100}%`
   }
+  const artworkTranslationPercent =
+    page.sourceType === 'blank' || !Number.isFinite(creepTranslationMm)
+      ? 0
+      : (creepTranslationMm / Math.max(rect.width, 1)) * 100
 
   return (
-    <div
-      className="absolute flex items-center justify-center overflow-hidden border border-dashed border-slate-300 bg-slate-50"
-      style={style}
-    >
-      <PageArtwork page={page} />
+    <>
       <div
-        className={`absolute left-2 top-2 rounded bg-white/90 px-2 py-1 font-bold shadow-sm ${large ? 'text-sm' : 'text-xs'}`}
-      >
-        Page {slot.pageNumber}
-      </div>
-    </div>
-  )
-}
-
-function PageArtwork({ page }: { page: BookletPage }): JSX.Element {
-  if (page.sourceType === 'blank') {
-    const fillColor = getSolidFillHex(page.colorHex)
-
-    return (
-      <div
-        className="grid h-full w-full place-items-center text-sm font-semibold"
-        style={{
-          backgroundColor: fillColor,
-          color: getReadableTextColor(fillColor)
+        data-no-drag="true"
+        className="group/page absolute flex cursor-zoom-in items-center justify-center overflow-hidden border border-dashed border-slate-300 bg-slate-50 outline-none transition hover:ring-2 hover:ring-inset hover:ring-primary/70 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+        style={style}
+        role="button"
+        tabIndex={0}
+        title={`Double-click to inspect page ${slot.pageNumber}`}
+        aria-label={`Inspect page ${slot.pageNumber}`}
+        onDoubleClick={(event) => {
+          event.stopPropagation()
+          setInspectionOpen(true)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            setInspectionOpen(true)
+          }
         }}
       >
-        Blank
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ transform: `translateX(${artworkTranslationPercent}%)` }}
+        >
+          <BookletPageArtwork page={page} />
+        </div>
+        {showCreepOverlay ? (
+          <div className="pointer-events-none absolute inset-0 z-10 border border-rose-500/90">
+            <span className="absolute bottom-1 left-1 rounded bg-rose-600/90 px-1.5 py-0.5 text-[9px] font-semibold text-white">
+              Trim · {Math.abs(creepTranslationMm).toFixed(2)} mm toward spine
+            </span>
+          </div>
+        ) : null}
+        <div
+          className={`absolute left-2 top-2 rounded bg-white/90 px-2 py-1 font-bold shadow-sm ${large ? 'text-sm' : 'text-xs'}`}
+        >
+          Page {slot.pageNumber}
+        </div>
+        <div className="absolute bottom-2 right-2 grid size-7 place-items-center rounded-full bg-slate-950/75 text-white opacity-0 shadow transition-opacity group-hover/page:opacity-100 group-focus/page:opacity-100">
+          <ZoomIn className="size-4" aria-hidden="true" />
+        </div>
       </div>
-    )
-  }
-
-  if (page.thumbnailUrl) {
-    return (
-      <img
-        src={page.thumbnailUrl}
-        alt={page.displayName}
-        className="h-full w-full object-contain"
-      />
-    )
-  }
-
-  return <span className="text-sm font-semibold text-muted-foreground">Blank</span>
+      {inspectionOpen ? (
+        <PageInspectionDialog
+          page={page}
+          pageNumber={slot.pageNumber}
+          source={source}
+          scaleMode={scaleMode}
+          onClose={() => setInspectionOpen(false)}
+        />
+      ) : null}
+    </>
+  )
 }

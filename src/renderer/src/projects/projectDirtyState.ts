@@ -68,12 +68,34 @@ export function getHardcoverProjectStateKey(state: HardcoverProjectState): strin
         bytes: undefined,
         thumbnailDataUrl: undefined,
         backThumbnailDataUrl: undefined,
-        pagePreviews: undefined
+        pagePreviews: undefined,
+        frontSource: state.sourcePdf.frontSource
+          ? {
+              ...state.sourcePdf.frontSource,
+              thumbnailDataUrl: undefined,
+              pagePreviews: undefined
+            }
+          : undefined,
+        backSource: state.sourcePdf.backSource
+          ? {
+              ...state.sourcePdf.backSource,
+              thumbnailDataUrl: undefined,
+              pagePreviews: undefined
+            }
+          : undefined
       }
     : undefined
 
   return JSON.stringify({
     ...state,
+    content: {
+      ...state.content,
+      spine: {
+        ...state.content.spine,
+        // Auto-fit size is derived from the text and dimensions, not a user edit.
+        fontSizePt: state.content.spine.autoFit ? undefined : state.content.spine.fontSizePt
+      }
+    },
     sourcePdf
   })
 }
@@ -82,8 +104,18 @@ function omitSourceBytes<T extends { bytes: Uint8Array }>(
   value: T,
   omitPreview = false
 ): Record<string, unknown> {
-  const source = value as T & { bytesBase64?: string; previewUrl?: string }
-  const { bytes, bytesBase64: _bytesBase64, previewUrl: temporaryPreviewUrl, ...rest } = source
+  const source = value as T & {
+    bytesBase64?: string
+    previewUrl?: string
+    previewDataUrl?: string
+  }
+  const {
+    bytes,
+    bytesBase64: _bytesBase64,
+    previewUrl: temporaryPreviewUrl,
+    previewDataUrl: _previewDataUrl,
+    ...rest
+  } = source
 
   return {
     ...rest,

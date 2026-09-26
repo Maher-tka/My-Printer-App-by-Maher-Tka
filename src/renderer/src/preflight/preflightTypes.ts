@@ -4,6 +4,9 @@ export interface PreflightIssue {
   id: string
   severity: PreflightSeverity
   message: string
+  category?: 'document' | 'dimensions' | 'quality' | 'production' | 'output'
+  recommendation?: string
+  affectedItems?: string[]
 }
 
 export interface PreflightReport {

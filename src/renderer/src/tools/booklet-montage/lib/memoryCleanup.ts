@@ -43,8 +43,26 @@ export function isCanceledError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
 }
 
-export function yieldToUi(delayMs = 0): Promise<void> {
-  return new Promise((resolve) => {
-    globalThis.setTimeout(resolve, delayMs)
+export function yieldToUi(delayMs = 0, signal?: AbortSignal): Promise<void> {
+  assertNotCanceled(signal)
+
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (): void => {
+      if (settled) return
+      settled = true
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }
+    const onAbort = (): void => {
+      if (settled) return
+      settled = true
+      globalThis.clearTimeout(timeoutId)
+      signal?.removeEventListener('abort', onAbort)
+      reject(createCanceledError('Operation canceled.'))
+    }
+    const timeoutId = globalThis.setTimeout(finish, delayMs)
+
+    signal?.addEventListener('abort', onAbort, { once: true })
   })
 }

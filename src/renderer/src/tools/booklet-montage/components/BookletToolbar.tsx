@@ -15,6 +15,7 @@ import type { ReactNode } from 'react'
 import { useRef } from 'react'
 import { PdfFilePickerInput } from '@/components/file-input/PdfFilePickerInput'
 import { Button } from '@/components/ui/button'
+import { PrintButton } from '@/print/PrintButton'
 import type {
   BookletScaleMode,
   BookletViewMode,
@@ -25,12 +26,14 @@ import type {
   PaperSizeOption,
   SheetSettings
 } from '../types'
+import { getSimpleCreepToggleSettings } from '../lib/creepCompensation'
 import { ProgressLine } from './ProgressLine'
 
 interface BookletToolbarProps {
   settings: SheetSettings
   viewMode: BookletViewMode
   blanksNeeded: number
+  physicalSheetCount: number
   hasBoardItems: boolean
   canExport: boolean
   isBusy: boolean
@@ -46,6 +49,7 @@ interface BookletToolbarProps {
   onAddEmptySheet: () => void
   onResetSheetLayout: () => void
   onExportPdf: () => void
+  onPrintPdf: () => void
   onExportImages: (format: 'png' | 'jpg') => void
   onViewModeChange: (viewMode: BookletViewMode) => void
 }
@@ -71,6 +75,7 @@ export function BookletToolbar({
   settings,
   viewMode,
   blanksNeeded,
+  physicalSheetCount,
   hasBoardItems,
   canExport,
   isBusy,
@@ -86,6 +91,7 @@ export function BookletToolbar({
   onAddEmptySheet,
   onResetSheetLayout,
   onExportPdf,
+  onPrintPdf,
   onExportImages,
   onViewModeChange
 }: BookletToolbarProps): JSX.Element {
@@ -220,6 +226,17 @@ export function BookletToolbar({
           </div>
         </details>
 
+        <ToolbarCheckbox
+          label="Creep Compensation"
+          checked={settings.creep.enabled}
+          title="Shift inner-sheet artwork progressively toward the saddle-stitch spine."
+          onChange={(enabled) =>
+            onSettingsChange({
+              creep: getSimpleCreepToggleSettings(settings.creep, enabled, physicalSheetCount)
+            })
+          }
+        />
+
         <div className="flex rounded-md border bg-muted/40 p-1">
           {viewModes.map((mode) => {
             const Icon = mode.icon
@@ -268,6 +285,12 @@ export function BookletToolbar({
           <FileDown data-icon="inline-start" />
           Export PDF
         </Button>
+        <PrintButton
+          label="Print Booklet"
+          disabled={!canExport}
+          isBusy={isBusy}
+          onPrint={onPrintPdf}
+        />
         <Button
           type="button"
           variant="outline"
@@ -275,7 +298,16 @@ export function BookletToolbar({
           disabled={!canExport || isBusy}
         >
           <ImageDown data-icon="inline-start" />
-          Export Images
+          PNG Sheets
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onExportImages('jpg')}
+          disabled={!canExport || isBusy}
+        >
+          <ImageDown data-icon="inline-start" />
+          JPG Sheets
         </Button>
         {(importCanCancel || exportCanCancel) && (
           <Button
@@ -290,8 +322,14 @@ export function BookletToolbar({
       </div>
 
       <div className="mt-3 grid gap-2 lg:grid-cols-2">
-        <ProgressLine progress={importProgress} />
-        <ProgressLine progress={exportProgress} />
+        {importProgress.phase === 'idle' && exportProgress.phase === 'idle' ? (
+          <p className="text-sm text-muted-foreground">Ready for local PDF or image input.</p>
+        ) : (
+          <>
+            {importProgress.phase !== 'idle' && <ProgressLine progress={importProgress} />}
+            {exportProgress.phase !== 'idle' && <ProgressLine progress={exportProgress} />}
+          </>
+        )}
       </div>
 
       <PdfFilePickerInput ref={pdfInputRef} onFilesSelected={onImportPdf} />
@@ -366,14 +404,19 @@ function ToolbarNumber({
 function ToolbarCheckbox({
   label,
   checked,
+  title,
   onChange
 }: {
   label: string
   checked: boolean
+  title?: string
   onChange: (checked: boolean) => void
 }): JSX.Element {
   return (
-    <label className="flex h-10 items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium text-foreground">
+    <label
+      className="flex h-10 items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium text-foreground"
+      title={title}
+    >
       <input
         type="checkbox"
         checked={checked}

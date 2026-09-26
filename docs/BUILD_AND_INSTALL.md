@@ -2,7 +2,7 @@
 
 ## Prepare and verify
 
-Use Node.js 20 or newer on Windows, then run:
+Use Node.js 24 LTS or newer on Windows, then run:
 
 ```powershell
 npm install
@@ -28,17 +28,58 @@ Output is written to `release/`:
 
 The release candidate uses Electron's placeholder application icon until a final `.ico` asset is approved.
 
+## Publish version 0.1.0
+
+The production delivery channel is **GitHub Releases + the Windows Setup installer**. The tag workflow in `.github/workflows/release.yml` verifies, builds, and publishes the installer together with the `latest.yml` and blockmap files required by automatic updates.
+
+Before the first production release, configure these GitHub repository secrets:
+
+- `WIN_CSC_LINK` — the Windows code-signing certificate (`.pfx`) as a base64 value or secure download URL supported by electron-builder.
+- `WIN_CSC_KEY_PASSWORD` — the certificate password.
+
+Code signing is strongly recommended before distributing the installer to customers. It establishes the publisher identity and reduces Windows security warnings.
+
+To publish 0.1.0 after the release changes are committed on `main`:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The tag must exactly match the `version` in `package.json`. The workflow creates a GitHub Release containing the Setup EXE, `latest.yml`, and blockmap. Do not delete or rename those generated update files.
+
+Give new customers the **Setup EXE** from the GitHub Release. The Portable EXE is useful for testing but is not the automatic-update delivery channel.
+
+## Publish later updates
+
+For every release, first update both `package.json` and `package-lock.json`. For example, to prepare version 0.1.1 without creating a tag automatically:
+
+```powershell
+npm version 0.1.1 --no-git-tag-version
+npm run release:check
+git add package.json package-lock.json
+git commit -m "Release 0.1.1"
+git push origin main
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+Installed Setup builds check shortly after startup and every six hours. A newer version downloads in the background, then the app shows a Windows notification and a **Restart to update** button in **Settings**. That button asks the user to save any open project first. If the user simply closes the app, the downloaded update installs during the normal quit, after the existing unsaved-project prompt is resolved.
+
+Only publish a newer semantic version; replacing files on an old GitHub Release will not reliably trigger an update.
+
 ## Install on a shop PC
 
 1. Copy the Setup EXE to the Windows shop PC.
 2. Scan the file with the PC's antivirus.
 3. Run the installer, choose the installation folder, and allow desktop/Start Menu shortcuts.
-4. Start the app and open **App Health**. Confirm the version, App Data path, and performance preset.
-5. Select **Low-end PC** on older computers.
-6. Open **License**, paste a generated key, and select **Activate Locally**.
-7. Run the cases in `SHOP_TESTING_PLAN.md` before production work.
+4. Start the app. On first launch, create an account to start the 14-day trial, or select **Subscription** and paste a generated Pro/Shop key.
+5. Returning users sign in with the account created on that computer.
+6. Open **App Health**. Confirm the version, App Data path, and performance preset.
+7. Select **Low-end PC** on older computers.
+8. Run the cases in `SHOP_TESTING_PLAN.md` before production work.
 
-For a no-install trial, run the Portable EXE. Portable program files are standalone, but app data still uses the Windows user profile.
+For a no-install trial, run the Portable EXE. Portable program files are standalone, but app data still uses the Windows user profile. Portable builds must be replaced manually when a new version is released.
 
 ## Uninstall and reset
 

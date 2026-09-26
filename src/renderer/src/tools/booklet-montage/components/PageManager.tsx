@@ -17,15 +17,18 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { FilePlus2, FileText, GripVertical, Image, Palette, RotateCcw, Trash2 } from 'lucide-react'
-import { memo, useMemo, useState, type CSSProperties } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { getReadableTextColor, getSolidFillHex } from '../lib/colorUtils'
-import type { BookletPage } from '../types'
+import type { BookletPage, BookletSource, SheetSettings } from '../types'
 import { ColorPickerPopover } from './ColorPickerPopover'
+import { PageInspectionDialog } from './PageInspectionDialog'
 
 interface PageManagerProps {
   pages: BookletPage[]
+  sources: BookletSource[]
+  scaleMode: SheetSettings['scaleMode']
   selectedPageId: string | null
   blanksNeeded: number
   pageCountIsValid: boolean
@@ -36,11 +39,14 @@ interface PageManagerProps {
   onReorderPages: (activeId: string, overId: string | null) => void
   onResetOrder: (blankMode: 'keep' | 'remove') => void
   onDeletePage: (pageId: string) => void
+  onDeleteSource: (sourceId: string) => void
   onBlankPageColorChange: (pageId: string, colorHex: string) => void
 }
 
-export function PageManager({
+export const PageManager = memo(function PageManager({
   pages,
+  sources,
+  scaleMode,
   selectedPageId,
   blanksNeeded,
   pageCountIsValid,
@@ -51,10 +57,21 @@ export function PageManager({
   onReorderPages,
   onResetOrder,
   onDeletePage,
+  onDeleteSource,
   onBlankPageColorChange
 }: PageManagerProps): JSX.Element {
   const [activePageId, setActivePageId] = useState<string | null>(null)
   const [colorPickerPageId, setColorPickerPageId] = useState<string | null>(null)
+  const [inspectedPage, setInspectedPage] = useState<{
+    page: BookletPage
+    pageNumber: number
+  } | null>(null)
+  const toggleColorPicker = useCallback((pageId: string): void => {
+    setColorPickerPageId((current) => (current === pageId ? null : pageId))
+  }, [])
+  const inspectPage = useCallback((page: BookletPage, pageNumber: number): void => {
+    setInspectedPage({ page, pageNumber })
+  }, [])
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 2 }
@@ -64,11 +81,18 @@ export function PageManager({
     })
   )
   const pageIds = useMemo(() => pages.map((page) => page.id), [pages])
+  const sourceMap = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources])
   const selectedPage = selectedPageId ? pages.find((page) => page.id === selectedPageId) : null
   const activePage = activePageId ? pages.find((page) => page.id === activePageId) : null
   const colorPickerPage = colorPickerPageId
     ? pages.find((page) => page.id === colorPickerPageId && page.sourceType === 'blank')
     : null
+
+  useEffect(() => {
+    if (inspectedPage && !pages.some((page) => page.id === inspectedPage.page.id)) {
+      setInspectedPage(null)
+    }
+  }, [inspectedPage, pages])
 
   return (
     <section className="rounded-lg border bg-card p-4" data-page-order-panel="true">
@@ -95,6 +119,57 @@ export function PageManager({
           Booklet page count must be divisible by 4. Add blank pages before export.
         </div>
       )}
+
+      {sources.length > 0 ? (
+        <div className="mt-3 rounded-md border bg-muted/20 p-3">
+          <div className="mb-2">
+            <h4 className="text-sm font-semibold">Imported artwork and PDF files</h4>
+            <p className="text-xs text-muted-foreground">
+              Remove a mistaken import together with all pages created from it.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {sources.map((source) => {
+              const sourcePageCount = pages.filter((page) => page.sourceId === source.id).length
+              const SourceIcon = source.kind === 'image' ? Image : FileText
+
+              return (
+                <div
+                  key={source.id}
+                  className="flex min-w-0 items-center gap-2 rounded-md border bg-background p-2"
+                >
+                  <SourceIcon className="size-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium" title={source.name}>
+                      {source.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {sourcePageCount} {sourcePageCount === 1 ? 'page' : 'pages'} ·{' '}
+                      {formatFileSize(source.bytes.byteLength)}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    title={`Delete ${source.name}`}
+                    aria-label={`Delete imported file ${source.name}`}
+                    onClick={() => {
+                      const confirmed = window.confirm(
+                        `Delete “${source.name}” and its ${sourcePageCount} ${sourcePageCount === 1 ? 'page' : 'pages'}?`
+                      )
+                      if (confirmed) onDeleteSource(source.id)
+                    }}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
@@ -150,9 +225,8 @@ export function PageManager({
                 selected={page.id === selectedPageId}
                 onSelectPage={onSelectPage}
                 onDeletePage={onDeletePage}
-                onToggleColorPicker={(pageId) =>
-                  setColorPickerPageId((current) => (current === pageId ? null : pageId))
-                }
+                onToggleColorPicker={toggleColorPicker}
+                onInspectPage={inspectPage}
               />
             ))}
           </div>
@@ -180,9 +254,20 @@ export function PageManager({
           </div>
         </div>
       )}
+      {inspectedPage ? (
+        <PageInspectionDialog
+          page={inspectedPage.page}
+          pageNumber={inspectedPage.pageNumber}
+          source={
+            inspectedPage.page.sourceId ? sourceMap.get(inspectedPage.page.sourceId) : undefined
+          }
+          scaleMode={scaleMode}
+          onClose={() => setInspectedPage(null)}
+        />
+      ) : null}
     </section>
   )
-}
+})
 
 const SortablePageCard = memo(function SortablePageCard({
   page,
@@ -190,7 +275,8 @@ const SortablePageCard = memo(function SortablePageCard({
   selected,
   onSelectPage,
   onDeletePage,
-  onToggleColorPicker
+  onToggleColorPicker,
+  onInspectPage
 }: {
   page: BookletPage
   index: number
@@ -198,6 +284,7 @@ const SortablePageCard = memo(function SortablePageCard({
   onSelectPage: (pageId: string) => void
   onDeletePage: (pageId: string) => void
   onToggleColorPicker: (pageId: string) => void
+  onInspectPage: (page: BookletPage, pageNumber: number) => void
 }): JSX.Element {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: page.id
@@ -269,7 +356,7 @@ const SortablePageCard = memo(function SortablePageCard({
         </Button>
       </div>
 
-      <BlankOrThumbnailPreview page={page} />
+      <BlankOrThumbnailPreview page={page} onInspect={() => onInspectPage(page, index + 1)} />
 
       <div className="mt-2 min-w-0">
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -292,14 +379,35 @@ const SortablePageCard = memo(function SortablePageCard({
   )
 })
 
-function BlankOrThumbnailPreview({ page }: { page: BookletPage }): JSX.Element {
+function BlankOrThumbnailPreview({
+  page,
+  onInspect
+}: {
+  page: BookletPage
+  onInspect?: () => void
+}): JSX.Element {
   const fillColor = getSolidFillHex(page.colorHex)
   const textColor = getReadableTextColor(fillColor)
 
   return (
     <div
-      className="aspect-[3/4] overflow-hidden rounded-md border bg-white"
+      className={`aspect-[3/4] overflow-hidden rounded-md border bg-white ${onInspect ? 'cursor-zoom-in transition hover:ring-2 hover:ring-primary/60' : ''}`}
       style={page.sourceType === 'blank' ? { backgroundColor: fillColor } : undefined}
+      title={onInspect ? 'Double-click to inspect this page' : undefined}
+      role={onInspect ? 'button' : undefined}
+      tabIndex={onInspect ? 0 : undefined}
+      aria-label={onInspect ? `Inspect ${getPageLabel(page)}` : undefined}
+      onDoubleClick={(event) => {
+        if (!onInspect) return
+        event.stopPropagation()
+        onInspect()
+      }}
+      onKeyDown={(event) => {
+        if (!onInspect || (event.key !== 'Enter' && event.key !== ' ')) return
+        event.preventDefault()
+        event.stopPropagation()
+        onInspect()
+      }}
     >
       {page.thumbnailUrl ? (
         <img
@@ -358,4 +466,10 @@ function getPageLabel(page: BookletPage): string {
   }
 
   return page.label || 'Blank Page'
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }

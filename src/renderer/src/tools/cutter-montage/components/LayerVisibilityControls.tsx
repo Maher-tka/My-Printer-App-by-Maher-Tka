@@ -33,6 +33,16 @@ export function LayerVisibilityControls({
           onChange={(showGrid) => onSettingsChange({ showGrid })}
         />
         <LayerToggle
+          label="Safe area"
+          checked={settings.showSafeArea !== false}
+          onChange={(showSafeArea) => onSettingsChange({ showSafeArea })}
+        />
+        <LayerToggle
+          label="Roll edge guides"
+          checked={settings.showRollGuides !== false}
+          onChange={(showRollGuides) => onSettingsChange({ showRollGuides })}
+        />
+        <LayerToggle
           label="Snap to grid"
           checked={settings.snapToGrid}
           onChange={(snapToGrid) => onSettingsChange({ snapToGrid })}

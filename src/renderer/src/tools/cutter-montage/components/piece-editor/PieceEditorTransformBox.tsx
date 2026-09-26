@@ -6,6 +6,9 @@ export type TransformHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' 
 interface PieceEditorTransformBoxProps {
   objects: EditorObject[]
   scale: number
+  onMovePointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
+  onMovePointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void
+  onMovePointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void
   onHandlePointerDown: (
     event: ReactPointerEvent<HTMLButtonElement>,
     handle: TransformHandle,
@@ -34,6 +37,9 @@ const handles: Array<{
 export function PieceEditorTransformBox({
   objects,
   scale,
+  onMovePointerDown,
+  onMovePointerMove,
+  onMovePointerUp,
   onHandlePointerDown,
   onHandlePointerMove,
   onHandlePointerUp
@@ -43,18 +49,21 @@ export function PieceEditorTransformBox({
 
   return (
     <div
-      className="pointer-events-none absolute z-40 border border-primary"
+      className="absolute z-40 cursor-move touch-none border border-primary"
       style={{
         left: bounds.xCm * scale,
         top: bounds.yCm * scale,
         width: bounds.widthCm * scale,
         height: bounds.heightCm * scale
       }}
+      onPointerDown={onMovePointerDown}
+      onPointerMove={onMovePointerMove}
+      onPointerUp={onMovePointerUp}
     >
       <div className="absolute left-1/2 top-[-24px] h-6 border-l border-primary" />
       <button
         type="button"
-        className="pointer-events-auto absolute left-1/2 top-[-30px] size-3 -translate-x-1/2 rounded-full border border-white bg-primary shadow"
+        className="absolute left-1/2 top-[-30px] size-3 -translate-x-1/2 rounded-full border border-white bg-primary shadow"
         style={{ cursor: 'grab' }}
         aria-label="Rotate selection"
         onPointerDown={(event) => onHandlePointerDown(event, 'rotate', bounds)}
@@ -65,7 +74,7 @@ export function PieceEditorTransformBox({
         <button
           key={handle}
           type="button"
-          className="pointer-events-auto absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-white bg-primary shadow"
+          className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-white bg-primary shadow"
           style={{ left, top, cursor }}
           aria-label={`Resize selection ${handle}`}
           onPointerDown={(event) => onHandlePointerDown(event, handle, bounds)}

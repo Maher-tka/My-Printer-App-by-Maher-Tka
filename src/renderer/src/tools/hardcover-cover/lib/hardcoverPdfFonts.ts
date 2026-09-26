@@ -16,9 +16,7 @@ export interface HardcoverPdfFonts {
 let cachedFontBytes: Promise<Uint8Array> | undefined
 let cachedBoldFontBytes: Promise<Uint8Array> | undefined
 
-export async function embedHardcoverPdfFonts(
-  document: PDFDocument
-): Promise<HardcoverPdfFonts> {
+export async function embedHardcoverPdfFonts(document: PDFDocument): Promise<HardcoverPdfFonts> {
   document.registerFontkit(fontkit)
   const [regularFontBytes, boldFontBytes] = await Promise.all([
     loadRegularHardcoverFontBytes(),

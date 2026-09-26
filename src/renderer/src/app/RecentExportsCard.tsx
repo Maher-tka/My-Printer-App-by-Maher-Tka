@@ -16,17 +16,19 @@ export function RecentExportsCard({
     void window.printerApp?.runtime.listExports().then((items) => setExports(items.slice(0, 5)))
   }, [])
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between gap-3">
-        <CardTitle className="flex items-center gap-2">
-          <History className="size-5 text-primary" />
+    <Card className="overflow-hidden">
+      <CardHeader className="flex-row items-center justify-between gap-3 border-b bg-muted/25 px-5 py-4">
+        <CardTitle className="flex items-center gap-3">
+          <span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary">
+            <History className="size-4" aria-hidden="true" />
+          </span>
           Recent Exports
         </CardTitle>
         <Button type="button" variant="ghost" size="sm" onClick={() => onNavigate('exports')}>
           View all
         </Button>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2">
+      <CardContent className="flex flex-col gap-2 p-5">
         {exports.length === 0 && (
           <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
             Exports saved by any tool will appear here.
@@ -35,7 +37,7 @@ export function RecentExportsCard({
         {exports.map((entry) => (
           <div
             key={entry.id}
-            className="flex items-center justify-between gap-3 rounded-md border p-3"
+            className="flex items-center justify-between gap-3 rounded-xl border bg-muted/15 p-3 transition-colors hover:bg-accent/35"
           >
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{entry.projectName}</p>

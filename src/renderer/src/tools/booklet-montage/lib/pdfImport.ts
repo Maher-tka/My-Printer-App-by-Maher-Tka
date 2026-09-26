@@ -10,19 +10,31 @@ import {
   releasePageThumbnails,
   resetCanvas
 } from './memoryCleanup'
-import { loadPdfDocument, normalizePdfError, type PDFPageProxy } from './pdfWorker'
+import {
+  destroyPdfDocument,
+  loadPdfDocument,
+  normalizePdfError,
+  type PDFPageProxy
+} from './pdfWorker'
 import { pdfThumbnailRenderQueue, syncRenderQueueConcurrency, yieldAfterChunk } from './renderQueue'
-import { canvasToThumbnailBlob, getOrCreateThumbnailUrl } from './thumbnailCache'
+import {
+  DEFAULT_INITIAL_THUMBNAIL_PAGE_LIMIT,
+  canvasToThumbnailBlob,
+  getInitialThumbnailPageIndexes,
+  getOrCreateThumbnailUrl
+} from './thumbnailCache'
 import { pointsToMm } from './units'
 
 export { loadPdfDocument } from './pdfWorker'
 
-interface PdfImportOptions {
+export interface PdfImportOptions {
   signal?: AbortSignal
+  initialThumbnailLimit?: number
 }
 
 const LARGE_PDF_SIZE_BYTES = 50 * 1024 * 1024
 const LARGE_PDF_PAGE_COUNT = 50
+export const DEFAULT_PDF_IMPORT_THUMBNAIL_LIMIT = DEFAULT_INITIAL_THUMBNAIL_PAGE_LIMIT
 
 export async function importPdfFile(
   file: File,
@@ -59,55 +71,48 @@ export async function importPdfFile(
     assertNotCanceled(signal)
 
     pdf = await loadPdfDocument(bytes, signal)
-    warning = warning ?? getLargePdfWarning(file.size, pdf.numPages)
+    const pageCount = pdf.numPages
+    const thumbnailIndexes = getInitialThumbnailPageIndexes(
+      pageCount,
+      options.initialThumbnailLimit ?? DEFAULT_PDF_IMPORT_THUMBNAIL_LIMIT
+    )
+    const thumbnailIndexSet = new Set(thumbnailIndexes)
+    const deferredThumbnailCount = pageCount - thumbnailIndexes.length
+
+    warning = appendWarning(warning, getLargePdfWarning(file.size, pageCount))
+    warning = appendWarning(
+      warning,
+      getDeferredThumbnailWarning(thumbnailIndexes.length, pageCount)
+    )
 
     reportProgress(onProgress, {
       phase: 'reading',
       current: 0,
-      total: pdf.numPages,
-      message: `PDF loaded: ${pdf.numPages} pages`,
+      total: pageCount,
+      message:
+        deferredThumbnailCount > 0
+          ? `PDF loaded: ${pageCount} pages; preparing ${thumbnailIndexes.length} initial thumbnails`
+          : `PDF loaded: ${pageCount} pages`,
       warning
     })
 
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    let thumbnailAttempts = 0
+
+    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
       assertNotCanceled(signal)
       reportProgress(onProgress, {
         phase: 'loading-page',
         current: pageNumber,
-        total: pdf.numPages,
-        message: `Loading page ${pageNumber} of ${pdf.numPages}`,
+        total: pageCount,
+        message: `Loading page ${pageNumber} of ${pageCount}`,
         warning
       })
 
-      const page = await pdf.getPage(pageNumber)
-      const viewport = page.getViewport({ scale: 1 })
-
-      reportProgress(onProgress, {
-        phase: 'generating-thumbnails',
-        current: pageNumber,
-        total: pdf.numPages,
-        message: `Generating thumbnails ${pageNumber} of ${pdf.numPages}`,
-        warning
-      })
-
+      let page: PDFPageProxy | undefined
       try {
-        const thumbnailUrl = await pdfThumbnailRenderQueue.run(
-          () =>
-            renderPdfThumbnail(
-              `${sourceId}:${pageNumber - 1}:thumbnail:${thumbnailMaxSize}:${thumbnailQuality}`,
-              page,
-              {
-                maxWidth: thumbnailMaxSize,
-                maxHeight: Math.round(thumbnailMaxSize * 1.45),
-                quality: thumbnailQuality,
-                signal
-              }
-            ),
-          signal,
-          pageNumber <= 12 ? 10 : 0
-        )
-
-        pages.push({
+        page = await pdf.getPage(pageNumber)
+        const viewport = page.getViewport({ scale: 1 })
+        const importedPage: ImportedPagesResult['pages'][number] = {
           id: createStableId('page'),
           kind: 'pdf',
           sourceType: 'pdf',
@@ -122,29 +127,70 @@ export async function importPdfFile(
           importBatchIndex: pageNumber - 1,
           label: `PDF Page ${pageNumber}`,
           displayName: `${file.name} - Page ${pageNumber}`,
-          thumbnailUrl,
           widthMm: pointsToMm(viewport.width),
           heightMm: pointsToMm(viewport.height)
-        })
+        }
+
+        pages.push(importedPage)
+
+        if (thumbnailIndexSet.has(pageNumber - 1)) {
+          thumbnailAttempts += 1
+          reportProgress(onProgress, {
+            phase: 'generating-thumbnails',
+            current: thumbnailAttempts,
+            total: thumbnailIndexes.length,
+            message: `Generating initial thumbnails ${thumbnailAttempts} of ${thumbnailIndexes.length} (page ${pageNumber} of ${pageCount})`,
+            warning
+          })
+
+          try {
+            importedPage.thumbnailUrl = await pdfThumbnailRenderQueue.run(
+              () =>
+                renderPdfThumbnail(
+                  `${sourceId}:${pageNumber - 1}:thumbnail:${thumbnailMaxSize}:${thumbnailQuality}`,
+                  page as PDFPageProxy,
+                  {
+                    maxWidth: thumbnailMaxSize,
+                    maxHeight: Math.round(thumbnailMaxSize * 1.45),
+                    quality: thumbnailQuality,
+                    signal
+                  }
+                ),
+              signal,
+              pageNumber <= 12 ? 10 : 0
+            )
+          } catch (error) {
+            if (isCanceledError(error)) {
+              throw error
+            }
+
+            warning = appendWarning(
+              warning,
+              `Page ${pageNumber} thumbnail could not be generated; the page remains available for on-demand preview.`
+            )
+          }
+        }
       } catch (error) {
         if (isCanceledError(error)) {
           throw error
         }
 
-        throw new Error(`Failed to render page ${pageNumber}. ${getErrorMessage(error)}`)
+        throw new Error(`Failed to load page ${pageNumber}. ${getErrorMessage(error)}`)
       } finally {
-        page.cleanup()
+        page?.cleanup()
       }
 
       await yieldAfterChunk(pageNumber, batchSize)
-      pdf.cleanup()
+      if (pageNumber % batchSize === 0 || pageNumber === pageCount) {
+        pdf.cleanup()
+      }
     }
 
     reportProgress(onProgress, {
       phase: 'done',
-      current: pdf.numPages,
-      total: pdf.numPages,
-      message: `Done: imported ${pdf.numPages} PDF pages`,
+      current: pageCount,
+      total: pageCount,
+      message: `Done: imported ${pageCount} PDF pages (${thumbnailIndexes.length} initial thumbnails ready)`,
       warning
     })
 
@@ -156,7 +202,7 @@ export async function importPdfFile(
           name: file.name,
           mimeType: 'application/pdf',
           bytes,
-          pageCount: pdf.numPages
+          pageCount
         }
       ],
       pages
@@ -170,7 +216,7 @@ export async function importPdfFile(
 
     throw normalizePdfError(error)
   } finally {
-    await pdf?.destroy()
+    await destroyPdfDocument(pdf)
   }
 }
 
@@ -243,10 +289,29 @@ function getLargePdfWarning(fileSize: number, pageCount?: number): string | unde
     fileSize >= LARGE_PDF_SIZE_BYTES ||
     (pageCount !== undefined && pageCount >= LARGE_PDF_PAGE_COUNT)
   ) {
-    return 'Large PDF detected. Import may take longer. The app will process it in batches.'
+    return 'Large PDF detected. Page metadata is loaded in order and thumbnail work is bounded.'
   }
 
   return undefined
+}
+
+function getDeferredThumbnailWarning(
+  thumbnailCount: number,
+  pageCount: number
+): string | undefined {
+  if (thumbnailCount >= pageCount) {
+    return undefined
+  }
+
+  return `Only ${thumbnailCount} of ${pageCount} page thumbnails are generated during import; remaining pages render on demand.`
+}
+
+function appendWarning(current: string | undefined, next: string | undefined): string | undefined {
+  if (!next || current?.includes(next)) {
+    return current
+  }
+
+  return current ? `${current} ${next}` : next
 }
 
 function reportProgress(

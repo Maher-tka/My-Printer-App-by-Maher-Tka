@@ -20,8 +20,8 @@ export function ToolAccessOverlay({
   const Icon = isChecking ? ShieldCheck : LockKeyhole
 
   return (
-    <div className="mx-auto grid min-h-[620px] max-w-[1680px] place-items-center rounded-xl border bg-muted/40 p-6">
-      <Card className="w-full max-w-xl shadow-panel">
+    <div className="mx-auto grid min-h-[620px] max-w-[1680px] place-items-center rounded-3xl border bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.12),_transparent_55%),hsl(var(--muted)/0.45)] p-6">
+      <Card className="w-full max-w-xl shadow-elevated">
         <CardHeader className="items-center text-center">
           <div className="mb-2 grid size-14 place-items-center rounded-full bg-amber-100 text-amber-700">
             <Icon className="size-7" aria-hidden="true" />
@@ -38,7 +38,7 @@ export function ToolAccessOverlay({
             Back to Dashboard
           </Button>
           <Button type="button" onClick={onManageLicense} disabled={isChecking}>
-            Manage License
+            Manage Subscription
           </Button>
         </CardContent>
       </Card>

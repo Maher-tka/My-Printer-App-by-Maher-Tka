@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import {
   formatDate,
   formatDateTime,
@@ -83,16 +84,16 @@ export function LicensePage({
   }
 
   return (
-    <div className="mx-auto flex max-w-[1200px] flex-col gap-6">
+    <div className="workspace-shell mx-auto flex max-w-[1200px] flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
         <Button
           variant="ghost"
           className="w-fit"
-          onClick={() => onNavigate('dashboard')}
+          onClick={() => onNavigate('settings')}
           type="button"
         >
           <ArrowLeft data-icon="inline-start" />
-          Back to Dashboard
+          Back to Settings
         </Button>
         {isDeveloperMode && (
           <Button
@@ -115,12 +116,12 @@ export function LicensePage({
         </Button>
       </div>
 
-      <Card>
-        <CardHeader className="flex-row items-start justify-between gap-4">
+      <Card className="overflow-hidden">
+        <CardHeader className="flex-row items-start justify-between gap-4 border-b bg-muted/25">
           <div className="flex flex-col gap-1.5">
-            <CardTitle className="text-xl">License Status</CardTitle>
+            <CardTitle className="text-xl">Access &amp; Subscription Status</CardTitle>
             <CardDescription>
-              Local trial and offline serial activation for this workstation.
+              Local trial and offline subscription-key activation for this workstation.
             </CardDescription>
           </div>
           <Badge variant={tone}>
@@ -194,22 +195,22 @@ export function LicensePage({
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <Card>
           <CardHeader>
-            <CardTitle>Activate Serial Key</CardTitle>
+            <CardTitle>Activate Subscription Key</CardTitle>
             <CardDescription>
-              Serial keys are checked locally and stored on this machine.
+              Subscription keys are checked locally and stored on this machine.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-foreground" htmlFor="serial-key">
-                  Serial Key
+                  Subscription Key
                 </label>
-                <input
+                <Input
                   id="serial-key"
                   value={serialKey}
                   onChange={(event) => setSerialKey(normalizeSerialInput(event.target.value))}
-                  className="h-11 rounded-md border border-input bg-card px-3 font-mono text-sm uppercase tracking-normal text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/20"
+                  className="h-11 font-mono uppercase tracking-normal"
                   placeholder="MPTK-PRO-LIFE-ABC123-SIGNATURE"
                   autoComplete="off"
                   spellCheck={false}
@@ -219,7 +220,7 @@ export function LicensePage({
               <div className="flex flex-wrap items-center gap-3">
                 <Button disabled={isActivating} type="submit">
                   <KeyRound data-icon="inline-start" />
-                  {isActivating ? 'Activating' : 'Activate Locally'}
+                  {isActivating ? 'Activating' : 'Activate Subscription'}
                 </Button>
                 <Button
                   variant="outline"

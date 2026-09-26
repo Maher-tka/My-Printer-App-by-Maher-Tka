@@ -1,4 +1,12 @@
-import { memo, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent
+} from 'react'
 import type {
   ArtworkTransform,
   EditorObject,
@@ -6,10 +14,16 @@ import type {
   MaskShape,
   PiecePreset
 } from '../../types'
+import { appendPenPoint, normalizePenPath, type PenPoint } from '../../lib/penPath'
 import { syncLegacyFieldsFromObjects } from '../../lib/pieceModelSync'
+import { getShapeDrawTransform, translateDraftShape } from '../../lib/shapeDraw'
+import { MaskedArtwork } from '../MaskedArtwork'
+import { isSelectableLayerObject } from '../../lib/editorLayers'
+import { getNormalizedShapePath } from '../../lib/shapeGeometry'
 import { PieceEditorTransformBox, type TransformHandle } from './PieceEditorTransformBox'
 
 interface PieceEditorCanvasProps {
+  showTransparency?: boolean
   piece: PiecePreset
   scale: number
   tool: EditorTool
@@ -21,6 +35,7 @@ interface PieceEditorCanvasProps {
   onSelectObject: (id: string, additive: boolean) => void
   onSelectIds: (ids: string[]) => void
   onContextMenuOpen: (x: number, y: number) => void
+  onKeyDown: (event: ReactKeyboardEvent<HTMLDivElement>) => void
 }
 
 interface DragState {
@@ -32,6 +47,15 @@ interface DragState {
   handle?: TransformHandle
   bounds: ArtworkTransform
   objects: EditorObject[]
+  historyCheckpointed: boolean
+}
+
+interface PanState {
+  pointerId: number
+  startX: number
+  startY: number
+  startScrollLeft: number
+  startScrollTop: number
 }
 
 interface MarqueeState {
@@ -45,6 +69,7 @@ interface MarqueeState {
 }
 
 export const PieceEditorCanvas = memo(function PieceEditorCanvas({
+  showTransparency = false,
   piece,
   scale,
   tool,
@@ -55,10 +80,13 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
   onTransformStart,
   onSelectObject,
   onSelectIds,
-  onContextMenuOpen
+  onContextMenuOpen,
+  onKeyDown
 }: PieceEditorCanvasProps): JSX.Element {
   const artboardRef = useRef<HTMLDivElement>(null)
+  const viewportRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
+  const panRef = useRef<PanState | null>(null)
   const frameRef = useRef<number | null>(null)
   const latestPieceRef = useRef(piece)
   latestPieceRef.current = piece
@@ -71,27 +99,122 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
     pointerId: number
     startX: number
     startY: number
+    lastX: number
+    lastY: number
     shape: MaskShape
+    transform: ArtworkTransform
   } | null>(null)
+  const spacePressedRef = useRef(false)
+  const penRef = useRef<{ pointerId: number; points: PenPoint[] } | null>(null)
+  const [draftPenPoints, setDraftPenPoints] = useState<PenPoint[] | null>(null)
+  const [isPanning, setIsPanning] = useState(false)
   const selectedObjects = useMemo(
-    () => piece.objects.filter((object) => piece.selectedObjectIds.includes(object.id)),
-    [piece.objects, piece.selectedObjectIds]
+    () =>
+      piece.objects.filter(
+        (object) =>
+          piece.selectedObjectIds.includes(object.id) && isSelectableLayerObject(piece, object)
+      ),
+    [piece]
   )
+
+  useEffect(() => {
+    dragRef.current = null
+    panRef.current = null
+    setIsPanning(false)
+    if (tool !== 'line') {
+      penRef.current = null
+      setDraftPenPoints(null)
+    }
+    if (!isShapeTool(tool)) {
+      drawRef.current = null
+      setDraftShape(null)
+      spacePressedRef.current = false
+    }
+  }, [tool])
+
+  useEffect(() => {
+    const isCanvasFocused = (): boolean => {
+      const viewport = viewportRef.current
+      const activeElement = document.activeElement
+      return Boolean(
+        viewport &&
+        activeElement &&
+        (activeElement === viewport || viewport.contains(activeElement))
+      )
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const draw = drawRef.current
+      const isShapeModifier = event.code === 'Space' || event.key === 'Alt'
+      if (!isShapeModifier || !draw || !isCanvasFocused()) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.code === 'Space' && draw.shape === 'ellipse') spacePressedRef.current = true
+    }
+    const onKeyUp = (event: KeyboardEvent): void => {
+      const isShapeModifier = event.code === 'Space' || event.key === 'Alt'
+      if (!isShapeModifier) return
+      if (drawRef.current && isCanvasFocused()) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      if (event.code === 'Space') spacePressedRef.current = false
+    }
+    const onWindowBlur = (): void => {
+      spacePressedRef.current = false
+      dragRef.current = null
+      panRef.current = null
+      setIsPanning(false)
+      setMarquee(null)
+      drawRef.current = null
+      penRef.current = null
+      setDraftShape(null)
+      setDraftPenPoints(null)
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current)
+        frameRef.current = null
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('keyup', onKeyUp, true)
+    window.addEventListener('blur', onWindowBlur)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('keyup', onKeyUp, true)
+      window.removeEventListener('blur', onWindowBlur)
+    }
+  }, [])
 
   return (
     <div
-      className="flex min-h-[560px] items-center justify-center overflow-auto rounded-lg border bg-slate-100 p-12"
+      ref={viewportRef}
+      tabIndex={0}
+      aria-label="Piece editor canvas"
+      className={`flex min-h-0 min-w-0 flex-1 items-start justify-start overflow-auto rounded-lg border bg-slate-100 p-6 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${isPanning ? 'cursor-grabbing' : tool === 'pan' ? 'cursor-grab' : ''}`}
       style={{
         backgroundImage: showGrid
           ? 'linear-gradient(0deg,rgba(148,163,184,0.20)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.20)_1px,transparent_1px)'
           : undefined,
         backgroundSize: `${Math.max(scale * 0.5, 8)}px ${Math.max(scale * 0.5, 8)}px`
       }}
+      onKeyDown={onKeyDown}
+      onPointerDown={beginViewportPointerDown}
+      onPointerMove={movePan}
+      onPointerUp={endPan}
+      onPointerCancel={cancelPointerInteraction}
     >
       <div
         ref={artboardRef}
-        className="relative shrink-0 bg-white shadow-md"
-        style={{ width: piece.widthCm * scale, height: piece.heightCm * scale }}
+        className="relative m-auto shrink-0 bg-white shadow-md"
+        style={{
+          width: piece.widthCm * scale,
+          height: piece.heightCm * scale,
+          ...(showTransparency
+            ? {
+                backgroundImage: 'conic-gradient(#e2e8f0 25%, white 0 50%, #e2e8f0 0 75%, white 0)',
+                backgroundSize: '16px 16px'
+              }
+            : {})
+        }}
         onContextMenu={(event) => {
           event.preventDefault()
           onContextMenuOpen(event.clientX, event.clientY)
@@ -99,24 +222,28 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
         onPointerDown={beginMarquee}
         onPointerMove={moveMarquee}
         onPointerUp={endMarquee}
+        onPointerCancel={cancelPointerInteraction}
       >
-        {piece.objects.map((object) => (
-          <CanvasObject
-            key={object.id}
-            object={object}
-            piece={piece}
-            scale={scale}
-            selected={piece.selectedObjectIds.includes(object.id)}
-            isKey={piece.keyObjectId === object.id}
-            onPointerDown={(event) => beginMove(event, object)}
-            onPointerMove={moveTransform}
-            onPointerUp={endTransform}
-          />
-        ))}
+        <div className="pointer-events-none absolute inset-0 isolate">
+          {piece.objects.map((object) => (
+            <CanvasObject
+              key={object.id}
+              object={object}
+              piece={piece}
+              scale={scale}
+              selected={piece.selectedObjectIds.includes(object.id)}
+              isKey={piece.keyObjectId === object.id}
+              onPointerDown={(event) => beginMove(event, object)}
+              onPointerMove={moveTransform}
+              onPointerUp={endTransform}
+            />
+          ))}
+        </div>
 
         {draftShape ? (
           <ShapePreview shape={draftShape.shape} transform={draftShape.transform} scale={scale} />
         ) : null}
+        {draftPenPoints ? <PenPathPreview points={draftPenPoints} scale={scale} /> : null}
         {marquee ? (
           <div
             className="pointer-events-none absolute z-50 border border-primary bg-primary/10"
@@ -133,15 +260,25 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
           <PieceEditorTransformBox
             objects={selectedObjects}
             scale={scale}
+            onMovePointerDown={beginSelectionMove}
+            onMovePointerMove={moveTransform}
+            onMovePointerUp={endTransform}
             onHandlePointerDown={beginHandleTransform}
             onHandlePointerMove={moveTransform}
             onHandlePointerUp={endTransform}
           />
         ) : null}
 
-        {isShapeTool(tool) ? (
+        {tool === 'line' ? (
           <div
-            className="absolute inset-0 z-30 cursor-crosshair"
+            className="absolute inset-0 z-30 touch-none cursor-crosshair"
+            onPointerDown={beginPenDraw}
+            onPointerMove={movePenDraw}
+            onPointerUp={endPenDraw}
+          />
+        ) : isShapeTool(tool) ? (
+          <div
+            className="absolute inset-0 z-30 touch-none cursor-crosshair"
             onPointerDown={beginShapeDraw}
             onPointerMove={moveShapeDraw}
             onPointerUp={endShapeDraw}
@@ -151,32 +288,89 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
     </div>
   )
 
+  function beginViewportPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
+    viewportRef.current?.focus({ preventScroll: true })
+    if (tool !== 'pan' || panRef.current) return
+    event.preventDefault()
+    const viewport = viewportRef.current
+    if (!viewport) return
+    panRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startScrollLeft: viewport.scrollLeft,
+      startScrollTop: viewport.scrollTop
+    }
+    setIsPanning(true)
+    viewport.setPointerCapture(event.pointerId)
+  }
+
+  function movePan(event: ReactPointerEvent<HTMLDivElement>): void {
+    const pan = panRef.current
+    const viewport = viewportRef.current
+    if (!pan || !viewport || pan.pointerId !== event.pointerId) return
+    event.preventDefault()
+    viewport.scrollLeft = pan.startScrollLeft - (event.clientX - pan.startX)
+    viewport.scrollTop = pan.startScrollTop - (event.clientY - pan.startY)
+  }
+
+  function endPan(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (panRef.current?.pointerId !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    panRef.current = null
+    setIsPanning(false)
+  }
+
+  function cancelPointerInteraction(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    dragRef.current = null
+    panRef.current = null
+    setIsPanning(false)
+    setMarquee(null)
+    drawRef.current = null
+    penRef.current = null
+    setDraftShape(null)
+    setDraftPenPoints(null)
+    spacePressedRef.current = false
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current)
+      frameRef.current = null
+    }
+  }
+
   function beginMove(event: ReactPointerEvent<HTMLElement>, object: EditorObject): void {
-    if (tool !== 'select' || object.locked) return
+    if (tool !== 'select' || !isSelectableLayerObject(piece, object)) return
+    viewportRef.current?.focus({ preventScroll: true })
     event.preventDefault()
     event.stopPropagation()
     const isAlreadySelected = piece.selectedObjectIds.includes(object.id)
-    if (event.shiftKey && isAlreadySelected) {
-      onSelectObject(object.id, true)
-      return
-    }
     const groupedIds = object.groupId
       ? piece.objects
-          .filter((candidate) => candidate.groupId === object.groupId)
+          .filter(
+            (candidate) =>
+              candidate.groupId === object.groupId && isSelectableLayerObject(piece, candidate)
+          )
           .map((candidate) => candidate.id)
       : [object.id]
+    const additive = event.shiftKey || event.ctrlKey || event.metaKey
+    if (additive && groupedIds.every((id) => piece.selectedObjectIds.includes(id))) {
+      if (groupedIds.length === 1) onSelectObject(object.id, true)
+      else onSelectIds(piece.selectedObjectIds.filter((id) => !groupedIds.includes(id)))
+      return
+    }
     const ids =
-      isAlreadySelected && !event.shiftKey
+      isAlreadySelected && !additive
         ? piece.selectedObjectIds
-        : event.shiftKey
+        : additive
           ? Array.from(new Set([...piece.selectedObjectIds, ...groupedIds]))
           : groupedIds
     onSelectIds(ids)
     const objects = piece.objects.filter(
-      (candidate) => ids.includes(candidate.id) && !candidate.locked
+      (candidate) => ids.includes(candidate.id) && isSelectableLayerObject(piece, candidate)
     )
     const bounds = getBounds(objects)
-    onTransformStart(piece)
     dragRef.current = {
       mode: 'move',
       pointerId: event.pointerId,
@@ -184,7 +378,28 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
       startY: event.clientY,
       startAngle: 0,
       bounds,
-      objects: objects.map(cloneObject)
+      objects: objects.map(cloneObject),
+      historyCheckpointed: false
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  function beginSelectionMove(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (tool !== 'select') return
+    viewportRef.current?.focus({ preventScroll: true })
+    event.preventDefault()
+    event.stopPropagation()
+    const objects = getTransformObjects(piece, selectedObjects)
+    if (objects.length === 0) return
+    dragRef.current = {
+      mode: 'move',
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startAngle: 0,
+      bounds: getBounds(objects),
+      objects: objects.map(cloneObject),
+      historyCheckpointed: false
     }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -194,11 +409,11 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
     handle: TransformHandle,
     bounds: ArtworkTransform
   ): void {
+    viewportRef.current?.focus({ preventScroll: true })
     event.preventDefault()
     event.stopPropagation()
-    const objects = selectedObjects.filter((object) => !object.locked).map(cloneObject)
+    const objects = getTransformObjects(piece, selectedObjects).map(cloneObject)
     if (objects.length === 0) return
-    onTransformStart(piece)
     const centerX = bounds.xCm * scale + (bounds.widthCm * scale) / 2
     const centerY = bounds.yCm * scale + (bounds.heightCm * scale) / 2
     const artboardRect = artboardRef.current?.getBoundingClientRect()
@@ -212,7 +427,8 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
       startAngle: Math.atan2(localY - centerY, localX - centerX),
       handle,
       bounds,
-      objects
+      objects,
+      historyCheckpointed: false
     }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -221,7 +437,13 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
     event.preventDefault()
-    schedulePieceChange(getTransformedPiece(event, drag))
+    const nextPiece = getTransformedPiece(event, drag)
+    if (!hasTransformChanges(drag.objects, nextPiece)) return
+    if (!drag.historyCheckpointed) {
+      onTransformStart(latestPieceRef.current)
+      drag.historyCheckpointed = true
+    }
+    schedulePieceChange(nextPiece)
   }
 
   function endTransform(event: ReactPointerEvent<HTMLElement>): void {
@@ -346,7 +568,10 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
       height: marquee.height / scale
     }
     const ids = piece.objects
-      .filter((object) => object.visible && intersects(selection, object.transform))
+      .filter(
+        (object) =>
+          isSelectableLayerObject(piece, object) && intersects(selection, object.transform)
+      )
       .map((object) => object.id)
     onSelectIds(event.shiftKey ? Array.from(new Set([...piece.selectedObjectIds, ...ids])) : ids)
     if (event.currentTarget.hasPointerCapture(event.pointerId))
@@ -356,6 +581,8 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
 
   function beginShapeDraw(event: ReactPointerEvent<HTMLDivElement>): void {
     if (!isShapeTool(tool)) return
+    viewportRef.current?.focus({ preventScroll: true })
+    event.preventDefault()
     const point = localPoint(event)
     const shape =
       tool === 'ellipse'
@@ -363,28 +590,71 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
         : tool === 'rounded-rectangle'
           ? 'rounded-rectangle'
           : 'rectangle'
-    drawRef.current = { pointerId: event.pointerId, startX: point.xCm, startY: point.yCm, shape }
-    setDraftShape({
+    const transform = {
+      xCm: point.xCm,
+      yCm: point.yCm,
+      widthCm: 0,
+      heightCm: 0,
+      rotation: 0
+    }
+    drawRef.current = {
+      pointerId: event.pointerId,
+      startX: point.xCm,
+      startY: point.yCm,
+      lastX: point.xCm,
+      lastY: point.yCm,
       shape,
-      transform: { xCm: point.xCm, yCm: point.yCm, widthCm: 0, heightCm: 0, rotation: 0 }
-    })
+      transform
+    }
+    setDraftShape({ shape, transform })
     event.currentTarget.setPointerCapture(event.pointerId)
   }
 
   function moveShapeDraw(event: ReactPointerEvent<HTMLDivElement>): void {
     const draw = drawRef.current
     if (!draw || draw.pointerId !== event.pointerId) return
+    event.preventDefault()
+    const point = localPoint(event)
+    if (draw.shape === 'ellipse' && spacePressedRef.current) {
+      const transform = translateDraftShape(
+        draw.transform,
+        point.xCm - draw.lastX,
+        point.yCm - draw.lastY
+      )
+      drawRef.current = {
+        ...draw,
+        startX: draw.startX + point.xCm - draw.lastX,
+        startY: draw.startY + point.yCm - draw.lastY,
+        lastX: point.xCm,
+        lastY: point.yCm,
+        transform
+      }
+      setDraftShape({ shape: draw.shape, transform })
+      return
+    }
+    const transform = getShapeDrawTransform(
+      draw,
+      point,
+      event.shiftKey,
+      draw.shape === 'ellipse' && event.altKey
+    )
+    drawRef.current = { ...draw, lastX: point.xCm, lastY: point.yCm, transform }
     setDraftShape({
       shape: draw.shape,
-      transform: drawTransform(draw, localPoint(event), event.shiftKey)
+      transform
     })
   }
 
   function endShapeDraw(event: ReactPointerEvent<HTMLDivElement>): void {
     const draw = drawRef.current
     if (!draw || draw.pointerId !== event.pointerId) return
-    const transform = drawTransform(draw, localPoint(event), event.shiftKey)
+    event.preventDefault()
+    const point = localPoint(event)
+    const transform = spacePressedRef.current
+      ? draw.transform
+      : getShapeDrawTransform(draw, point, event.shiftKey, draw.shape === 'ellipse' && event.altKey)
     drawRef.current = null
+    spacePressedRef.current = false
     setDraftShape(null)
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId)
@@ -419,11 +689,76 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
     )
   }
 
-  function localPoint(event: ReactPointerEvent<HTMLElement>): { xCm: number; yCm: number } {
+  function beginPenDraw(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (tool !== 'line') return
+    event.preventDefault()
+    const points = [localPoint(event, false)]
+    penRef.current = { pointerId: event.pointerId, points }
+    setDraftPenPoints(points)
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  function movePenDraw(event: ReactPointerEvent<HTMLDivElement>): void {
+    const pen = penRef.current
+    if (!pen || pen.pointerId !== event.pointerId) return
+    event.preventDefault()
+    const points = appendPenPoint(pen.points, localPoint(event, false))
+    if (points === pen.points) return
+    penRef.current = { ...pen, points }
+    setDraftPenPoints(points)
+  }
+
+  function endPenDraw(event: ReactPointerEvent<HTMLDivElement>): void {
+    const pen = penRef.current
+    if (!pen || pen.pointerId !== event.pointerId) return
+    event.preventDefault()
+    const points = appendPenPoint(pen.points, localPoint(event, false))
+    const path = normalizePenPath(points, piece.widthCm, piece.heightCm)
+    penRef.current = null
+    setDraftPenPoints(null)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    if (!path) return
+
+    const id = createObjectId('pen')
+    const helperNumber = piece.objects.filter((object) => object.role === 'helper').length + 1
+    const helper: EditorObject = {
+      id,
+      type: 'helper-shape',
+      role: 'helper',
+      shapeType: 'path',
+      name: `Pen Path ${helperNumber}`,
+      visible: true,
+      locked: false,
+      transform: path.transform,
+      fillColor: 'none',
+      strokeColor: '#7c3aed',
+      strokeWidthPt: 1,
+      pathData: path.pathData,
+      exportEnabled: false
+    }
+
+    onTransformStart(piece)
+    onPieceChange(
+      syncLegacyFieldsFromObjects({
+        ...piece,
+        objects: [...piece.objects, helper],
+        helperObjectIds: [...piece.helperObjectIds, id],
+        selectedObjectIds: [id],
+        keyObjectId: undefined
+      })
+    )
+  }
+
+  function localPoint(
+    event: ReactPointerEvent<HTMLElement>,
+    shouldSnap = snapToGrid
+  ): { xCm: number; yCm: number } {
     const rect = event.currentTarget.getBoundingClientRect()
     const xCm = (event.clientX - rect.left) / scale
     const yCm = (event.clientY - rect.top) / scale
-    return snapToGrid
+    return shouldSnap
       ? { xCm: Math.round(xCm * 10) / 10, yCm: Math.round(yCm * 10) / 10 }
       : { xCm, yCm }
   }
@@ -456,48 +791,80 @@ const CanvasObject = memo(function CanvasObject({
     width: transform.widthCm * scale,
     height: transform.heightCm * scale,
     transform: `rotate(${transform.rotation}deg)`,
-    transformOrigin: 'center',
-    zIndex:
-      object.role === 'cutline'
-        ? 20
-        : object.role === 'helper' || object.role === 'clipping-mask'
-          ? 10
-          : 1
+    transformOrigin: 'center'
   }
-  const ring = isKey ? 'ring-4 ring-amber-400' : selected ? 'ring-2 ring-primary' : ''
+  const selectable = isSelectableLayerObject(piece, object)
+  const ring = !selectable
+    ? ''
+    : isKey
+      ? 'ring-4 ring-amber-400'
+      : selected
+        ? 'ring-2 ring-primary'
+        : ''
+  const interactionClass = selectable ? 'pointer-events-auto' : 'pointer-events-none cursor-default'
   const handlers = { onPointerDown, onPointerMove, onPointerUp }
+  const activeMask = piece.clippingMaskEnabled ?? piece.mask.enabled
   if (object.shapeType === 'image') {
+    if (object.role === 'artwork' && activeMask) {
+      const mask = piece.objects.find(
+        (item) => item.id === piece.maskObjectId || item.role === 'clipping-mask'
+      )
+      if (mask)
+        return (
+          <MaskedArtwork
+            artwork={transform}
+            mask={mask}
+            src={piece.artwork.previewUrl || piece.previewUrl}
+            width={piece.widthCm}
+            height={piece.heightCm}
+          />
+        )
+    }
+
     return (
-      <img
-        src={piece.previewUrl}
-        alt={object.name}
-        draggable={false}
-        className={`absolute cursor-move select-none object-fill ${ring}`}
-        style={{
-          ...commonStyle,
-          clipPath:
-            object.role === 'artwork' && piece.clippingMaskEnabled
-              ? getArtworkClipPath(piece, scale)
-              : undefined
-        }}
+      <div
+        className={`absolute cursor-move ${interactionClass} ${ring}`}
+        style={commonStyle}
         {...handlers}
-      />
+      >
+        <img
+          src={piece.artwork.previewUrl || piece.previewUrl}
+          alt={object.name}
+          draggable={false}
+          className="pointer-events-none absolute inset-0 size-full select-none object-fill"
+        />
+      </div>
     )
   }
   return (
     <div
-      className={`absolute cursor-move ${shapeClass(object.shapeType)} ${ring}`}
-      style={{
-        ...commonStyle,
-        border:
-          object.role === 'cutline'
-            ? `1.5px solid ${object.strokeColor ?? '#ff00ff'}`
-            : `1.5px dashed ${object.role === 'clipping-mask' ? '#0ea5e9' : '#8b5cf6'}`,
-        background: object.role === 'helper' ? 'rgba(139,92,246,0.1)' : 'transparent',
-        clipPath: object.shapeType === 'path' ? 'polygon(50% 0,100% 50%,50% 100%,0 50%)' : undefined
-      }}
+      className={`pointer-events-none absolute cursor-move ${ring}`}
+      style={commonStyle}
       {...handlers}
-    />
+    >
+      <svg
+        className="pointer-events-none size-full overflow-visible"
+        viewBox="0 0 1 1"
+        preserveAspectRatio="none"
+        aria-label={object.name}
+      >
+        <path
+          d={getNormalizedShapePath(object, transform.widthCm, transform.heightCm)}
+          fill={object.role === 'helper' && object.fillColor !== 'none' ? 'transparent' : 'none'}
+          stroke="transparent"
+          strokeWidth={Math.max(6, ((object.strokeWidthPt ?? 0.25) * scale * 2.54) / 72)}
+          vectorEffect="non-scaling-stroke"
+          style={{ pointerEvents: selectable ? 'visiblePainted' : 'none' }}
+        />
+        <path
+          d={getNormalizedShapePath(object, transform.widthCm, transform.heightCm)}
+          fill={object.role === 'helper' ? (object.fillColor ?? 'rgba(139,92,246,0.1)') : 'none'}
+          stroke={object.strokeColor ?? '#8b5cf6'}
+          strokeWidth={Math.max(0.5, ((object.strokeWidthPt ?? 0.25) * scale * 2.54) / 72)}
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+    </div>
   )
 })
 
@@ -524,20 +891,19 @@ function ShapePreview({
   )
 }
 
-function getArtworkClipPath(piece: PiecePreset, scale: number): string {
-  const artwork = piece.artwork.transform
-  const mask = piece.mask.transform
-  const left = (mask.xCm - artwork.xCm) * scale
-  const top = (mask.yCm - artwork.yCm) * scale
-  const width = mask.widthCm * scale
-  const height = mask.heightCm * scale
-  if (piece.mask.shape === 'ellipse')
-    return `ellipse(${width / 2}px ${height / 2}px at ${left + width / 2}px ${top + height / 2}px)`
-  if (piece.mask.shape === 'custom-polygon')
-    return `polygon(${left + width / 2}px ${top}px,${left + width}px ${top + height / 2}px,${left + width / 2}px ${top + height}px,${left}px ${top + height / 2}px)`
-  const right = Math.max(artwork.widthCm * scale - left - width, 0)
-  const bottom = Math.max(artwork.heightCm * scale - top - height, 0)
-  return `inset(${Math.max(top, 0)}px ${right}px ${bottom}px ${Math.max(left, 0)}px round ${piece.mask.shape === 'rounded-rectangle' ? `${Math.min(width, height) * 0.08}px` : '0'})`
+function PenPathPreview({ points, scale }: { points: PenPoint[]; scale: number }): JSX.Element {
+  return (
+    <svg className="pointer-events-none absolute inset-0 z-40 size-full overflow-visible">
+      <polyline
+        points={points.map((point) => `${point.xCm * scale},${point.yCm * scale}`).join(' ')}
+        fill="none"
+        stroke="#7c3aed"
+        strokeWidth="0.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
 }
 
 function resizeBounds(
@@ -574,23 +940,6 @@ function resizeBounds(
   return { xCm: left, yCm: top, widthCm: width, heightCm: height, rotation: 0 }
 }
 
-function drawTransform(
-  draw: { startX: number; startY: number },
-  point: { xCm: number; yCm: number },
-  square: boolean
-): ArtworkTransform {
-  let width = Math.abs(point.xCm - draw.startX)
-  let height = Math.abs(point.yCm - draw.startY)
-  if (square) width = height = Math.max(width, height)
-  return {
-    xCm: point.xCm < draw.startX ? draw.startX - width : draw.startX,
-    yCm: point.yCm < draw.startY ? draw.startY - height : draw.startY,
-    widthCm: width,
-    heightCm: height,
-    rotation: 0
-  }
-}
-
 function getBounds(objects: EditorObject[]): ArtworkTransform {
   if (objects.length === 0) return { xCm: 0, yCm: 0, widthCm: 0, heightCm: 0, rotation: 0 }
   const left = Math.min(...objects.map((object) => object.transform.xCm))
@@ -602,6 +951,38 @@ function getBounds(objects: EditorObject[]): ArtworkTransform {
     ...objects.map((object) => object.transform.yCm + object.transform.heightCm)
   )
   return { xCm: left, yCm: top, widthCm: right - left, heightCm: bottom - top, rotation: 0 }
+}
+
+function getTransformObjects(piece: PiecePreset, selectedObjects: EditorObject[]): EditorObject[] {
+  const selectedIds = new Set(selectedObjects.map((object) => object.id))
+  const selectedGroupIds = new Set(
+    selectedObjects
+      .map((object) => object.groupId)
+      .filter((groupId): groupId is string => Boolean(groupId))
+  )
+  return piece.objects.filter(
+    (object) =>
+      isSelectableLayerObject(piece, object) &&
+      (selectedIds.has(object.id) ||
+        Boolean(
+          !piece.maskEditingEnabled && object.groupId && selectedGroupIds.has(object.groupId)
+        ))
+  )
+}
+
+function hasTransformChanges(objects: EditorObject[], piece: PiecePreset): boolean {
+  const nextById = new Map(piece.objects.map((object) => [object.id, object]))
+  return objects.some((object) => {
+    const next = nextById.get(object.id)
+    if (!next) return false
+    return (
+      Math.abs(next.transform.xCm - object.transform.xCm) > 0.0001 ||
+      Math.abs(next.transform.yCm - object.transform.yCm) > 0.0001 ||
+      Math.abs(next.transform.widthCm - object.transform.widthCm) > 0.0001 ||
+      Math.abs(next.transform.heightCm - object.transform.heightCm) > 0.0001 ||
+      Math.abs(next.transform.rotation - object.transform.rotation) > 0.0001
+    )
+  })
 }
 
 function intersects(

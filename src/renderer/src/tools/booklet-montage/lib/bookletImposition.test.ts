@@ -266,6 +266,8 @@ function bookletPages(count: number): BookletPage[] {
 async function testMarksDisabledByDefault(): Promise<void> {
   const side: BookletSide = {
     sheetNumber: 1,
+    physicalSheetIndex: 0,
+    physicalSheetCount: 1,
     side: 'front',
     left: { pageNumber: 4, page: createBlankPage(1) },
     right: { pageNumber: 1, page: createBlankPage(2) }

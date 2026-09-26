@@ -39,7 +39,7 @@ export function LicenseStatusCard({
           </div>
           <div className="flex flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium text-muted-foreground">License Status</p>
+              <p className="text-sm font-medium text-muted-foreground">Access Status</p>
               <Badge variant={tone}>
                 {isLoading && !licenseState
                   ? 'Checking'
@@ -66,7 +66,7 @@ export function LicenseStatusCard({
           type="button"
         >
           <KeyRound data-icon="inline-start" />
-          {licenseState?.mode === 'activated' ? 'Manage License' : 'Activate Serial Key'}
+          {licenseState?.mode === 'activated' ? 'Manage Subscription' : 'Activate Subscription'}
         </Button>
       </CardContent>
     </Card>

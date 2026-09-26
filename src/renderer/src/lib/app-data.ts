@@ -2,6 +2,16 @@ import type { PrinterTool } from '@/types/tools'
 
 export const printerTools: PrinterTool[] = [
   {
+    id: 'sequential-number',
+    route: 'sequential-number',
+    title: 'Sequential Number',
+    shortTitle: 'Sequential Number',
+    description: 'Number tickets, invoices, and forms with cut-stack order and aligned backs',
+    status: 'active',
+    accent: 'blue',
+    requiredFeature: 'paid-tools'
+  },
+  {
     id: 'booklet-montage',
     route: 'booklet-montage',
     title: 'Booklet Montage',

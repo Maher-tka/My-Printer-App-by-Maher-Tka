@@ -17,16 +17,20 @@ export function CoverMockupPreview({
           <h3 className="font-semibold">Customer mockup</h3>
           <p className="text-sm text-muted-foreground">Lightweight approval preview.</p>
         </div>
-        <select
-          className="rounded-md border bg-background px-2 py-1 text-sm"
-          value={state.mockupMode}
-          onChange={(event) => onModeChange(event.target.value as CoverMockupMode)}
-        >
-          <option value="flat">Flat sheet</option>
-          <option value="folded">Folded hardcover</option>
-          <option value="spine">Spine check</option>
-          <option value="front">Front cover</option>
-        </select>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <span className="sr-only">Mockup view</span>
+          <select
+            aria-label="Mockup view"
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+            value={state.mockupMode}
+            onChange={(event) => onModeChange(event.target.value as CoverMockupMode)}
+          >
+            <option value="flat">Flat sheet</option>
+            <option value="folded">Folded hardcover</option>
+            <option value="spine">Spine check</option>
+            <option value="front">Front cover</option>
+          </select>
+        </label>
       </div>
       <div className="mt-4 overflow-hidden rounded-lg bg-muted p-6">
         <div

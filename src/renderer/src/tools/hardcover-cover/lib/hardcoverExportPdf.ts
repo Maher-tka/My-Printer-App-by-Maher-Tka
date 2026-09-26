@@ -1,6 +1,11 @@
 import {
   PDFDocument,
+  clip,
   degrees,
+  endPath,
+  popGraphicsState,
+  pushGraphicsState,
+  rectangle,
   rgb,
   type PDFEmbeddedPage,
   type PDFImage,
@@ -8,17 +13,33 @@ import {
   type PDFFont
 } from 'pdf-lib'
 import { safeFileName } from '@/lib/fileNaming'
-import type { BatchStudent, HardcoverProjectState } from '../types'
+import type {
+  BatchStudent,
+  HardcoverPdfCoverSource,
+  HardcoverPdfFitMode,
+  HardcoverPdfPagePosition,
+  HardcoverProjectState
+} from '../types'
+import { applyStudent } from './batchStudent'
 import { calculateCoverDimensions } from './coverCalculations'
+import { normalizePdfPagePosition } from './pdfPosition'
 import { embedHardcoverPdfFonts, type HardcoverPdfFonts } from './hardcoverPdfFonts'
 import { preparePdfDisplayText } from './pdfText'
+import { getHardcoverPdfCoverSourceBytes } from './sourcePdf'
+import { getSpineBackgroundFill } from './spineBackground'
 import { calculateSpineTextLayout } from './spineTextLayout'
 import { wrapTextByCharacters } from './textFit'
 import { mmToPoints } from './units'
 
 interface EmbeddedSourcePages {
-  front?: PDFEmbeddedPage
-  back?: PDFEmbeddedPage
+  front?: EmbeddedSourcePage
+  back?: EmbeddedSourcePage
+}
+
+interface EmbeddedSourcePage {
+  page: PDFEmbeddedPage
+  fitMode: HardcoverPdfFitMode
+  position: HardcoverPdfPagePosition
 }
 
 export async function exportHardcoverPdf(state: HardcoverProjectState): Promise<{
@@ -43,34 +64,7 @@ export async function exportHardcoverBatchPdf(
   return buildHardcoverPdf(states)
 }
 
-export function applyStudent(
-  state: HardcoverProjectState,
-  student: BatchStudent
-): HardcoverProjectState {
-  const academicYear =
-    student.year.trim() || state.content.spine.year.trim() || state.content.front.academicYear
-
-  return {
-    ...state,
-    content: {
-      ...state.content,
-      front: {
-        ...state.content.front,
-        studentName: student.studentName,
-        title: student.title,
-        department: student.department,
-        supervisor: student.supervisor,
-        academicYear
-      },
-      spine: {
-        ...state.content.spine,
-        studentName: student.studentName,
-        shortTitle: student.spineTitle || student.title,
-        year: academicYear
-      }
-    }
-  }
-}
+export { applyStudent } from './batchStudent'
 
 async function buildHardcoverPdf(states: HardcoverProjectState[]): Promise<Uint8Array> {
   const document = await PDFDocument.create()
@@ -109,21 +103,23 @@ async function drawCoverPage(
     height: page.getHeight(),
     color: sourcePages.front ? rgb(1, 1, 1) : background
   })
-  drawPhysicalAreas(page, state, dimensions, sourcePages.front ? undefined : accent)
+  drawPhysicalAreas(page, state, dimensions)
 
   if (sourcePages.front) {
     drawEmbeddedPdfPageInZone(
       page,
-      sourcePages.front,
+      sourcePages.front.page,
       dimensions.front,
-      state.sourcePdf?.fitMode ?? 'fit'
+      sourcePages.front.fitMode,
+      sourcePages.front.position
     )
     if (sourcePages.back) {
       drawEmbeddedPdfPageInZone(
         page,
-        sourcePages.back,
+        sourcePages.back.page,
         dimensions.back,
-        state.sourcePdf?.fitMode ?? 'fit'
+        sourcePages.back.fitMode,
+        sourcePages.back.position
       )
     }
     drawSpineText(page, state, dimensions, fonts.bold, spineTextColor)
@@ -262,6 +258,25 @@ async function embedSelectedSourcePages(
   const source = state.sourcePdf
 
   if (!source) return {}
+
+  if (source.sourceMode === 'separate' || source.frontSource || source.backSource) {
+    if (!source.frontSource) {
+      throw new Error('Upload the independent front-cover PDF before exporting this cover.')
+    }
+
+    const front = await embedIndependentSourcePage(document, source.frontSource, 'front')
+    let back: EmbeddedSourcePage | undefined
+
+    if (source.backCoverEnabled) {
+      if (!source.backSource) {
+        throw new Error('Upload the independent back-cover PDF before exporting this cover.')
+      }
+      back = await embedIndependentSourcePage(document, source.backSource, 'back')
+    }
+
+    return { front, back }
+  }
+
   if (!source.bytes) {
     throw new Error('Upload the memoire PDF again before exporting this saved hardcover project.')
   }
@@ -285,23 +300,56 @@ async function embedSelectedSourcePages(
       : undefined
 
   return {
-    front: await document.embedPage(frontPage),
-    back: backPage ? await document.embedPage(backPage) : undefined
+    front: {
+      page: await document.embedPage(frontPage),
+      fitMode: source.fitMode,
+      position: normalizePdfPagePosition(source.frontPosition)
+    },
+    back: backPage
+      ? {
+          page: await document.embedPage(backPage),
+          fitMode: source.fitMode,
+          position: normalizePdfPagePosition(source.backPosition)
+        }
+      : undefined
+  }
+}
+
+async function embedIndependentSourcePage(
+  document: PDFDocument,
+  source: HardcoverPdfCoverSource,
+  side: 'front' | 'back'
+): Promise<EmbeddedSourcePage> {
+  const bytes = getHardcoverPdfCoverSourceBytes(source)
+  if (!bytes || bytes.byteLength === 0) {
+    throw new Error(
+      `Re-upload the independent ${side}-cover PDF (${source.fileName}) before exporting this cover.`
+    )
+  }
+
+  const sourceDocument = await PDFDocument.load(bytes)
+  const pageCount = sourceDocument.getPageCount()
+  if (source.pageNumber < 1 || source.pageNumber > pageCount) {
+    throw new Error(
+      `Choose an independent ${side}-cover page between 1 and ${pageCount} for ${source.fileName}.`
+    )
+  }
+
+  return {
+    page: await document.embedPage(sourceDocument.getPage(source.pageNumber - 1)),
+    fitMode: source.fitMode,
+    position: normalizePdfPagePosition(source.position)
   }
 }
 
 function drawPhysicalAreas(
   page: PDFPage,
   state: HardcoverProjectState,
-  dimensions: ReturnType<typeof calculateCoverDimensions>,
-  manualAccent?: ReturnType<typeof rgb>
+  dimensions: ReturnType<typeof calculateCoverDimensions>
 ): void {
-  const bandColor = rgb(0.93, 0.95, 0.98)
-  const spineColor = state.sourcePdf ? rgb(0.96, 0.97, 0.98) : manualAccent
+  const spineFill = getSpineBackgroundFill(state)
 
-  drawZoneFill(page, dimensions.leftBand, bandColor, 0.9)
-  drawZoneFill(page, dimensions.rightBand, bandColor, 0.9)
-  if (spineColor) drawZoneFill(page, dimensions.spine, spineColor, state.sourcePdf ? 0.95 : 0.25)
+  if (spineFill.shouldDraw) drawZoneFill(page, dimensions.spine, parseHex(spineFill.color), 1)
 }
 
 function drawZoneFill(
@@ -324,10 +372,14 @@ function drawEmbeddedPdfPageInZone(
   page: PDFPage,
   embeddedPage: PDFEmbeddedPage,
   zone: { xMm: number; yMm: number; widthMm: number; heightMm: number },
-  fitMode: 'fit' | 'fill'
+  fitMode: 'fit' | 'fill',
+  position: HardcoverPdfPagePosition
 ): void {
   const zoneWidth = mmToPoints(zone.widthMm)
   const zoneHeight = mmToPoints(zone.heightMm)
+  const zoneX = mmToPoints(zone.xMm)
+  const zoneY = page.getHeight() - mmToPoints(zone.yMm) - zoneHeight
+  const normalizedPosition = normalizePdfPagePosition(position)
   const scale =
     fitMode === 'fill'
       ? Math.max(zoneWidth / embeddedPage.width, zoneHeight / embeddedPage.height)
@@ -335,12 +387,19 @@ function drawEmbeddedPdfPageInZone(
   const width = embeddedPage.width * scale
   const height = embeddedPage.height * scale
 
+  page.pushOperators(
+    pushGraphicsState(),
+    rectangle(zoneX, zoneY, zoneWidth, zoneHeight),
+    clip(),
+    endPath()
+  )
   page.drawPage(embeddedPage, {
-    x: mmToPoints(zone.xMm) + (zoneWidth - width) / 2,
-    y: page.getHeight() - mmToPoints(zone.yMm) - zoneHeight + (zoneHeight - height) / 2,
+    x: zoneX + (zoneWidth - width) / 2 + zoneWidth * (normalizedPosition.xPercent / 100),
+    y: zoneY + (zoneHeight - height) / 2 + zoneHeight * (normalizedPosition.yPercent / 100),
     width,
     height
   })
+  page.pushOperators(popGraphicsState())
 }
 
 function drawImageInZone(

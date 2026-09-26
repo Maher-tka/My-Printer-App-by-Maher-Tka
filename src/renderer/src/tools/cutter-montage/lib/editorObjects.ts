@@ -14,6 +14,8 @@ import {
   syncObjectsFromLegacyFields
 } from './pieceModelSync'
 
+const CURRENT_MASK_WORKFLOW_VERSION = 3 as const
+
 interface EditorSelectionSnapshot {
   selectedTypes?: EditorObjectType[]
   selectedObjectIds?: string[]
@@ -24,25 +26,26 @@ export function synchronizePieceEditorModel(
   piece: PiecePreset,
   selection: EditorSelectionSnapshot = {}
 ): PiecePreset {
-  const migrated = piece.objects?.length
-    ? normalizePiecePreset(piece)
-    : syncObjectsFromLegacyFields(piece)
+  const migrated =
+    piece.objectModelInitialized || piece.objects?.length
+      ? normalizePiecePreset(piece)
+      : syncObjectsFromLegacyFields(piece)
   const currentObjects = migrated.objects
-  const artwork = createOrUpdateObject(
-    findObjectByIdOrRole(currentObjects, piece.artworkObjectId, 'artwork'),
-    {
-      id: migrated.artworkObjectId || `artwork-${piece.id}`,
-      type: 'artwork',
-      shapeType: 'image',
-      role: 'artwork',
-      name: 'Artwork',
-      visible: migrated.objectVisibility.artwork,
-      locked: migrated.objectLocks.artwork,
-      transform: { ...migrated.artwork.transform },
-      sourceId: migrated.sourceId,
-      exportEnabled: true
-    }
-  )
+  const currentArtwork = findObjectByIdOrRole(currentObjects, piece.artworkObjectId, 'artwork')
+  const artwork = currentArtwork
+    ? createOrUpdateObject(currentArtwork, {
+        id: currentArtwork.id,
+        type: 'artwork',
+        shapeType: 'image',
+        role: 'artwork',
+        name: 'Artwork',
+        visible: migrated.objectVisibility.artwork,
+        locked: migrated.objectLocks.artwork,
+        transform: { ...migrated.artwork.transform },
+        sourceId: migrated.sourceId,
+        exportEnabled: true
+      })
+    : undefined
   const mask = migrated.mask.enabled
     ? createOrUpdateObject(
         findObjectByIdOrRole(currentObjects, piece.maskObjectId, 'clipping-mask'),
@@ -53,39 +56,42 @@ export function synchronizePieceEditorModel(
           role: 'clipping-mask',
           name: 'Clipping Mask',
           visible: migrated.objectVisibility.mask,
-          locked: migrated.objectLocks.mask,
+          locked: migrated.maskEditingEnabled
+            ? (currentObjects.find((object) => object.id === migrated.maskObjectId)?.locked ??
+              false)
+            : true,
           transform: { ...migrated.mask.transform },
           fillColor: 'transparent',
           exportEnabled: false
         }
       )
     : undefined
-  const cutline = createOrUpdateObject(
-    findObjectByIdOrRole(currentObjects, piece.cutlineObjectId, 'cutline'),
-    {
-      id: migrated.cutlineObjectId || `cutline-${piece.id}`,
-      type: 'cutline',
-      shapeType: cutlineShapeToEditorShape(migrated.cutline.shape),
-      role: 'cutline',
-      name: migrated.cutline.strokeName || CUT_CONTOUR_NAME,
-      visible: migrated.objectVisibility.cutline,
-      locked: migrated.objectLocks.cutline,
-      transform: {
-        xCm: migrated.cutline.transform.xCm,
-        yCm: migrated.cutline.transform.yCm,
-        widthCm: migrated.cutline.transform.widthCm,
-        heightCm: migrated.cutline.transform.heightCm,
-        rotation: migrated.cutline.transform.rotation
-      },
-      fillColor: 'none',
-      strokeColor: migrated.cutline.strokeColor || CUT_CONTOUR_COLOR,
-      strokeWidthPt: migrated.cutline.strokeWidthPt,
-      strokeName: migrated.cutline.strokeName || CUT_CONTOUR_NAME,
-      pathData: migrated.cutline.customPathData,
-      offsetMm: migrated.cutline.transform.offsetMm,
-      exportEnabled: true
-    }
-  )
+  const currentCutline = findObjectByIdOrRole(currentObjects, piece.cutlineObjectId, 'cutline')
+  const cutline = currentCutline
+    ? createOrUpdateObject(currentCutline, {
+        id: currentCutline.id,
+        type: 'cutline',
+        shapeType: cutlineShapeToEditorShape(migrated.cutline.shape),
+        role: 'cutline',
+        name: migrated.cutline.strokeName || CUT_CONTOUR_NAME,
+        visible: migrated.objectVisibility.cutline,
+        locked: migrated.objectLocks.cutline,
+        transform: {
+          xCm: migrated.cutline.transform.xCm,
+          yCm: migrated.cutline.transform.yCm,
+          widthCm: migrated.cutline.transform.widthCm,
+          heightCm: migrated.cutline.transform.heightCm,
+          rotation: migrated.cutline.transform.rotation
+        },
+        fillColor: 'none',
+        strokeColor: migrated.cutline.strokeColor || CUT_CONTOUR_COLOR,
+        strokeWidthPt: migrated.cutline.strokeWidthPt,
+        strokeName: migrated.cutline.strokeName || CUT_CONTOUR_NAME,
+        pathData: migrated.cutline.customPathData,
+        offsetMm: migrated.cutline.transform.offsetMm,
+        exportEnabled: true
+      })
+    : undefined
   const legacyHelperId = migrated.helperShape?.id
   const retainedHelpers = currentObjects.filter(
     (object) => object.role === 'helper' && object.id !== legacyHelperId
@@ -109,9 +115,15 @@ export function synchronizePieceEditorModel(
         }
       )
     : undefined
-  const objects = [artwork, mask, cutline, ...retainedHelpers, helper].filter(
+  const canonicalObjects = [artwork, mask, cutline, ...retainedHelpers, helper].filter(
     (object): object is EditorObject => Boolean(object)
   )
+  const canonicalById = new Map(canonicalObjects.map((object) => [object.id, object]))
+  // The object list is the layer stack. Keep its order and all additional
+  // contours/shapes while refreshing the legacy-backed canonical objects.
+  const objects = currentObjects.map((object) => canonicalById.get(object.id) ?? object)
+  const existingIds = new Set(objects.map((object) => object.id))
+  objects.push(...canonicalObjects.filter((object) => !existingIds.has(object.id)))
   const selectedObjectIds = selection.selectedObjectIds
     ? selection.selectedObjectIds.filter((id) => objects.some((object) => object.id === id))
     : selection.selectedTypes
@@ -137,9 +149,10 @@ export function synchronizePieceEditorModel(
   return syncLegacyFieldsFromObjects({
     ...migrated,
     objects,
-    artworkObjectId: artwork.id,
+    objectModelInitialized: true,
+    artworkObjectId: artwork?.id,
     maskObjectId: mask?.id,
-    cutlineObjectId: cutline.id,
+    cutlineObjectId: cutline?.id,
     helperObjectIds: objects
       .filter((object) => object.role === 'helper')
       .map((object) => object.id),
@@ -199,8 +212,10 @@ export function duplicateShapeAsCutline(object: EditorObject): EditorObject {
     name: CUT_CONTOUR_NAME,
     fillColor: 'none',
     strokeColor: CUT_CONTOUR_COLOR,
-    strokeWidthPt: object.strokeWidthPt ?? 0.25,
+    strokeWidthPt: object.role === 'cutline' ? (object.strokeWidthPt ?? 0.25) : 0.25,
+    offsetMm: 0,
     strokeName: CUT_CONTOUR_NAME,
+    locked: false,
     exportEnabled: true,
     groupId: undefined,
     transform: { ...object.transform }
@@ -215,25 +230,44 @@ export function makeClippingMaskFromSelection(
   const hasArtwork = piece.objects.some(
     (object) => selected.has(object.id) && object.role === 'artwork'
   )
-  const shape = [...piece.objects]
-    .reverse()
-    .find(
-      (object) =>
-        selected.has(object.id) &&
-        (object.role === 'helper' || object.role === 'clipping-mask') &&
-        object.shapeType !== 'image'
-    )
-  if (!hasArtwork || !shape) return piece
+  const artwork = piece.objects.find((object) => object.role === 'artwork')
+  const shape = getMaskSourceFromSelection(piece, selectedIds)
+  if (!hasArtwork || !shape || !artwork) return piece
+  const artworkLockBeforeMask = artwork.locked
 
+  const mask =
+    shape.role === 'cutline'
+      ? {
+          ...shape,
+          id: createObjectId('mask'),
+          type: 'mask' as const,
+          role: 'clipping-mask' as const,
+          name: 'Clipping Mask',
+          locked: true,
+          fillColor: 'none',
+          strokeColor: '#0ea5e9',
+          strokeName: undefined,
+          exportEnabled: false,
+          transform: { ...shape.transform }
+        }
+      : {
+          ...shape,
+          type: 'mask' as const,
+          role: 'clipping-mask' as const,
+          name: 'Clipping Mask',
+          locked: true,
+          exportEnabled: false
+        }
   const objects = piece.objects.map((object) => {
-    if (object.id === shape.id) {
+    if (object.id === artwork.id) {
       return {
         ...object,
-        type: 'mask' as const,
-        role: 'clipping-mask' as const,
-        name: 'Clipping Mask',
-        exportEnabled: false
+        locked: true,
+        transform: { ...object.transform }
       }
+    }
+    if (object.id === shape.id) {
+      return shape.role === 'cutline' ? object : mask
     }
     if (object.role === 'clipping-mask') {
       return {
@@ -241,19 +275,92 @@ export function makeClippingMaskFromSelection(
         type: 'helper-shape' as const,
         role: 'helper' as const,
         name: getNextHelperName(piece.objects),
+        locked: false,
         exportEnabled: false
       }
     }
     return object
   })
+  if (shape.role === 'cutline') objects.push(mask)
 
   return syncLegacyFieldsFromObjects({
     ...piece,
     objects,
-    maskObjectId: shape.id,
+    maskObjectId: mask.id,
     clippingMaskEnabled: true,
-    selectedObjectIds: [shape.id],
+    maskWorkflowVersion: CURRENT_MASK_WORKFLOW_VERSION,
+    artworkLockBeforeMask,
+    selectedObjectIds: [mask.id],
     keyObjectId: undefined
+  })
+}
+
+export function getMaskSourceFromSelection(
+  piece: PiecePreset,
+  selectedIds: string[] = piece.selectedObjectIds
+): EditorObject | undefined {
+  const selected = new Set(selectedIds)
+  return [...piece.objects]
+    .reverse()
+    .find(
+      (object) =>
+        selected.has(object.id) &&
+        (object.role === 'helper' ||
+          object.role === 'clipping-mask' ||
+          object.role === 'cutline') &&
+        object.shapeType !== 'image'
+    )
+}
+
+export function canMakeClippingMaskFromSelection(
+  piece: PiecePreset,
+  selectedIds: string[] = piece.selectedObjectIds
+): boolean {
+  if (piece.clippingMaskEnabled) return false
+  const selected = new Set(selectedIds)
+  return (
+    piece.objects.some((object) => selected.has(object.id) && object.role === 'artwork') &&
+    Boolean(getMaskSourceFromSelection(piece, selectedIds))
+  )
+}
+
+export function makeClippingMaskAndCutlineFromSelection(
+  piece: PiecePreset,
+  selectedIds: string[] = piece.selectedObjectIds
+): PiecePreset {
+  const masked = makeClippingMaskFromSelection(piece, selectedIds)
+  if (masked === piece || !masked.maskObjectId) return piece
+
+  const mask = masked.objects.find((object) => object.id === masked.maskObjectId)
+  if (!mask) return piece
+
+  const currentCutline =
+    masked.objects.find((object) => object.id === masked.cutlineObjectId) ??
+    masked.objects.find((object) => object.role === 'cutline')
+  const groupId = createObjectId('group')
+  const cutline = {
+    ...duplicateShapeAsCutline(mask),
+    id: currentCutline?.id ?? createObjectId('cutline'),
+    groupId
+  }
+  const objects = masked.objects
+    .filter((object) => object.role !== 'cutline' || object.id === currentCutline?.id)
+    .map((object) => {
+      if (object.id === mask.id) return { ...object, groupId }
+      if (object.id === currentCutline?.id) return cutline
+      return object
+    })
+
+  if (!currentCutline) objects.push(cutline)
+
+  return syncLegacyFieldsFromObjects({
+    ...masked,
+    objects,
+    cutlineObjectId: cutline.id,
+    selectedObjectIds: [mask.id, cutline.id],
+    keyObjectId: undefined,
+    groupLinked: true,
+    artworkCutlineGrouped: true
   })
 }
 
@@ -262,24 +369,67 @@ export function releaseClippingMask(piece: PiecePreset): PiecePreset {
     piece.objects.find((object) => object.id === piece.maskObjectId) ??
     piece.objects.find((object) => object.role === 'clipping-mask')
   if (!mask) return piece
+  const artwork =
+    piece.objects.find((object) => object.id === piece.artworkObjectId) ??
+    piece.objects.find((object) => object.role === 'artwork')
+  const artworkLock = piece.artworkLockBeforeMask ?? false
 
   return syncLegacyFieldsFromObjects({
     ...piece,
-    objects: piece.objects.map((object) =>
-      object.id === mask.id
-        ? {
-            ...object,
-            type: 'helper-shape' as const,
-            role: 'helper' as const,
-            name: getNextHelperName(piece.objects),
-            exportEnabled: false
-          }
-        : object
-    ),
+    objects: piece.objects.map((object) => {
+      if (object.id === mask.id) {
+        return {
+          ...object,
+          type: 'helper-shape' as const,
+          role: 'helper' as const,
+          name: getNextHelperName(piece.objects),
+          locked: false,
+          exportEnabled: false
+        }
+      }
+      if (artwork && object.id === artwork.id) {
+        return { ...object, locked: artworkLock }
+      }
+      return object
+    }),
     maskObjectId: undefined,
     clippingMaskEnabled: false,
+    artworkLockBeforeMask: undefined,
     selectedObjectIds: [mask.id],
     keyObjectId: undefined
+  })
+}
+
+export function deleteEditorObjects(piece: PiecePreset, objectIds: string[]): PiecePreset {
+  const deleting = new Set(objectIds)
+  if (!piece.objects.some((object) => deleting.has(object.id))) return piece
+
+  let objects = piece.objects.filter((object) => !deleting.has(object.id))
+  const groupCounts = new Map<string, number>()
+  for (const object of objects) {
+    if (object.groupId) groupCounts.set(object.groupId, (groupCounts.get(object.groupId) ?? 0) + 1)
+  }
+  objects = objects.map((object) =>
+    object.groupId && (groupCounts.get(object.groupId) ?? 0) < 2
+      ? { ...object, groupId: undefined }
+      : object
+  )
+
+  const artwork = objects.find((object) => object.role === 'artwork')
+  const mask = objects.find((object) => object.role === 'clipping-mask')
+  const cutline = objects.find((object) => object.role === 'cutline')
+  return syncLegacyFieldsFromObjects({
+    ...piece,
+    objects,
+    artworkObjectId: artwork?.id,
+    maskObjectId: mask?.id,
+    cutlineObjectId: cutline?.id,
+    clippingMaskEnabled: Boolean(mask && piece.clippingMaskEnabled),
+    selectedObjectIds: piece.selectedObjectIds.filter((id) => !deleting.has(id)),
+    keyObjectId:
+      piece.keyObjectId && deleting.has(piece.keyObjectId) ? undefined : piece.keyObjectId,
+    groupLinked: objects.some((object) => Boolean(object.groupId)),
+    artworkCutlineGrouped: objects.some((object) => Boolean(object.groupId))
   })
 }
 
@@ -414,7 +564,13 @@ export function getPrimaryObject(
 }
 
 function createOrUpdateObject(current: EditorObject | undefined, next: EditorObject): EditorObject {
-  return { ...current, ...next, id: current?.id ?? next.id, transform: { ...next.transform } }
+  return {
+    ...current,
+    ...next,
+    id: current?.id ?? next.id,
+    name: current?.name ?? next.name,
+    transform: { ...next.transform }
+  }
 }
 
 function findObjectByIdOrRole(

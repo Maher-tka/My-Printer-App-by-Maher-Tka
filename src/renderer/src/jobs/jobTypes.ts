@@ -1,4 +1,4 @@
-export type PrinterJobTool = 'booklet' | 'cutter' | 'hardcover'
+export type PrinterJobTool = 'booklet' | 'cutter' | 'hardcover' | 'sequential'
 
 export type PrinterJobStatus =
   | 'draft'
@@ -26,6 +26,7 @@ export interface JobQuote {
 
 export interface PrinterJob {
   id: string
+  customerId?: string
   tool: PrinterJobTool
   customerName: string
   phoneNumber: string
@@ -37,6 +38,17 @@ export interface PrinterJob {
   notes: string
   localProjectPath?: string
   exportPaths: string[]
+  printHistory?: PrintHistoryEntry[]
   thumbnailPreview?: string
   quote: JobQuote
+}
+
+export interface PrintHistoryEntry {
+  id: string
+  module: PrinterJobTool
+  jobName: string
+  printerName?: string
+  printedAt: string
+  pdfName: string
+  status: 'printed' | 'sent-to-printer'
 }

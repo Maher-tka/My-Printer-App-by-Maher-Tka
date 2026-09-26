@@ -1,12 +1,13 @@
-import { ArrowLeft } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { StickerLibraryRail } from './components/StickerLibraryRail'
+import { StickerQuantities } from './components/StickerQuantities'
+import { AIStickerMaker } from './components/AIStickerMaker'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createProjectPrinterJob } from '@/jobs/projectJob'
 import { useJobStore } from '@/jobs/useJobStore'
-import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
-import { ProjectFileActions } from '@/projects/ProjectFileActions'
 import { getCutterProjectStateKey } from '@/projects/projectDirtyState'
 import {
   createCutterProjectFile,
@@ -22,15 +23,33 @@ import type {
 } from '@/types/projects'
 import type { UnsavedChangesAction } from '../../../../shared/project-types'
 import { CutterToolbar } from './components/CutterToolbar'
+import { CutlineInspector } from './components/CutlineInspector'
 import { ExportCutterPanel } from './components/ExportCutterPanel'
 import { LayerVisibilityControls } from './components/LayerVisibilityControls'
 import { MontageArtboard } from './components/MontageArtboard'
 import { PieceEditor } from './components/PieceEditor'
 import { PieceLibrary } from './components/PieceLibrary'
+import { PdfPageImportDialog } from './components/PdfPageImportDialog'
 import { PreflightPanel } from './components/PreflightPanel'
+import { SheetUsageStats } from './components/SheetUsageStats'
 import { useCutterProject } from './hooks/useCutterProject'
-import { CUT_CONTOUR_NAME, normalizeSpotName } from './lib/colorSpot'
 import { DEFAULT_CUTTER_SHEET } from './lib/cutterLayout'
+import { TARGET_CUTTER_LABEL, TARGET_CUTTER_PROFILE } from './lib/cutterDeviceProfile'
+import { getDefaultCutterExportSettings } from './lib/exportPresets'
+import { resizeFinishedStickerWidth } from './lib/stickerCutterAdapter'
+import { getProductionSheetLayoutGroups } from './lib/productionSheetGroups'
+import {
+  getPlacedSheetIndex,
+  getMarkedSheetWidth,
+  getProductionSheetCount,
+  getProductionSheetHeight
+} from './lib/productionSheets'
+import type { CutterProject } from './types'
+
+interface PendingCutterImageImport {
+  id: number
+  files: File[]
+}
 
 interface CutterMontagePageProps {
   onNavigate: (route: AppRoute) => void
@@ -38,6 +57,8 @@ interface CutterMontagePageProps {
   onOpenProject: (filePath?: string | null) => Promise<PrinterAppProjectResult>
   onProjectSessionChange: (session: ActiveProjectSession | null) => void
   onConfirmUnsavedChanges: (action: UnsavedChangesAction) => Promise<boolean>
+  initialImageImport?: PendingCutterImageImport | null
+  onInitialImageImportConsumed?: (requestId: number) => void
 }
 
 export function CutterMontagePage({
@@ -45,9 +66,10 @@ export function CutterMontagePage({
   openedProject,
   onOpenProject,
   onProjectSessionChange,
-  onConfirmUnsavedChanges
+  onConfirmUnsavedChanges,
+  initialImageImport,
+  onInitialImageImportConsumed
 }: CutterMontagePageProps): JSX.Element {
-  const { settings: performanceSettings } = usePerformanceSettings()
   const cutter = useCutterProject(openedProject?.project)
   const { saveJob } = useJobStore()
   const [projectFilePath, setProjectFilePath] = useState<string | null>(
@@ -60,6 +82,94 @@ export function CutterMontagePage({
   const [projectMessage, setProjectMessage] = useState<string | null>(
     openedProject ? `Opened ${openedProject.project.metadata.jobName}` : null
   )
+  const consumedImageImportIdsRef = useRef(new Set<number>())
+  const [step, setStep] = useState<'prepare' | 'cut' | 'quantity' | 'layout'>('prepare')
+  const [stickerMakerOpen, setStickerMakerOpen] = useState(false)
+  const changeStep = (next: typeof step) => {
+    setStep(next)
+    setPanel(null)
+    cutter.setMode(next === 'layout' ? 'montage-sheet' : 'piece-editor')
+  }
+  const [panel, setPanel] = useState<'designs' | 'view' | 'export' | 'checks' | null>(null)
+  const [printPreview, setPrintPreview] = useState(false)
+  const editorWorkspaceRef = useRef<HTMLDivElement>(null)
+  const productionSheetRefs = useRef<Array<HTMLDivElement | null>>([])
+  const [previewSheetIndex, setPreviewSheetIndex] = useState(0)
+  const productionSheetCount = useMemo(
+    () => getProductionSheetCount(cutter.placedPieces),
+    [cutter.placedPieces]
+  )
+  const productionSheetLayoutGroups = useMemo(
+    () =>
+      getProductionSheetLayoutGroups({
+        sheet: cutter.sheet,
+        sources: cutter.sources,
+        pieces: cutter.pieces,
+        placedPieces: cutter.placedPieces,
+        layers: cutter.layers,
+        exportSettings: cutter.exportSettings
+      }),
+    [
+      cutter.exportSettings,
+      cutter.layers,
+      cutter.pieces,
+      cutter.placedPieces,
+      cutter.sheet,
+      cutter.sources
+    ]
+  )
+  const productionLayoutCount = productionSheetLayoutGroups.length
+  useEffect(() => {
+    setPreviewSheetIndex((current) => Math.min(current, productionLayoutCount - 1))
+  }, [productionLayoutCount])
+  const productionLayouts = useMemo(
+    () =>
+      productionSheetLayoutGroups.map((group, layoutIndex) => {
+        const sheetIndex = group.templateSheetIndex
+
+        return {
+          ...group,
+          layoutIndex,
+          placedPieces: cutter.placedPieces.filter(
+            (piece) => getPlacedSheetIndex(piece) === sheetIndex
+          ),
+          settings: {
+            ...cutter.sheet,
+            widthCm: getMarkedSheetWidth(cutter.placedPieces, cutter.sheet, sheetIndex),
+            heightCm: getProductionSheetHeight(cutter.placedPieces, cutter.sheet, sheetIndex)
+          }
+        }
+      }),
+    [cutter.placedPieces, cutter.sheet, productionSheetLayoutGroups]
+  )
+  const selectProductionSheet = useCallback(
+    (layoutIndex: number, scrollIntoView = false): void => {
+      const boundedIndex = Math.min(Math.max(layoutIndex, 0), productionLayoutCount - 1)
+      setPreviewSheetIndex(boundedIndex)
+
+      if (scrollIntoView) {
+        requestAnimationFrame(() => {
+          productionSheetRefs.current[boundedIndex]?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          })
+        })
+      }
+    },
+    [productionLayoutCount]
+  )
+
+  useEffect(() => {
+    if (!initialImageImport || consumedImageImportIdsRef.current.has(initialImageImport.id)) {
+      return
+    }
+
+    consumedImageImportIdsRef.current.add(initialImageImport.id)
+    void cutter
+      .importDesignFiles(initialImageImport.files)
+      .finally(() => onInitialImageImportConsumed?.(initialImageImport.id))
+  }, [cutter.importDesignFiles, initialImageImport, onInitialImageImportConsumed])
+
   const projectStateKey = useMemo(
     () =>
       getCutterProjectStateKey({
@@ -86,7 +196,32 @@ export function CutterMontagePage({
     cutter.pieces[0]?.displayName ??
     cutter.sources[0]?.displayName ??
     'Untitled Cutter Project'
-
+  const cutterProject = useMemo<CutterProject>(
+    () => ({
+      sheet: cutter.sheet,
+      sources: cutter.sources,
+      pieces: cutter.pieces,
+      placedPieces: cutter.placedPieces,
+      layers: cutter.layers,
+      exportSettings: cutter.exportSettings,
+      productionInfo: {
+        jobName: projectName,
+        appName: 'My Printer App by Maher Tka',
+        targetCutterProfileId: TARGET_CUTTER_PROFILE.id,
+        targetCutterLabel: TARGET_CUTTER_LABEL,
+        integrationMode: TARGET_CUTTER_PROFILE.integrationMode
+      }
+    }),
+    [
+      cutter.exportSettings,
+      cutter.layers,
+      cutter.pieces,
+      cutter.placedPieces,
+      cutter.sheet,
+      cutter.sources,
+      projectName
+    ]
+  )
   const createProjectSnapshot = useCallback(
     () =>
       createCutterProjectFile({
@@ -195,10 +330,30 @@ export function CutterMontagePage({
 
     setSavedProjectStateKey(getEmptyCutterProjectStateKey())
     cutter.clearProject()
+    setStep('prepare')
+    setPanel(null)
     setProjectFilePath(null)
     setProjectMetadata(null)
     setProjectMessage('Started a new cutter project.')
   }
+
+  const editPieceAndFocus = useCallback(
+    (pieceId: string): void => {
+      cutter.editPiece(pieceId)
+      if (step === 'layout') cutter.setMode('montage-sheet')
+      setPanel(null)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          editorWorkspaceRef.current?.focus({ preventScroll: true })
+          editorWorkspaceRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          })
+        })
+      })
+    },
+    [cutter.editPiece, step]
+  )
 
   useEffect(() => {
     onProjectSessionChange({
@@ -230,39 +385,63 @@ export function CutterMontagePage({
   useEffect(() => () => onProjectSessionChange(null), [onProjectSessionChange])
 
   return (
-    <div className="mx-auto flex max-w-[1680px] flex-col gap-5">
-      <Button
-        variant="ghost"
-        className="w-fit"
-        onClick={() => onNavigate('dashboard')}
-        type="button"
-      >
-        <ArrowLeft data-icon="inline-start" />
-        Back to Dashboard
-      </Button>
-
-      <Card>
-        <CardHeader className="flex-row items-start justify-between gap-4 pb-4">
-          <div className="flex flex-col gap-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <CardTitle className="text-xl">Cutter Layer + Big Sheet Montage</CardTitle>
-              <Badge variant="warning">MVP Beta</Badge>
+    <div className="workspace-shell mx-auto flex w-full min-w-0 max-w-none flex-col overflow-hidden lg:h-[calc(100dvh-8rem)]">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <CardHeader className="shrink-0 flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/25 px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={stickerMakerOpen ? 'Back to Cutter Montage' : 'Back to dashboard'}
+              onClick={() => {
+                if (stickerMakerOpen) {
+                  setStickerMakerOpen(false)
+                } else {
+                  onNavigate('dashboard')
+                }
+              }}
+            >
+              <ArrowLeft />
+            </Button>
+            <div>
+              <CardTitle className="text-base">Cutter workspace</CardTitle>
+              <p className="max-w-56 truncate text-xs text-muted-foreground">{projectName}</p>
             </div>
-            <CardDescription>
-              Prepare masked sticker pieces, align vector CutContour paths, then arrange them on a
-              real-size roll sheet.
-            </CardDescription>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <ProjectFileActions
-              filePath={projectFilePath}
-              isBusy={projectIsBusy}
-              isDirty={isDirty}
-              message={projectMessage}
-              onOpen={() => void openProject()}
-              onSave={() => void saveProject(false)}
-              onSaveAs={() => void saveProject(true)}
-            />
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={stickerMakerOpen ? 'default' : 'outline'}
+              onClick={() => setStickerMakerOpen((current) => !current)}
+            >
+              AI Sticker Maker
+            </Button>
+            <span
+              className="text-xs text-muted-foreground"
+              title={projectFilePath ?? 'Not saved yet'}
+            >
+              {isDirty ? 'Unsaved' : 'Saved'}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={projectIsBusy}
+              onClick={() => void openProject()}
+            >
+              Open
+            </Button>
+            <Button size="sm" disabled={projectIsBusy} onClick={() => void saveProject(false)}>
+              Save
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={projectIsBusy}
+              onClick={() => void saveProject(true)}
+            >
+              Save as
+            </Button>
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -272,97 +451,385 @@ export function CutterMontagePage({
               >
                 New Project
               </Button>
-              <Badge variant="secondary">{performanceSettings.label}</Badge>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <CutterToolbar
-            mode={cutter.mode}
-            settings={cutter.sheet}
-            warnings={cutter.warnings}
-            hasPieces={cutter.pieces.length > 0}
-            onModeChange={cutter.setMode}
-            onSettingsChange={cutter.updateSheet}
-            onAutoArrange={cutter.runAutoArrange}
-            onUndoAutoArrange={cutter.undoAutoArrange}
-            onCreateTestProject={import.meta.env.DEV ? cutter.createTestMontage : undefined}
-          />
+        <CardContent className="flex min-h-0 flex-1 flex-col gap-2 p-2">
+          <div className={stickerMakerOpen ? 'flex min-h-0 flex-1' : 'hidden'}>
+            <AIStickerMaker
+              onSend={(results, offsetMm) => {
+                cutter.addStickerResults(results, offsetMm)
+                setStep('layout')
+              }}
+              onClose={() => setStickerMakerOpen(false)}
+            />
+          </div>
+          {!stickerMakerOpen && (
+            <Tabs
+              value={step}
+              onValueChange={(value) => changeStep(value as typeof step)}
+              className="flex min-h-0 flex-1 flex-col gap-2"
+            >
+              <TabsList className="grid h-11 w-full grid-cols-4" aria-label="Cutter workflow steps">
+                <TabsTrigger value="prepare">1. Prepare artwork</TabsTrigger>
+                <TabsTrigger value="cut">2. Cut lines</TabsTrigger>
+                <TabsTrigger value="quantity">3. Quantities</TabsTrigger>
+                <TabsTrigger value="layout">4. Layout & export</TabsTrigger>
+              </TabsList>
+              {step === 'layout' && (
+                <>
+                  <CutterToolbar
+                    hideModeSwitcher
+                    mode={cutter.mode}
+                    settings={cutter.sheet}
+                    warnings={cutter.warnings}
+                    hasPieces={cutter.pieces.length > 0}
+                    onModeChange={(mode) => changeStep(mode === 'piece-editor' ? 'cut' : 'layout')}
+                    onSettingsChange={cutter.updateSheet}
+                    onAutoArrange={cutter.runAutoArrange}
+                    onUndoAutoArrange={cutter.undoAutoArrange}
+                    onCreateTestProject={import.meta.env.DEV ? cutter.createTestMontage : undefined}
+                  />
+                </>
+              )}
 
-          {cutter.error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
-              {cutter.error}
-            </div>
+              {cutter.error && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
+                  {cutter.error}
+                </div>
+              )}
+
+              <div
+                className="flex shrink-0 flex-wrap items-center gap-1 border-b pb-2"
+                aria-label="Workspace panels"
+              >
+                {(step === 'layout' ? (['view', 'export', 'checks'] as const) : []).map((item) => (
+                  <Button
+                    key={item}
+                    size="sm"
+                    variant={panel === item ? 'secondary' : 'ghost'}
+                    aria-expanded={panel === item}
+                    aria-controls="cutter-workspace-panel"
+                    onClick={() => setPanel(panel === item ? null : item)}
+                  >
+                    {
+                      {
+                        view: 'View',
+                        export: 'Export',
+                        checks: 'Checks'
+                      }[item]
+                    }
+                  </Button>
+                ))}
+                <span
+                  className="ml-auto truncate text-xs text-muted-foreground"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {projectMessage ?? cutter.status}
+                </span>
+              </div>
+              <TabsContent
+                value={step}
+                className="relative mt-0 grid min-h-0 flex-1 grid-cols-[190px_minmax(0,1fr)] gap-2"
+              >
+                <StickerLibraryRail
+                  pieces={cutter.pieces}
+                  activeId={cutter.activePieceId}
+                  onSelect={editPieceAndFocus}
+                  onImport={(files) => void cutter.importDesignFiles(files)}
+                  onDuplicate={cutter.duplicatePiece}
+                  onDelete={cutter.deletePiece}
+                  onManage={() => setPanel('designs')}
+                  showProductionControls={step === 'layout'}
+                  onQuantity={(id, quantity) => {
+                    const piece = cutter.pieces.find((item) => item.id === id)
+                    if (piece) cutter.updatePiece({ ...piece, quantity, orderMode: 'copies' })
+                  }}
+                  onFinishedWidthChange={(id, widthMm) => {
+                    const piece = cutter.pieces.find((item) => item.id === id)
+                    if (piece) cutter.updatePiece(resizeFinishedStickerWidth(piece, widthMm))
+                  }}
+                />
+                <div className="relative flex min-h-0 min-w-0 flex-col">
+                  {panel && (
+                    <aside
+                      id="cutter-workspace-panel"
+                      aria-label={`${panel} panel`}
+                      className="absolute inset-y-0 left-0 z-30 flex w-[min(320px,100%)] flex-col overflow-hidden rounded-lg border bg-card shadow-xl"
+                    >
+                      <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
+                        <strong className="text-sm capitalize">{panel}</strong>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7"
+                          aria-label="Close workspace panel"
+                          onClick={() => setPanel(null)}
+                        >
+                          <X />
+                        </Button>
+                      </div>
+                      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
+                        {panel === 'designs' && (
+                          <>
+                            <PieceLibrary
+                              pieces={cutter.pieces}
+                              activePieceId={cutter.activePieceId}
+                              onImport={cutter.importDesignFiles}
+                              onEditPiece={editPieceAndFocus}
+                              onDuplicatePiece={cutter.duplicatePiece}
+                              onDeletePiece={cutter.deletePiece}
+                              onAddToSheet={cutter.addPieceToSheet}
+                              onAddSelectedToSheet={cutter.addPiecesToSheet}
+                              onAutoArrangeSelected={cutter.runAutoArrangeForPieces}
+                              onDeleteUnusedPieces={cutter.deleteUnusedPieces}
+                              onPieceQuantityChange={cutter.updatePieceQuantity}
+                              onPieceTargetLengthChange={cutter.updatePieceTargetLength}
+                              onPieceRotationAllowedChange={cutter.updatePieceRotationAllowed}
+                              onRename={cutter.renamePiece}
+                            />
+                          </>
+                        )}
+                        {panel === 'view' && (
+                          <>
+                            <LayerVisibilityControls
+                              layers={cutter.layers}
+                              settings={cutter.sheet}
+                              onLayerChange={(patch) =>
+                                cutter.setLayers((current) => ({ ...current, ...patch }))
+                              }
+                              onSettingsChange={cutter.updateSheet}
+                            />
+                            {cutter.mode === 'montage-sheet' && (
+                              <label className="flex items-center gap-2 p-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={printPreview}
+                                  onChange={(e) => setPrintPreview(e.target.checked)}
+                                />
+                                Print preview (hide editing overlays)
+                              </label>
+                            )}
+                          </>
+                        )}
+                        {panel === 'export' && (
+                          <>
+                            <ExportCutterPanel
+                              fineCutBusy={cutter.fineCutBusy}
+                              layoutNumber={previewSheetIndex + 1}
+                              onPrepareFineCut={() =>
+                                void cutter.prepareFineCut(
+                                  productionLayouts[previewSheetIndex]?.templateSheetIndex ?? 0
+                                )
+                              }
+                              canExport={cutter.canExport}
+                              settings={cutter.exportSettings}
+                              sheet={cutter.sheet}
+                              onModeChange={cutter.setExportMode}
+                              onSettingsChange={cutter.setExportSettings}
+                              onSheetChange={cutter.updateSheet}
+                              onPresetChange={cutter.applyExportPreset}
+                              onExportSvg={cutter.handleExportSvg}
+                              onExportPdf={cutter.handleExportPdf}
+                              onExportEps={cutter.handleExportEps}
+                              onBatchExport={cutter.handleBatchExport}
+                            />
+                          </>
+                        )}
+                        {panel === 'checks' && (
+                          <>
+                            <CutlineInspector
+                              piece={cutter.activePiece}
+                              onPieceChange={cutter.updatePiece}
+                            />
+                            <PreflightPanel
+                              report={cutter.preflight}
+                              placedCount={cutter.placedPieces.length}
+                            />
+                            <SheetUsageStats project={cutterProject} />
+                          </>
+                        )}
+                      </div>
+                    </aside>
+                  )}
+
+                  <div
+                    ref={editorWorkspaceRef}
+                    tabIndex={-1}
+                    className="min-h-0 min-w-0 flex-1 outline-none"
+                  >
+                    {step === 'quantity' ? (
+                      <StickerQuantities
+                        pieces={cutter.pieces}
+                        onQuantity={cutter.updatePieceQuantity}
+                        onEdit={(id) => {
+                          editPieceAndFocus(id)
+                          changeStep('cut')
+                        }}
+                        onContinue={() => {
+                          cutter.runAutoArrange()
+                          changeStep('layout')
+                        }}
+                      />
+                    ) : step !== 'layout' ? (
+                      <PieceEditor
+                        stage={step === 'prepare' ? 'prepare' : 'cut'}
+                        onBackgroundApply={cutter.applyArtworkEdit}
+                        piece={cutter.activePiece}
+                        onPieceChange={cutter.updatePiece}
+                        onSave={cutter.markPieceSaved}
+                        onDuplicate={() =>
+                          cutter.activePiece && cutter.duplicatePiece(cutter.activePiece.id)
+                        }
+                      />
+                    ) : (
+                      <div className="flex h-full min-h-0 min-w-0 flex-col">
+                        <div className="mb-2 shrink-0 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-card px-3 py-2">
+                          <div className="text-sm">
+                            <strong>
+                              {productionLayoutCount} unique sheet layout
+                              {productionLayoutCount === 1 ? '' : 's'} for {productionSheetCount}{' '}
+                              physical sheet{productionSheetCount === 1 ? '' : 's'}
+                            </strong>
+                            <span className="ml-2 text-muted-foreground">
+                              {cutter.placedPieces.length} total copies · Select a sticker on the
+                              left to set copies and finished width · Layout {previewSheetIndex + 1}{' '}
+                              selected for Mimaki package review
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              disabled={previewSheetIndex === 0}
+                              onClick={() => selectProductionSheet(previewSheetIndex - 1, true)}
+                              aria-label="Select previous production layout"
+                            >
+                              <ChevronLeft />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              disabled={previewSheetIndex >= productionLayoutCount - 1}
+                              onClick={() => selectProductionSheet(previewSheetIndex + 1, true)}
+                              aria-label="Select next production layout"
+                            >
+                              <ChevronRight />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="min-h-0 flex-1" data-production-sheet-stack="false">
+                          {productionLayouts
+                            .filter((layout) => layout.layoutIndex === previewSheetIndex)
+                            .map((productionLayout) => {
+                              const sheetPieceIds = new Set(
+                                productionLayout.placedPieces.map((piece) => piece.id)
+                              )
+                              const selectedPieceIds = cutter.selectedPlacedIds.filter((pieceId) =>
+                                sheetPieceIds.has(pieceId)
+                              )
+                              const active = previewSheetIndex === productionLayout.layoutIndex
+
+                              return (
+                                <div
+                                  key={productionLayout.signature}
+                                  ref={(node) => {
+                                    productionSheetRefs.current[productionLayout.layoutIndex] = node
+                                  }}
+                                  className="h-full min-h-0"
+                                >
+                                  <MontageArtboard
+                                    settings={productionLayout.settings}
+                                    pieces={cutter.pieces}
+                                    placedPieces={productionLayout.placedPieces}
+                                    totalPlacedCount={cutter.placedPieces.length}
+                                    selectedPieceIds={selectedPieceIds}
+                                    layers={cutter.layers}
+                                    onHeightChange={cutter.resizeSheetHeight}
+                                    allowHeightResize={productionLayout.layoutIndex === 0}
+                                    cleanArtworkPreview={printPreview}
+                                    sheetNumber={productionLayout.layoutIndex + 1}
+                                    sheetCount={productionLayoutCount}
+                                    repeatCount={productionLayout.repeatCount}
+                                    physicalSheetNumbers={productionLayout.sheetIndices.map(
+                                      (sheetIndex) => sheetIndex + 1
+                                    )}
+                                    active={active}
+                                    onActivate={() =>
+                                      selectProductionSheet(productionLayout.layoutIndex, false)
+                                    }
+                                    onSelectPiece={cutter.selectPlacedPiece}
+                                    onMovePiece={cutter.movePlacedPiece}
+                                    onResizePiece={cutter.resizePlacedPiece}
+                                    onDuplicatePieces={cutter.duplicatePlacedPieces}
+                                    onDeletePieces={cutter.deletePlacedPieces}
+                                    onRotatePiece={cutter.rotatePlacedPiece}
+                                    onToggleLock={cutter.togglePlacedLock}
+                                    onNudgeSelected={cutter.nudgeSelected}
+                                    outOfBoundsPieceIds={[
+                                      ...cutter.preflight.outOfBoundsIds,
+                                      ...cutter.preflight.safeAreaOutOfBoundsIds
+                                    ]}
+                                    overlapPieceIds={cutter.preflight.overlapIds}
+                                    onAlignSelected={cutter.alignSelected}
+                                  />
+                                </div>
+                              )
+                            })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+              <div className="flex shrink-0 justify-between gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={step === 'prepare'}
+                  onClick={() =>
+                    changeStep(
+                      step === 'cut' ? 'prepare' : step === 'quantity' ? 'cut' : 'quantity'
+                    )
+                  }
+                >
+                  Previous step
+                </Button>
+                {step !== 'layout' && (
+                  <Button
+                    size="sm"
+                    disabled={!cutter.pieces.length}
+                    onClick={() => {
+                      if (step === 'quantity') cutter.runAutoArrange()
+                      changeStep(
+                        step === 'prepare' ? 'cut' : step === 'cut' ? 'quantity' : 'layout'
+                      )
+                    }}
+                  >
+                    {step === 'prepare'
+                      ? 'Next: cut lines'
+                      : step === 'cut'
+                        ? 'Next: quantities'
+                        : 'Next: layout & export'}
+                  </Button>
+                )}
+              </div>
+            </Tabs>
           )}
-
-          <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-            {cutter.status}
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[340px_minmax(0,1fr)]">
-            <aside className="flex flex-col gap-4">
-              <PieceLibrary
-                pieces={cutter.pieces}
-                activePieceId={cutter.activePieceId}
-                onImport={cutter.importDesignFiles}
-                onEditPiece={cutter.editPiece}
-                onDuplicatePiece={cutter.duplicatePiece}
-                onDeletePiece={cutter.deletePiece}
-                onAddToSheet={cutter.addPieceToSheet}
-                onPieceQuantityChange={cutter.updatePieceQuantity}
-                onPieceRotationAllowedChange={cutter.updatePieceRotationAllowed}
-                onRename={cutter.renamePiece}
-              />
-              <LayerVisibilityControls
-                layers={cutter.layers}
-                settings={cutter.sheet}
-                onLayerChange={(patch) => cutter.setLayers((current) => ({ ...current, ...patch }))}
-                onSettingsChange={cutter.updateSheet}
-              />
-              <ExportCutterPanel
-                canExport={cutter.canExport}
-                settings={cutter.exportSettings}
-                onModeChange={cutter.setExportMode}
-                onExportSvg={cutter.handleExportSvg}
-                onExportPdf={cutter.handleExportPdf}
-                onExportEps={cutter.handleExportEps}
-              />
-              <PreflightPanel report={cutter.preflight} placedCount={cutter.placedPieces.length} />
-            </aside>
-
-            {cutter.mode === 'piece-editor' ? (
-              <PieceEditor
-                piece={cutter.activePiece}
-                onPieceChange={cutter.updatePiece}
-                onSave={cutter.markPieceSaved}
-                onDuplicate={() =>
-                  cutter.activePiece && cutter.duplicatePiece(cutter.activePiece.id)
-                }
-              />
-            ) : (
-              <MontageArtboard
-                settings={cutter.sheet}
-                pieces={cutter.pieces}
-                placedPieces={cutter.placedPieces}
-                selectedPieceIds={cutter.selectedPlacedIds}
-                layers={cutter.layers}
-                onHeightChange={(heightCm) => cutter.updateSheet({ heightCm })}
-                onSelectPiece={cutter.selectPlacedPiece}
-                onMovePiece={cutter.movePlacedPiece}
-                onResizePiece={cutter.resizePlacedPiece}
-                onDuplicatePieces={cutter.duplicatePlacedPieces}
-                onDeletePieces={cutter.deletePlacedPieces}
-                onRotatePiece={cutter.rotatePlacedPiece}
-                onToggleLock={cutter.togglePlacedLock}
-                onNudgeSelected={cutter.nudgeSelected}
-                outOfBoundsPieceIds={cutter.preflight.outOfBoundsIds}
-                overlapPieceIds={cutter.preflight.overlapIds}
-                onAlignSelected={cutter.alignSelected}
-              />
-            )}
-          </div>
         </CardContent>
       </Card>
+      {cutter.pdfImportSession && (
+        <PdfPageImportDialog
+          session={cutter.pdfImportSession}
+          busy={cutter.isPdfImportBusy}
+          onLoadMore={cutter.loadMorePdfPages}
+          onCancel={cutter.cancelPdfImport}
+          onImport={cutter.importSelectedPdfPages}
+        />
+      )}
     </div>
   )
 }
@@ -378,12 +845,6 @@ function getEmptyCutterProjectStateKey(): string {
     placedPieces: [],
     sheet: DEFAULT_CUTTER_SHEET,
     layers: { artwork: true, cutlines: true },
-    exportSettings: {
-      strokeName: normalizeSpotName(CUT_CONTOUR_NAME),
-      includeArtwork: true,
-      includeCutlines: true,
-      mode: 'print-cut',
-      preset: 'svg-illustrator'
-    }
+    exportSettings: getDefaultCutterExportSettings()
   })
 }

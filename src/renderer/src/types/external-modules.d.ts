@@ -20,10 +20,7 @@ declare module 'bidi-js' {
   }
 
   export interface BidiProcessor {
-    getEmbeddingLevels(
-      text: string,
-      explicitDirection?: 'ltr' | 'rtl'
-    ): BidiEmbeddingLevels
+    getEmbeddingLevels(text: string, explicitDirection?: 'ltr' | 'rtl'): BidiEmbeddingLevels
     getReorderSegments(
       text: string,
       embeddingLevels: BidiEmbeddingLevels,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   AlertTriangle,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -8,6 +9,7 @@ import {
   RotateCcw,
   Ruler,
   Save,
+  Settings2,
   Upload
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +18,8 @@ import type {
   BookDirection,
   CoverDimensions,
   CoverSetup,
+  HardcoverPdfCoverSource,
+  HardcoverPdfCoverTarget,
   HardcoverPdfSource,
   HardcoverProductionPreset
 } from '../types'
@@ -25,6 +29,7 @@ import {
   isValidHardcoverPageNumber
 } from '../lib/coverCalculations'
 import { formatMeasurement, fromMillimeters, toMillimeters } from '../lib/units'
+import { hasHardcoverPdfCoverSourceBytes, markHardcoverPdfImportTarget } from '../lib/sourcePdf'
 
 type CoverSetupPanelSection = 'all' | 'source' | 'measurements'
 
@@ -39,8 +44,15 @@ interface CoverSetupPanelProps {
   onSelectPdfFrontPage: (pageNumber: number) => Promise<void>
   onSelectPdfBackPage: (pageNumber: number) => Promise<void>
   onTogglePdfBackCover: (enabled: boolean) => Promise<void>
-  onLoadPdfPagePreviews: (startPage: number, count?: number) => Promise<void>
-  onChangePdfFitMode: (fitMode: HardcoverPdfSource['fitMode']) => void
+  onLoadPdfPagePreviews: (
+    startPage: number,
+    count?: number,
+    target?: HardcoverPdfCoverTarget
+  ) => Promise<void>
+  onChangePdfFitMode: (
+    fitMode: HardcoverPdfSource['fitMode'],
+    target?: HardcoverPdfCoverTarget
+  ) => void
   onSavePreset: () => void
   onUpdatePreset: () => void
   onResetFactoryPreset: () => void
@@ -64,9 +76,12 @@ export function CoverSetupPanel({
   onResetFactoryPreset
 }: CoverSetupPanelProps): JSX.Element {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const frontInputRef = useRef<HTMLInputElement | null>(null)
+  const backInputRef = useRef<HTMLInputElement | null>(null)
   const unit = setup.unit
   const [message, setMessage] = useState<string | null>(null)
   const [busyPdf, setBusyPdf] = useState(false)
+  const [showAdvancedMeasurements, setShowAdvancedMeasurements] = useState(false)
   const showSource = section === 'all' || section === 'source'
   const showMeasurements = section === 'all' || section === 'measurements'
   const heading =
@@ -102,14 +117,22 @@ export function CoverSetupPanel({
       [key]: Math.max(0, toMillimeters(value, unit))
     })
 
-  const importPdf = async (file: File | undefined): Promise<void> => {
+  const importPdf = async (
+    file: File | undefined,
+    target: 'single' | HardcoverPdfCoverTarget = 'single'
+  ): Promise<void> => {
     if (!file) return
+    if (target !== 'single') markHardcoverPdfImportTarget(file, target)
     setBusyPdf(true)
     setMessage('Reading PDF...')
 
     try {
       await onImportPdf(file)
-      setMessage('PDF loaded. Page 1 is selected for the front cover. Back cover is off.')
+      setMessage(
+        target === 'single'
+          ? 'PDF loaded. Page 1 is selected for the front cover. Back cover is off.'
+          : `${target === 'front' ? 'Front' : 'Back'} cover PDF loaded. You can choose its page and placement mode.`
+      )
     } catch (error) {
       setMessage(getErrorMessage(error))
     } finally {
@@ -117,10 +140,13 @@ export function CoverSetupPanel({
     }
   }
 
+  const separateSources = sourcePdf?.sourceMode === 'separate' || Boolean(sourcePdf?.frontSource)
+
   const selectFrontPage = async (pageNumber: number): Promise<void> => {
     if (!sourcePdf) return
-    if (!isValidHardcoverPageNumber(pageNumber, sourcePdf.pageCount)) {
-      setMessage(`Choose a page between 1 and ${sourcePdf.pageCount}.`)
+    const pageCount = sourcePdf.frontSource?.pageCount ?? sourcePdf.pageCount
+    if (!isValidHardcoverPageNumber(pageNumber, pageCount)) {
+      setMessage(`Choose a page between 1 and ${pageCount}.`)
       return
     }
 
@@ -138,8 +164,9 @@ export function CoverSetupPanel({
 
   const selectBackPage = async (pageNumber: number): Promise<void> => {
     if (!sourcePdf) return
-    if (!isValidHardcoverPageNumber(pageNumber, sourcePdf.pageCount)) {
-      setMessage(`Choose a page between 1 and ${sourcePdf.pageCount}.`)
+    const pageCount = sourcePdf.backSource?.pageCount ?? sourcePdf.pageCount
+    if (!isValidHardcoverPageNumber(pageNumber, pageCount)) {
+      setMessage(`Choose a page between 1 and ${pageCount}.`)
       return
     }
 
@@ -163,7 +190,10 @@ export function CoverSetupPanel({
       await onTogglePdfBackCover(enabled)
       setMessage(
         enabled
-          ? `Back cover is on. Page ${sourcePdf.backPageNumber ?? Math.min(2, sourcePdf.pageCount)} is selected.`
+          ? `Back cover is on. Page ${
+              sourcePdf.backPageNumber ??
+              Math.min(2, sourcePdf.backSource?.pageCount ?? sourcePdf.pageCount)
+            } is selected.`
           : 'Back cover is off. The back side will export blank.'
       )
     } catch (error) {
@@ -173,13 +203,16 @@ export function CoverSetupPanel({
     }
   }
 
-  const loadMorePagePreviews = async (startPage: number): Promise<void> => {
+  const loadMorePagePreviews = async (
+    startPage: number,
+    target: HardcoverPdfCoverTarget = 'front'
+  ): Promise<void> => {
     if (!sourcePdf) return
     setBusyPdf(true)
 
     try {
-      await onLoadPdfPagePreviews(startPage)
-      setMessage(`Loaded more page thumbnails from page ${startPage}.`)
+      await onLoadPdfPagePreviews(startPage, undefined, target)
+      setMessage(`Loaded more ${target} page thumbnails from page ${startPage}.`)
     } catch (error) {
       setMessage(getErrorMessage(error))
     } finally {
@@ -213,6 +246,26 @@ export function CoverSetupPanel({
                 event.currentTarget.value = ''
               }}
             />
+            <input
+              ref={frontInputRef}
+              className="hidden"
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={(event) => {
+                void importPdf(event.target.files?.[0], 'front')
+                event.currentTarget.value = ''
+              }}
+            />
+            <input
+              ref={backInputRef}
+              className="hidden"
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={(event) => {
+                void importPdf(event.target.files?.[0], 'back')
+                event.currentTarget.value = ''
+              }}
+            />
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
@@ -223,16 +276,59 @@ export function CoverSetupPanel({
                 <Upload />
                 Upload mémoire PDF
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => frontInputRef.current?.click()}
+                disabled={busyPdf}
+              >
+                <Upload />
+                Upload front PDF
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => backInputRef.current?.click()}
+                disabled={busyPdf}
+              >
+                <Upload />
+                Upload back PDF
+              </Button>
               {sourcePdf ? (
-                <Badge variant={sourcePdf.bytes ? 'success' : 'warning'}>
-                  {sourcePdf.bytes ? 'Source loaded' : 'Re-upload needed'}
+                <Badge
+                  variant={
+                    sourcePdf.bytes ||
+                    (sourcePdf.frontSource &&
+                      hasHardcoverPdfCoverSourceBytes(sourcePdf.frontSource))
+                      ? 'success'
+                      : 'warning'
+                  }
+                >
+                  {separateSources
+                    ? 'Separate sources'
+                    : sourcePdf.bytes
+                      ? 'Source loaded'
+                      : 'Re-upload needed'}
                 </Badge>
               ) : (
                 <Badge variant="secondary">No PDF yet</Badge>
               )}
             </div>
 
-            {sourcePdf ? (
+            {sourcePdf && separateSources ? (
+              <SeparatePdfSources
+                sourcePdf={sourcePdf}
+                busy={busyPdf}
+                onChangeFitMode={onChangePdfFitMode}
+                onSelectFrontPage={(pageNumber) => void selectFrontPage(pageNumber)}
+                onSelectBackPage={(pageNumber) => void selectBackPage(pageNumber)}
+                onToggleBackCover={(enabled) => void toggleBackCover(enabled)}
+                onLoadMoreFront={(startPage) => void loadMorePagePreviews(startPage, 'front')}
+                onLoadMoreBack={(startPage) => void loadMorePagePreviews(startPage, 'back')}
+              />
+            ) : sourcePdf ? (
               <div className="grid min-w-0 max-w-full gap-3 overflow-hidden rounded-md border bg-background p-3">
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -270,7 +366,7 @@ export function CoverSetupPanel({
                 <PdfPageCarousel
                   title="Front cover"
                   description="Page 1 is selected automatically after upload."
-                  sourcePdf={sourcePdf}
+                  source={sourcePdf}
                   selectedPageNumber={sourcePdf.frontPageNumber}
                   selectedLabel="Front"
                   disabled={busyPdf || !sourcePdf.bytes}
@@ -297,7 +393,7 @@ export function CoverSetupPanel({
                       <PdfPageCarousel
                         title="Back source page"
                         description="Choose the PDF page to place on the back board."
-                        sourcePdf={sourcePdf}
+                        source={sourcePdf}
                         selectedPageNumber={sourcePdf.backPageNumber ?? 1}
                         selectedLabel="Back"
                         disabled={busyPdf || !sourcePdf.bytes}
@@ -331,7 +427,7 @@ export function CoverSetupPanel({
 
         {showMeasurements && (
           <PanelBlock icon={<Languages className="size-4" />} title="Book direction">
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {(['ltr', 'rtl'] as const).map((direction) => (
                 <DirectionButton
                   key={direction}
@@ -345,78 +441,17 @@ export function CoverSetupPanel({
         )}
 
         {showMeasurements && (
-          <PanelBlock icon={<Ruler className="size-4" />} title="Physical hardcover setup">
-            <div className="grid grid-cols-2 gap-3">
-              <SelectField
-                label="Board preset"
-                value={setup.preset}
-                onChange={(value) =>
-                  onChange(applyCoverPreset(setup, value as CoverSetup['preset']))
-                }
-                options={[
-                  ['a4', 'A4 mémoire'],
-                  ['a5', 'A5 mémoire'],
-                  ['custom', 'Custom']
-                ]}
-              />
-              <SelectField
-                label="Unit"
-                value={unit}
-                onChange={(value) => onChange({ unit: value as CoverSetup['unit'] })}
-                options={[
-                  ['cm', 'Centimeters'],
-                  ['mm', 'Millimeters']
-                ]}
-              />
+          <PanelBlock icon={<Ruler className="size-4" />} title="Essential measurements">
+            <p className="text-xs leading-5 text-muted-foreground">
+              Set the spine first, then confirm the printer sheet size.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
               <NumberField
-                label="Board width"
-                value={measure(setup.boardWidthMm)}
-                suffix={unit}
-                onChange={(value) => setMeasure('boardWidthMm', value)}
-              />
-              <NumberField
-                label="Board height"
-                value={measure(setup.boardHeightMm)}
-                suffix={unit}
-                onChange={(value) => setMeasure('boardHeightMm', value)}
-              />
-              <NumberField
-                label="Spine thickness"
+                label="Spine width"
                 value={measure(setup.spineWidthMm)}
                 suffix={unit}
                 onChange={(value) => setMeasure('spineWidthMm', value)}
               />
-              <NumberField
-                label="Guide mark length"
-                value={measure(setup.markLengthMm)}
-                suffix={unit}
-                onChange={(value) => setMeasure('markLengthMm', value)}
-              />
-              <NumberField
-                label="Left band"
-                value={measure(setup.leftBandWidthMm)}
-                suffix={unit}
-                onChange={(value) => setMeasure('leftBandWidthMm', value)}
-              />
-              <NumberField
-                label="Right band"
-                value={measure(setup.rightBandWidthMm)}
-                suffix={unit}
-                onChange={(value) => setMeasure('rightBandWidthMm', value)}
-                disabled={setup.useSameBandWidth}
-              />
-              <Toggle
-                label="Use same band width"
-                checked={setup.useSameBandWidth}
-                onChange={(useSameBandWidth) => onChange({ useSameBandWidth })}
-              />
-            </div>
-          </PanelBlock>
-        )}
-
-        {showMeasurements && (
-          <PanelBlock icon={<Save className="size-4" />} title="Printer sheet preset">
-            <div className="grid grid-cols-2 gap-3">
               <NumberField
                 label="Sheet width"
                 value={measure(setup.paperWidthMm)}
@@ -429,46 +464,147 @@ export function CoverSetupPanel({
                 suffix={unit}
                 onChange={(value) => setMeasure('paperHeightMm', value)}
               />
-              <Toggle
-                label="Center structure on sheet"
-                checked={setup.centerOnSheet}
-                onChange={(centerOnSheet) => onChange({ centerOnSheet })}
-              />
-            </div>
-            <div className="rounded-md bg-primary/8 p-3">
-              <p className="text-xs font-medium text-muted-foreground">
-                Saved preset: {productionPreset.name}
-              </p>
-              <p className="mt-1 text-lg font-semibold">
-                {formatMeasurement(dimensions.fullWidthMm, unit)} x{' '}
-                {formatMeasurement(dimensions.fullHeightMm, unit)}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Badge variant="secondary">
-                  Structure {formatMeasurement(dimensions.structureWidthMm, unit)}
-                </Badge>
-                <Badge variant="secondary">
-                  Margin {formatMeasurement(dimensions.horizontalMarginMm, unit)} /{' '}
-                  {formatMeasurement(dimensions.verticalMarginMm, unit)}
-                </Badge>
-                <Badge variant="secondary">{getDirectionLabel(setup.bookDirection)}</Badge>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <Button type="button" size="sm" variant="outline" onClick={onSavePreset}>
-                <Save />
-                Save as default
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={onUpdatePreset}>
-                <Save />
-                Update preset
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={onResetFactoryPreset}>
-                <RotateCcw />
-                Reset factory
-              </Button>
             </div>
           </PanelBlock>
+        )}
+
+        {showMeasurements && (
+          <div className="rounded-xl border bg-card">
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors hover:bg-muted/50"
+              aria-expanded={showAdvancedMeasurements}
+              onClick={() => setShowAdvancedMeasurements((open) => !open)}
+            >
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                <Settings2 className="size-4" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">Advanced settings</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Board, bands, units, marks, and presets
+                </span>
+              </span>
+              <ChevronDown
+                className={`size-4 text-muted-foreground transition-transform ${
+                  showAdvancedMeasurements ? 'rotate-180' : ''
+                }`}
+                aria-hidden="true"
+              />
+            </button>
+
+            {showAdvancedMeasurements ? (
+              <div className="flex flex-col gap-4 border-t p-3">
+                <PanelBlock icon={<Ruler className="size-4" />} title="Cover and binding">
+                  <div className="grid grid-cols-2 gap-3">
+                    <SelectField
+                      label="Board preset"
+                      value={setup.preset}
+                      onChange={(value) =>
+                        onChange(applyCoverPreset(setup, value as CoverSetup['preset']))
+                      }
+                      options={[
+                        ['a4', 'A4 mémoire'],
+                        ['a5', 'A5 mémoire'],
+                        ['custom', 'Custom']
+                      ]}
+                    />
+                    <SelectField
+                      label="Unit"
+                      value={unit}
+                      onChange={(value) => onChange({ unit: value as CoverSetup['unit'] })}
+                      options={[
+                        ['cm', 'Centimeters'],
+                        ['mm', 'Millimeters']
+                      ]}
+                    />
+                    <NumberField
+                      label="Board width"
+                      value={measure(setup.boardWidthMm)}
+                      suffix={unit}
+                      onChange={(value) => setMeasure('boardWidthMm', value)}
+                    />
+                    <NumberField
+                      label="Board height"
+                      value={measure(setup.boardHeightMm)}
+                      suffix={unit}
+                      onChange={(value) => setMeasure('boardHeightMm', value)}
+                    />
+                    <NumberField
+                      label="Guide mark length"
+                      value={measure(setup.markLengthMm)}
+                      suffix={unit}
+                      onChange={(value) => setMeasure('markLengthMm', value)}
+                    />
+                    <NumberField
+                      label="Left band"
+                      value={measure(setup.leftBandWidthMm)}
+                      suffix={unit}
+                      onChange={(value) => setMeasure('leftBandWidthMm', value)}
+                    />
+                    <NumberField
+                      label="Right band"
+                      value={measure(setup.rightBandWidthMm)}
+                      suffix={unit}
+                      onChange={(value) => setMeasure('rightBandWidthMm', value)}
+                      disabled={setup.useSameBandWidth}
+                    />
+                    <Toggle
+                      label="Use same band width"
+                      checked={setup.useSameBandWidth}
+                      onChange={(useSameBandWidth) => onChange({ useSameBandWidth })}
+                    />
+                    <Toggle
+                      label="Center structure on sheet"
+                      checked={setup.centerOnSheet}
+                      onChange={(centerOnSheet) => onChange({ centerOnSheet })}
+                    />
+                  </div>
+                </PanelBlock>
+
+                <PanelBlock icon={<Save className="size-4" />} title="Printer preset">
+                  <div className="rounded-md bg-primary/8 p-3">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Saved preset: {productionPreset.name}
+                    </p>
+                    <p className="mt-1 text-lg font-semibold">
+                      {formatMeasurement(dimensions.fullWidthMm, unit)} x{' '}
+                      {formatMeasurement(dimensions.fullHeightMm, unit)}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Badge variant="secondary">
+                        Structure {formatMeasurement(dimensions.structureWidthMm, unit)}
+                      </Badge>
+                      <Badge variant="secondary">
+                        Margin {formatMeasurement(dimensions.horizontalMarginMm, unit)} /{' '}
+                        {formatMeasurement(dimensions.verticalMarginMm, unit)}
+                      </Badge>
+                      <Badge variant="secondary">{getDirectionLabel(setup.bookDirection)}</Badge>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={onSavePreset}>
+                      <Save />
+                      Save as default
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={onUpdatePreset}>
+                      <Save />
+                      Update preset
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={onResetFactoryPreset}
+                    >
+                      <RotateCcw />
+                      Reset factory
+                    </Button>
+                  </div>
+                </PanelBlock>
+              </div>
+            ) : null}
+          </div>
         )}
       </div>
 
@@ -485,10 +621,178 @@ export function CoverSetupPanel({
   )
 }
 
+function SeparatePdfSources({
+  sourcePdf,
+  busy,
+  onChangeFitMode,
+  onSelectFrontPage,
+  onSelectBackPage,
+  onToggleBackCover,
+  onLoadMoreFront,
+  onLoadMoreBack
+}: {
+  sourcePdf: HardcoverPdfSource
+  busy: boolean
+  onChangeFitMode: (
+    fitMode: HardcoverPdfSource['fitMode'],
+    target?: HardcoverPdfCoverTarget
+  ) => void
+  onSelectFrontPage: (pageNumber: number) => void
+  onSelectBackPage: (pageNumber: number) => void
+  onToggleBackCover: (enabled: boolean) => void
+  onLoadMoreFront: (startPage: number) => void
+  onLoadMoreBack: (startPage: number) => void
+}): JSX.Element {
+  const front = sourcePdf.frontSource
+  const back = sourcePdf.backSource
+
+  return (
+    <div className="grid min-w-0 max-w-full gap-3 overflow-hidden rounded-md border bg-background p-3">
+      <div>
+        <p className="text-sm font-semibold">Independent cover PDFs</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Front and back files stay separate. Choose a page and Fit or Fill independently for each
+          cover.
+        </p>
+      </div>
+
+      {front ? (
+        <IndependentCoverSourceCard
+          source={front}
+          title="Front cover source"
+          selectedLabel="Front"
+          target="front"
+          busy={busy}
+          onChangeFitMode={onChangeFitMode}
+          onSelectPage={onSelectFrontPage}
+          onLoadMore={onLoadMoreFront}
+        />
+      ) : (
+        <WarningText>Upload a front PDF to place artwork on the front board.</WarningText>
+      )}
+
+      <div className="min-w-0 max-w-full overflow-hidden rounded-md border bg-muted/30 p-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Back cover source</p>
+            <p className="text-xs text-muted-foreground">
+              Upload a separate back PDF when the back artwork is not in the same document.
+            </p>
+          </div>
+          <Toggle
+            label={sourcePdf.backCoverEnabled ? 'Back Cover ON' : 'Back Cover OFF'}
+            checked={sourcePdf.backCoverEnabled}
+            onChange={onToggleBackCover}
+            disabled={busy || !back}
+          />
+        </div>
+        {back && sourcePdf.backCoverEnabled ? (
+          <div className="mt-3">
+            <IndependentCoverSourceCard
+              source={back}
+              title="Back cover source"
+              selectedLabel="Back"
+              target="back"
+              busy={busy}
+              onChangeFitMode={onChangeFitMode}
+              onSelectPage={onSelectBackPage}
+              onLoadMore={onLoadMoreBack}
+            />
+          </div>
+        ) : (
+          <p className="mt-3 max-w-full break-words rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
+            {back
+              ? 'Back cover is OFF. The uploaded back PDF is kept and can be enabled again.'
+              : 'Back cover is OFF. Use Upload back PDF above to add an independent source.'}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function IndependentCoverSourceCard({
+  source,
+  title,
+  selectedLabel,
+  target,
+  busy,
+  onChangeFitMode,
+  onSelectPage,
+  onLoadMore
+}: {
+  source: HardcoverPdfCoverSource
+  title: string
+  selectedLabel: string
+  target: HardcoverPdfCoverTarget
+  busy: boolean
+  onChangeFitMode: (
+    fitMode: HardcoverPdfSource['fitMode'],
+    target?: HardcoverPdfCoverTarget
+  ) => void
+  onSelectPage: (pageNumber: number) => void
+  onLoadMore: (startPage: number) => void
+}): JSX.Element {
+  const loaded = hasHardcoverPdfCoverSourceBytes(source)
+
+  return (
+    <div className="grid min-w-0 max-w-full gap-3 overflow-hidden rounded-md border bg-muted/30 p-3">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{source.fileName}</p>
+          <p className="break-words text-xs text-muted-foreground">
+            {source.pageCount} page(s), selected page {source.pageNumber}
+          </p>
+        </div>
+        <Badge variant={loaded ? 'success' : 'warning'}>
+          {loaded ? 'Source loaded' : 'Re-upload needed'}
+        </Badge>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 rounded-md bg-background p-2">
+        <span className="text-xs font-medium text-muted-foreground">{title} placement</span>
+        <Button
+          type="button"
+          size="sm"
+          variant={source.fitMode === 'fit' ? 'default' : 'outline'}
+          onClick={() => onChangeFitMode('fit', target)}
+          disabled={busy || !loaded}
+        >
+          Fit
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={source.fitMode === 'fill' ? 'default' : 'outline'}
+          onClick={() => onChangeFitMode('fill', target)}
+          disabled={busy || !loaded}
+        >
+          Fill
+        </Button>
+      </div>
+      <PdfPageCarousel
+        title={title}
+        description="Choose the source page to place on this board."
+        source={source}
+        selectedPageNumber={source.pageNumber}
+        selectedLabel={selectedLabel}
+        disabled={busy || !loaded}
+        onSelect={onSelectPage}
+        onLoadMore={onLoadMore}
+      />
+      {!loaded && (
+        <WarningText>
+          This project contains the source metadata, but the original PDF bytes are not stored in
+          the project file. Re-upload this cover PDF before exporting.
+        </WarningText>
+      )}
+    </div>
+  )
+}
+
 function PdfPageCarousel({
   title,
   description,
-  sourcePdf,
+  source,
   selectedPageNumber,
   selectedLabel,
   disabled,
@@ -497,7 +801,7 @@ function PdfPageCarousel({
 }: {
   title: string
   description: string
-  sourcePdf: HardcoverPdfSource
+  source: HardcoverPdfSource | HardcoverPdfCoverSource
   selectedPageNumber: number
   selectedLabel: string
   disabled: boolean
@@ -506,13 +810,13 @@ function PdfPageCarousel({
 }): JSX.Element {
   const [pageDraft, setPageDraft] = useState(String(selectedPageNumber))
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  const loadedPreviews = [...(sourcePdf.pagePreviews ?? [])].sort(
+  const loadedPreviews = [...(source.pagePreviews ?? [])].sort(
     (first, second) => first.pageNumber - second.pageNumber
   )
-  const previewPages = new Set(sourcePdf.pagePreviews?.map((preview) => preview.pageNumber) ?? [])
+  const previewPages = new Set(source.pagePreviews?.map((preview) => preview.pageNumber) ?? [])
   let firstMissingPage: number | undefined
 
-  for (let pageNumber = 1; pageNumber <= sourcePdf.pageCount; pageNumber += 1) {
+  for (let pageNumber = 1; pageNumber <= source.pageCount; pageNumber += 1) {
     if (!previewPages.has(pageNumber)) {
       firstMissingPage = pageNumber
       break
@@ -533,10 +837,7 @@ function PdfPageCarousel({
   const commitPageDraft = (): void => {
     const pageNumber = Number(pageDraft)
 
-    if (
-      Number.isInteger(pageNumber) &&
-      isValidHardcoverPageNumber(pageNumber, sourcePdf.pageCount)
-    ) {
+    if (Number.isInteger(pageNumber) && isValidHardcoverPageNumber(pageNumber, source.pageCount)) {
       onSelect(pageNumber)
     } else {
       setPageDraft(String(selectedPageNumber))
@@ -621,7 +922,7 @@ function PdfPageCarousel({
             className="rounded-md border bg-background px-3 py-2 text-sm text-foreground"
             type="number"
             min={1}
-            max={sourcePdf.pageCount}
+            max={source.pageCount}
             value={pageDraft}
             disabled={disabled}
             onBlur={commitPageDraft}
@@ -636,7 +937,7 @@ function PdfPageCarousel({
           size="icon"
           variant="outline"
           aria-label={`Next ${title.toLowerCase()} page`}
-          disabled={disabled || selectedPageNumber >= sourcePdf.pageCount}
+          disabled={disabled || selectedPageNumber >= source.pageCount}
           onClick={() => onSelect(selectedPageNumber + 1)}
         >
           <ChevronRight />
@@ -705,17 +1006,12 @@ function DirectionButton({
   return (
     <button
       type="button"
-      className={`rounded-md border px-3 py-2 text-left text-sm transition ${
+      className={`rounded-lg border px-2 py-2 text-center text-xs font-semibold transition ${
         active ? 'border-primary bg-primary/10 text-primary' : 'bg-background hover:bg-muted'
       }`}
       onClick={onClick}
     >
-      <span className="font-medium">{getDirectionLabel(direction)}</span>
-      <span className="mt-0.5 block text-xs text-muted-foreground">
-        {direction === 'rtl'
-          ? 'Front cover on the left board, back cover on the right.'
-          : 'Back cover on the left board, front cover on the right.'}
-      </span>
+      {getDirectionLabel(direction)}
     </button>
   )
 }

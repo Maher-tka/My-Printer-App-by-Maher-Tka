@@ -1,4 +1,8 @@
 import type { AlignmentCommand, PiecePreset } from '../../types'
+import {
+  canMakeClippingMaskFromSelection,
+  getMaskSourceFromSelection
+} from '../../lib/editorObjects'
 
 export interface PieceEditorContextMenuState {
   x: number
@@ -31,11 +35,17 @@ export function PieceEditorContextMenu(props: PieceEditorContextMenuProps): JSX.
   const selected = props.piece.objects.filter((object) =>
     props.piece.selectedObjectIds.includes(object.id)
   )
-  const hasArtwork = selected.some((object) => object.role === 'artwork')
-  const hasShape = selected.some(
-    (object) => object.role === 'helper' || object.role === 'clipping-mask'
-  )
+  const hasShape = Boolean(getMaskSourceFromSelection(props.piece))
+  const canMakeMask = canMakeClippingMaskFromSelection(props.piece)
   const primary = selected[0]
+  const editableSelected = selected.filter(
+    (object) => !(props.piece.clippingMaskEnabled && props.piece.maskObjectId === object.id)
+  )
+  const canDeleteSelection = editableSelected.length > 0
+  const canLockSelection = editableSelected.some((object) => !object.locked)
+  const canUnlockSelection = editableSelected.some((object) => object.locked)
+  const canChangeGrouping =
+    editableSelected.length === selected.length && editableSelected.length > 0
   return (
     <>
       <button
@@ -57,33 +67,29 @@ export function PieceEditorContextMenu(props: PieceEditorContextMenuProps): JSX.
           disabled={!props.hasClipboard}
         />
         <MenuItem label="Duplicate" onClick={props.onDuplicate} disabled={selected.length === 0} />
-        <MenuItem label="Delete" onClick={props.onDelete} disabled={selected.length === 0} />
+        <MenuItem label="Delete" onClick={props.onDelete} disabled={!canDeleteSelection} />
         <Separator />
-        <MenuItem
-          label="Lock"
-          onClick={() => props.onLock(true)}
-          disabled={selected.length === 0}
-        />
+        <MenuItem label="Lock" onClick={() => props.onLock(true)} disabled={!canLockSelection} />
         <MenuItem
           label="Unlock"
           onClick={() => props.onLock(false)}
-          disabled={selected.length === 0}
+          disabled={!canUnlockSelection}
         />
         <MenuItem
           label="Group / Link"
           onClick={() => props.onGroup(true)}
-          disabled={selected.length < 2 || props.piece.groupLinked}
+          disabled={!canChangeGrouping || selected.length < 2 || props.piece.groupLinked}
         />
         <MenuItem
           label="Ungroup / Unlink"
           onClick={() => props.onGroup(false)}
-          disabled={!props.piece.groupLinked}
+          disabled={!canChangeGrouping || !props.piece.groupLinked}
         />
         <Separator />
         <MenuItem
           label="Make Clipping Mask"
           onClick={props.onMakeClippingMask}
-          disabled={!hasArtwork || !hasShape}
+          disabled={!canMakeMask}
         />
         <MenuItem
           label="Release Clipping Mask"

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
+import { printPdf as sendPdfToPrint } from '@/print/printPdf'
 import {
   deserializeBookletProjectPayload,
   type BookletProjectPayload
 } from '@/projects/projectFiles'
+import type { PrintPdfResult } from '../../../../../shared/print-types'
 import type { PrinterProjectFile } from '@/types/projects'
 import type {
   BookletPage,
@@ -42,6 +44,7 @@ import {
   type ResetBlankMode
 } from '../lib/pageOrdering'
 import { syncRenderQueueConcurrency } from '../lib/renderQueue'
+import { clearPagePreviewCache } from '../lib/pagePreviewRenderer'
 import {
   addEmptySheetToBoard,
   createInitialSheetBoardState,
@@ -56,6 +59,7 @@ import {
   updateSheetBoardPosition
 } from '../lib/sheetLayoutState'
 import { getSolidFillHex } from '../lib/colorUtils'
+import { calculateSheetCount } from '../lib/creepCompensation'
 
 const idleImportProgress: ImportProgress = {
   phase: 'idle',
@@ -166,9 +170,19 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
           const result = await importPdfFile(file, setImportProgress, {
             signal: abortController.signal
           })
+
+          if (importAbortControllerRef.current !== abortController) {
+            releasePageThumbnails(result.pages)
+            return
+          }
+
           appendImportResult(result.sources, result.pages)
         }
       } catch (importError) {
+        if (importAbortControllerRef.current !== abortController) {
+          return
+        }
+
         const canceled = isCanceledError(importError)
         setImportProgress({
           phase: canceled ? 'canceled' : 'error',
@@ -202,8 +216,18 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
         const result = await importImageFiles(files, setImportProgress, {
           signal: abortController.signal
         })
+
+        if (importAbortControllerRef.current !== abortController) {
+          releasePageThumbnails(result.pages)
+          return
+        }
+
         appendImportResult(result.sources, result.pages)
       } catch (importError) {
+        if (importAbortControllerRef.current !== abortController) {
+          return
+        }
+
         const canceled = isCanceledError(importError)
         setImportProgress({
           phase: canceled ? 'canceled' : 'error',
@@ -316,6 +340,20 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
     })
   }, [])
 
+  const deleteSource = useCallback((sourceId: string): void => {
+    setPages((current) => {
+      const removedPages = current.filter((page) => page.sourceId === sourceId)
+
+      if (removedPages.length === 0) return current
+
+      releasePageThumbnails(removedPages)
+      return normalizeCurrentOrder(current.filter((page) => page.sourceId !== sourceId))
+    })
+    setSources((current) => current.filter((source) => source.id !== sourceId))
+    setError(null)
+    void clearPagePreviewCache()
+  }, [])
+
   const clearProject = useCallback((): void => {
     importAbortControllerRef.current?.abort()
     exportAbortControllerRef.current?.abort()
@@ -391,6 +429,18 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
     })
   }, [])
 
+  const createBookletPdfBlob = useCallback(
+    async (abortController: AbortController): Promise<Blob> => {
+      const { exportBookletPdf } = await import('../lib/exportPdf')
+
+      return exportBookletPdf(sheets, sources, settings, setExportProgress, {
+        signal: abortController.signal,
+        emptySheets: emptySheetsForExport
+      })
+    },
+    [emptySheetsForExport, settings, sheets, sources]
+  )
+
   const exportPdf = useCallback(async (): Promise<void> => {
     const exportPageCount = sheets.length * 2 + emptySheetsForExport.length
     const readinessError = getExportReadinessError(
@@ -417,11 +467,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
     })
 
     try {
-      const { exportBookletPdf } = await import('../lib/exportPdf')
-      const blob = await exportBookletPdf(sheets, sources, settings, setExportProgress, {
-        signal: abortController.signal,
-        emptySheets: emptySheetsForExport
-      })
+      const blob = await createBookletPdfBlob(abortController)
       setExportProgress({
         phase: 'saving-file',
         current: exportPageCount,
@@ -467,7 +513,99 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
         exportAbortControllerRef.current = null
       }
     }
-  }, [emptySheetsForExport, pageCountIsValid, pages.length, settings, sheets, sources])
+  }, [
+    createBookletPdfBlob,
+    emptySheetsForExport.length,
+    pageCountIsValid,
+    pages.length,
+    settings,
+    sheets.length
+  ])
+
+  const printPdf = useCallback(
+    async (jobTitle: string): Promise<PrintPdfResult> => {
+      const exportPageCount = sheets.length * 2 + emptySheetsForExport.length
+      const readinessError = getExportReadinessError(
+        pages.length,
+        pageCountIsValid,
+        settings,
+        emptySheetsForExport.length
+      )
+
+      if (readinessError) {
+        setError(readinessError)
+        return { ok: false, error: readinessError }
+      }
+
+      setError(null)
+      exportAbortControllerRef.current?.abort()
+      const abortController = new AbortController()
+      exportAbortControllerRef.current = abortController
+      setExportProgress({
+        phase: 'preparing-pages',
+        current: 0,
+        total: exportPageCount,
+        message: 'Preparing PDF for print'
+      })
+
+      try {
+        const blob = await createBookletPdfBlob(abortController)
+        setExportProgress({
+          phase: 'saving-file',
+          current: exportPageCount,
+          total: exportPageCount,
+          message: 'Opening printer dialog'
+        })
+
+        const result = await sendPdfToPrint({
+          bytes: await blobToUint8Array(blob),
+          suggestedName: 'booklet-montage.pdf',
+          jobTitle,
+          silent: false
+        })
+
+        setExportProgress({
+          phase: result.ok ? 'done' : result.canceled ? 'canceled' : 'error',
+          current: result.ok ? exportPageCount : 0,
+          total: result.ok ? exportPageCount : 0,
+          message: result.ok
+            ? 'PDF sent to printer'
+            : result.canceled
+              ? 'Print canceled.'
+              : (result.error ?? 'Printing failed.')
+        })
+
+        if (!result.ok) {
+          setError(result.canceled ? 'Print canceled.' : (result.error ?? 'Printing failed.'))
+        }
+
+        return result
+      } catch (printError) {
+        const canceled = isCanceledError(printError)
+        const message = canceled ? 'Print canceled.' : getErrorMessage(printError)
+        setExportProgress({
+          phase: canceled ? 'canceled' : 'error',
+          current: 0,
+          total: 0,
+          message
+        })
+        setError(message)
+        return { ok: false, canceled, error: message }
+      } finally {
+        if (exportAbortControllerRef.current === abortController) {
+          exportAbortControllerRef.current = null
+        }
+      }
+    },
+    [
+      createBookletPdfBlob,
+      emptySheetsForExport.length,
+      pageCountIsValid,
+      pages.length,
+      settings,
+      sheets.length
+    ]
+  )
 
   const exportImages = useCallback(
     async (format: ExportImageFormat): Promise<void> => {
@@ -607,6 +745,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
     resetPageOrder,
     setBlankPageColor,
     deletePage,
+    deleteSource,
     clearProject,
     updateSettings,
     addEmptySheet,
@@ -616,6 +755,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
     deleteSheetBoardItem,
     duplicateSheetBoardItem,
     exportPdf,
+    printPdf,
     exportImages,
     cancelExport
   }
@@ -639,7 +779,7 @@ function getExportReadinessError(
     return 'Page count must be divisible by 4 before exporting. Use Auto add blank pages.'
   }
 
-  const settingsErrors = validatePrintSettings(settings)
+  const settingsErrors = validatePrintSettings(settings, calculateSheetCount(pageCount))
 
   return settingsErrors[0] ?? null
 }

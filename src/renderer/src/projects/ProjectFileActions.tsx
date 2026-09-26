@@ -43,11 +43,18 @@ export function ProjectFileActions({
           </span>
         )}
         <p className="truncate text-right text-muted-foreground" title={filePath ?? undefined}>
-          {isDirty
-            ? (filePath ?? 'Not saved yet')
-            : (message ?? (filePath ? filePath : 'Not saved yet'))}
+          {filePath ?? 'Not saved yet'}
         </p>
       </div>
+      {message && (
+        <p
+          className="max-w-xl text-right text-sm text-muted-foreground"
+          role="status"
+          aria-live="polite"
+        >
+          {message}
+        </p>
+      )}
     </div>
   )
 }

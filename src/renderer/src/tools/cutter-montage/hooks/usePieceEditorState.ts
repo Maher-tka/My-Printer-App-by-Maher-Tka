@@ -19,7 +19,7 @@ export function usePieceEditorState(): {
   const [tool, setTool] = useState<EditorTool>('select')
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(true)
-  const [snapToGrid, setSnapToGrid] = useState(true)
+  const [snapToGrid, setSnapToGrid] = useState(false)
   const [smartGuides, setSmartGuides] = useState(true)
   const [contextMenu, setContextMenu] = useState<PieceEditorContextMenuState | null>(null)
 

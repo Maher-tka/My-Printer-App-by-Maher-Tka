@@ -44,6 +44,9 @@ export function HardcoverToolbar(props: HardcoverToolbarProps): JSX.Element {
         size="sm"
         variant="outline"
         onClick={() => props.onZoomChange(Math.max(0.5, props.zoom - 0.1))}
+        disabled={props.zoom <= 0.5}
+        aria-label="Zoom out"
+        title="Zoom out"
       >
         <ZoomOut />
       </Button>
@@ -56,6 +59,9 @@ export function HardcoverToolbar(props: HardcoverToolbarProps): JSX.Element {
         size="sm"
         variant="outline"
         onClick={() => props.onZoomChange(Math.min(2, props.zoom + 0.1))}
+        disabled={props.zoom >= 2}
+        aria-label="Zoom in"
+        title="Zoom in"
       >
         <ZoomIn />
       </Button>
@@ -64,6 +70,8 @@ export function HardcoverToolbar(props: HardcoverToolbarProps): JSX.Element {
         size="sm"
         variant={props.showGuides ? 'default' : 'outline'}
         onClick={props.onToggleGuides}
+        aria-pressed={props.showGuides}
+        title="Show or hide binding and fold guides"
       >
         Guides
       </Button>
@@ -72,6 +80,8 @@ export function HardcoverToolbar(props: HardcoverToolbarProps): JSX.Element {
         size="sm"
         variant={props.showSafeZones ? 'default' : 'outline'}
         onClick={props.onToggleSafeZones}
+        aria-pressed={props.showSafeZones}
+        title="Show the area where text and important artwork stay safe"
       >
         Safe zones
       </Button>
@@ -80,6 +90,8 @@ export function HardcoverToolbar(props: HardcoverToolbarProps): JSX.Element {
         size="sm"
         variant={props.snapToGuides ? 'default' : 'outline'}
         onClick={props.onToggleSnap}
+        aria-pressed={props.snapToGuides}
+        title="Align artwork to nearby guides while dragging"
       >
         Snap
       </Button>
@@ -99,7 +111,13 @@ function ModeButton({
   label: string
 }): JSX.Element {
   return (
-    <Button type="button" size="sm" variant={active ? 'default' : 'outline'} onClick={onClick}>
+    <Button
+      type="button"
+      size="sm"
+      variant={active ? 'default' : 'outline'}
+      onClick={onClick}
+      aria-pressed={active}
+    >
       {icon}
       {label}
     </Button>

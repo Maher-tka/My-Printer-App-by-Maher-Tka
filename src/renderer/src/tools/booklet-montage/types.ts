@@ -16,6 +16,31 @@ export type ExportImageFormat = 'png' | 'jpg'
 
 export type ExportQuality = 'standard' | 'high'
 
+export type CreepCompensationMode = 'measured' | 'automatic' | 'manual'
+
+export type CreepDistribution = 'linear'
+
+export interface CreepPaperPreset {
+  id: string
+  name: string
+  paperCaliperMm: number
+  calibrationMultiplier: number
+  machineName?: string
+}
+
+export interface CreepSettings {
+  enabled: boolean
+  mode: CreepCompensationMode
+  measuredTotalCreepMm: number
+  paperCaliperMm: number
+  calibrationMultiplier: number
+  manualTotalCreepMm: number
+  distribution: CreepDistribution
+  showOverlay: boolean
+  selectedPaperPresetId?: string
+  paperPresets: CreepPaperPreset[]
+}
+
 export interface BookletSource {
   id: string
   kind: BookletSourceKind
@@ -59,6 +84,7 @@ export interface SheetSettings {
   cropMarks: boolean
   registrationMarks: boolean
   exportQuality: ExportQuality
+  creep: CreepSettings
 }
 
 export interface ImportProgress {
@@ -104,6 +130,8 @@ export interface BookletSlot<TPage = BookletPage> {
 
 export interface BookletSide<TPage = BookletPage> {
   sheetNumber: number
+  physicalSheetIndex: number
+  physicalSheetCount: number
   side: 'front' | 'back'
   left: BookletSlot<TPage>
   right: BookletSlot<TPage>
@@ -111,6 +139,8 @@ export interface BookletSide<TPage = BookletPage> {
 
 export interface BookletSheet<TPage = BookletPage> {
   sheetNumber: number
+  physicalSheetIndex: number
+  physicalSheetCount: number
   front: BookletSide<TPage>
   back: BookletSide<TPage>
 }

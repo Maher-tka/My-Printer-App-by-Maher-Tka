@@ -2,12 +2,17 @@ export const PRINTER_PROJECT_SCHEMA = 'com.maher-tka.my-printer-app.project'
 export const PRINTER_PROJECT_VERSION = 1
 export const LEGACY_PRINTER_PROJECT_EXTENSION = 'mpjob'
 
-export type ProjectToolId = 'booklet-montage' | 'cutter-montage' | 'hardcover-cover'
+export type ProjectToolId =
+  | 'booklet-montage'
+  | 'cutter-montage'
+  | 'hardcover-cover'
+  | 'sequential-number'
 
 export const PRINTER_PROJECT_EXTENSIONS: Record<ProjectToolId, string> = {
   'booklet-montage': 'myprinter-booklet.json',
   'cutter-montage': 'myprinter-cutter.json',
-  'hardcover-cover': 'myprinter-hardcover.json'
+  'hardcover-cover': 'myprinter-hardcover.json',
+  'sequential-number': 'myprinter-sequential.json'
 }
 
 export type JobStatus = 'Saved' | 'Missing'

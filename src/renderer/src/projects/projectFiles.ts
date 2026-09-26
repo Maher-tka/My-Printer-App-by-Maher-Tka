@@ -1,3 +1,4 @@
+import { isSequentialProject } from '../../../shared/sequential-validation'
 import type {
   BookletPage,
   BookletSource,
@@ -18,6 +19,9 @@ import type {
   PlacedPiece
 } from '@/tools/cutter-montage/types'
 import { synchronizePieceEditorModel } from '@/tools/cutter-montage/lib/editorObjects'
+import { normalizeCutterSheetSettings } from '@/tools/cutter-montage/lib/cutterLayout'
+import { normalizeCutterExportSettings } from '@/tools/cutter-montage/lib/exportPresets'
+import { getSourcePreviewUrl } from '@/tools/cutter-montage/lib/sourcePreview'
 import type { HardcoverProjectState } from '@/tools/hardcover-cover/types'
 import {
   PRINTER_PROJECT_EXTENSIONS,
@@ -31,7 +35,8 @@ import {
 export const projectToolLabels: Record<ProjectToolId, string> = {
   'booklet-montage': 'Booklet Montage',
   'cutter-montage': 'Cutter Montage',
-  'hardcover-cover': 'Hardcover Cover'
+  'hardcover-cover': 'Hardcover Cover',
+  'sequential-number': 'Sequential Number'
 }
 
 export interface SerializedBookletSource extends Omit<BookletSource, 'bytes'> {
@@ -95,6 +100,8 @@ interface MetadataInput {
   price?: number
   existingMetadata?: ProjectMetadata | null
 }
+
+const encodedSourceBytes = new WeakMap<Uint8Array, string>()
 
 export function createBookletProjectFile({
   sources,
@@ -190,12 +197,12 @@ export function createCutterProjectFile({
       selectedPlacedIds,
       selectedEditorObjects,
       keyObject,
-      sheet,
+      sheet: normalizeCutterSheetSettings(sheet),
       sources: sources.map(serializePieceSource),
       pieces: pieces.map(serializePiecePreset),
       placedPieces,
       layers,
-      exportSettings
+      exportSettings: normalizeCutterExportSettings(exportSettings, sheet)
     }
   }
 }
@@ -205,13 +212,15 @@ export function deserializeCutterProjectPayload(
 ): RestoredCutterProject {
   const sources = payload.sources.map((source) => {
     const bytes = base64ToUint8Array(source.bytesBase64)
+    const { bytesBase64: _bytesBase64, ...serializableSource } = source
+    const restoredSource = {
+      ...serializableSource,
+      bytes
+    }
 
     return {
-      ...source,
-      bytes,
-      previewUrl: URL.createObjectURL(
-        new Blob([bytesToArrayBuffer(bytes)], { type: source.mimeType })
-      )
+      ...restoredSource,
+      previewUrl: getSourcePreviewUrl(restoredSource)
     }
   })
   const previewBySourceId = new Map(sources.map((source) => [source.id, source.previewUrl]))
@@ -234,7 +243,7 @@ export function deserializeCutterProjectPayload(
     selectedPlacedIds: payload.selectedPlacedIds,
     selectedEditorObjects: payload.selectedEditorObjects,
     keyObject: payload.keyObject,
-    sheet: payload.sheet,
+    sheet: normalizeCutterSheetSettings(payload.sheet),
     sources,
     pieces,
     placedPieces: payload.placedPieces,
@@ -281,20 +290,19 @@ export function deserializeHardcoverProjectPayload(
 }
 
 function serializeHardcoverProjectState(state: HardcoverProjectState): HardcoverProjectState {
-  const payload = structuredClone(state)
-
-  if (payload.sourcePdf) {
+  let sourcePdf = state.sourcePdf
+  if (sourcePdf) {
     const {
       bytes: _bytes,
       thumbnailDataUrl: _thumbnailDataUrl,
       backThumbnailDataUrl: _backThumbnailDataUrl,
       pagePreviews: _pagePreviews,
-      ...sourcePdf
-    } = payload.sourcePdf
-    payload.sourcePdf = sourcePdf
+      ...serializableSourcePdf
+    } = sourcePdf
+    sourcePdf = serializableSourcePdf
   }
 
-  return payload
+  return structuredClone({ ...state, sourcePdf })
 }
 
 export function isPrinterProjectFile(value: unknown): value is PrinterProjectFile {
@@ -311,7 +319,8 @@ export function isPrinterProjectFile(value: unknown): value is PrinterProjectFil
     Boolean(candidate.payload) &&
     (candidate.metadata?.tool === 'booklet-montage' ||
       candidate.metadata?.tool === 'cutter-montage' ||
-      candidate.metadata?.tool === 'hardcover-cover')
+      candidate.metadata?.tool === 'hardcover-cover' ||
+      (candidate.metadata?.tool === 'sequential-number' && isSequentialProject(candidate.payload)))
   )
 }
 
@@ -421,6 +430,9 @@ function getCutterProjectSummary(
 
 function getHardcoverQuoteTotal(state: HardcoverProjectState): number {
   const quote = state.job.quote
+  if (typeof quote.totalPrice === 'number' && Number.isFinite(quote.totalPrice)) {
+    return Math.max(0, quote.totalPrice)
+  }
   const subtotal =
     Math.max(0, quote.materialCost + quote.printCost + quote.finishingCost + quote.designCost) *
     Math.max(1, quote.quantity)
@@ -428,6 +440,9 @@ function getHardcoverQuoteTotal(state: HardcoverProjectState): number {
 }
 
 function uint8ArrayToBase64(bytes: Uint8Array): string {
+  const cached = encodedSourceBytes.get(bytes)
+  if (cached) return cached
+
   const chunkSize = 0x8000
   let binary = ''
 
@@ -435,7 +450,9 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize))
   }
 
-  return btoa(binary)
+  const encoded = btoa(binary)
+  encodedSourceBytes.set(bytes, encoded)
+  return encoded
 }
 
 function base64ToUint8Array(value: string): Uint8Array {
@@ -447,10 +464,6 @@ function base64ToUint8Array(value: string): Uint8Array {
   }
 
   return bytes
-}
-
-function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
 }
 
 function sanitizeProjectFileName(name: string): string {

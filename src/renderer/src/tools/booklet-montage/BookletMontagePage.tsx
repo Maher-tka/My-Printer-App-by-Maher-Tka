@@ -1,8 +1,10 @@
 import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { createPrintedJob } from '@/jobs/printHistory'
 import { createProjectPrinterJob } from '@/jobs/projectJob'
 import { useJobStore } from '@/jobs/useJobStore'
+import { getPrintResultMessage } from '@/print/printPdf'
 import { ProjectFileActions } from '@/projects/ProjectFileActions'
 import { getBookletProjectStateKey } from '@/projects/projectDirtyState'
 import {
@@ -29,7 +31,7 @@ import { BookletToolbar } from './components/BookletToolbar'
 import { PageManager } from './components/PageManager'
 import { SheetPreview } from './components/SheetPreview'
 import { useBookletMontage } from './hooks/useBookletMontage'
-import { getPrintSizeMm } from './lib/printSizes'
+import { getPrintSizeMm, validatePrintSettings } from './lib/printSizes'
 import type { BookletViewMode } from './types'
 
 interface BookletMontagePageProps {
@@ -52,7 +54,7 @@ export function BookletMontagePage({
   onConfirmUnsavedChanges
 }: BookletMontagePageProps): JSX.Element {
   const montage = useBookletMontage(openedProject?.project)
-  const { saveJob } = useJobStore()
+  const { jobs, saveJob } = useJobStore()
   const handledInitialPdfImportIdRef = useRef<number | null>(null)
   const { settings: performanceSettings, setPreset: setPerformancePreset } =
     usePerformanceSettings()
@@ -70,6 +72,7 @@ export function BookletMontagePage({
   const [pendingExport, setPendingExport] = useState<{
     report: PreflightReport
     run: () => void
+    action: 'export' | 'print'
   } | null>(null)
   const projectStateKey = useMemo(
     () =>
@@ -92,6 +95,11 @@ export function BookletMontagePage({
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [inspectedItemId, setInspectedItemId] = useState<string | null>(null)
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null)
+  const inspectSheetItem = useCallback((itemId: string): void => {
+    setSelectedItemId(itemId)
+    setInspectedItemId(itemId)
+  }, [])
+  const closeSheetInspection = useCallback((): void => setInspectedItemId(null), [])
   const importIsBusy =
     montage.importProgress.phase === 'reading' ||
     montage.importProgress.phase === 'loading-page' ||
@@ -108,6 +116,7 @@ export function BookletMontagePage({
   const canExport =
     hasExportableItems &&
     (montage.pages.length === 0 || montage.pageCountIsValid) &&
+    validatePrintSettings(montage.settings, montage.sheets.length).length === 0 &&
     !exportIsBusy &&
     !importIsBusy
   const largeProjectWarning = getLargeProjectWarning({
@@ -125,14 +134,27 @@ export function BookletMontagePage({
       estimatedSourceBytes: montage.sources.reduce(
         (total, source) => total + source.bytes.byteLength,
         0
-      )
+      ),
+      pageSizesMm: montage.pages
+        .filter((page) => page.kind !== 'blank')
+        .map((page) => ({
+          widthMm: page.widthMm,
+          heightMm: page.heightMm,
+          label: page.label
+        })),
+      outerMarginMm: montage.settings.outerMarginMm,
+      pageGapMm: montage.settings.pageGapMm,
+      cropMarks: montage.settings.cropMarks,
+      registrationMarks: montage.settings.registrationMarks,
+      scaleMode: montage.settings.scaleMode
     })
   }, [montage.pages, montage.settings, montage.sources])
-  const requestBookletExport = useCallback(
-    (run: () => void): void => {
+  const requestBookletAction = useCallback(
+    (run: () => void, action: 'export' | 'print' = 'export'): void => {
       setPendingExport({
         report: bookletPreflight,
-        run
+        run,
+        action
       })
     },
     [bookletPreflight]
@@ -232,6 +254,29 @@ export function BookletMontagePage({
     setProjectMessage('Started a new booklet project.')
   }
 
+  const printBooklet = useCallback(async (): Promise<void> => {
+    setProjectMessage('Preparing booklet PDF for printing...')
+    const result = await montage.printPdf(projectName)
+    setProjectMessage(getPrintResultMessage(result, 'booklet-montage.pdf'))
+
+    if (!result.ok) return
+
+    const existingJob = projectMetadata?.id
+      ? jobs.find((job) => job.id === projectMetadata.id)
+      : undefined
+    saveJob(
+      createPrintedJob({
+        existingJob,
+        projectId: projectMetadata?.id,
+        tool: 'booklet',
+        jobName: projectName,
+        pdfName: result.pdfName ?? 'booklet-montage.pdf',
+        printerName: result.printerName,
+        localProjectPath: projectFilePath
+      })
+    )
+  }, [jobs, montage, projectFilePath, projectMetadata?.id, projectName, saveJob])
+
   const importPdfFiles = async (files: File[]): Promise<void> => {
     if (files.length === 0 || !(await onConfirmUnsavedChanges('import-pdf'))) {
       return
@@ -308,7 +353,7 @@ export function BookletMontagePage({
   }, [viewMode])
 
   return (
-    <div className="mx-auto flex max-w-[1680px] flex-col gap-5">
+    <div className="workspace-shell mx-auto flex max-w-[1680px] flex-col gap-5">
       <Button
         variant="ghost"
         className="w-fit"
@@ -319,8 +364,8 @@ export function BookletMontagePage({
         Back to Dashboard
       </Button>
 
-      <Card>
-        <CardHeader className="flex-row items-start justify-between gap-4 pb-4">
+      <Card className="overflow-hidden">
+        <CardHeader className="flex-row items-start justify-between gap-4 border-b bg-muted/25 px-5 py-4">
           <div className="flex flex-col gap-1.5">
             <CardTitle className="text-xl">Booklet Montage</CardTitle>
             <CardDescription>
@@ -337,11 +382,12 @@ export function BookletMontagePage({
             onSaveAs={() => void saveProject(true)}
           />
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex flex-col gap-4 p-5">
           <BookletToolbar
             settings={montage.settings}
             viewMode={viewMode}
             blanksNeeded={montage.blanksNeeded}
+            physicalSheetCount={montage.sheets.length}
             hasBoardItems={montage.sheetBoardState.items.length > 0}
             canExport={canExport}
             isBusy={importIsBusy || exportIsBusy}
@@ -356,9 +402,10 @@ export function BookletMontagePage({
             onAutoAddBlankPages={montage.autoAddBlankPages}
             onAddEmptySheet={montage.addEmptySheet}
             onResetSheetLayout={montage.resetSheetLayout}
-            onExportPdf={() => requestBookletExport(() => void montage.exportPdf())}
+            onExportPdf={() => requestBookletAction(() => void montage.exportPdf())}
+            onPrintPdf={() => requestBookletAction(() => void printBooklet(), 'print')}
             onExportImages={(format) =>
-              requestBookletExport(() => void montage.exportImages(format))
+              requestBookletAction(() => void montage.exportImages(format))
             }
             onViewModeChange={setViewMode}
           />
@@ -391,6 +438,8 @@ export function BookletMontagePage({
                   />
                   <PageManager
                     pages={montage.pages}
+                    sources={montage.sources}
+                    scaleMode={montage.settings.scaleMode}
                     selectedPageId={selectedPageId}
                     blanksNeeded={montage.blanksNeeded}
                     pageCountIsValid={montage.pageCountIsValid}
@@ -401,6 +450,7 @@ export function BookletMontagePage({
                     onReorderPages={montage.reorderPages}
                     onResetOrder={montage.resetPageOrder}
                     onDeletePage={montage.deletePage}
+                    onDeleteSource={montage.deleteSource}
                     onBlankPageColorChange={montage.setBlankPageColor}
                   />
                 </>
@@ -414,16 +464,14 @@ export function BookletMontagePage({
                   />
                   <SheetPreview
                     sheets={montage.sheets}
+                    sources={montage.sources}
                     settings={montage.settings}
                     pageCountIsValid={montage.pageCountIsValid}
                     selectedItemId={selectedItemId}
                     inspectedItemId={inspectedItemId}
                     boardState={montage.sheetBoardState}
-                    onInspectItem={(itemId) => {
-                      setSelectedItemId(itemId)
-                      setInspectedItemId(itemId)
-                    }}
-                    onCloseInspect={() => setInspectedItemId(null)}
+                    onInspectItem={inspectSheetItem}
+                    onCloseInspect={closeSheetInspection}
                     onMoveItem={montage.moveSheetBoardItem}
                     onDeleteItem={montage.deleteSheetBoardItem}
                     onDuplicateItem={montage.duplicateSheetBoardItem}
@@ -452,6 +500,7 @@ export function BookletMontagePage({
       {pendingExport && (
         <PreflightDialog
           report={pendingExport.report}
+          action={pendingExport.action}
           onCancel={() => setPendingExport(null)}
           onConfirm={() => {
             const run = pendingExport.run

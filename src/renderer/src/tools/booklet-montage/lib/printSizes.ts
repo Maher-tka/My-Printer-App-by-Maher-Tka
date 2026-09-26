@@ -1,4 +1,9 @@
 import type { PaperOrientation, PaperSizeOption, Rect, SheetSettings, SizeMm } from '../types'
+import {
+  DEFAULT_CREEP_SETTINGS,
+  normalizeCreepSettings,
+  validateCreepSettings
+} from './creepCompensation'
 
 export const PRINT_SIZES_MM: Record<Exclude<PaperSizeOption, 'custom'>, SizeMm> = {
   A4: { widthMm: 210, heightMm: 297 },
@@ -21,7 +26,8 @@ export const DEFAULT_SHEET_SETTINGS: SheetSettings = {
   pageGapMm: DEFAULT_PAGE_GAP_MM,
   cropMarks: false,
   registrationMarks: false,
-  exportQuality: 'standard'
+  exportQuality: 'standard',
+  creep: DEFAULT_CREEP_SETTINGS
 }
 
 export interface SheetLayoutMm {
@@ -73,7 +79,8 @@ export function normalizeSheetSettings(settings: Partial<SheetSettings>): SheetS
     pageGapMm: nonNegativeOrDefault(settings.pageGapMm, DEFAULT_SHEET_SETTINGS.pageGapMm),
     cropMarks: settings.cropMarks === true,
     registrationMarks: settings.registrationMarks === true,
-    exportQuality: settings.exportQuality === 'high' ? 'high' : 'standard'
+    exportQuality: settings.exportQuality === 'high' ? 'high' : 'standard',
+    creep: normalizeCreepSettings(settings.creep)
   }
 }
 
@@ -123,7 +130,10 @@ export function getBookletSlotRects(
   }
 }
 
-export function validatePrintSettings(settings: SheetSettings): string[] {
+export function validatePrintSettings(
+  settings: SheetSettings,
+  physicalSheetCount?: number
+): string[] {
   const errors: string[] = []
 
   if (settings.paperSize === 'custom') {
@@ -155,6 +165,8 @@ export function validatePrintSettings(settings: SheetSettings): string[] {
   } catch (error) {
     errors.push(error instanceof Error ? error.message : 'Invalid paper layout settings.')
   }
+
+  errors.push(...validateCreepSettings(settings.creep, physicalSheetCount))
 
   return errors
 }

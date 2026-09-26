@@ -1,9 +1,10 @@
+import { MaskedArtwork } from './MaskedArtwork'
+import { getNormalizedShapePath } from '../lib/shapeGeometry'
 import { Copy, LockKeyhole, RotateCw, Trash2, UnlockKeyhole } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { CutterLayerVisibility, PiecePreset, PlacedPiece } from '../types'
-import { getPlacedArtworkRect, getPlacedCutlineRect } from '../lib/cutlineGenerator'
-import { getMaskClipPath, getPlacedMaskRect } from '../lib/maskUtils'
+import { getPlacedTransformScale } from '../lib/cutlineGenerator'
 import { roundToStep } from '../lib/units'
 
 interface PlacedPieceItemProps {
@@ -17,6 +18,7 @@ interface PlacedPieceItemProps {
   sheetHeightCm: number
   snapStepCm: number
   simplifiedPreview?: boolean
+  cleanArtworkPreview?: boolean
   onSelect: (pieceId: string, additive: boolean) => void
   onMove: (pieceId: string, xCm: number, yCm: number) => void
   onDuplicate: (pieceId: string) => void
@@ -36,6 +38,7 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
   sheetHeightCm,
   snapStepCm,
   simplifiedPreview = false,
+  cleanArtworkPreview = false,
   onSelect,
   onMove,
   onDuplicate,
@@ -56,9 +59,19 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
     originX: placed.xCm,
     originY: placed.yCm
   })
-  const artworkRect = useMemo(() => getPlacedArtworkRect(placed, piece), [piece, placed])
-  const maskRect = useMemo(() => getPlacedMaskRect(placed, piece), [piece, placed])
-  const cutlineRect = useMemo(() => getPlacedCutlineRect(placed, piece), [piece, placed])
+  const {
+    scaleX: pieceScaleX,
+    scaleY: pieceScaleY,
+    sceneWidthCm,
+    sceneHeightCm
+  } = useMemo(() => getPlacedTransformScale(placed, piece), [piece, placed])
+  const artworkVisible = layers.artwork && piece.objectVisibility.artwork
+  const maskObject = piece.objects.find(
+    (object) => object.id === piece.maskObjectId || object.role === 'clipping-mask'
+  )
+  const activeMask = (piece.clippingMaskEnabled ?? piece.mask.enabled) && maskObject
+  const artworkPreviewUrl = piece.artwork.previewUrl || piece.previewUrl
+  const artworkTransform = placed.artworkTransform
 
   useEffect(() => {
     latestPositionRef.current = { xCm: placed.xCm, yCm: placed.yCm }
@@ -72,13 +85,13 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
     <div
       ref={itemRef}
       className={`group absolute touch-none select-none rounded-sm ${
-        warning === 'out-of-bounds'
+        !cleanArtworkPreview && warning === 'out-of-bounds'
           ? 'ring-2 ring-destructive'
-          : warning === 'overlap'
+          : !cleanArtworkPreview && warning === 'overlap'
             ? 'ring-2 ring-amber-500'
-            : selected
+            : !cleanArtworkPreview && selected
               ? 'ring-2 ring-primary'
-              : 'ring-1 ring-slate-300/60'
+              : ''
       } ${dragging ? 'z-30 cursor-grabbing' : placed.locked ? 'z-10 cursor-not-allowed' : 'z-10 cursor-grab'}`}
       style={{
         width: placed.widthCm * scale,
@@ -165,79 +178,88 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
         onMove(placed.id, latestPositionRef.current.xCm, latestPositionRef.current.yCm)
       }}
     >
-      {simplifiedPreview && dragging ? (
+      {!cleanArtworkPreview && simplifiedPreview && dragging ? (
         <div className="absolute inset-0 bg-primary/15" aria-label="Simplified drag preview" />
-      ) : layers.artwork &&
-        piece.objectVisibility.artwork &&
-        (piece.clippingMaskEnabled ?? piece.mask.enabled) ? (
+      ) : (
         <div
-          className="absolute overflow-hidden"
+          className="absolute"
           style={{
-            left: (maskRect.xCm - placed.xCm) * scale,
-            top: (maskRect.yCm - placed.yCm) * scale,
-            width: maskRect.widthCm * scale,
-            height: maskRect.heightCm * scale,
-            clipPath: getMaskClipPath(piece.mask),
-            transform: `rotate(${maskRect.rotation - placed.rotation}deg)`,
+            left: ((placed.widthCm - sceneWidthCm) / 2) * scale,
+            top: ((placed.heightCm - sceneHeightCm) / 2) * scale,
+            width: sceneWidthCm * scale,
+            height: sceneHeightCm * scale,
+            transform: `rotate(${placed.rotation}deg)`,
             transformOrigin: 'center'
           }}
         >
-          <img
-            src={piece.previewUrl}
-            alt={piece.displayName}
-            className="absolute object-fill"
-            style={{
-              left: (artworkRect.xCm - maskRect.xCm) * scale,
-              top: (artworkRect.yCm - maskRect.yCm) * scale,
-              width: artworkRect.widthCm * scale,
-              height: artworkRect.heightCm * scale,
-              transform: `rotate(${artworkRect.rotation - maskRect.rotation}deg)`,
-              transformOrigin: 'center'
-            }}
-            draggable={false}
-          />
+          {artworkVisible && activeMask ? (
+            <MaskedArtwork
+              artwork={artworkTransform}
+              mask={{ ...maskObject!, transform: placed.maskTransform }}
+              src={artworkPreviewUrl}
+              width={sceneWidthCm / pieceScaleX}
+              height={sceneHeightCm / pieceScaleY}
+            />
+          ) : artworkVisible ? (
+            <img
+              src={artworkPreviewUrl}
+              alt={piece.displayName}
+              className="absolute object-fill"
+              style={{
+                left: artworkTransform.xCm * pieceScaleX * scale,
+                top: artworkTransform.yCm * pieceScaleY * scale,
+                width: artworkTransform.widthCm * pieceScaleX * scale,
+                height: artworkTransform.heightCm * pieceScaleY * scale,
+                transform: `rotate(${artworkTransform.rotation}deg)`,
+                transformOrigin: 'center'
+              }}
+              draggable={false}
+            />
+          ) : null}
+          {!cleanArtworkPreview &&
+            layers.cutlines &&
+            piece.objects
+              .filter((object) => object.role === 'cutline' && object.visible)
+              .map((object) => {
+                const t = object.transform,
+                  offset = (object.offsetMm ?? 0) / 10
+                return (
+                  <svg
+                    key={object.id}
+                    className="pointer-events-none absolute overflow-visible"
+                    viewBox="0 0 1 1"
+                    preserveAspectRatio="none"
+                    style={{
+                      left: (t.xCm * pieceScaleX - offset) * scale,
+                      top: (t.yCm * pieceScaleY - offset) * scale,
+                      width: (t.widthCm * pieceScaleX + 2 * offset) * scale,
+                      height: (t.heightCm * pieceScaleY + 2 * offset) * scale,
+                      transform: `rotate(${t.rotation}deg)`,
+                      transformOrigin: 'center'
+                    }}
+                  >
+                    <path
+                      d={getNormalizedShapePath(object, t.widthCm, t.heightCm)}
+                      fill="none"
+                      stroke={object.strokeColor ?? '#ff00ff'}
+                      strokeWidth={Math.max(
+                        0.5,
+                        ((object.strokeWidthPt ?? 0.25) * scale * 2.54) / 72
+                      )}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </svg>
+                )
+              })}
         </div>
-      ) : layers.artwork && piece.objectVisibility.artwork ? (
-        <img
-          src={piece.previewUrl}
-          alt={piece.displayName}
-          className="absolute object-fill"
-          style={{
-            left: (artworkRect.xCm - placed.xCm) * scale,
-            top: (artworkRect.yCm - placed.yCm) * scale,
-            width: artworkRect.widthCm * scale,
-            height: artworkRect.heightCm * scale,
-            transform: `rotate(${artworkRect.rotation - placed.rotation}deg)`,
-            transformOrigin: 'center'
-          }}
-          draggable={false}
-        />
-      ) : null}
-      {layers.cutlines && piece.objectVisibility.cutline && (
-        <div
-          className={`pointer-events-none absolute ${
-            piece.cutline.shape === 'ellipse'
-              ? 'rounded-full'
-              : piece.cutline.shape === 'rounded-rectangle'
-                ? 'rounded-md'
-                : ''
-          }`}
-          style={{
-            left: (cutlineRect.xCm - placed.xCm) * scale,
-            top: (cutlineRect.yCm - placed.yCm) * scale,
-            width: cutlineRect.widthCm * scale,
-            height: cutlineRect.heightCm * scale,
-            border: `1px solid ${piece.cutline.strokeColor}`,
-            transform: `rotate(${cutlineRect.rotation - placed.rotation}deg)`,
-            transformOrigin: 'center'
-          }}
-        />
       )}
-      <div className="pointer-events-none absolute left-1 top-1 rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-        {placed.displayName}
-        {warning ? ` · ${warning}` : ''}
-      </div>
-      {selected && (
+      {!cleanArtworkPreview && (
+        <div className="pointer-events-none absolute left-1 top-1 rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+          {placed.displayName}
+          {warning ? ` · ${warning}` : ''}
+        </div>
+      )}
+      {selected && !cleanArtworkPreview && (
         <div
           className="absolute -right-2 -top-10 z-40 flex gap-1 rounded-md border bg-card p-1 shadow-sm"
           data-no-drag="true"

@@ -1,19 +1,32 @@
-import { Save, Scissors } from 'lucide-react'
-import { useMemo } from 'react'
+import { ArtworkBackgroundTools } from './ArtworkBackgroundTools'
+import type { ArtworkEditResult } from '../lib/applyArtworkEdit'
+import {
+  createCutlineFromArtworkBounds,
+  createCutlineFromMaskBounds
+} from '../lib/cutlineValidation'
+import { CutlineInspector } from './CutlineInspector'
+import { reorderLayerObject, renameLayerObject, setMaskEditing } from '../lib/editorLayers'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Redo2, Save, Undo2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { AlignmentCommand, EditorObject, PiecePreset } from '../types'
 import {
   alignEditorObjects,
+  canMakeClippingMaskFromSelection,
   centerObjectInside,
   convertObjectToCutline,
+  deleteEditorObjects,
   duplicateObjectAsCutline,
+  getMaskSourceFromSelection,
+  makeClippingMaskAndCutlineFromSelection,
   makeClippingMaskFromSelection,
   matchObjectGeometry,
   releaseClippingMask,
   setObjectGroup
 } from '../lib/editorObjects'
 import { syncLegacyFieldsFromObjects } from '../lib/pieceModelSync'
-import { syncPieceBounds } from '../lib/piecePresets'
+import { resizePiecePreset } from '../lib/piecePresets'
 import { formatCm } from '../lib/units'
 import { usePieceEditorClipboard } from '../hooks/usePieceEditorClipboard'
 import { usePieceEditorHistory } from '../hooks/usePieceEditorHistory'
@@ -31,6 +44,8 @@ import { PieceEditorStatusBar } from './piece-editor/PieceEditorStatusBar'
 import { PieceEditorToolbar } from './piece-editor/PieceEditorToolbar'
 
 interface PieceEditorProps {
+  stage?: 'prepare' | 'cut'
+  onBackgroundApply?: (pieceId: string, result: ArtworkEditResult) => void
   piece: PiecePreset | null
   onPieceChange: (piece: PiecePreset) => void
   onSave: () => void
@@ -40,7 +55,7 @@ interface PieceEditorProps {
 export function PieceEditor(props: PieceEditorProps): JSX.Element {
   if (!props.piece) {
     return (
-      <section className="grid min-h-[640px] place-items-center rounded-lg border bg-muted/30 p-8 text-center">
+      <section className="grid h-full min-h-64 place-items-center rounded-lg border bg-muted/30 p-8 text-center">
         <div className="max-w-md">
           <h3 className="text-lg font-semibold">No piece selected</h3>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -58,26 +73,43 @@ function ActivePieceEditor({
   piece,
   onPieceChange,
   onSave,
-  onDuplicate
+  onDuplicate,
+  stage = 'cut',
+  onBackgroundApply
 }: PieceEditorProps & { piece: PiecePreset }): JSX.Element {
+  const [inspector, setInspector] = useState('mask')
+  const [preparationTool, setPreparationTool] = useState<'mask' | 'background'>('mask')
+  useEffect(() => setInspector('mask'), [stage])
   const editorState = usePieceEditorState()
   const history = usePieceEditorHistory(piece, onPieceChange)
   const clipboard = usePieceEditorClipboard()
   const transforms = usePieceEditorTransforms()
   const selection = usePieceEditorSelection(piece, onPieceChange)
-  const scale = useMemo(() => getPieceScale(piece, editorState.zoom), [editorState.zoom, piece])
+  const canvasHost = useRef<HTMLDivElement>(null)
+  const [canvasSize, setCanvasSize] = useState({ width: 600, height: 400 })
+  useEffect(() => {
+    const element = canvasHost.current
+    if (!element) return
+    const observer = new ResizeObserver(() =>
+      setCanvasSize({ width: element.clientWidth, height: element.clientHeight })
+    )
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+  const scale =
+    Math.max(
+      0.1,
+      Math.min(
+        (canvasSize.width - 80) / Math.max(piece.widthCm, 0.1),
+        (canvasSize.height - 80) / Math.max(piece.heightCm, 0.1)
+      )
+    ) * editorState.zoom
   const selectedObjects = useMemo(
     () => piece.objects.filter((object) => piece.selectedObjectIds.includes(object.id)),
     [piece.objects, piece.selectedObjectIds]
   )
   const selectedObject = selectedObjects.length === 1 ? selectedObjects[0] : undefined
-  const selectedShape = [...selectedObjects]
-    .reverse()
-    .find(
-      (object) =>
-        object.shapeType !== 'image' &&
-        (object.role === 'helper' || object.role === 'clipping-mask')
-    )
+  const selectedShape = getMaskSourceFromSelection(piece)
 
   const handleKeyDown = usePieceEditorShortcuts({
     clearSelection: () => {
@@ -98,117 +130,275 @@ function ActivePieceEditor({
     undo: history.undo,
     redo: history.redo,
     setZoom: editorState.setZoom,
-    resetZoom: () => editorState.setZoom(1)
+    resetZoom: () => editorState.setZoom(1),
+    setTool: editorState.setTool
   })
-
   return (
-    <section
-      className="grid grid-cols-1 gap-4 rounded-lg border bg-slate-100 p-4 outline-none xl:grid-cols-[minmax(0,1fr)_360px]"
-      tabIndex={0}
-      onKeyDown={handleKeyDown}
-    >
-      <div className="min-w-0">
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+    <section className="grid h-full min-h-0 min-w-0 grid-cols-1 gap-2 overflow-hidden rounded-lg border bg-muted/30 p-2 outline-none lg:grid-cols-[minmax(0,1fr)_250px]">
+      <div className="flex min-h-0 min-w-0 flex-col">
+        <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="font-semibold">Piece Editor</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <h3 className="font-semibold">
+              {stage === 'prepare' ? 'Prepare artwork' : 'Cut lines'}
+            </h3>
+            <p className="text-xs text-muted-foreground">
               {piece.displayName} · {formatCm(piece.widthCm)} x {formatCm(piece.heightCm)}
             </p>
           </div>
-          <PieceEditorToolbar
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label="Undo"
+              disabled={!history.canUndo}
+              onClick={history.undo}
+            >
+              <Undo2 data-icon="inline-start" />
+              Undo
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label="Redo"
+              disabled={!history.canRedo}
+              onClick={history.redo}
+            >
+              <Redo2 data-icon="inline-start" />
+              Redo
+            </Button>
+          </div>
+        </div>
+
+        <PieceEditorToolbar
+          tool={editorState.tool}
+          zoom={editorState.zoom}
+          showGrid={editorState.showGrid}
+          snapToGrid={editorState.snapToGrid}
+          smartGuides={editorState.smartGuides}
+          onToolChange={editorState.setTool}
+          onZoomIn={() => editorState.setZoom((value) => Math.min(value + 0.15, 2.5))}
+          onZoomOut={() => editorState.setZoom((value) => Math.max(value - 0.15, 0.45))}
+          onFit={() => editorState.setZoom(1)}
+          onShowGridChange={editorState.setShowGrid}
+          onSnapToGridChange={editorState.setSnapToGrid}
+          onSmartGuidesChange={editorState.setSmartGuides}
+        />
+        <div ref={canvasHost} className="flex min-h-64 min-w-0 flex-1 lg:min-h-0">
+          <PieceEditorCanvas
+            showTransparency={stage === 'prepare'}
+            piece={piece}
+            scale={scale}
             tool={editorState.tool}
             showGrid={editorState.showGrid}
             snapToGrid={editorState.snapToGrid}
             smartGuides={editorState.smartGuides}
-            onToolChange={editorState.setTool}
-            onZoomIn={() => editorState.setZoom((value) => Math.min(value + 0.15, 2.5))}
-            onZoomOut={() => editorState.setZoom((value) => Math.max(value - 0.15, 0.45))}
-            onFit={() => editorState.setZoom(1)}
-            onShowGridChange={editorState.setShowGrid}
-            onSnapToGridChange={editorState.setSnapToGrid}
-            onSmartGuidesChange={editorState.setSmartGuides}
+            onPieceChange={onPieceChange}
+            onTransformStart={history.checkpoint}
+            onSelectObject={selection.toggleId}
+            onSelectIds={selection.selectIds}
+            onContextMenuOpen={(x, y) => editorState.setContextMenu({ x, y })}
+            onKeyDown={(event) => handleKeyDown(event.nativeEvent)}
           />
         </div>
-
-        <PieceEditorCanvas
-          piece={piece}
-          scale={scale}
-          tool={editorState.tool}
-          showGrid={editorState.showGrid}
-          snapToGrid={editorState.snapToGrid}
-          smartGuides={editorState.smartGuides}
-          onPieceChange={onPieceChange}
-          onTransformStart={history.checkpoint}
-          onSelectObject={selection.toggleId}
-          onSelectIds={selection.selectIds}
-          onContextMenuOpen={(x, y) => editorState.setContextMenu({ x, y })}
-        />
-        <PieceEditorStatusBar piece={piece} />
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <PieceEditorShortcuts />
-          <span className="text-[11px] text-muted-foreground">
-            {history.canUndo ? 'Undo ready' : 'No undo'} ·{' '}
-            {history.canRedo ? 'Redo ready' : 'No redo'}
-          </span>
-        </div>
+        <PieceEditorStatusBar piece={piece} tool={editorState.tool} zoom={editorState.zoom} />
+        <details className="shrink-0 text-xs text-muted-foreground">
+          <summary className="cursor-pointer py-1">Keyboard shortcuts</summary>
+          <PieceEditorShortcuts tool={editorState.tool} />
+        </details>
       </div>
 
-      <aside className="flex flex-col gap-4">
-        <ObjectLayerPanel
-          piece={piece}
-          onSelectObject={selection.toggleId}
-          onToggleVisibility={toggleVisibility}
-          onToggleLock={toggleLock}
-          onSetKeyObject={selection.setKeyObjectId}
-          onDeleteObject={(objectId) => deleteObjects([objectId])}
-        />
-
-        <AlignmentToolbar
-          piece={piece}
-          onSelectIds={selection.selectIds}
-          onSetKeyObject={selection.setKeyObjectId}
-          onAlign={alignSelection}
-          onCenterArtworkToMask={() => center(piece.artworkObjectId, piece.maskObjectId)}
-          onCenterArtworkToCutline={() => center(piece.artworkObjectId, piece.cutlineObjectId)}
-          onCenterCutlineToMask={() => center(piece.cutlineObjectId, piece.maskObjectId)}
-          onMatchCutlineToMask={() => match(piece.cutlineObjectId, piece.maskObjectId)}
-          onMatchMaskToCutline={() => match(piece.maskObjectId, piece.cutlineObjectId)}
-        />
-
-        <WorkflowPanel
-          piece={piece}
-          selectedShape={selectedShape}
-          onMakeMask={makeClippingMask}
-          onReleaseMask={releaseMask}
-          onConvertToCutline={convertToCutline}
-          onDuplicateAsCutline={duplicateAsCutline}
-          onGroup={() => setGroup(true)}
-          onUngroup={() => setGroup(false)}
-        />
-
-        <PieceEditorPropertiesPanel
-          piece={piece}
-          selectedObject={selectedObject}
-          onPieceSizeChange={(widthCm, heightCm, source) =>
-            history.commit(resizePiece(piece, widthCm, heightCm, source))
-          }
-          onQuantityChange={(quantity) =>
-            history.commit({
-              ...piece,
-              quantity: Math.max(1, Math.round(quantity))
-            })
-          }
-          onAspectLockChange={(lockAspectRatio) => history.commit({ ...piece, lockAspectRatio })}
-          onObjectTransformChange={(objectId, patch) =>
-            history.commit(transforms.updateTransform(piece, objectId, patch))
-          }
-          onReset={() => history.commit(resetTransforms(piece))}
-          onDuplicatePiece={onDuplicate}
-          onPieceLockChange={(locked) => history.commit({ ...piece, locked })}
-          onGroupChange={setGroup}
-        />
-
-        <Button type="button" onClick={onSave}>
+      <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border bg-card">
+        <Tabs
+          value={inspector}
+          onValueChange={setInspector}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <TabsList className="m-1 grid shrink-0 grid-cols-4" aria-label="Piece inspector">
+            <TabsTrigger value="layers" className="px-1 text-xs">
+              Layers
+            </TabsTrigger>
+            <TabsTrigger value="properties" className="px-1 text-xs">
+              Properties
+            </TabsTrigger>
+            <TabsTrigger value="mask" className="px-1 text-xs">
+              {stage === 'prepare' ? 'Prepare' : 'Cut tools'}
+            </TabsTrigger>
+            <TabsTrigger value="align" className="px-1 text-xs">
+              Align
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="layers" className="mt-0 min-h-0 flex-1 overflow-y-auto p-1">
+            <ObjectLayerPanel
+              piece={piece}
+              onMaskEditingChange={(enabled) => {
+                editorState.setTool('select')
+                history.commit((current) => setMaskEditing(current, enabled))
+              }}
+              onRenameObject={(id, name) =>
+                history.commit((current) => renameLayerObject(current, id, name))
+              }
+              onReorderObject={(id, index) =>
+                history.commit((current) => reorderLayerObject(current, id, index))
+              }
+              onSelectObject={(id, additive) => {
+                editorState.setTool('select')
+                selection.toggleId(id, additive)
+              }}
+              onToggleVisibility={toggleVisibility}
+              onToggleLock={toggleLock}
+              onSetKeyObject={selection.setKeyObjectId}
+              onDeleteObject={(objectId) => deleteObjects([objectId])}
+            />
+          </TabsContent>
+          <TabsContent value="align" className="mt-0 min-h-0 flex-1 overflow-y-auto p-1">
+            <AlignmentToolbar
+              piece={piece}
+              onSelectIds={selection.selectIds}
+              onSetKeyObject={selection.setKeyObjectId}
+              onAlign={alignSelection}
+              onCenterArtworkToMask={() => center(piece.artworkObjectId, piece.maskObjectId)}
+              onCenterArtworkToCutline={() => center(piece.artworkObjectId, piece.cutlineObjectId)}
+              onCenterCutlineToMask={() => center(piece.cutlineObjectId, piece.maskObjectId)}
+              onMatchCutlineToMask={() => match(piece.cutlineObjectId, piece.maskObjectId)}
+              onMatchMaskToCutline={() => match(piece.maskObjectId, piece.cutlineObjectId)}
+            />
+          </TabsContent>
+          <TabsContent value="mask" className="mt-0 min-h-0 flex-1 overflow-y-auto p-1">
+            {stage === 'prepare' ? (
+              <div className="space-y-3">
+                <section className="rounded-lg border p-3">
+                  <h4 className="text-sm font-semibold">Mask / trim</h4>
+                  <p className="my-2 text-xs text-muted-foreground">
+                    Draw around the part you want to keep, then apply the mask. The original image
+                    stays intact.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => editorState.setTool('rectangle')}
+                    >
+                      Trim rectangle
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => editorState.setTool('ellipse')}
+                    >
+                      Oval mask
+                    </Button>
+                  </div>
+                  <Button
+                    className="mt-2 w-full"
+                    size="sm"
+                    disabled={!selectedShape || !piece.artworkObjectId}
+                    onClick={() => {
+                      if (selectedShape && piece.artworkObjectId) {
+                        history.commit(
+                          makeClippingMaskFromSelection(piece, [
+                            piece.artworkObjectId,
+                            selectedShape.id
+                          ])
+                        )
+                        editorState.setTool('select')
+                      }
+                    }}
+                  >
+                    Apply mask / trim
+                  </Button>
+                  <Button
+                    className="mt-2 w-full"
+                    variant="ghost"
+                    size="sm"
+                    disabled={!piece.clippingMaskEnabled}
+                    onClick={releaseMask}
+                  >
+                    Release mask
+                  </Button>
+                </section>
+                {onBackgroundApply && (
+                  <ArtworkBackgroundTools
+                    piece={piece}
+                    onApply={(id, result) => {
+                      history.checkpoint(piece)
+                      onBackgroundApply(id, result)
+                    }}
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <section className="space-y-2 rounded-lg border p-3">
+                  <h4 className="text-sm font-semibold">Create cut line</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Use the prepared mask, artwork bounds, or draw a shape on the canvas.
+                  </p>
+                  <Button
+                    className="w-full"
+                    size="sm"
+                    disabled={!piece.clippingMaskEnabled}
+                    onClick={() => history.commit(createCutlineFromMaskBounds(piece))}
+                  >
+                    Cut around mask
+                  </Button>
+                  <Button
+                    className="w-full"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => history.commit(createCutlineFromArtworkBounds(piece))}
+                  >
+                    Cut around artwork
+                  </Button>
+                  <Button
+                    className="w-full"
+                    size="sm"
+                    variant="outline"
+                    disabled={!selectedShape}
+                    onClick={duplicateAsCutline}
+                  >
+                    Use selected shape
+                  </Button>
+                </section>
+                <CutlineInspector piece={piece} onPieceChange={(next) => history.commit(next)} />
+              </div>
+            )}
+          </TabsContent>
+          <TabsContent value="properties" className="mt-0 min-h-0 flex-1 overflow-y-auto p-1">
+            <PieceEditorPropertiesPanel
+              hideQuantity
+              piece={piece}
+              selectedObject={selectedObject}
+              onPieceSizeChange={(widthCm, heightCm, source) =>
+                history.commit((currentPiece) =>
+                  resizePiecePreset(currentPiece, widthCm, heightCm, source)
+                )
+              }
+              onQuantityChange={(quantity) =>
+                history.commit((currentPiece) => ({
+                  ...currentPiece,
+                  quantity: Math.max(1, Math.round(quantity))
+                }))
+              }
+              onAspectLockChange={(lockAspectRatio) =>
+                history.commit((currentPiece) => ({ ...currentPiece, lockAspectRatio }))
+              }
+              onObjectTransformChange={(objectId, patch) =>
+                history.commit((currentPiece) =>
+                  transforms.updateTransform(currentPiece, objectId, patch)
+                )
+              }
+              onReset={() => history.commit((currentPiece) => resetTransforms(currentPiece))}
+              onDuplicatePiece={onDuplicate}
+              onPieceLockChange={(locked) =>
+                history.commit((currentPiece) => ({ ...currentPiece, locked }))
+              }
+              onGroupChange={setGroup}
+            />
+          </TabsContent>
+        </Tabs>
+        <Button className="m-2 shrink-0" type="button" onClick={onSave}>
           <Save data-icon="inline-start" />
           Save piece preset
         </Button>
@@ -261,34 +451,19 @@ function ActivePieceEditor({
   }
 
   function deleteObjects(ids: string[]): void {
-    const deleting = new Set(ids)
-    const objects = piece.objects.filter(
-      (object) => !deleting.has(object.id) || object.role === 'artwork'
-    )
-    if (objects.length === piece.objects.length) return
-    const nextCutline = objects.find((object) => object.role === 'cutline')
-    const maskDeleted = Boolean(piece.maskObjectId && deleting.has(piece.maskObjectId))
-    history.commit(
-      syncLegacyFieldsFromObjects({
-        ...piece,
-        objects,
-        maskObjectId: maskDeleted ? undefined : piece.maskObjectId,
-        clippingMaskEnabled: maskDeleted ? false : piece.clippingMaskEnabled,
-        cutlineObjectId:
-          piece.cutlineObjectId && deleting.has(piece.cutlineObjectId)
-            ? nextCutline?.id
-            : piece.cutlineObjectId,
-        selectedObjectIds: piece.selectedObjectIds.filter((id) => !deleting.has(id)),
-        keyObjectId:
-          piece.keyObjectId && deleting.has(piece.keyObjectId) ? undefined : piece.keyObjectId
-      })
-    )
+    const editableIds = ids.filter((id) => !isActiveMaskPairObject(piece, id))
+    if (editableIds.length === 0) return
+    const next = deleteEditorObjects(piece, editableIds)
+    if (next !== piece) history.commit(next)
   }
 
   function toggleVisibility(objectId: string): void {
+    if (isActiveMaskPairObject(piece, objectId)) return
     history.commit(
       syncLegacyFieldsFromObjects({
         ...piece,
+        selectedObjectIds: piece.selectedObjectIds.filter((id) => id !== objectId),
+        keyObjectId: piece.keyObjectId === objectId ? undefined : piece.keyObjectId,
         objects: piece.objects.map((object) =>
           object.id === objectId ? { ...object, visible: !object.visible } : object
         )
@@ -297,9 +472,12 @@ function ActivePieceEditor({
   }
 
   function toggleLock(objectId: string): void {
+    if (isActiveMaskPairObject(piece, objectId)) return
     history.commit(
       syncLegacyFieldsFromObjects({
         ...piece,
+        selectedObjectIds: piece.selectedObjectIds.filter((id) => id !== objectId),
+        keyObjectId: piece.keyObjectId === objectId ? undefined : piece.keyObjectId,
         objects: piece.objects.map((object) =>
           object.id === objectId ? { ...object, locked: !object.locked } : object
         )
@@ -313,6 +491,11 @@ function ActivePieceEditor({
 
   function makeClippingMask(): void {
     const next = makeClippingMaskFromSelection(piece)
+    if (next !== piece) history.commit(next)
+  }
+
+  function makeMaskAndCutline(): void {
+    const next = makeClippingMaskAndCutlineFromSelection(piece)
     if (next !== piece) history.commit(next)
   }
 
@@ -338,6 +521,7 @@ function ActivePieceEditor({
 
   function alignSelection(command: AlignmentCommand): void {
     if (!piece.keyObjectId || piece.selectedObjectIds.length < 2) return
+    if (piece.selectedObjectIds.some((objectId) => isActiveMaskPairObject(piece, objectId))) return
     history.commit(
       syncLegacyFieldsFromObjects({
         ...piece,
@@ -352,16 +536,19 @@ function ActivePieceEditor({
   }
 
   function center(targetId: string | undefined, containerId: string | undefined): void {
+    if (targetId && isActiveMaskPairObject(piece, targetId)) return
     const next = centerObjectInside(piece, targetId, containerId)
     if (next !== piece) history.commit(next)
   }
 
   function match(targetId: string | undefined, sourceId: string | undefined): void {
+    if (targetId && isActiveMaskPairObject(piece, targetId)) return
     const next = matchObjectGeometry(piece, targetId, sourceId)
     if (next !== piece) history.commit(next)
   }
 
   function setGroup(grouped: boolean): void {
+    if (piece.selectedObjectIds.some((objectId) => isActiveMaskPairObject(piece, objectId))) return
     const next = setObjectGroup(piece, piece.selectedObjectIds, grouped)
     if (next !== piece) history.commit(next)
   }
@@ -372,111 +559,12 @@ function ActivePieceEditor({
   }
 }
 
-function WorkflowPanel({
-  piece,
-  selectedShape,
-  onMakeMask,
-  onReleaseMask,
-  onConvertToCutline,
-  onDuplicateAsCutline,
-  onGroup,
-  onUngroup
-}: {
-  piece: PiecePreset
-  selectedShape?: EditorObject
-  onMakeMask: () => void
-  onReleaseMask: () => void
-  onConvertToCutline: () => void
-  onDuplicateAsCutline: () => void
-  onGroup: () => void
-  onUngroup: () => void
-}): JSX.Element {
-  const selected = piece.objects.filter((object) => piece.selectedObjectIds.includes(object.id))
-  const canMakeMask = selected.some((object) => object.role === 'artwork') && Boolean(selectedShape)
+function isActiveMaskPairObject(piece: PiecePreset, objectId: string): boolean {
   return (
-    <section className="rounded-lg border bg-card p-3">
-      <h4 className="text-sm font-semibold">Object workflow</h4>
-      <div className="mt-3 grid grid-cols-1 gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={!canMakeMask}
-          onClick={onMakeMask}
-        >
-          Make Clipping Mask
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={!piece.clippingMaskEnabled}
-          onClick={onReleaseMask}
-        >
-          Release Clipping Mask
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={!selectedShape}
-          onClick={onDuplicateAsCutline}
-        >
-          <Scissors data-icon="inline-start" />
-          Duplicate Shape as Cutline
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={!selectedShape}
-          onClick={onConvertToCutline}
-        >
-          Convert to CutContour
-        </Button>
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={piece.selectedObjectIds.length < 2}
-            onClick={onGroup}
-          >
-            Group / link
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!selected.some((object) => object.groupId)}
-            onClick={onUngroup}
-          >
-            Ungroup
-          </Button>
-        </div>
-      </div>
-    </section>
+    piece.clippingMaskEnabled &&
+    !piece.maskEditingEnabled &&
+    (piece.maskObjectId === objectId || piece.artworkObjectId === objectId)
   )
-}
-
-function getPieceScale(piece: PiecePreset, zoom: number): number {
-  return Math.max(16, Math.min(360 / Math.max(piece.widthCm, piece.heightCm), 64)) * zoom
-}
-
-function resizePiece(
-  piece: PiecePreset,
-  widthCm: number,
-  heightCm: number,
-  sourceAxis: 'width' | 'height'
-): PiecePreset {
-  const nextWidth = Math.max(widthCm, 0.5)
-  const nextHeight = Math.max(heightCm, 0.5)
-  const ratio = piece.heightCm / piece.widthCm
-  const finalWidth =
-    piece.lockAspectRatio && sourceAxis === 'height' ? nextHeight / ratio : nextWidth
-  const finalHeight =
-    piece.lockAspectRatio && sourceAxis === 'width' ? nextWidth * ratio : nextHeight
-  return syncPieceBounds(piece, finalWidth, finalHeight)
 }
 
 function resetTransforms(piece: PiecePreset): PiecePreset {
@@ -484,7 +572,7 @@ function resetTransforms(piece: PiecePreset): PiecePreset {
   return syncLegacyFieldsFromObjects({
     ...piece,
     objects: piece.objects.map((object) =>
-      primaryIds.has(object.id)
+      primaryIds.has(object.id) && !object.locked && !isActiveMaskPairObject(piece, object.id)
         ? {
             ...object,
             transform: {

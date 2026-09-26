@@ -22,6 +22,12 @@ export function roundToStep(value: number, step: number): number {
   return Math.round(value / step) * step
 }
 
+/** Snap forward without ever reducing the requested physical clearance. */
+export function roundUpToStep(value: number, step: number): number {
+  if (step <= 0) return value
+  return Math.ceil((value - 1e-9) / step) * step
+}
+
 export function formatCm(value: number): string {
   return `${trimNumber(value)} cm`
 }

@@ -1,5 +1,16 @@
 import {
   PDFDocument,
+  fill,
+  setLineJoin,
+  setLineCap,
+  PDFOperator,
+  PDFOperatorNames,
+  PDFNumber,
+  setLineWidth,
+  stroke,
+  setStrokingRgbColor,
+  setDashPattern,
+  StandardFonts,
   appendBezierCurve,
   clip,
   closePath,
@@ -11,7 +22,8 @@ import {
   pushGraphicsState,
   rectangle,
   rgb,
-  type PDFImage
+  rotateDegrees,
+  translate
 } from 'pdf-lib'
 import type {
   CutterExportResult,
@@ -20,54 +32,314 @@ import type {
   PieceSourceFile,
   PlacedPiece
 } from '../types'
-import { getPlacedArtworkRect, getPlacedCutlineRect } from './cutlineGenerator'
+import { getPlacedArtworkRect, getPlacedEditorObjectRect } from './cutlineGenerator'
+import {
+  beginPdfLayer,
+  endPdfLayer,
+  createProductionLayers,
+  installCutSpot,
+  cutSpotOperators,
+  registrationSpotOperators,
+  objectPath
+} from './pdfProductionLayers'
 import { getPlacedMaskRect } from './maskUtils'
+import { getProductionLabelLayout } from './productionLabel'
+import { getProductionSheetLayoutGroups } from './productionSheetGroups'
+import { getProductionSheetCount, getProductionSheetProject } from './productionSheets'
+import { rasterizeSourceForPdf } from './rasterizeArtwork'
+import { getRegistrationMarks } from './registrationMarks'
+import { getCutterExportSemantics } from './exportPresets'
 import { cmToPoints, mmToPoints } from './units'
 import { getCutterFileName } from './svgExport'
 
 export async function exportCutterPdf(project: CutterProject): Promise<CutterExportResult> {
   const pdf = await PDFDocument.create()
-  const page = pdf.addPage([cmToPoints(project.sheet.widthCm), cmToPoints(project.sheet.heightCm)])
+  const semantics = getCutterExportSemantics(project.exportSettings)
+  const pdfLayers = createProductionLayers(pdf, semantics.isCustomerPreview)
   const pieceMap = new Map(project.pieces.map((piece) => [piece.id, piece]))
   const sourceMap = new Map(project.sources.map((source) => [source.id, source]))
+  const physicalSheetCount = getProductionSheetCount(project.placedPieces)
+  const layoutGroups = getProductionSheetLayoutGroups(project)
 
-  page.drawRectangle({
-    x: 0,
-    y: 0,
-    width: cmToPoints(project.sheet.widthCm),
-    height: cmToPoints(project.sheet.heightCm),
-    color: rgb(1, 1, 1)
-  })
+  pdf.setTitle('Cutter montage - unique production layouts')
+  pdf.setSubject(
+    layoutGroups
+      .map(
+        (group, layoutIndex) =>
+          `Layout ${layoutIndex + 1}: print ${group.repeatCount} cop${group.repeatCount === 1 ? 'y' : 'ies'}`
+      )
+      .join('; ')
+  )
 
-  if (project.layers.artwork && project.exportSettings.includeArtwork) {
-    for (const placed of project.placedPieces) {
-      const piece = pieceMap.get(placed.presetId)
-      const source = piece ? sourceMap.get(piece.sourceId) : undefined
+  for (const group of layoutGroups) {
+    const sheetProject = getProductionSheetProject(project, group.templateSheetIndex)
+    const page = pdf.addPage([
+      cmToPoints(sheetProject.sheet.widthCm),
+      cmToPoints(sheetProject.sheet.heightCm)
+    ])
 
-      if (piece && source && piece.objectVisibility.artwork) {
-        await drawArtwork(pdf, page, source, placed, project.sheet.heightCm, piece)
+    installCutSpot(pdf, page)
+    beginPdfLayer(page, pdfLayers.artwork)
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width: cmToPoints(sheetProject.sheet.widthCm),
+      height: cmToPoints(sheetProject.sheet.heightCm),
+      color: rgb(1, 1, 1)
+    })
+
+    if (sheetProject.layers.artwork && sheetProject.exportSettings.includeArtwork) {
+      for (const placed of sheetProject.placedPieces) {
+        const piece = pieceMap.get(placed.presetId)
+        const source = piece ? sourceMap.get(piece.sourceId) : undefined
+
+        if (piece && source && piece.objectVisibility.artwork) {
+          await drawArtwork(pdf, page, source, placed, sheetProject.sheet.heightCm, piece)
+        }
       }
     }
-  }
 
-  if (project.layers.cutlines && project.exportSettings.includeCutlines) {
-    for (const placed of project.placedPieces) {
-      const piece = pieceMap.get(placed.presetId)
+    endPdfLayer(page)
+    const exportSemantics = getCutterExportSemantics(sheetProject.exportSettings)
+    const contourRenderKind = exportSemantics.contourRenderKind
 
-      if (!piece || !piece.objectVisibility.cutline) {
-        continue
+    beginPdfLayer(page, pdfLayers.cut)
+    if (contourRenderKind !== 'none') {
+      for (const placed of sheetProject.placedPieces) {
+        const piece = pieceMap.get(placed.presetId)
+        if (!piece) continue
+        for (const object of piece.objects.filter(
+          (object) => object.role === 'cutline' && object.exportEnabled !== false
+        )) {
+          const rect = getPlacedEditorObjectRect(placed, piece, object)
+          page.pushOperators(
+            pushGraphicsState(),
+            ...(contourRenderKind === 'preview'
+              ? [
+                  setStrokingRgbColor(0.976, 0.451, 0.086),
+                  setDashPattern([mmToPoints(2), mmToPoints(1)], 0)
+                ]
+              : cutSpotOperators()),
+            setLineWidth(object.strokeWidthPt ?? 0.25),
+            ...objectPath(object, rect, sheetProject.sheet.heightCm),
+            stroke(),
+            popGraphicsState()
+          )
+        }
       }
-
-      drawCutline(page, getPlacedCutlineRect(placed, piece), project.sheet.heightCm, piece)
     }
+    endPdfLayer(page)
+    beginPdfLayer(page, pdfLayers.registration)
+    if (sheetProject.exportSettings.includeRegistrationMarks !== false) {
+      drawRegistrationMarks(page, sheetProject)
+    }
+
+    endPdfLayer(page)
+    beginPdfLayer(page, pdfLayers.artwork)
+    if (exportSemantics.isCustomerPreview) {
+      const font = await pdf.embedFont(StandardFonts.HelveticaBold)
+      page.drawText('CUSTOMER PREVIEW - NOT FOR PRODUCTION CUTTING', {
+        x: cmToPoints(sheetProject.sheet.widthCm * 0.18),
+        y: cmToPoints(sheetProject.sheet.heightCm * 0.5),
+        size: 18,
+        rotate: degrees(22),
+        color: rgb(0.75, 0.08, 0.08),
+        opacity: 0.38,
+        font
+      })
+    }
+
+    if (sheetProject.exportSettings.includeProductionLabel !== false) {
+      await drawProductionLabel(pdf, page, sheetProject)
+    }
+    endPdfLayer(page)
   }
 
   const bytes = await pdf.save({ addDefaultPage: false, useObjectStreams: true })
+  const firstSheet = getProductionSheetProject(project, 0)
 
   return {
     blob: new Blob([bytesToArrayBuffer(bytes)], { type: 'application/pdf' }),
-    fileName: getCutterFileName(project.sheet.widthCm, project.sheet.heightCm, 'pdf')
+    fileName:
+      physicalSheetCount > 1
+        ? `cutter_montage_96cm_${layoutGroups.length}_layouts_${physicalSheetCount}_prints.pdf`
+        : getCutterFileName(firstSheet.sheet.widthCm, firstSheet.sheet.heightCm, 'pdf')
   }
+}
+
+function drawRegistrationMarks(page: PdfPage, project: CutterProject): void {
+  for (const mark of getRegistrationMarks(project)) {
+    const color = hexToRgb(mark.color)
+    const x = mmToPoints(mark.xMm)
+    const markHeightMm = mark.boundsCm.heightCm * 10
+    const y = cmToPoints(project.sheet.heightCm) - mmToPoints(mark.yMm + markHeightMm)
+    const size = mmToPoints(mark.sizeMm)
+    const centerX = x + size / 2
+    const centerY = y + size / 2
+
+    if (mark.type === 'mimaki') {
+      if (mark.position === 'direction') {
+        const triangleHeight = mmToPoints(markHeightMm)
+        page.pushOperators(
+          pushGraphicsState(),
+          ...registrationSpotOperators(true),
+          moveTo(x + size / 2, y),
+          lineTo(x, y + triangleHeight),
+          lineTo(x + size, y + triangleHeight),
+          closePath(),
+          fill(),
+          popGraphicsState()
+        )
+        continue
+      }
+
+      const left = mark.xMm
+      const top = mark.yMm
+      const right = left + mark.sizeMm
+      const bottom = top + mark.sizeMm
+      const [first, corner, last]: [[number, number], [number, number], [number, number]] =
+        mark.position === 'top-left'
+          ? [
+              [left, bottom],
+              [right, bottom],
+              [right, top]
+            ]
+          : mark.position === 'top-right'
+            ? [
+                [right, bottom],
+                [left, bottom],
+                [left, top]
+              ]
+            : mark.position === 'bottom-left'
+              ? [
+                  [left, top],
+                  [right, top],
+                  [right, bottom]
+                ]
+              : [
+                  [right, top],
+                  [left, top],
+                  [left, bottom]
+                ]
+
+      const point = (p: readonly [number, number]) =>
+        [mmToPoints(p[0]), cmToPoints(project.sheet.heightCm) - mmToPoints(p[1])] as const
+      page.pushOperators(
+        pushGraphicsState(),
+        ...registrationSpotOperators(),
+        setLineWidth(mmToPoints(mark.strokeWidthMm)),
+        setLineJoin(0),
+        setLineCap(0),
+        PDFOperator.of(PDFOperatorNames.SetLineMiterLimit, [PDFNumber.of(2)]),
+        moveTo(...point(first)),
+        lineTo(...point(corner)),
+        lineTo(...point(last)),
+        stroke(),
+        popGraphicsState()
+      )
+      continue
+    }
+
+    if (mark.type === 'corner-square') {
+      page.drawRectangle({ x, y, width: size, height: size, color })
+      continue
+    }
+
+    if (mark.type === 'circle') {
+      page.drawEllipse({
+        x: centerX,
+        y: centerY,
+        xScale: size / 2,
+        yScale: size / 2,
+        borderColor: color,
+        borderWidth: mmToPoints(0.35)
+      })
+      continue
+    }
+
+    page.drawLine({
+      start: { x, y: centerY },
+      end: { x: centerX - size / 4, y: centerY },
+      color,
+      thickness: mmToPoints(0.35)
+    })
+    page.drawLine({
+      start: { x: centerX + size / 4, y: centerY },
+      end: { x: x + size, y: centerY },
+      color,
+      thickness: mmToPoints(0.35)
+    })
+    page.drawLine({
+      start: { x: centerX, y },
+      end: { x: centerX, y: centerY - size / 4 },
+      color,
+      thickness: mmToPoints(0.35)
+    })
+    page.drawLine({
+      start: { x: centerX, y: centerY + size / 4 },
+      end: { x: centerX, y: y + size },
+      color,
+      thickness: mmToPoints(0.35)
+    })
+  }
+}
+
+function drawRegistrationLine(
+  page: PdfPage,
+  sheetHeightCm: number,
+  startMm: readonly [number, number],
+  endMm: readonly [number, number],
+  color: ReturnType<typeof rgb>,
+  thicknessMm: number
+): void {
+  page.drawLine({
+    start: {
+      x: mmToPoints(startMm[0]),
+      y: cmToPoints(sheetHeightCm) - mmToPoints(startMm[1])
+    },
+    end: {
+      x: mmToPoints(endMm[0]),
+      y: cmToPoints(sheetHeightCm) - mmToPoints(endMm[1])
+    },
+    color,
+    thickness: mmToPoints(thicknessMm)
+  })
+}
+
+async function drawProductionLabel(
+  pdf: PDFDocument,
+  page: PdfPage,
+  project: CutterProject
+): Promise<void> {
+  const layout = getProductionLabelLayout(project)
+
+  if (!layout) return
+
+  const font = await pdf.embedFont(StandardFonts.Helvetica)
+  const x = mmToPoints(layout.xMm)
+  const y = cmToPoints(project.sheet.heightCm) - mmToPoints(layout.yMm + layout.heightMm)
+  const lineHeight = layout.fontSizePt + 3
+
+  page.drawRectangle({
+    x,
+    y,
+    width: mmToPoints(layout.widthMm),
+    height: mmToPoints(layout.heightMm),
+    color: rgb(1, 1, 1),
+    opacity: 0.86,
+    borderColor: rgb(0.28, 0.33, 0.41),
+    borderWidth: 0.35
+  })
+
+  layout.lines.forEach((line, index) => {
+    page.drawText(line, {
+      x: x + mmToPoints(2),
+      y: y + mmToPoints(layout.heightMm) - 10 - index * lineHeight,
+      size: layout.fontSizePt,
+      color: rgb(0.06, 0.09, 0.16),
+      font
+    })
+  })
 }
 
 async function drawArtwork(
@@ -82,180 +354,48 @@ async function drawArtwork(
   const maskRect = getPlacedMaskRect(placed, piece)
   const hasMask = piece.clippingMaskEnabled ?? piece.mask.enabled
 
-  if (source.mimeType === 'image/svg+xml') {
-    const image = await embedSvgSourceAsPng(pdf, source)
-
-    if (!image) {
-      drawSvgFallback(page, hasMask ? maskRect : artworkRect, sheetHeightCm)
-      return
-    }
-
-    if (hasMask) {
-      pushMaskClip(page, maskRect, sheetHeightCm, piece.mask.shape)
-    }
-
-    const pdfRect = toPdfRect(artworkRect, sheetHeightCm)
-    page.drawImage(image, {
-      x: pdfRect.x,
-      y: pdfRect.y,
-      width: pdfRect.width,
-      height: pdfRect.height,
-      rotate: degrees(-artworkRect.rotation)
-    })
-
-    if (hasMask) {
-      page.pushOperators(popGraphicsState())
-    }
-
-    return
-  }
-
+  const rasterized = await rasterizeSourceForPdf(source, {
+    widthCm: artworkRect.widthCm,
+    heightCm: artworkRect.heightCm
+  })
   const image =
-    source.mimeType === 'image/png'
-      ? await pdf.embedPng(source.bytes)
-      : await pdf.embedJpg(source.bytes)
+    rasterized.mimeType === 'image/png'
+      ? await pdf.embedPng(rasterized.bytes)
+      : await pdf.embedJpg(rasterized.bytes)
   const pdfRect = toPdfRect(artworkRect, sheetHeightCm)
 
   if (hasMask) {
-    pushMaskClip(page, maskRect, sheetHeightCm, piece.mask.shape)
+    const mask = piece.objects.find(
+      (object) => object.id === piece.maskObjectId || object.role === 'clipping-mask'
+    )
+    if (mask) {
+      page.pushOperators(
+        pushGraphicsState(),
+        ...objectPath(mask, maskRect, sheetHeightCm),
+        clip(),
+        endPath()
+      )
+    } else {
+      pushMaskClip(page, maskRect, sheetHeightCm, piece.mask.shape)
+    }
   }
 
+  page.pushOperators(
+    pushGraphicsState(),
+    translate(pdfRect.centerX, pdfRect.centerY),
+    rotateDegrees(-artworkRect.rotation)
+  )
   page.drawImage(image, {
-    x: pdfRect.x,
-    y: pdfRect.y,
+    x: -pdfRect.width / 2,
+    y: -pdfRect.height / 2,
     width: pdfRect.width,
-    height: pdfRect.height,
-    rotate: degrees(-artworkRect.rotation)
+    height: pdfRect.height
   })
 
+  page.pushOperators(popGraphicsState())
   if (hasMask) {
     page.pushOperators(popGraphicsState())
   }
-}
-
-async function embedSvgSourceAsPng(
-  pdf: PDFDocument,
-  source: PieceSourceFile
-): Promise<PDFImage | null> {
-  if (typeof document === 'undefined') {
-    return null
-  }
-
-  const svgText = new TextDecoder().decode(source.bytes)
-  const svgSize = getSvgIntrinsicSize(svgText, source.naturalWidthPx, source.naturalHeightPx)
-  const url = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' }))
-
-  try {
-    const image = await loadSvgImage(url)
-    const width = Math.max(image.naturalWidth || image.width || svgSize.width || 800, 1)
-    const height = Math.max(image.naturalHeight || image.height || svgSize.height || 800, 1)
-    const pixelRatio =
-      typeof window === 'undefined' ? 1 : Math.min(Math.max(window.devicePixelRatio || 1, 1), 2)
-    const canvas = document.createElement('canvas')
-    const context = canvas.getContext('2d')
-
-    if (!context) {
-      return null
-    }
-
-    canvas.width = Math.ceil(width * pixelRatio)
-    canvas.height = Math.ceil(height * pixelRatio)
-    context.scale(pixelRatio, pixelRatio)
-    context.drawImage(image, 0, 0, width, height)
-
-    const pngBytes = await canvasToPngBytes(canvas)
-    resetCanvas(canvas)
-
-    return pngBytes ? pdf.embedPng(pngBytes) : null
-  } catch {
-    return null
-  } finally {
-    URL.revokeObjectURL(url)
-  }
-}
-
-function loadSvgImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error('Could not render SVG artwork for PDF export.'))
-    image.src = url
-  })
-}
-
-function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array | null> {
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        resolve(null)
-        return
-      }
-
-      blob
-        .arrayBuffer()
-        .then((buffer) => resolve(new Uint8Array(buffer)))
-        .catch(() => resolve(null))
-    }, 'image/png')
-  })
-}
-
-function resetCanvas(canvas: HTMLCanvasElement): void {
-  canvas.width = 1
-  canvas.height = 1
-}
-
-function getSvgIntrinsicSize(
-  svgText: string,
-  fallbackWidth: number,
-  fallbackHeight: number
-): { width: number; height: number } {
-  const width = readSvgLength(svgText, 'width')
-  const height = readSvgLength(svgText, 'height')
-
-  if (width && height) {
-    return { width, height }
-  }
-
-  const viewBox = /viewBox=["']\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)\s*["']/i.exec(svgText)
-  if (viewBox) {
-    return {
-      width: Number(viewBox[1]) || fallbackWidth || 800,
-      height: Number(viewBox[2]) || fallbackHeight || 800
-    }
-  }
-
-  return {
-    width: fallbackWidth || 800,
-    height: fallbackHeight || 800
-  }
-}
-
-function readSvgLength(svgText: string, attribute: 'width' | 'height'): number | null {
-  const match = new RegExp(`${attribute}=["']([\\d.]+)(?:px|pt|mm|cm|in)?["']`, 'i').exec(svgText)
-  const value = match ? Number(match[1]) : Number.NaN
-
-  return Number.isFinite(value) && value > 0 ? value : null
-}
-
-function drawSvgFallback(page: PdfPage, rect: RectLike, sheetHeightCm: number): void {
-  const pdfRect = toPdfRect(rect, sheetHeightCm)
-
-  page.drawRectangle({
-    x: pdfRect.x,
-    y: pdfRect.y,
-    width: pdfRect.width,
-    height: pdfRect.height,
-    rotate: degrees(-rect.rotation),
-    borderColor: rgb(0.75, 0.78, 0.84),
-    borderWidth: 0.5
-  })
-  page.drawText('SVG preview unavailable', {
-    x: cmToPoints(rect.xCm + 0.2),
-    y: cmToPoints(sheetHeightCm - rect.yCm - 0.6),
-    size: 8,
-    color: rgb(0.37, 0.42, 0.5)
-  })
 }
 
 function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -281,39 +421,6 @@ interface PdfRect {
   centerY: number
 }
 
-function drawCutline(
-  page: PdfPage,
-  rect: RectLike,
-  sheetHeightCm: number,
-  piece: PiecePreset
-): void {
-  const pdfRect = toPdfRect(rect, sheetHeightCm)
-  const borderWidth = Math.max(mmToPoints(0.1), piece.cutline.strokeWidthPt)
-
-  if (piece.cutline.shape === 'ellipse') {
-    page.drawEllipse({
-      x: pdfRect.centerX,
-      y: pdfRect.centerY,
-      xScale: pdfRect.width / 2,
-      yScale: pdfRect.height / 2,
-      rotate: degrees(-rect.rotation),
-      borderColor: rgb(1, 0, 1),
-      borderWidth
-    })
-    return
-  }
-
-  page.drawRectangle({
-    x: pdfRect.x,
-    y: pdfRect.y,
-    width: pdfRect.width,
-    height: pdfRect.height,
-    rotate: degrees(-rect.rotation),
-    borderColor: rgb(1, 0, 1),
-    borderWidth
-  })
-}
-
 function pushMaskClip(
   page: PdfPage,
   rect: RectLike,
@@ -323,6 +430,13 @@ function pushMaskClip(
   const pdfRect = toPdfRect(rect, sheetHeightCm)
 
   page.pushOperators(pushGraphicsState())
+  if (rect.rotation) {
+    page.pushOperators(
+      translate(pdfRect.centerX, pdfRect.centerY),
+      rotateDegrees(-rect.rotation),
+      translate(-pdfRect.centerX, -pdfRect.centerY)
+    )
+  }
 
   if (shape === 'ellipse') {
     pushEllipsePath(page, pdfRect)
@@ -372,4 +486,20 @@ function toPdfRect(rect: RectLike, sheetHeightCm: number): PdfRect {
     centerX: x + width / 2,
     centerY: y + height / 2
   }
+}
+
+function hexToRgb(value: string): ReturnType<typeof rgb> {
+  const normalized = value.trim().replace('#', '')
+  const full =
+    normalized.length === 3
+      ? normalized
+          .split('')
+          .map((char) => `${char}${char}`)
+          .join('')
+      : normalized.padEnd(6, '0').slice(0, 6)
+  const red = Number.parseInt(full.slice(0, 2), 16) / 255
+  const green = Number.parseInt(full.slice(2, 4), 16) / 255
+  const blue = Number.parseInt(full.slice(4, 6), 16) / 255
+
+  return rgb(red, green, blue)
 }

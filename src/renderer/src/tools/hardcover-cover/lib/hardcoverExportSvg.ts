@@ -1,26 +1,34 @@
 import { safeFileName } from '@/lib/fileNaming'
-import type { CoverDimensions, CoverZone, HardcoverProjectState, SpineTextLayout } from '../types'
+import type {
+  CoverDimensions,
+  CoverZone,
+  HardcoverPdfFitMode,
+  HardcoverPdfPagePosition,
+  HardcoverPdfSource,
+  HardcoverProjectState,
+  SpineTextLayout
+} from '../types'
 import { calculateCoverDimensions } from './coverCalculations'
+import { hasHardcoverPdfSourceBytes } from './sourcePdf'
+import { normalizePdfPagePosition } from './pdfPosition'
+import { getSpineBackgroundFill } from './spineBackground'
 import { calculateSpineTextLayout } from './spineTextLayout'
 import { isRtlText, wrapTextByCharacters } from './textFit'
 
 const SOURCE_PDF_SPINE_TEXT_COLOR = '#0f172a'
 
-export function buildHardcoverSvg(state: HardcoverProjectState): string {
+export function buildHardcoverSvg(
+  state: HardcoverProjectState,
+  options: { idPrefix?: string } = {}
+): string {
   const dimensions = calculateCoverDimensions(state.setup)
   const { content, exportSettings } = state
   const showProductionGuides = exportSettings.mode === 'production-guide'
   const showGuides = showProductionGuides || exportSettings.includeFoldLines
   const showSafeZones = showProductionGuides || exportSettings.includeSafeZones
   const showZoneFills = showProductionGuides || exportSettings.mode === 'customer-preview'
-  const frontSourcePreview = state.sourcePdf?.thumbnailDataUrl
-  const backSourcePreview =
-    state.sourcePdf?.backCoverEnabled && state.sourcePdf.backPageNumber
-      ? (state.sourcePdf.backThumbnailDataUrl ??
-        state.sourcePdf.pagePreviews?.find(
-          (preview) => preview.pageNumber === state.sourcePdf?.backPageNumber
-        )?.thumbnailDataUrl)
-      : undefined
+  const frontSourcePreview = getSourcePagePreview(state.sourcePdf, 'front')
+  const backSourcePreview = getSourcePagePreview(state.sourcePdf, 'back')
   const drawManualArtwork = !state.sourcePdf
   const spineLayout = calculateSpineTextLayout(
     content.spine,
@@ -28,7 +36,7 @@ export function buildHardcoverSvg(state: HardcoverProjectState): string {
     dimensions.spine.heightMm - state.setup.hingeMm * 2
   )
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${round(dimensions.fullWidthMm)}mm" height="${round(dimensions.fullHeightMm)}mm" viewBox="0 0 ${round(dimensions.fullWidthMm)} ${round(dimensions.fullHeightMm)}">
   <title>${escapeXml(content.front.studentName || 'Hardcover cover')}</title>
   <metadata>Created by My Printer App by Maher Tka; ${new Date().toISOString()}; ${round(dimensions.fullWidthMm)} x ${round(dimensions.fullHeightMm)} mm; ${escapeXml(exportSettings.mode)}</metadata>
@@ -42,7 +50,14 @@ export function buildHardcoverSvg(state: HardcoverProjectState): string {
     ${
       drawManualArtwork
         ? manualArtworkMarkup(dimensions, state)
-        : sourcePdfArtworkMarkup(dimensions, state, frontSourcePreview, backSourcePreview)
+        : sourcePdfArtworkMarkup(
+            dimensions,
+            state,
+            frontSourcePreview,
+            backSourcePreview,
+            getSourceFitMode(state.sourcePdf, 'front'),
+            getSourceFitMode(state.sourcePdf, 'back')
+          )
     }
     ${spineTextMarkup(spineLayout, dimensions, state)}
   </g>
@@ -50,19 +65,39 @@ export function buildHardcoverSvg(state: HardcoverProjectState): string {
   ${showSafeZones ? safeZoneMarkup(dimensions) : ''}
   ${exportSettings.includeCropMarks ? cropMarkMarkup(dimensions) : ''}
 </svg>`
+
+  return options.idPrefix ? namespaceSvgIds(svg, options.idPrefix) : svg
 }
 
 function sourcePdfArtworkMarkup(
   dimensions: CoverDimensions,
   state: HardcoverProjectState,
   frontSourcePreview: string | undefined,
-  backSourcePreview: string | undefined
+  backSourcePreview: string | undefined,
+  frontFitMode: HardcoverPdfFitMode,
+  backFitMode: HardcoverPdfFitMode
 ): string {
-  const fitMode = state.sourcePdf?.fitMode === 'fill' ? 'cover' : 'contain'
+  const frontFit = frontFitMode === 'fill' ? 'cover' : 'contain'
+  const backFit = backFitMode === 'fill' ? 'cover' : 'contain'
+  const frontPosition = getSourcePosition(state.sourcePdf, 'front')
+  const backPosition = getSourcePosition(state.sourcePdf, 'back')
+  const backExpected = Boolean(state.sourcePdf?.backCoverEnabled)
 
   return `
-    ${imageMarkup(frontSourcePreview, dimensions.front, fitMode)}
-    ${imageMarkup(backSourcePreview, dimensions.back, fitMode)}`
+    ${frontSourcePreview ? positionedSourceImageMarkup(frontSourcePreview, dimensions.front, frontFit, frontPosition, 'front') : missingSourceMarkup('front', dimensions.front)}
+    ${
+      backExpected
+        ? backSourcePreview
+          ? positionedSourceImageMarkup(
+              backSourcePreview,
+              dimensions.back,
+              backFit,
+              backPosition,
+              'back'
+            )
+          : missingSourceMarkup('back', dimensions.back)
+        : ''
+    }`
 }
 
 export function exportHardcoverSvg(state: HardcoverProjectState): {
@@ -70,11 +105,92 @@ export function exportHardcoverSvg(state: HardcoverProjectState): {
   fileName: string
   mimeType: string
 } {
+  assertSvgSourceReady(state)
   const svg = buildHardcoverSvg(state)
   return {
     bytes: new TextEncoder().encode(svg),
     fileName: `hardcover_cover_${safeFileName(state.content.front.studentName, 'Student')}_${safeFileName(state.content.front.academicYear, 'Year')}.svg`,
     mimeType: 'image/svg+xml'
+  }
+}
+
+function getSourcePagePreview(
+  source: HardcoverPdfSource | undefined,
+  target: 'front' | 'back'
+): string | undefined {
+  if (!source) return undefined
+
+  const coverSource = target === 'front' ? source.frontSource : source.backSource
+  if (source.sourceMode === 'separate' || coverSource) {
+    if (!coverSource || (target === 'back' && !source.backCoverEnabled)) return undefined
+    return (
+      coverSource.thumbnailDataUrl ??
+      coverSource.pagePreviews?.find((preview) => preview.pageNumber === coverSource.pageNumber)
+        ?.thumbnailDataUrl
+    )
+  }
+
+  if (target === 'back' && !source.backCoverEnabled) return undefined
+  const pageNumber = target === 'front' ? source.frontPageNumber : source.backPageNumber
+  if (!pageNumber) return undefined
+
+  return target === 'front'
+    ? (source.thumbnailDataUrl ??
+        source.pagePreviews?.find((preview) => preview.pageNumber === pageNumber)?.thumbnailDataUrl)
+    : (source.backThumbnailDataUrl ??
+        source.pagePreviews?.find((preview) => preview.pageNumber === pageNumber)?.thumbnailDataUrl)
+}
+
+function getSourceFitMode(
+  source: HardcoverPdfSource | undefined,
+  target: 'front' | 'back'
+): HardcoverPdfFitMode {
+  if (!source) return 'fit'
+  if (source.sourceMode === 'separate' || source.frontSource || source.backSource) {
+    const coverSource = target === 'front' ? source.frontSource : source.backSource
+    return coverSource?.fitMode ?? 'fit'
+  }
+  return source.fitMode
+}
+
+function getSourcePosition(
+  source: HardcoverPdfSource | undefined,
+  target: 'front' | 'back'
+): HardcoverPdfPagePosition {
+  if (!source) return normalizePdfPagePosition(undefined)
+  if (source.sourceMode === 'separate' || source.frontSource || source.backSource) {
+    const coverSource = target === 'front' ? source.frontSource : source.backSource
+    return normalizePdfPagePosition(coverSource?.position)
+  }
+  return normalizePdfPagePosition(target === 'front' ? source.frontPosition : source.backPosition)
+}
+
+function missingSourceMarkup(side: 'front' | 'back', zone: CoverZone): string {
+  const label = side === 'front' ? 'Front' : 'Back'
+  return `<g data-source-status="missing-${side}"><rect x="${round(zone.xMm)}" y="${round(zone.yMm)}" width="${round(zone.widthMm)}" height="${round(zone.heightMm)}" fill="#fff7ed" stroke="#f97316" stroke-width="0.6"/><text x="${round(zone.xMm + zone.widthMm / 2)}" y="${round(zone.yMm + zone.heightMm / 2)}" fill="#9a3412" font-family="Arial, sans-serif" font-size="5" text-anchor="middle">Re-upload ${label} PDF</text></g>`
+}
+
+function assertSvgSourceReady(state: HardcoverProjectState): void {
+  const source = state.sourcePdf
+  if (!source) return
+
+  if (!hasHardcoverPdfSourceBytes(source)) {
+    throw new Error(
+      source.sourceMode === 'separate'
+        ? 'Re-upload the independent front and back cover PDFs before exporting SVG.'
+        : 'Upload the memoire PDF again before exporting SVG.'
+    )
+  }
+
+  if (!getSourcePagePreview(source, 'front')) {
+    throw new Error(
+      'The selected front-cover page preview is unavailable. Re-upload the source PDF.'
+    )
+  }
+  if (source.backCoverEnabled && !getSourcePagePreview(source, 'back')) {
+    throw new Error(
+      'The selected back-cover page preview is unavailable. Re-upload the source PDF.'
+    )
   }
 }
 
@@ -86,6 +202,7 @@ function manualArtworkMarkup(dimensions: CoverDimensions, state: HardcoverProjec
 
   return `
     <rect width="100%" height="100%" fill="url(#coverBackground)"${template.decorativeStyle === 'leather' ? ' filter="url(#leather)"' : ''}/>
+    ${spineBackgroundMarkup(dimensions, state)}
     ${decorativeMarkup(dimensions, state)}
     ${imageMarkup(content.front.backgroundDataUrl, dimensions.front, 'cover')}
     ${imageMarkup(content.front.logoDataUrl, logoZone(dimensions.front, template.logoPlacement), 'contain')}
@@ -110,18 +227,23 @@ function physicalZoneMarkup(
   const boardFill = showBoardFills
     ? `${zoneRect(dimensions.back, '#f8fafc', 0.7)}${zoneRect(dimensions.front, '#f8fafc', 0.7)}`
     : ''
+  const spineFill = spineBackgroundMarkup(dimensions, state)
 
   return `<g id="PhysicalZones">
     ${boardFill}
-    ${zoneRect(dimensions.leftBand, '#eef2f7', 0.9)}
-    ${zoneRect(dimensions.rightBand, '#eef2f7', 0.9)}
-    ${zoneRect(dimensions.spine, state.sourcePdf ? '#f6f7f9' : state.template.backgroundAccent, state.sourcePdf ? 0.9 : 0.32)}
+    ${spineFill}
     ${labels}
   </g>`
 }
 
 function zoneRect(zone: CoverZone, fill: string, opacity: number): string {
   return `<rect x="${round(zone.xMm)}" y="${round(zone.yMm)}" width="${round(zone.widthMm)}" height="${round(zone.heightMm)}" fill="${escapeXml(fill)}" opacity="${round(opacity)}"/>`
+}
+
+function spineBackgroundMarkup(dimensions: CoverDimensions, state: HardcoverProjectState): string {
+  const fill = getSpineBackgroundFill(state)
+
+  return fill.shouldDraw ? zoneRect(dimensions.spine, fill.color, 1) : ''
 }
 
 function zoneLabel(label: string, zone: CoverZone): string {
@@ -209,6 +331,21 @@ function imageMarkup(
   return `<image href="${escapeXml(dataUrl)}" x="${round(zone.xMm)}" y="${round(zone.yMm)}" width="${round(zone.widthMm)}" height="${round(zone.heightMm)}" preserveAspectRatio="xMidYMid ${preserveAspect === 'cover' ? 'slice' : 'meet'}"/>`
 }
 
+function positionedSourceImageMarkup(
+  dataUrl: string,
+  zone: CoverDimensions['front'],
+  preserveAspect: 'cover' | 'contain',
+  position: HardcoverPdfPagePosition,
+  side: 'front' | 'back'
+): string {
+  const normalizedPosition = normalizePdfPagePosition(position)
+  const x = zone.xMm + zone.widthMm * (normalizedPosition.xPercent / 100)
+  const y = zone.yMm - zone.heightMm * (normalizedPosition.yPercent / 100)
+  const clipId = `source-${side}-clip`
+
+  return `<g data-source-position="${side}" data-position-x="${normalizedPosition.xPercent}" data-position-y="${normalizedPosition.yPercent}"><defs><clipPath id="${clipId}"><rect x="${round(zone.xMm)}" y="${round(zone.yMm)}" width="${round(zone.widthMm)}" height="${round(zone.heightMm)}"/></clipPath></defs><image href="${escapeXml(dataUrl)}" x="${round(x)}" y="${round(y)}" width="${round(zone.widthMm)}" height="${round(zone.heightMm)}" preserveAspectRatio="xMidYMid ${preserveAspect === 'cover' ? 'slice' : 'meet'}" clip-path="url(#${clipId})"/></g>`
+}
+
 function textLinesMarkup(
   lines: string[],
   x: number,
@@ -233,4 +370,13 @@ function escapeXml(value: string): string {
 
 function round(value: number): number {
   return Number(value.toFixed(3))
+}
+
+function namespaceSvgIds(svg: string, prefix: string): string {
+  const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, '')
+  if (!safePrefix) return svg
+
+  return svg
+    .replace(/\bid="([^"]+)"/g, (_match, id: string) => `id="${safePrefix}-${id}"`)
+    .replace(/url\(#([^)]+)\)/g, (_match, id: string) => `url(#${safePrefix}-${id})`)
 }

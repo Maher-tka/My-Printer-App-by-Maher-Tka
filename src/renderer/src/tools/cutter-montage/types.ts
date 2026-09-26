@@ -8,6 +8,79 @@ export type EditorShapeType = 'image' | 'rectangle' | 'rounded-rectangle' | 'ell
 
 export type EditorObjectRole = 'artwork' | 'clipping-mask' | 'cutline' | 'helper'
 
+export type PieceSourceKind = 'image' | 'svg' | 'pdf-page'
+
+export type PdfProductionClassification = 'artwork-only' | 'likely-print-and-cut' | 'ambiguous'
+
+export type PdfProductionSourceFormat = 'pdf' | 'pdf-compatible-ai'
+
+export interface PdfPhysicalSize {
+  widthMm: number
+  heightMm: number
+}
+
+export interface PdfPageBox {
+  xPt: number
+  yPt: number
+  widthPt: number
+  heightPt: number
+  widthMm: number
+  heightMm: number
+}
+
+export interface PdfPageBoxSummary {
+  media?: PdfPageBox
+  crop?: PdfPageBox
+  trim?: PdfPageBox
+  bleed?: PdfPageBox
+  art?: PdfPageBox
+}
+
+export interface PdfProductionLayer {
+  id: string
+  name: string
+  defaultVisible: boolean
+  intent?: string[]
+}
+
+export interface PdfProductionColorant {
+  kind: 'Separation' | 'DeviceN'
+  name: string
+}
+
+export interface PdfPageProductionMetadata {
+  pageNumber: number
+  physicalSizeMm?: PdfPhysicalSize
+  boxes?: PdfPageBoxSummary
+}
+
+/** Read-only production structure preserved alongside the original PDF bytes. */
+export interface PdfProductionMetadata {
+  sourceFormat: PdfProductionSourceFormat
+  classification: PdfProductionClassification
+  pageCount?: number
+  pageSizeMm?: PdfPhysicalSize
+  pageBoxes?: PdfPageBoxSummary
+  pages?: PdfPageProductionMetadata[]
+  layers: PdfProductionLayer[]
+  colorants: PdfProductionColorant[]
+  warnings: string[]
+  notes: string[]
+  creator?: string
+}
+
+export type RegistrationMarkType = 'corner-square' | 'cross' | 'circle' | 'mimaki'
+
+export type RegistrationMarkLayerMode = 'artwork' | 'registration' | 'both'
+
+export type ProductionLabelPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+
+export type ProductionLabelSize = 'small' | 'medium'
+
+export type CutterSheetLengthMode = 'auto-trim-last' | 'fixed'
+
+export type PieceOrderMode = 'copies' | 'target-length'
+
 export type EditorTool =
   | 'select'
   | 'pan'
@@ -43,18 +116,49 @@ export interface CutterSheetSettings {
   allowRotation: boolean
   preserveManualPositions: boolean
   showGrid: boolean
+  showSafeArea?: boolean
+  showRollGuides?: boolean
+  registrationMarks?: CutterRegistrationSettings
+  productionLabel?: CutterProductionLabelSettings
   preferSameDesignGrouping?: boolean
   fillDirection?: 'left-to-right' | 'top-to-bottom'
   sortStrategy?: 'largest-first' | 'smallest-first' | 'piece-name' | 'quantity'
+  /** Full sheets keep this packing length. Auto mode trims only the final sheet. */
+  lengthMode?: CutterSheetLengthMode
+}
+
+export interface CutterRegistrationSettings {
+  /** Marks projects created after app-owned Mimaki registration was introduced. */
+  profileVersion?: 1
+  enabled: boolean
+  type: RegistrationMarkType
+  sizeMm: number
+  marginMm: number
+  color: string
+  includeIn: RegistrationMarkLayerMode
+}
+
+export interface CutterProductionLabelSettings {
+  enabled: boolean
+  position: ProductionLabelPosition
+  size: ProductionLabelSize
+  placement: 'margin' | 'inside-sheet'
 }
 
 export interface PieceSourceFile {
   id: string
+  sourceKind?: PieceSourceKind
   fileName: string
   displayName: string
+  originalFileName?: string
   mimeType: string
   bytes: Uint8Array
   previewUrl: string
+  previewDataUrl?: string
+  pdfPageNumber?: number
+  pageCount?: number
+  pdfProductionMetadata?: PdfProductionMetadata
+  pdfPageMetadata?: PdfPageProductionMetadata
   naturalWidthPx: number
   naturalHeightPx: number
 }
@@ -144,8 +248,16 @@ export interface PieceObjectLocks {
 
 export interface PiecePreset {
   id: string
+  /** Physical offset already baked into an AI Sticker Maker vector path. */
+  stickerMakerOffsetMm?: number
   sourceId: string
+  sourceKind?: PieceSourceKind
   sourceFileName: string
+  originalFileName?: string
+  pdfPageNumber?: number
+  pageCount?: number
+  pdfProductionMetadata?: PdfProductionMetadata
+  pdfPageMetadata?: PdfPageProductionMetadata
   displayName: string
   previewUrl: string
   naturalWidthPx: number
@@ -153,6 +265,9 @@ export interface PiecePreset {
   widthCm: number
   heightCm: number
   quantity: number
+  /** Customer order can be an exact copy count or a material length to fill. */
+  orderMode?: PieceOrderMode
+  targetLengthCm?: number
   rotationAllowed: boolean
   locked: boolean
   artwork: PieceArtwork
@@ -164,7 +279,8 @@ export interface PiecePreset {
   objectLocks: PieceObjectLocks
   /** Canonical editor model. Legacy artwork/mask/cutline fields stay synchronized for old projects. */
   objects: EditorObject[]
-  artworkObjectId: string
+  objectModelInitialized?: boolean
+  artworkObjectId?: string
   maskObjectId?: string
   cutlineObjectId?: string
   helperObjectIds: string[]
@@ -173,6 +289,12 @@ export interface PiecePreset {
   groupLinked: boolean
   lockAspectRatio: boolean
   clippingMaskEnabled: boolean
+  /** Explicit clipping-group isolation; artwork and mask can be edited independently. */
+  maskEditingEnabled?: boolean
+  /** Version of the normalized clipping-mask workflow, when a mask has been prepared. */
+  maskWorkflowVersion?: 2 | 3
+  /** Artwork lock state to restore when the active clipping mask is released. */
+  artworkLockBeforeMask?: boolean
 }
 
 export interface PlacedPiece {
@@ -189,6 +311,13 @@ export interface PlacedPiece {
   artworkTransform: ArtworkTransform
   maskTransform: ArtworkTransform
   cutlineTransform: CutlineTransform
+  sheetIndex?: number
+  productionBoundsCm?: {
+    xCm: number
+    yCm: number
+    widthCm: number
+    heightCm: number
+  }
 }
 
 export interface CutterLayerVisibility {
@@ -214,8 +343,19 @@ export interface CutterExportSettings {
   strokeName: string
   includeArtwork: boolean
   includeCutlines: boolean
-  mode?: 'print-cut' | 'print-only' | 'cut-only'
-  preset?: 'svg-illustrator' | 'pdf-print-cut' | 'eps-cut-test'
+  includeRegistrationMarks?: boolean
+  includeProductionLabel?: boolean
+  mode?: 'print-cut' | 'print-only' | 'cut-only' | 'test-cut' | 'customer-preview'
+  preset?:
+    | 'illustrator-print-cut-svg'
+    | 'layered-print-cut-pdf'
+    | 'mimaki-cutcontour-svg'
+    | 'pdf-print-only'
+    | 'svg-eps-cut-only'
+    | 'customer-preview'
+    | 'svg-illustrator'
+    | 'eps-cut-only'
+    | 'pdf-test-cut'
 }
 
 export interface CutterProject {
@@ -225,6 +365,15 @@ export interface CutterProject {
   placedPieces: PlacedPiece[]
   layers: CutterLayerVisibility
   exportSettings: CutterExportSettings
+  productionInfo?: CutterProductionInfo
+}
+
+export interface CutterProductionInfo {
+  jobName?: string
+  appName?: string
+  targetCutterProfileId?: string
+  targetCutterLabel?: string
+  integrationMode?: 'finecut-handoff' | 'offline-mimaki-package'
 }
 
 export interface CutterLayoutResult {
@@ -232,6 +381,7 @@ export interface CutterLayoutResult {
   placedCount: number
   requestedCount: number
   usedHeightCm: number
+  sheetCount?: number
   usedAreaPercent?: number
   wasteAreaPercent?: number
   warning?: string

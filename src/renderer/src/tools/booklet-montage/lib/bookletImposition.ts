@@ -43,14 +43,20 @@ export function generateBookletSheets<TPage>(
     if (readingDirection === 'rtl') {
       sheets.push({
         sheetNumber,
+        physicalSheetIndex: sheetIndex,
+        physicalSheetCount: sheetCount,
         front: {
           sheetNumber,
+          physicalSheetIndex: sheetIndex,
+          physicalSheetCount: sheetCount,
           side: 'front',
           left: getSlot(outerRight),
           right: getSlot(outerLeft)
         },
         back: {
           sheetNumber,
+          physicalSheetIndex: sheetIndex,
+          physicalSheetCount: sheetCount,
           side: 'back',
           left: getSlot(innerRight),
           right: getSlot(innerLeft)
@@ -61,14 +67,20 @@ export function generateBookletSheets<TPage>(
 
     sheets.push({
       sheetNumber,
+      physicalSheetIndex: sheetIndex,
+      physicalSheetCount: sheetCount,
       front: {
         sheetNumber,
+        physicalSheetIndex: sheetIndex,
+        physicalSheetCount: sheetCount,
         side: 'front',
         left: getSlot(outerLeft),
         right: getSlot(outerRight)
       },
       back: {
         sheetNumber,
+        physicalSheetIndex: sheetIndex,
+        physicalSheetCount: sheetCount,
         side: 'back',
         left: getSlot(innerLeft),
         right: getSlot(innerRight)

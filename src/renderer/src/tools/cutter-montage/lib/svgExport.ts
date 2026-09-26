@@ -3,15 +3,30 @@ import type {
   CutterProject,
   EditorObject,
   PiecePreset,
-  PieceSourceFile,
   PlacedPiece
 } from '../types'
-import { escapeXml, type CutlineRect } from './cutlineGenerator'
+import { escapeXml, getPlacedEditorObjectRect, type CutlineRect } from './cutlineGenerator'
+import { getProductionLabelSvgMarkup } from './productionLabel'
+import { sourceToSvgArtworkDataUrl } from './rasterizeArtwork'
+import {
+  CUSTOMER_PREVIEW_CONTOUR_COLOR,
+  CUSTOMER_PREVIEW_CONTOUR_DASH,
+  CUSTOMER_PREVIEW_CONTOUR_LABEL,
+  getCutterExportSemantics
+} from './exportPresets'
+import type { CutterContourRenderKind } from './exportPresets'
+import { CUT_CONTOUR_COLOR, CUT_CONTOUR_NAME } from './colorSpot'
+import {
+  getRegistrationMarksSvgMarkup,
+  shouldIncludeRegistrationInArtwork,
+  shouldIncludeRegistrationLayer
+} from './registrationMarks'
 
 const CM_TO_MM = 10
 
 export async function exportCutterSvg(project: CutterProject): Promise<CutterExportResult> {
   const { sheet, sources, pieces, placedPieces, layers, exportSettings } = project
+  const exportSemantics = getCutterExportSemantics(exportSettings)
   const pieceMap = new Map(pieces.map((piece) => [piece.id, piece]))
   const sourceMap = new Map(sources.map((source) => [source.id, source]))
   const artworkEntries =
@@ -33,7 +48,8 @@ export async function exportCutterSvg(project: CutterProject): Promise<CutterExp
               return { definition: '', artwork: '' }
             }
 
-            const artworkRect = scaleRectToMm(getPlacedObjectRect(placed, piece, artwork))
+            const artworkRectCm = getPlacedObjectRect(placed, piece, artwork)
+            const artworkRect = scaleRectToMm(artworkRectCm)
             const mask = getActiveMaskObject(piece)
             const clippingEnabled = Boolean(piece.clippingMaskEnabled && mask)
             const clipId = `clip-piece-${safeXmlId(placed.id)}`
@@ -46,13 +62,16 @@ export async function exportCutterSvg(project: CutterProject): Promise<CutterExp
                   )
                 : ''
             const clipAttribute = clippingEnabled ? ` clip-path="url(#${clipId})"` : ''
-            const href = await sourceToDataUrl(source)
+            const href = await sourceToSvgArtworkDataUrl(source, {
+              widthCm: artworkRectCm.widthCm,
+              heightCm: artworkRectCm.heightCm
+            })
 
             return {
               definition,
               artwork: [
-                `<g id="artwork-${safeXmlId(placed.id)}" data-piece="${escapeXml(piece.displayName)}">`,
-                `<image href="${href}" x="${formatNumber(artworkRect.xCm)}" y="${formatNumber(artworkRect.yCm)}" width="${formatNumber(artworkRect.widthCm)}" height="${formatNumber(artworkRect.heightCm)}" preserveAspectRatio="none"${getRotationTransform(artworkRect)}${clipAttribute} />`,
+                `<g id="artwork-${safeXmlId(placed.id)}" data-piece="${escapeXml(piece.displayName)}"${clipAttribute}>`,
+                `<image xlink:href="${href}" x="${formatNumber(artworkRect.xCm)}" y="${formatNumber(artworkRect.yCm)}" width="${formatNumber(artworkRect.widthCm)}" height="${formatNumber(artworkRect.heightCm)}" preserveAspectRatio="none"${getRotationTransform(artworkRect)} />`,
                 '</g>'
               ].join('')
             }
@@ -61,33 +80,43 @@ export async function exportCutterSvg(project: CutterProject): Promise<CutterExp
       : []
 
   const cutlineMarkup =
-    exportSettings.includeCutlines && layers.cutlines
+    exportSemantics.contourRenderKind !== 'none'
       ? placedPieces
           .flatMap((placed) => {
             const piece = pieceMap.get(placed.presetId)
             if (!piece) return []
             return piece.objects
-              .filter(
-                (object) =>
-                  object.role === 'cutline' && object.visible && object.exportEnabled !== false
-              )
+              .filter((object) => object.role === 'cutline' && object.exportEnabled !== false)
               .map((object) =>
                 getCutlineSvgElementMm(
                   scaleRectToMm(getPlacedObjectRect(placed, piece, object, object.offsetMm ?? 0)),
                   object,
-                  exportSettings.strokeName
+                  placed.id,
+                  exportSemantics.contourRenderKind
                 )
               )
           })
           .join('\n')
       : ''
+  const artworkRegistrationMarkup = shouldIncludeRegistrationInArtwork(project)
+    ? getRegistrationMarksSvgMarkup(project)
+    : ''
+  const registrationLayerMarkup = shouldIncludeRegistrationLayer(project)
+    ? getRegistrationMarksSvgMarkup(project)
+    : ''
+  const productionLabelMarkup = getProductionLabelSvgMarkup(project)
+  const contourGroupMarkup = getContourGroupMarkup(
+    cutlineMarkup,
+    exportSemantics.contourRenderKind,
+    layers.cutlines
+  )
 
   const widthMm = sheet.widthCm * CM_TO_MM
   const heightMm = sheet.heightCm * CM_TO_MM
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="${formatNumber(widthMm)}mm" height="${formatNumber(heightMm)}mm" viewBox="0 0 ${formatNumber(widthMm)} ${formatNumber(heightMm)}">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="${formatNumber(widthMm)}mm" height="${formatNumber(heightMm)}mm" viewBox="0 0 ${formatNumber(widthMm)} ${formatNumber(heightMm)}">
   <title>Cutter Montage ${sheet.widthCm}x${sheet.heightCm}cm</title>
-  <desc>Generated by My Printer App by Maher Tka on ${new Date().toISOString()}. Sheet ${sheet.widthCm} x ${sheet.heightCm} cm. Preset ${escapeXml(exportSettings.preset ?? 'svg-illustrator')}. Artwork may be clipped; CutContour geometry remains vector.</desc>
+  <desc>${getExportDescription(project, exportSemantics.intent)}</desc>
   <defs>
 ${artworkEntries
   .map((entry) => entry.definition)
@@ -101,16 +130,19 @@ ${artworkEntries
   .map((entry) => entry.artwork)
   .filter(Boolean)
   .join('\n')}
+${artworkRegistrationMarkup}
   </g>`
       : ''
   }
   ${
-    exportSettings.includeCutlines
-      ? `<g id="CutContour" inkscape:groupmode="layer" inkscape:label="${escapeXml(exportSettings.strokeName)}" data-spot-name="${escapeXml(exportSettings.strokeName)}" data-layer-visible="${layers.cutlines}">
-${cutlineMarkup}
+    registrationLayerMarkup
+      ? `<g id="RegistrationMarks" inkscape:groupmode="layer" inkscape:label="Registration Marks">
+${registrationLayerMarkup}
   </g>`
       : ''
   }
+  ${contourGroupMarkup}
+  ${productionLabelMarkup}
 </svg>`
 
   return {
@@ -142,29 +174,27 @@ function getPlacedObjectRect(
   placed: PlacedPiece,
   piece: PiecePreset,
   object: EditorObject,
-  offsetMm = 0
+  _offsetMm = 0
 ): CutlineRect {
-  const scaleX = placed.widthCm / piece.widthCm
-  const scaleY = placed.heightCm / piece.heightCm
-  const offsetCm = offsetMm / 10
-  return {
-    xCm: placed.xCm + object.transform.xCm * scaleX - offsetCm,
-    yCm: placed.yCm + object.transform.yCm * scaleY - offsetCm,
-    widthCm: object.transform.widthCm * scaleX + offsetCm * 2,
-    heightCm: object.transform.heightCm * scaleY + offsetCm * 2,
-    rotation: (placed.rotation + object.transform.rotation) % 360
-  }
+  return getPlacedEditorObjectRect(placed, piece, object)
 }
 
 function getCutlineSvgElementMm(
   rect: CutlineRect,
   object: EditorObject,
-  fallbackSpotName: string
+  placedId: string,
+  renderKind: CutterContourRenderKind
 ): string {
-  const spotName = object.strokeName || fallbackSpotName || 'CutContour'
-  const strokeColor = object.strokeColor || '#ff00ff'
+  if (renderKind === 'none') return ''
+
+  const isProductionContour = renderKind === 'production'
+  const strokeColor = isProductionContour ? CUT_CONTOUR_COLOR : CUSTOMER_PREVIEW_CONTOUR_COLOR
   const strokeWidth = object.strokeWidthPt ?? 0.25
-  const common = `class="${safeXmlId(spotName)}" data-object-id="${safeXmlId(object.id)}" data-spot-name="${escapeXml(spotName)}" data-spot-color="${escapeXml(strokeColor)}" fill="none" stroke="${escapeXml(strokeColor)}" stroke-width="${formatNumber(strokeWidth)}pt" vector-effect="non-scaling-stroke"`
+  const identity = isProductionContour
+    ? `id="CutContour-${safeXmlId(placedId)}-${safeXmlId(object.id)}" class="${CUT_CONTOUR_NAME}" data-production="true" data-spot-name="${CUT_CONTOUR_NAME}" data-spot-color="${CUT_CONTOUR_COLOR}"`
+    : `id="CustomerPreviewContour-${safeXmlId(placedId)}-${safeXmlId(object.id)}" class="CustomerPreviewContour" data-production="false" data-preview-only="true" data-preview-label="${escapeXml(CUSTOMER_PREVIEW_CONTOUR_LABEL)}"`
+  const dash = isProductionContour ? '' : ` stroke-dasharray="${CUSTOMER_PREVIEW_CONTOUR_DASH}"`
+  const common = `${identity} data-object-id="${safeXmlId(object.id)}" fill="none" stroke="${escapeXml(strokeColor)}" stroke-width="${formatNumber(strokeWidth)}pt"${dash} vector-effect="non-scaling-stroke"`
   const rotation = getRotationTransform(rect)
 
   if (object.shapeType === 'ellipse') {
@@ -175,10 +205,47 @@ function getCutlineSvgElementMm(
     return `<rect x="${formatNumber(rect.xCm)}" y="${formatNumber(rect.yCm)}" width="${formatNumber(rect.widthCm)}" height="${formatNumber(rect.heightCm)}" rx="${formatNumber(radius)}" ry="${formatNumber(radius)}"${rotation} ${common} />`
   }
   if (object.shapeType === 'path' && object.pathData) {
-    const transform = `translate(${formatNumber(rect.xCm)} ${formatNumber(rect.yCm)}) scale(${formatNumber(rect.widthCm)} ${formatNumber(rect.heightCm)})`
+    const transform = getNormalizedPathTransform(rect)
     return `<path d="${escapeXml(object.pathData)}" transform="${transform}" ${common} />`
   }
   return `<rect x="${formatNumber(rect.xCm)}" y="${formatNumber(rect.yCm)}" width="${formatNumber(rect.widthCm)}" height="${formatNumber(rect.heightCm)}"${rotation} ${common} />`
+}
+
+function getContourGroupMarkup(
+  cutlineMarkup: string,
+  renderKind: CutterContourRenderKind,
+  layerVisible: boolean
+): string {
+  if (renderKind === 'none') return ''
+
+  if (renderKind === 'preview') {
+    return `<g id="CustomerPreviewContour" inkscape:groupmode="layer" inkscape:label="${escapeXml(CUSTOMER_PREVIEW_CONTOUR_LABEL)}" data-preview-only="true" data-production="false" data-layer-visible="${layerVisible}">
+${cutlineMarkup}
+  </g>`
+  }
+
+  return `<g id="CutContour" inkscape:groupmode="layer" inkscape:label="${CUT_CONTOUR_NAME}" data-production="true" data-spot-name="${CUT_CONTOUR_NAME}" data-layer-visible="${layerVisible}">
+${cutlineMarkup}
+  </g>`
+}
+
+function getExportDescription(
+  project: CutterProject,
+  intent: ReturnType<typeof getCutterExportSemantics>['intent']
+): string {
+  const preset = escapeXml(project.exportSettings.preset ?? 'svg-illustrator')
+  const target = escapeXml(project.productionInfo?.targetCutterLabel ?? 'Mimaki CG-130AR')
+  const sheet = `Sheet ${project.sheet.widthCm} x ${project.sheet.heightCm} cm.`
+
+  if (intent === 'print-only') {
+    return `Print-only artwork export. ${sheet} Registration content is optional; no visible CutContour preview is included.`
+  }
+
+  if (intent === 'customer-preview') {
+    return `Customer preview only. ${sheet} The orange dashed contour is visual guidance and must not be used as production CutContour.`
+  }
+
+  return `Offline Mimaki production export. ${sheet} Preset ${preset}. Target ${target}. The app adds Mimaki Type 1 registration marks; canonical ${CUT_CONTOUR_NAME} geometry stays in its own knife layer.`
 }
 
 function getMaskClipPathMarkup(id: string, rect: CutlineRect, mask: EditorObject): string {
@@ -191,22 +258,9 @@ function getMaskClipPathMarkup(id: string, rect: CutlineRect, mask: EditorObject
     return `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><rect x="${formatNumber(rect.xCm)}" y="${formatNumber(rect.yCm)}" width="${formatNumber(rect.widthCm)}" height="${formatNumber(rect.heightCm)}" rx="${formatNumber(radius)}" ry="${formatNumber(radius)}"${transform} /></clipPath>`
   }
   if (mask.shapeType === 'path' && mask.pathData) {
-    return `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><path d="${escapeXml(mask.pathData)}" transform="translate(${formatNumber(rect.xCm)} ${formatNumber(rect.yCm)}) scale(${formatNumber(rect.widthCm)} ${formatNumber(rect.heightCm)})" /></clipPath>`
+    return `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><path d="${escapeXml(mask.pathData)}" transform="${getNormalizedPathTransform(rect)}" /></clipPath>`
   }
   return `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><rect x="${formatNumber(rect.xCm)}" y="${formatNumber(rect.yCm)}" width="${formatNumber(rect.widthCm)}" height="${formatNumber(rect.heightCm)}"${transform} /></clipPath>`
-}
-
-async function sourceToDataUrl(source: PieceSourceFile): Promise<string> {
-  return `data:${source.mimeType};base64,${uint8ToBase64(source.bytes)}`
-}
-
-function uint8ToBase64(bytes: Uint8Array): string {
-  let binary = ''
-  const chunkSize = 0x8000
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize))
-  }
-  return btoa(binary)
 }
 
 function scaleRectToMm(rect: CutlineRect): CutlineRect {
@@ -223,6 +277,17 @@ function getRotationTransform(rect: CutlineRect): string {
   return rect.rotation
     ? ` transform="rotate(${formatNumber(rect.rotation)} ${formatNumber(rect.xCm + rect.widthCm / 2)} ${formatNumber(rect.yCm + rect.heightCm / 2)})"`
     : ''
+}
+
+function getNormalizedPathTransform(rect: CutlineRect): string {
+  const translateAndScale = `translate(${formatNumber(rect.xCm)} ${formatNumber(rect.yCm)}) scale(${formatNumber(rect.widthCm)} ${formatNumber(rect.heightCm)})`
+
+  if (!rect.rotation) return translateAndScale
+
+  const centerX = rect.xCm + rect.widthCm / 2
+  const centerY = rect.yCm + rect.heightCm / 2
+
+  return `rotate(${formatNumber(rect.rotation)} ${formatNumber(centerX)} ${formatNumber(centerY)}) ${translateAndScale}`
 }
 
 function safeXmlId(value: string): string {
