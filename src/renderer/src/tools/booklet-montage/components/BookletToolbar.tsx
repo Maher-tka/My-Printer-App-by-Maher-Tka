@@ -29,7 +29,8 @@ import type {
 import { getSimpleCreepToggleSettings } from '../lib/creepCompensation'
 import { ProgressLine } from './ProgressLine'
 
-interface BookletToolbarProps {
+export interface BookletToolbarProps {
+  variant?: 'actions' | 'properties'
   settings: SheetSettings
   viewMode: BookletViewMode
   blanksNeeded: number
@@ -72,6 +73,7 @@ const viewModes: Array<{ value: BookletViewMode; label: string; icon: typeof Gri
 ]
 
 export function BookletToolbar({
+  variant = 'actions',
   settings,
   viewMode,
   blanksNeeded,
@@ -108,242 +110,272 @@ export function BookletToolbar({
     exportProgress.phase === 'creating-pdf'
 
   return (
-    <div className="sticky top-0 z-10 rounded-lg border bg-card/95 p-3 shadow-sm backdrop-blur">
-      <div className="flex flex-wrap items-end gap-3">
-        <Button type="button" onClick={() => pdfInputRef.current?.click()} disabled={isBusy}>
-          <FileText data-icon="inline-start" />
-          PDF
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => imageInputRef.current?.click()}
-          disabled={isBusy}
-        >
-          <FileImage data-icon="inline-start" />
-          Images
-        </Button>
-        <Button type="button" variant="ghost" onClick={onClear} disabled={isBusy}>
-          <RotateCcw data-icon="inline-start" />
-          New
-        </Button>
-
-        <ToolbarSelect
-          label="Paper"
-          value={settings.paperSize}
-          onChange={(value) => onSettingsChange({ paperSize: value as PaperSizeOption })}
-        >
-          {paperOptions.map((option) => (
-            <option key={option} value={option}>
-              {option === 'custom' ? 'Custom' : option}
-            </option>
-          ))}
-        </ToolbarSelect>
-
-        <ToolbarSelect
-          label="Orientation"
-          value={settings.orientation}
-          onChange={(value) => onSettingsChange({ orientation: value as PaperOrientation })}
-        >
-          {orientationOptions.map((option) => (
-            <option key={option} value={option}>
-              {option[0].toUpperCase()}
-              {option.slice(1)}
-            </option>
-          ))}
-        </ToolbarSelect>
-
-        <ToolbarSelect
-          label="Reading"
-          value={settings.readingDirection}
-          onChange={(value) =>
-            onSettingsChange({ readingDirection: value as BookletReadingDirection })
-          }
-        >
-          {readingDirectionOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </ToolbarSelect>
-
-        {settings.paperSize === 'custom' && (
+    <div className="rounded-[18px] border border-border/70 bg-card p-4">
+      {variant === 'properties' && <h3 className="mb-4 text-sm font-semibold">Booklet settings</h3>}
+      <div
+        className={
+          variant === 'properties'
+            ? 'grid gap-4 [&_label]:w-full [&_label]:min-w-0'
+            : 'flex flex-wrap items-center gap-2'
+        }
+      >
+        {variant === 'actions' && (
           <>
-            <ToolbarNumber
-              label="Width"
-              value={settings.customWidthMm}
-              onChange={(value) => onSettingsChange({ customWidthMm: value })}
-            />
-            <ToolbarNumber
-              label="Height"
-              value={settings.customHeightMm}
-              onChange={(value) => onSettingsChange({ customHeightMm: value })}
-            />
-          </>
-        )}
-
-        <ToolbarSelect
-          label="Scale"
-          value={settings.scaleMode}
-          onChange={(value) => onSettingsChange({ scaleMode: value as BookletScaleMode })}
-        >
-          {scaleOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </ToolbarSelect>
-
-        <details className="min-w-[280px] rounded-md border bg-muted/30 px-3 py-2">
-          <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
-            Advanced print layout
-          </summary>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <ToolbarNumber
-              label="Outer margin mm"
-              value={settings.outerMarginMm}
-              min={0}
-              step={0.5}
-              onChange={(value) => onSettingsChange({ outerMarginMm: value })}
-            />
-            <ToolbarNumber
-              label="Page gap mm"
-              value={settings.pageGapMm}
-              min={0}
-              step={0.5}
-              onChange={(value) => onSettingsChange({ pageGapMm: value })}
-            />
-            <ToolbarCheckbox
-              label="Crop marks"
-              checked={settings.cropMarks}
-              onChange={(cropMarks) => onSettingsChange({ cropMarks })}
-            />
-            <ToolbarCheckbox
-              label="Registration marks"
-              checked={settings.registrationMarks}
-              onChange={(registrationMarks) => onSettingsChange({ registrationMarks })}
-            />
-          </div>
-        </details>
-
-        <ToolbarCheckbox
-          label="Creep Compensation"
-          checked={settings.creep.enabled}
-          title="Shift inner-sheet artwork progressively toward the saddle-stitch spine."
-          onChange={(enabled) =>
-            onSettingsChange({
-              creep: getSimpleCreepToggleSettings(settings.creep, enabled, physicalSheetCount)
-            })
-          }
-        />
-
-        <div className="flex rounded-md border bg-muted/40 p-1">
-          {viewModes.map((mode) => {
-            const Icon = mode.icon
-
-            return (
-              <Button
-                key={mode.value}
-                type="button"
-                size="sm"
-                variant={viewMode === mode.value ? 'default' : 'ghost'}
-                onClick={() => onViewModeChange(mode.value)}
-              >
-                <Icon data-icon="inline-start" />
-                {mode.label}
-              </Button>
-            )
-          })}
-        </div>
-
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onAutoAddBlankPages}
-          disabled={blanksNeeded === 0 || isBusy}
-        >
-          Auto blanks
-        </Button>
-        {viewMode === 'montage' && (
-          <>
-            <Button type="button" variant="outline" onClick={onAddEmptySheet} disabled={isBusy}>
-              <Plus data-icon="inline-start" />
-              Add Empty Sheet
+            <Button type="button" onClick={() => pdfInputRef.current?.click()} disabled={isBusy}>
+              <FileText data-icon="inline-start" />
+              PDF
             </Button>
             <Button
               type="button"
               variant="outline"
-              onClick={onResetSheetLayout}
-              disabled={!hasBoardItems || isBusy}
+              onClick={() => imageInputRef.current?.click()}
+              disabled={isBusy}
             >
-              <LayoutGrid data-icon="inline-start" />
-              Reset layout
+              <FileImage data-icon="inline-start" />
+              Images
+            </Button>
+            <Button type="button" variant="ghost" onClick={onClear} disabled={isBusy}>
+              <RotateCcw data-icon="inline-start" />
+              New
             </Button>
           </>
         )}
-        <Button type="button" onClick={onExportPdf} disabled={!canExport || isBusy}>
-          <FileDown data-icon="inline-start" />
-          Export PDF
-        </Button>
-        <PrintButton
-          label="Print Booklet"
-          disabled={!canExport}
-          isBusy={isBusy}
-          onPrint={onPrintPdf}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onExportImages('png')}
-          disabled={!canExport || isBusy}
-        >
-          <ImageDown data-icon="inline-start" />
-          PNG Sheets
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onExportImages('jpg')}
-          disabled={!canExport || isBusy}
-        >
-          <ImageDown data-icon="inline-start" />
-          JPG Sheets
-        </Button>
-        {(importCanCancel || exportCanCancel) && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={importCanCancel ? onCancelImport : onCancelExport}
-          >
-            <CircleStop data-icon="inline-start" />
-            Cancel
-          </Button>
-        )}
-      </div>
-
-      <div className="mt-3 grid gap-2 lg:grid-cols-2">
-        {importProgress.phase === 'idle' && exportProgress.phase === 'idle' ? (
-          <p className="text-sm text-muted-foreground">Ready for local PDF or image input.</p>
-        ) : (
+        {variant === 'properties' && (
           <>
-            {importProgress.phase !== 'idle' && <ProgressLine progress={importProgress} />}
-            {exportProgress.phase !== 'idle' && <ProgressLine progress={exportProgress} />}
+            <ToolbarSelect
+              label="Paper"
+              value={settings.paperSize}
+              onChange={(value) => onSettingsChange({ paperSize: value as PaperSizeOption })}
+            >
+              {paperOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === 'custom' ? 'Custom' : option}
+                </option>
+              ))}
+            </ToolbarSelect>
+
+            <ToolbarSelect
+              label="Orientation"
+              value={settings.orientation}
+              onChange={(value) => onSettingsChange({ orientation: value as PaperOrientation })}
+            >
+              {orientationOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option[0].toUpperCase()}
+                  {option.slice(1)}
+                </option>
+              ))}
+            </ToolbarSelect>
+
+            <ToolbarSelect
+              label="Reading"
+              value={settings.readingDirection}
+              onChange={(value) =>
+                onSettingsChange({ readingDirection: value as BookletReadingDirection })
+              }
+            >
+              {readingDirectionOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </ToolbarSelect>
+
+            {settings.paperSize === 'custom' && (
+              <>
+                <ToolbarNumber
+                  label="Width"
+                  value={settings.customWidthMm}
+                  onChange={(value) => onSettingsChange({ customWidthMm: value })}
+                />
+                <ToolbarNumber
+                  label="Height"
+                  value={settings.customHeightMm}
+                  onChange={(value) => onSettingsChange({ customHeightMm: value })}
+                />
+              </>
+            )}
+
+            <ToolbarSelect
+              label="Scale"
+              value={settings.scaleMode}
+              onChange={(value) => onSettingsChange({ scaleMode: value as BookletScaleMode })}
+            >
+              {scaleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </ToolbarSelect>
+
+            <details className="min-w-0 rounded-[14px] border border-border/60 bg-muted/30 px-3 py-2">
+              <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
+                Advanced print layout
+              </summary>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <ToolbarNumber
+                  label="Outer margin mm"
+                  value={settings.outerMarginMm}
+                  min={0}
+                  step={0.5}
+                  onChange={(value) => onSettingsChange({ outerMarginMm: value })}
+                />
+                <ToolbarNumber
+                  label="Page gap mm"
+                  value={settings.pageGapMm}
+                  min={0}
+                  step={0.5}
+                  onChange={(value) => onSettingsChange({ pageGapMm: value })}
+                />
+                <ToolbarCheckbox
+                  label="Crop marks"
+                  checked={settings.cropMarks}
+                  onChange={(cropMarks) => onSettingsChange({ cropMarks })}
+                />
+                <ToolbarCheckbox
+                  label="Registration marks"
+                  checked={settings.registrationMarks}
+                  onChange={(registrationMarks) => onSettingsChange({ registrationMarks })}
+                />
+              </div>
+            </details>
+
+            <ToolbarCheckbox
+              label="Creep Compensation"
+              checked={settings.creep.enabled}
+              title="Shift inner-sheet artwork progressively toward the saddle-stitch spine."
+              onChange={(enabled) =>
+                onSettingsChange({
+                  creep: getSimpleCreepToggleSettings(settings.creep, enabled, physicalSheetCount)
+                })
+              }
+            />
+          </>
+        )}
+        {variant === 'actions' && (
+          <>
+            <div className="flex flex-wrap rounded-[14px] border border-border/60 bg-muted/40 p-1">
+              {viewModes.map((mode) => {
+                const Icon = mode.icon
+
+                return (
+                  <Button
+                    key={mode.value}
+                    type="button"
+                    size="sm"
+                    variant={viewMode === mode.value ? 'default' : 'ghost'}
+                    aria-pressed={viewMode === mode.value}
+                    onClick={() => onViewModeChange(mode.value)}
+                  >
+                    <Icon data-icon="inline-start" />
+                    {mode.label}
+                  </Button>
+                )
+              })}
+            </div>
+
+            <div className="basis-full border-t border-border/60" aria-hidden="true" />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onAutoAddBlankPages}
+              disabled={blanksNeeded === 0 || isBusy}
+            >
+              Auto blanks
+            </Button>
+            {viewMode === 'montage' && (
+              <>
+                <Button type="button" variant="outline" onClick={onAddEmptySheet} disabled={isBusy}>
+                  <Plus data-icon="inline-start" />
+                  Add Empty Sheet
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onResetSheetLayout}
+                  disabled={!hasBoardItems || isBusy}
+                >
+                  <LayoutGrid data-icon="inline-start" />
+                  Reset layout
+                </Button>
+              </>
+            )}
+            <Button type="button" onClick={onExportPdf} disabled={!canExport || isBusy}>
+              <FileDown data-icon="inline-start" />
+              Export PDF
+            </Button>
+            <PrintButton
+              compact
+              label="Print Booklet"
+              disabled={!canExport}
+              isBusy={isBusy}
+              onPrint={onPrintPdf}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onExportImages('png')}
+              disabled={!canExport || isBusy}
+            >
+              <ImageDown data-icon="inline-start" />
+              PNG Sheets
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onExportImages('jpg')}
+              disabled={!canExport || isBusy}
+            >
+              <ImageDown data-icon="inline-start" />
+              JPG Sheets
+            </Button>
+            {(importCanCancel || exportCanCancel) && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={importCanCancel ? onCancelImport : onCancelExport}
+              >
+                <CircleStop data-icon="inline-start" />
+                Cancel
+              </Button>
+            )}
           </>
         )}
       </div>
 
-      <PdfFilePickerInput ref={pdfInputRef} onFilesSelected={onImportPdf} />
-      <input
-        ref={imageInputRef}
-        className="hidden"
-        type="file"
-        accept="image/jpeg,image/png,.jpg,.jpeg,.png"
-        multiple
-        onChange={(event) => {
-          onImportImages(Array.from(event.target.files ?? []))
-          event.currentTarget.value = ''
-        }}
-      />
+      {variant === 'actions' && (
+        <>
+          <div
+            className={
+              importProgress.phase === 'idle' && exportProgress.phase === 'idle'
+                ? 'sr-only'
+                : 'mt-3 grid gap-2 lg:grid-cols-2'
+            }
+          >
+            {importProgress.phase === 'idle' && exportProgress.phase === 'idle' ? (
+              <p className="text-sm text-muted-foreground">Ready for local PDF or image input.</p>
+            ) : (
+              <>
+                {importProgress.phase !== 'idle' && <ProgressLine progress={importProgress} />}
+                {exportProgress.phase !== 'idle' && <ProgressLine progress={exportProgress} />}
+              </>
+            )}
+          </div>
+
+          <PdfFilePickerInput ref={pdfInputRef} onFilesSelected={onImportPdf} />
+          <input
+            ref={imageInputRef}
+            className="hidden"
+            type="file"
+            accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+            multiple
+            onChange={(event) => {
+              onImportImages(Array.from(event.target.files ?? []))
+              event.currentTarget.value = ''
+            }}
+          />
+        </>
+      )}
     </div>
   )
 }
@@ -363,7 +395,7 @@ function ToolbarSelect({
     <label className="flex min-w-[126px] flex-col gap-1 text-xs font-medium text-muted-foreground">
       {label}
       <select
-        className="h-10 rounded-md border bg-background px-3 text-sm text-foreground"
+        className="h-9 rounded-[14px] border border-border/70 bg-background px-3 text-[13px] text-foreground"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
@@ -390,7 +422,7 @@ function ToolbarNumber({
     <label className="flex w-24 flex-col gap-1 text-xs font-medium text-muted-foreground">
       {label}
       <input
-        className="h-10 rounded-md border bg-background px-3 text-sm text-foreground"
+        className="h-9 rounded-[14px] border border-border/70 bg-background px-3 text-[13px] text-foreground"
         type="number"
         min={min}
         step={step}
@@ -414,7 +446,7 @@ function ToolbarCheckbox({
 }): JSX.Element {
   return (
     <label
-      className="flex h-10 items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium text-foreground"
+      className="flex min-h-9 items-center gap-2 text-[13px] font-medium text-foreground"
       title={title}
     >
       <input

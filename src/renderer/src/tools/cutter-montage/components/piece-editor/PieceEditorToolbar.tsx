@@ -29,7 +29,11 @@ interface PieceEditorToolbarProps {
 
 export function PieceEditorToolbar(props: PieceEditorToolbarProps): JSX.Element {
   return (
-    <div className="flex flex-wrap items-center gap-1">
+    <div
+      className="mb-3 flex shrink-0 flex-wrap items-center gap-1 rounded-lg bg-muted/40 p-2"
+      role="toolbar"
+      aria-label="Artwork tools and zoom"
+    >
       <ToolButton
         active={props.tool === 'select'}
         onClick={() => props.onToolChange('select')}
@@ -109,7 +113,7 @@ export function PieceEditorToolbar(props: PieceEditorToolbarProps): JSX.Element 
         <summary className="flex h-8 cursor-pointer items-center rounded-md border bg-background px-2 text-xs font-medium">
           View
         </summary>
-        <div className="absolute right-0 top-full z-50 mt-1 flex w-40 flex-col gap-1 rounded-md border bg-card p-2 shadow-md">
+        <div className="absolute right-0 top-full z-50 mt-2 flex w-44 flex-col gap-1 rounded-lg border bg-card p-2 shadow-elevated">
           <Toggle label="Show grid" checked={props.showGrid} onChange={props.onShowGridChange} />
           <Toggle
             label="Snap to grid"

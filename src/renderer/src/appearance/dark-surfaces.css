@@ -1,0 +1,175 @@
+/* Interface surfaces only. Paper previews, artwork, cutlines and exports are not recolored. */
+:root[data-theme='dark'] .desktop-atmosphere {
+  background-color: #08121f;
+  background-image: radial-gradient(ellipse at 38% 0%, rgba(56, 82, 120, 0.24), transparent 62%);
+}
+:root[data-theme='dark'] .application-frame {
+  border-color: rgba(165, 191, 224, 0.12);
+  background: #111e30;
+  box-shadow: 0 16px 48px rgba(0, 5, 15, 0.34);
+}
+:root[data-theme='dark'] .application-frame::before {
+  background: radial-gradient(
+    ellipse at 43% -12%,
+    rgba(72, 108, 161, 0.2),
+    rgba(32, 57, 93, 0.1) 38%,
+    transparent 66%
+  );
+}
+:root[data-theme='dark'] .application-frame[data-route='dashboard'] {
+  border-color: rgba(174, 201, 237, 0.16);
+  background: linear-gradient(125deg, rgba(19, 33, 53, 0.84), rgba(14, 27, 46, 0.94));
+  box-shadow:
+    inset 0 1px 0 rgba(194, 215, 245, 0.08),
+    inset 0 0 0 1px rgba(124, 159, 207, 0.035),
+    0 18px 52px rgba(0, 5, 16, 0.38);
+}
+:root[data-theme='dark'] .application-frame[data-route='dashboard']::before {
+  background:
+    radial-gradient(
+      ellipse at 44% -8%,
+      rgba(84, 126, 184, 0.21),
+      rgba(43, 70, 108, 0.13) 38%,
+      transparent 68%
+    ),
+    radial-gradient(ellipse at 95% 85%, rgba(43, 73, 116, 0.15), transparent 55%);
+}
+:root[data-theme='dark'] .application-frame .sidebar-navigation-button:not([aria-current='page']) {
+  background: rgba(35, 53, 79, 0.6);
+}
+:root[data-theme='dark'] .application-frame .sidebar-navigation-button:hover {
+  background: rgba(56, 78, 111, 0.74);
+}
+:root[data-theme='dark'] .application-frame[data-route='dashboard'] .sidebar-navigation-button,
+:root[data-theme='dark'] .application-frame[data-route='dashboard'] .dashboard-header-icon,
+:root[data-theme='dark'] .application-frame[data-route='dashboard'] .dashboard-account-button {
+  border-color: rgba(174, 201, 237, 0.11);
+  box-shadow:
+    inset 0 1px 0 rgba(194, 215, 245, 0.08),
+    0 3px 12px rgba(0, 5, 18, 0.08);
+}
+:root[data-theme='dark'] .dashboard-header-icon,
+:root[data-theme='dark'] .dashboard-account-button {
+  background: rgba(36, 54, 81, 0.66);
+}
+:root[data-theme='dark'] .dashboard-header-icon:hover,
+:root[data-theme='dark'] .dashboard-account-button:hover {
+  background: rgba(54, 76, 108, 0.84);
+}
+:root[data-theme='dark'] .production-dashboard {
+  --dashboard-glass-filter: blur(12px) saturate(1.08);
+  --dashboard-glass-surface: rgba(27, 43, 65, 0.48);
+  --dashboard-glass-current: rgba(29, 46, 70, 0.5);
+  --dashboard-glass-summary: rgba(35, 52, 77, 0.6);
+  --dashboard-glass-active: rgba(24, 42, 65, 0.46);
+  --dashboard-glass-recent: rgba(25, 42, 64, 0.38);
+  --dashboard-glass-actions: rgba(33, 50, 74, 0.62);
+  --dashboard-glass-activity: rgba(26, 43, 66, 0.46);
+  --dashboard-glass-edge: rgba(164, 193, 233, 0.16);
+  --dashboard-glass-shadow:
+    inset 0 1px 0 rgba(194, 215, 245, 0.075), inset 0 -1px 0 rgba(0, 8, 23, 0.18),
+    0 8px 28px rgba(0, 5, 17, 0.11);
+}
+:root[data-theme='dark'] .dashboard-surface {
+  background-image: linear-gradient(135deg, rgba(182, 209, 247, 0.04), transparent 68%);
+}
+:root[data-theme='dark'] .dashboard-queue > section,
+:root[data-theme='dark'] .dashboard-exports > div {
+  background-image: linear-gradient(135deg, rgba(182, 209, 247, 0.035), transparent 70%);
+}
+:root[data-theme='dark'] .dashboard-summary:hover {
+  background-color: rgba(44, 65, 96, 0.76);
+}
+:root[data-theme='dark'] .dashboard-project-preview {
+  background: linear-gradient(130deg, rgba(52, 80, 118, 0.42), rgba(23, 42, 68, 0.58));
+}
+:root[data-theme='dark'] .dashboard-round-link,
+:root[data-theme='dark'] .dashboard-empty-mark,
+:root[data-theme='dark'] .dashboard-file-symbol,
+:root[data-theme='dark'] .dashboard-quick-button > span {
+  background: rgba(49, 71, 104, 0.6);
+}
+:root[data-theme='dark'] .dashboard-round-link:hover,
+:root[data-theme='dark'] .dashboard-quiet-link:hover,
+:root[data-theme='dark'] .dashboard-quick-button:hover > span {
+  background: rgba(73, 100, 138, 0.66);
+}
+:root[data-theme='dark'] .dashboard-running-job {
+  background: rgba(39, 58, 84, 0.68);
+}
+:root[data-theme='dark'] .dashboard-running-dot {
+  background: var(--ui-success);
+}
+:root[data-theme='dark'] .dashboard-action-option {
+  background: rgba(28, 44, 67, 0.65);
+}
+:root[data-theme='dark'] .dashboard-action-option:hover {
+  background: rgba(44, 66, 97, 0.72);
+}
+:root[data-theme='dark'] .dashboard-action-option.is-selected {
+  border-color: rgba(156, 189, 233, 0.24);
+  background: rgba(51, 80, 121, 0.55);
+}
+:root[data-theme='dark'] .dashboard-action-icon {
+  background: rgba(60, 84, 119, 0.66);
+}
+:root[data-theme='dark'] .dashboard-choice-mark {
+  border-color: #758eaf;
+}
+:root[data-theme='dark'] .is-selected .dashboard-choice-mark {
+  border-color: var(--ui-accent);
+  background: #243753;
+}
+:root[data-theme='dark'] .dashboard-toolkit {
+  border-color: rgba(171, 200, 239, 0.17);
+  background:
+    linear-gradient(140deg, rgba(145, 183, 236, 0.09), transparent 60%),
+    linear-gradient(125deg, rgba(38, 65, 103, 0.95), rgba(24, 44, 75, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(173, 203, 245, 0.12),
+    0 10px 28px rgba(0, 5, 17, 0.15);
+}
+:root[data-theme='dark'] .dashboard-guide,
+:root[data-theme='dark'] .dashboard-activity-tabs {
+  background: rgba(28, 44, 66, 0.6);
+}
+:root[data-theme='dark'] .dashboard-queue > section > div:nth-child(2) > button {
+  background: rgba(37, 56, 82, 0.66);
+}
+:root[data-theme='dark'] .dashboard-queue > section > div:nth-child(2) > button:hover {
+  background: rgba(51, 74, 106, 0.7);
+}
+:root[data-theme='dark'] .atelier-access__brand-mark,
+:root[data-theme='dark'] .atelier-access__submit {
+  color: hsl(var(--primary-foreground));
+}
+:root[data-theme='dark'][data-performance-preset='low-end'] .production-dashboard {
+  --dashboard-glass-filter: none;
+  --dashboard-glass-surface: #1b2b42;
+  --dashboard-glass-current: #1d2f48;
+  --dashboard-glass-summary: #23344d;
+  --dashboard-glass-active: #1b2e47;
+  --dashboard-glass-recent: #192b43;
+  --dashboard-glass-actions: #23344d;
+  --dashboard-glass-activity: #1b2d45;
+  --dashboard-glass-shadow: none;
+}
+:root[data-theme='dark'][data-performance-preset='low-end']
+  .application-frame[data-route='dashboard'] {
+  background: #111e30;
+  box-shadow: none;
+}
+:root[data-theme='dark'][data-performance-preset='low-end'] .dashboard-toolkit {
+  box-shadow: none;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root[data-theme='dark'] .production-dashboard {
+    --dashboard-glass-surface: #1b2b42;
+    --dashboard-glass-current: #1d2f48;
+    --dashboard-glass-summary: #23344d;
+    --dashboard-glass-active: #1b2e47;
+    --dashboard-glass-recent: #192b43;
+    --dashboard-glass-actions: #23344d;
+    --dashboard-glass-activity: #1b2d45;
+  }
+}

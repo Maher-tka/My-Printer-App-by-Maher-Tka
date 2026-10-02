@@ -22,6 +22,19 @@ export interface StickerMakerResult {
 }
 
 export type StickerMaskBrushMode = 'erase' | 'restore'
+export type StickerBackgroundMode = 'auto' | 'remove' | 'keep'
+
+/** A transparent source can supply its own cut mask without model inference. */
+export function shouldRemoveStickerBackground(
+  rgba: Uint8ClampedArray,
+  mode: StickerBackgroundMode
+): boolean {
+  if (mode !== 'auto') return mode === 'remove'
+  for (let index = 3; index < rgba.length; index += 4) {
+    if (rgba[index] < 255) return false
+  }
+  return true
+}
 
 /** Paint one stroke into a working mask. Callers keep a copy for undo. */
 export function paintStickerMaskStroke(
@@ -178,6 +191,14 @@ export function makeOffsetPath(
     !Number.isFinite(settings.offsetMm) ||
     settings.offsetMm < 0 ||
     !Number.isFinite(settings.threshold) ||
+    settings.threshold < 1 ||
+    settings.threshold > 254 ||
+    !Number.isFinite(settings.smoothing) ||
+    settings.smoothing < 0 ||
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width <= 0 ||
+    height <= 0 ||
     mask.length !== width * height
   ) {
     throw new Error('Sticker dimensions, offset, or mask are invalid.')
@@ -226,7 +247,7 @@ export function geometryOrReviewWarning(
     if (error instanceof Error && error.message.startsWith('No usable foreground')) {
       return {
         pathData: '',
-        warnings: ['AI found no usable foreground. Use the Restore brush in Mask view.']
+        warnings: ['No usable foreground found. Use the Restore brush in Mask view.']
       }
     }
     throw error
@@ -247,7 +268,8 @@ function getMaskQualityWarnings(alpha: Uint8Array, threshold: number): string[] 
 export async function processSticker(
   file: File,
   settings: StickerMakerSettings,
-  onStatus: (message: string) => void
+  onStatus: (message: string) => void,
+  backgroundMode: StickerBackgroundMode = 'auto'
 ): Promise<StickerMakerResult> {
   const image = await loadImage(file)
   const widthPx = image.naturalWidth
@@ -255,36 +277,42 @@ export async function processSticker(
   if (!widthPx || !heightPx || widthPx * heightPx > 80_000_000) {
     throw new Error('Image dimensions are invalid or exceed the 80 megapixel processing limit.')
   }
-  const segmenter = (await getSegmenter(onStatus)) as (input: string) => Promise<unknown[]>
-  onStatus(`Removing background from ${file.name}…`)
-  const source = URL.createObjectURL(file)
-  let prediction: unknown
-  try {
-    prediction = (await segmenter(source))[0]
-  } finally {
-    URL.revokeObjectURL(source)
-  }
-  const maskCanvas = await (prediction as { toCanvas: () => Promise<HTMLCanvasElement> }).toCanvas()
   const sourceCanvas = makeCanvas(widthPx, heightPx)
   const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) throw new Error('Canvas processing is unavailable.')
   ctx.drawImage(image, 0, 0)
-  const fullMask = makeCanvas(widthPx, heightPx)
-  const maskCtx = fullMask.getContext('2d', { willReadFrequently: true })
-  if (!maskCtx) throw new Error('Mask processing is unavailable.')
-  maskCtx.drawImage(maskCanvas, 0, 0, widthPx, heightPx)
   const pixels = ctx.getImageData(0, 0, widthPx, heightPx)
-  const maskPixels = maskCtx.getImageData(0, 0, widthPx, heightPx).data
-  for (let i = 0; i < widthPx * heightPx; i += 1) {
-    pixels.data[i * 4 + 3] = Math.round((pixels.data[i * 4 + 3] * maskPixels[i * 4 + 3]) / 255)
+  if (shouldRemoveStickerBackground(pixels.data, backgroundMode)) {
+    const segmenter = (await getSegmenter(onStatus)) as (input: string) => Promise<unknown[]>
+    onStatus(`Removing background from ${file.name}…`)
+    const source = URL.createObjectURL(file)
+    let prediction: unknown
+    try {
+      prediction = (await segmenter(source))[0]
+    } finally {
+      URL.revokeObjectURL(source)
+    }
+    const maskCanvas = await (
+      prediction as { toCanvas: () => Promise<HTMLCanvasElement> }
+    ).toCanvas()
+    const fullMask = makeCanvas(widthPx, heightPx)
+    const maskCtx = fullMask.getContext('2d', { willReadFrequently: true })
+    if (!maskCtx) throw new Error('Mask processing is unavailable.')
+    maskCtx.drawImage(maskCanvas, 0, 0, widthPx, heightPx)
+    const maskPixels = maskCtx.getImageData(0, 0, widthPx, heightPx).data
+    for (let i = 0; i < widthPx * heightPx; i += 1) {
+      pixels.data[i * 4 + 3] = Math.round((pixels.data[i * 4 + 3] * maskPixels[i * 4 + 3]) / 255)
+    }
+    ctx.putImageData(pixels, 0, 0)
+  } else {
+    onStatus(`Using existing artwork for ${file.name}…`)
   }
-  ctx.putImageData(pixels, 0, 0)
   const contourScale = Math.min(1, 1024 / Math.max(widthPx, heightPx))
   const contourW = Math.max(1, Math.round(widthPx * contourScale))
   const contourH = Math.max(1, Math.round(heightPx * contourScale))
   const small = makeCanvas(contourW, contourH)
   const smallCtx = small.getContext('2d', { willReadFrequently: true })!
-  smallCtx.drawImage(fullMask, 0, 0, contourW, contourH)
+  smallCtx.drawImage(sourceCanvas, 0, 0, contourW, contourH)
   const smallPixels = smallCtx.getImageData(0, 0, contourW, contourH).data
   const alpha = new Uint8Array(contourW * contourH)
   for (let i = 0; i < alpha.length; i += 1) alpha[i] = smallPixels[i * 4 + 3]
@@ -347,29 +375,41 @@ export async function rebuildStickerFromMask(
   if (image.naturalWidth !== result.widthPx || image.naturalHeight !== result.heightPx) {
     throw new Error('The original image dimensions changed. Reprocess the sticker.')
   }
+  const artwork = makeCanvas(result.widthPx, result.heightPx)
+  const artworkContext = artwork.getContext('2d', { willReadFrequently: true })
+  if (!artworkContext) throw new Error('Artwork canvas is unavailable.')
+  artworkContext.drawImage(image, 0, 0)
   const smallMask = makeCanvas(result.contourWidth, result.contourHeight)
-  const smallContext = smallMask.getContext('2d')
+  const smallContext = smallMask.getContext('2d', { willReadFrequently: true })
   if (!smallContext) throw new Error('Mask canvas is unavailable.')
+  // Clamp against the untouched source, avoiding repeated resampling of edited masks.
+  smallContext.drawImage(artwork, 0, 0, result.contourWidth, result.contourHeight)
+  const sourcePixels = smallContext.getImageData(
+    0,
+    0,
+    result.contourWidth,
+    result.contourHeight
+  ).data
+  const effectiveMask = new Uint8Array(mask.length)
   const maskImage = smallContext.createImageData(result.contourWidth, result.contourHeight)
   for (let index = 0; index < mask.length; index += 1) {
+    effectiveMask[index] = Math.min(mask[index], sourcePixels[index * 4 + 3])
     maskImage.data[index * 4] = 255
     maskImage.data[index * 4 + 1] = 255
     maskImage.data[index * 4 + 2] = 255
-    maskImage.data[index * 4 + 3] = mask[index]
+    maskImage.data[index * 4 + 3] = effectiveMask[index]
   }
   smallContext.putImageData(maskImage, 0, 0)
   const fullMask = makeCanvas(result.widthPx, result.heightPx)
   const fullMaskContext = fullMask.getContext('2d', { willReadFrequently: true })
-  const artwork = makeCanvas(result.widthPx, result.heightPx)
-  const artworkContext = artwork.getContext('2d', { willReadFrequently: true })
-  if (!fullMaskContext || !artworkContext) throw new Error('Artwork canvas is unavailable.')
+  if (!fullMaskContext) throw new Error('Artwork canvas is unavailable.')
   fullMaskContext.drawImage(smallMask, 0, 0, result.widthPx, result.heightPx)
-  artworkContext.drawImage(image, 0, 0)
   const artworkPixels = artworkContext.getImageData(0, 0, result.widthPx, result.heightPx)
   const maskPixels = fullMaskContext.getImageData(0, 0, result.widthPx, result.heightPx).data
   for (let index = 0; index < result.widthPx * result.heightPx; index += 1) {
-    artworkPixels.data[index * 4 + 3] = Math.round(
-      (artworkPixels.data[index * 4 + 3] * maskPixels[index * 4 + 3]) / 255
+    artworkPixels.data[index * 4 + 3] = Math.min(
+      artworkPixels.data[index * 4 + 3],
+      maskPixels[index * 4 + 3]
     )
   }
   artworkContext.putImageData(artworkPixels, 0, 0)
@@ -380,7 +420,7 @@ export async function rebuildStickerFromMask(
     )
   )
   const geometry = geometryOrReviewWarning(
-    mask,
+    effectiveMask,
     result.contourWidth,
     result.contourHeight,
     settings
@@ -388,10 +428,10 @@ export async function rebuildStickerFromMask(
   return {
     ...result,
     png: new Uint8Array(await png.arrayBuffer()),
-    contourMask: mask,
+    contourMask: effectiveMask,
     pathData: geometry.pathData,
     widthMm: settings.widthMm,
     heightMm: (settings.widthMm * result.heightPx) / result.widthPx,
-    warnings: [...geometry.warnings, ...getMaskQualityWarnings(mask, settings.threshold)]
+    warnings: [...geometry.warnings, ...getMaskQualityWarnings(effectiveMask, settings.threshold)]
   }
 }

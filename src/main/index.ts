@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } fr
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { registerAccountHandlers } from './account.js'
+import { assertOnlineProductionAccess } from './online-account.js'
 import { registerAppUpdaterHandlers } from './app-updater.js'
 import { registerLicenseHandlers } from './licensing.js'
 import { registerPrintHandlers } from './print-service.js'
@@ -253,6 +254,7 @@ function registerBookletExportHandlers(): void {
     'booklet:save-file',
     async (event, request: SaveFileRequest, context?: ExportContext) => {
       try {
+        await assertOnlineProductionAccess()
         const owner = BrowserWindow.fromWebContents(event.sender)
         const options = {
           title: 'Save booklet montage file',
@@ -324,6 +326,7 @@ function registerBookletExportHandlers(): void {
       context?: ExportContext
     ) => {
       try {
+        await assertOnlineProductionAccess(files.length > 1 ? 'batch-exports' : 'paid-tools')
         const folder = resolve(folderPath)
         const writtenPaths: string[] = []
 

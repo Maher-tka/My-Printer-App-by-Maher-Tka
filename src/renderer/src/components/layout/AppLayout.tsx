@@ -15,6 +15,7 @@ interface AppLayoutProps {
   onSignOut: () => void
   onOpenProject: () => void
   onOpenImageFile: () => void
+  onOpenJob: (jobId: string) => void
 }
 
 export function AppLayout({
@@ -26,6 +27,7 @@ export function AppLayout({
   onSignOut,
   onOpenProject,
   onOpenImageFile,
+  onOpenJob,
   isDeveloperMode = false
 }: AppLayoutProps): JSX.Element {
   const [commandCenterOpen, setCommandCenterOpen] = useState(false)
@@ -48,46 +50,54 @@ export function AppLayout({
   }, [])
 
   return (
-    <div className="flex h-screen max-w-full overflow-hidden bg-background text-foreground">
-      <a
-        href="#main-content"
-        onClick={(event) => {
-          event.preventDefault()
-          mainRef.current?.focus()
-        }}
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[110] focus:rounded-lg focus:bg-card focus:p-3 focus:text-foreground focus:shadow-lg"
+    <div className="desktop-atmosphere" data-route={activeRoute}>
+      <div
+        className="application-frame flex h-full max-w-full overflow-hidden text-foreground"
+        data-route={activeRoute}
       >
-        Skip to workspace
-      </a>
-      <Sidebar activeRoute={activeRoute} onNavigate={onNavigate} />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <TopBar
-          pageMeta={pageMeta}
-          account={account}
-          onSignOut={onSignOut}
-          isDeveloperMode={isDeveloperMode}
-          onOpenCommandCenter={() => setCommandCenterOpen(true)}
-          onOpenImageFile={onOpenImageFile}
-        />
-        <main
-          id="main-content"
-          ref={mainRef}
-          tabIndex={-1}
-          aria-label={pageMeta.title}
-          className="app-canvas min-w-0 flex-1 overflow-auto px-3 py-4 sm:px-5 lg:px-7 lg:py-6"
+        <a
+          href="#main-content"
+          onClick={(event) => {
+            event.preventDefault()
+            mainRef.current?.focus()
+          }}
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[110] focus:rounded-lg focus:bg-card focus:p-3 focus:text-foreground focus:shadow-lg"
         >
-          <div className="relative z-[1]">{children}</div>
-        </main>
+          Skip to workspace
+        </a>
+        <Sidebar activeRoute={activeRoute} onNavigate={onNavigate} />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <TopBar
+            isDashboard={activeRoute === 'dashboard'}
+            onNavigate={onNavigate}
+            pageMeta={pageMeta}
+            account={account}
+            onSignOut={onSignOut}
+            isDeveloperMode={isDeveloperMode}
+            onOpenCommandCenter={() => setCommandCenterOpen(true)}
+            onOpenImageFile={onOpenImageFile}
+          />
+          <main
+            id="main-content"
+            ref={mainRef}
+            tabIndex={-1}
+            aria-label={pageMeta.title}
+            className="app-canvas min-w-0 flex-1 overflow-auto px-4 py-4 lg:px-6 lg:py-5"
+          >
+            <div className="relative z-[1]">{children}</div>
+          </main>
+        </div>
+        <CommandCenter
+          open={commandCenterOpen}
+          activeRoute={activeRoute}
+          onOpenChange={setCommandCenterOpen}
+          onNavigate={onNavigate}
+          onOpenProject={onOpenProject}
+          onOpenImageFile={onOpenImageFile}
+          isDeveloperMode={isDeveloperMode}
+          onOpenJob={onOpenJob}
+        />
       </div>
-      <CommandCenter
-        open={commandCenterOpen}
-        activeRoute={activeRoute}
-        onOpenChange={setCommandCenterOpen}
-        onNavigate={onNavigate}
-        onOpenProject={onOpenProject}
-        onOpenImageFile={onOpenImageFile}
-        isDeveloperMode={isDeveloperMode}
-      />
     </div>
   )
 }

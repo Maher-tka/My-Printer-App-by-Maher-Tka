@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { BackupRestoreSettings } from '@/backup/BackupRestoreSettings'
+import { AppearanceSettings } from '@/appearance/AppearanceSettings'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -57,20 +58,19 @@ export function SettingsPage({
       </Button>
 
       <Card className="overflow-hidden">
-        <CardHeader className="flex-row items-center gap-3 border-b bg-muted/25">
+        <CardHeader className="flex-row items-center gap-3 border-b border-[var(--ui-divider)]">
           <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary">
             <Settings className="size-5" aria-hidden="true" />
           </div>
           <div className="flex flex-col gap-1">
-            <CardTitle className="text-xl">Settings</CardTitle>
-            <CardDescription>Preferences and less-used app controls.</CardDescription>
+            <CardTitle className="text-lg">Settings</CardTitle>
+            <CardDescription>Workspace preferences and app management.</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-6 pt-6">
+          <AppearanceSettings />
           <section>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
-              General
-            </p>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">General</p>
             <div className="rounded-xl border bg-card p-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
@@ -105,9 +105,7 @@ export function SettingsPage({
           </section>
 
           <section>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
-              App management
-            </p>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">App management</p>
             <div className="overflow-hidden rounded-xl border bg-card">
               <BackupRestoreSettings />
               <UpdatesSettings />
@@ -225,7 +223,7 @@ function updateBadgeVariant(
 
 function SettingsIcon({ icon: Icon }: { icon: LucideIcon }): JSX.Element {
   return (
-    <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+    <div className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-muted-foreground">
       <Icon className="size-5" aria-hidden="true" />
     </div>
   )

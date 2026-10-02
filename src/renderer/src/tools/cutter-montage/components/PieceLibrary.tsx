@@ -83,7 +83,7 @@ export function PieceLibrary({
   }, [pieces])
 
   return (
-    <section className="min-w-0 max-w-full overflow-hidden rounded-lg border bg-card p-4">
+    <section className="min-w-0 max-w-full overflow-hidden space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold">Sticker Job</h3>
@@ -131,11 +131,11 @@ export function PieceLibrary({
         </details>
 
         {inspectedPdfPieces.length > 0 && (
-          <section className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-950">
+          <section className="rounded-md border border-primary/15 bg-primary/5 p-3 text-xs text-primary">
             <div className="font-semibold">PDF production inspection</div>
             <div className="mt-2 grid gap-2">
               {inspectedPdfPieces.slice(0, 4).map((piece) => (
-                <div key={piece.id} className="rounded border border-sky-200 bg-white/60 p-2">
+                <div key={piece.id} className="rounded border border-primary/15 bg-white/60 p-2">
                   <div className="font-medium">{piece.displayName}</div>
                   <div className="mt-1">
                     {formatPdfClassification(piece.pdfProductionMetadata!)}
@@ -150,7 +150,7 @@ export function PieceLibrary({
                       </>
                     )}
                   </div>
-                  <div className="mt-1 text-[11px] text-sky-900/80">
+                  <div className="mt-1 text-[11px] text-muted-foreground">
                     {piece.pdfProductionMetadata!.layers.length} layer(s) ·{' '}
                     {piece.pdfProductionMetadata!.colorants.length} spot color(s)
                   </div>
@@ -162,7 +162,7 @@ export function PieceLibrary({
                 </div>
               )}
             </div>
-            <p className="mt-2 text-[11px] text-sky-900/80">
+            <p className="mt-2 text-[11px] text-muted-foreground">
               Hidden layers and Mimaki registration separations stay in the original source. They
               are not automatically editable CutContour lines.
             </p>
@@ -170,7 +170,7 @@ export function PieceLibrary({
         )}
 
         {pieces.length > 3 && (
-          <label className="flex h-10 items-center gap-2 rounded-md border bg-background px-3 text-sm">
+          <label className="flex h-9 items-center gap-2 rounded-md border bg-background px-3 text-sm">
             <Search className="size-4 text-muted-foreground" />
             <input
               className="min-w-0 flex-1 bg-transparent outline-none"

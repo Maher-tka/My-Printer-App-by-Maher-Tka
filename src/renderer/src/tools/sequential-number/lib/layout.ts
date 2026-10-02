@@ -176,21 +176,17 @@ export function getGutterCutLines(s: SequentialSettings, slots: NumberSlot[]): G
   const top = ys[0],
     bottom = ys[ys.length - 1] + s.ticketHeightMm
   return [
-    ...xs
-      .slice(0, -1)
-      .map((x) => ({
-        x1: x + s.ticketWidthMm + s.gapMm / 2,
-        y1: top,
-        x2: x + s.ticketWidthMm + s.gapMm / 2,
-        y2: bottom
-      })),
-    ...ys
-      .slice(0, -1)
-      .map((y) => ({
-        x1: left,
-        y1: y + s.ticketHeightMm + s.gapMm / 2,
-        x2: right,
-        y2: y + s.ticketHeightMm + s.gapMm / 2
-      }))
+    ...xs.slice(0, -1).map((x) => ({
+      x1: x + s.ticketWidthMm + s.gapMm / 2,
+      y1: top,
+      x2: x + s.ticketWidthMm + s.gapMm / 2,
+      y2: bottom
+    })),
+    ...ys.slice(0, -1).map((y) => ({
+      x1: left,
+      y1: y + s.ticketHeightMm + s.gapMm / 2,
+      x2: right,
+      y2: y + s.ticketHeightMm + s.gapMm / 2
+    }))
   ]
 }

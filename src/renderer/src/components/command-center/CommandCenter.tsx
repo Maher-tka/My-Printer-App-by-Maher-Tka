@@ -16,6 +16,14 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AppRoute } from '@/types/navigation'
+import {
+  findCustomerJobs,
+  normalizeSearch,
+  productionTasks,
+  searchScore
+} from '@/assistant/taskMatching'
+import { useJobStore } from '@/jobs/useJobStore'
+import { statusLabel } from '@/jobs/jobWorkflow'
 
 interface CommandCenterProps {
   open: boolean
@@ -24,6 +32,7 @@ interface CommandCenterProps {
   onNavigate: (route: AppRoute) => void
   onOpenProject: () => void
   onOpenImageFile: () => void
+  onOpenJob: (jobId: string) => void
   isDeveloperMode?: boolean
 }
 
@@ -36,6 +45,7 @@ interface CommandItem {
   route?: AppRoute
   action?: 'open-project' | 'open-image'
   developerOnly?: boolean
+  jobId?: string
 }
 
 const commands: CommandItem[] = [
@@ -153,20 +163,42 @@ export function CommandCenter({
   onNavigate,
   onOpenProject,
   onOpenImageFile,
+  onOpenJob,
   isDeveloperMode = false
 }: CommandCenterProps): JSX.Element | null {
   const [query, setQuery] = useState('')
+  const { jobs } = useJobStore()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const dialogRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const filteredCommands = useMemo(() => {
-    const queryWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
-    return commands.filter((command) => {
-      if (command.developerOnly && !isDeveloperMode) return false
-      const searchable = `${command.label} ${command.description} ${command.keywords}`.toLowerCase()
-      return queryWords.every((word) => searchable.includes(word))
-    })
-  }, [isDeveloperMode, query])
+    const available = commands.filter((command) => !command.developerOnly || isDeveloperMode)
+    if (!query.trim()) return available
+    const rankedCommands = available
+      .map((command) => {
+        const task = productionTasks.find((item) => item.route === command.route)
+        const keywords = `${command.description} ${command.keywords} ${task?.keywords ?? ''}`
+        const normalizedQuery = normalizeSearch(query)
+        const exact =
+          normalizedQuery.length > 0 &&
+          normalizeSearch(`${command.label} ${keywords}`).includes(normalizedQuery)
+        return { command, score: searchScore(query, command.label, keywords) + (exact ? 30 : 0) }
+      })
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+    // Customer records use literal tokens: never suggest a different person through fuzzy matching.
+    const matchingJobs: CommandItem[] = findCustomerJobs(jobs, query)
+      .slice(0, 8)
+      .map((job) => ({
+        id: `job-${job.id}`,
+        jobId: job.id,
+        label: job.jobTitle,
+        description: `${job.customerName || 'No customer'} · ${statusLabel(job.status)}${job.deadline ? ` · Due ${job.deadline}` : ''}`,
+        keywords: '',
+        icon: BriefcaseBusiness
+      }))
+    return [...matchingJobs, ...rankedCommands.map(({ command }) => command)]
+  }, [isDeveloperMode, query, jobs])
 
   useEffect(() => {
     if (!open) return
@@ -191,7 +223,8 @@ export function CommandCenter({
 
   const runCommand = (command: CommandItem): void => {
     onOpenChange(false)
-    if (command.action === 'open-project') onOpenProject()
+    if (command.jobId) onOpenJob(command.jobId)
+    else if (command.action === 'open-project') onOpenProject()
     else if (command.action === 'open-image') onOpenImageFile()
     else if (command.route) onNavigate(command.route)
   }
@@ -200,7 +233,7 @@ export function CommandCenter({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center bg-slate-950/45 px-3 pt-[12vh] backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-start justify-center bg-slate-950/20 px-3 pt-[12vh]"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onOpenChange(false)
@@ -232,14 +265,14 @@ export function CommandCenter({
         role="dialog"
         aria-modal="true"
         aria-label="Command Center"
-        className="w-full max-w-2xl overflow-hidden rounded-xl border bg-card shadow-2xl"
+        className="w-full max-w-2xl overflow-hidden rounded-[var(--ui-radius-xl)] border border-[var(--ui-border)] bg-popover shadow-elevated"
       >
         <div className="flex items-center gap-3 border-b px-4">
           <Search className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <input
             ref={inputRef}
             role="combobox"
-            aria-label="Search tools and actions"
+            aria-label="Search tools and customer jobs"
             aria-autocomplete="list"
             aria-expanded="true"
             aria-controls="command-results"
@@ -265,11 +298,14 @@ export function CommandCenter({
                 setSelectedIndex((index) => Math.max(index - 1, 0))
               }
               if (event.key === 'Enter' && filteredCommands[selectedIndex]) {
+                event.preventDefault()
+                event.stopPropagation()
+                if (event.nativeEvent.isComposing || event.repeat) return
                 runCommand(filteredCommands[selectedIndex])
               }
             }}
-            placeholder="Search tools, jobs, exports, settings…"
-            className="h-14 min-w-0 flex-1 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground"
+            placeholder="Describe a task, or find a customer / job…"
+            className="h-12 min-w-0 flex-1 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground"
           />
           <button
             type="button"
@@ -283,7 +319,7 @@ export function CommandCenter({
 
         <div
           id="command-results"
-          aria-label="Tools and actions"
+          aria-label="Tools and customer jobs"
           className="max-h-[55vh] overflow-y-auto p-2"
           role="listbox"
         >
@@ -313,6 +349,11 @@ export function CommandCenter({
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2 text-sm font-semibold">
                     {command.label}
+                    {command.jobId ? (
+                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        Job
+                      </span>
+                    ) : null}
                     {isActive ? (
                       <span className="rounded-full bg-success px-2 py-0.5 text-[10px] font-bold uppercase text-success-foreground">
                         Current
@@ -329,7 +370,7 @@ export function CommandCenter({
           })}
           {filteredCommands.length === 0 ? (
             <div role="status" className="px-4 py-10 text-center text-sm text-muted-foreground">
-              No command matches “{query}”.
+              No match for “{query}”. Try a product name, customer name, or phone number.
             </div>
           ) : null}
         </div>

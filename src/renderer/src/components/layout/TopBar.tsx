@@ -1,8 +1,9 @@
-import { ChevronDown, FileImage, HardDrive, LogOut, Search } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileImage, LogOut, Search, Settings } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import type { PageMeta } from '@/types/navigation'
+import { ThemeToggle } from '@/appearance/ThemeToggle'
+import type { AppRoute, PageMeta } from '@/types/navigation'
 import type { AccountProfile } from '../../../../shared/account-types'
 
 interface TopBarProps {
@@ -12,6 +13,8 @@ interface TopBarProps {
   onSignOut: () => void
   onOpenCommandCenter: () => void
   onOpenImageFile: () => void
+  isDashboard?: boolean
+  onNavigate?: (route: AppRoute) => void
 }
 
 export function TopBar({
@@ -20,7 +23,9 @@ export function TopBar({
   account,
   onSignOut,
   onOpenCommandCenter,
-  onOpenImageFile
+  onOpenImageFile,
+  isDashboard = false,
+  onNavigate
 }: TopBarProps): JSX.Element {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const accountMenuRef = useRef<HTMLDivElement>(null)
@@ -48,23 +53,32 @@ export function TopBar({
   const accountInitials = getInitials(account?.displayName ?? 'SA')
 
   return (
-    <header className="relative z-10 flex min-h-[76px] shrink-0 items-center justify-between gap-4 border-b bg-card/95 px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)] lg:px-7">
+    <header
+      className={
+        isDashboard
+          ? 'dashboard-topbar relative z-10 flex shrink-0 items-center justify-between gap-3 px-4 lg:px-6'
+          : 'relative z-10 flex h-[var(--ui-header-height)] shrink-0 items-center justify-between gap-3 px-4 lg:px-6'
+      }
+    >
       <div className="flex min-w-0 flex-1 items-center gap-4">
-        <div className="hidden size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/45 text-muted-foreground 2xl:flex">
-          <HardDrive className="size-4" aria-hidden="true" />
-        </div>
         <div className="min-w-0">
-          <p className="mb-1 hidden text-[10px] font-bold uppercase tracking-[0.18em] text-primary sm:block">
-            Local production workspace
-          </p>
-          <div className="flex min-w-0 items-baseline gap-3">
-            <h1 className="truncate text-xl font-bold tracking-[-0.025em] text-foreground lg:text-[22px]">
-              {pageMeta.title}
+          <div className="flex min-w-0 items-center gap-2.5">
+            {!isDashboard && (
+              <span className="hidden text-xs text-muted-foreground md:inline">Workspace</span>
+            )}
+            <ChevronRight
+              className={isDashboard ? 'hidden' : 'hidden size-3 text-muted-foreground/60 md:block'}
+              aria-hidden="true"
+            />
+            <h1
+              className={
+                isDashboard
+                  ? 'dashboard-brand-name'
+                  : 'truncate text-base font-semibold tracking-[-0.015em] text-foreground'
+              }
+            >
+              {isDashboard ? 'My Printer App' : pageMeta.title}
             </h1>
-            <span className="hidden h-4 w-px bg-border lg:block" />
-            <p className="hidden truncate text-sm text-muted-foreground lg:block">
-              {pageMeta.subtitle}
-            </p>
           </div>
         </div>
       </div>
@@ -73,13 +87,23 @@ export function TopBar({
         <button
           type="button"
           onClick={onOpenCommandCenter}
-          className="hidden h-10 min-w-52 items-center gap-2 rounded-xl border bg-background px-3 text-left text-sm text-muted-foreground shadow-sm transition-colors hover:border-primary/35 hover:bg-accent/50 lg:flex"
+          className={
+            isDashboard
+              ? 'dashboard-header-icon'
+              : 'hidden h-9 w-60 items-center gap-2 rounded-[var(--ui-radius-md)] border border-[var(--ui-border)] bg-card/70 px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-card lg:flex'
+          }
           aria-label="Quick open"
           title="Quick open (Ctrl+K)"
         >
           <Search className="size-4" aria-hidden="true" />
-          <span className="flex-1">Search tools & actions</span>
-          <kbd className="rounded-md border bg-card px-1.5 py-0.5 font-sans text-[10px] font-semibold text-muted-foreground">
+          <span className={isDashboard ? 'sr-only' : 'flex-1'}>Find anything…</span>
+          <kbd
+            className={
+              isDashboard
+                ? 'sr-only'
+                : 'rounded border bg-background px-1.5 py-0.5 font-sans text-[9px] font-medium text-muted-foreground'
+            }
+          >
             Ctrl K
           </kbd>
         </button>
@@ -90,20 +114,34 @@ export function TopBar({
           onClick={onOpenCommandCenter}
           aria-label="Quick open"
           title="Quick open (Ctrl+K)"
-          className="lg:hidden"
+          className={isDashboard ? 'hidden' : 'lg:hidden'}
         >
           <Search className="size-4" />
         </Button>
+        {isDashboard && onNavigate && (
+          <button
+            type="button"
+            className="dashboard-header-icon"
+            onClick={() => onNavigate('settings')}
+            aria-label="Settings"
+            title="Settings"
+          >
+            <Settings className="size-4" aria-hidden="true" />
+          </button>
+        )}
+        <ThemeToggle dashboard={isDashboard} />
         <Button
           aria-label="Import artwork"
           title="Import artwork into Cutter Montage"
-          variant="default"
+          variant="outline"
           type="button"
           onClick={onOpenImageFile}
-          className="rounded-xl"
+          className={
+            isDashboard ? 'dashboard-header-icon border-0 p-0' : 'rounded-lg px-3.5 text-xs'
+          }
         >
           <FileImage className="size-4" aria-hidden="true" />
-          <span className="hidden sm:inline">Import artwork</span>
+          <span className={isDashboard ? 'sr-only' : 'hidden sm:inline'}>Import artwork</span>
         </Button>
 
         <div
@@ -116,23 +154,34 @@ export function TopBar({
         >
           <button
             type="button"
-            className="flex h-10 items-center gap-2 rounded-xl border border-transparent px-1.5 text-sm font-medium transition hover:border-border hover:bg-accent/60"
+            className={
+              isDashboard
+                ? 'dashboard-account-button'
+                : 'ml-1 flex h-10 items-center gap-2 rounded-lg border border-transparent px-1.5 text-sm font-medium transition hover:border-border hover:bg-accent/60'
+            }
             ref={accountButtonRef}
             aria-expanded={accountMenuOpen}
             aria-controls={accountMenuOpen ? 'account-details' : undefined}
             aria-label="Account menu"
             onClick={() => setAccountMenuOpen((open) => !open)}
           >
-            <Avatar className="size-8">
-              <AvatarFallback>{accountInitials}</AvatarFallback>
+            <Avatar className="size-8 border border-primary/10">
+              <AvatarFallback className="bg-secondary text-xs text-primary">
+                {accountInitials}
+              </AvatarFallback>
             </Avatar>
-            <span className="hidden max-w-36 truncate 2xl:inline">{accountLabel}</span>
-            <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
+            <span className={isDashboard ? 'sr-only' : 'hidden max-w-36 truncate 2xl:inline'}>
+              {accountLabel}
+            </span>
+            <ChevronDown
+              className={isDashboard ? 'hidden' : 'size-3.5 text-muted-foreground'}
+              aria-hidden="true"
+            />
           </button>
           {accountMenuOpen ? (
             <div
               id="account-details"
-              className="absolute right-0 top-12 z-30 w-72 rounded-2xl border bg-card p-3 shadow-2xl shadow-slate-950/15"
+              className="absolute right-0 top-12 z-30 w-72 rounded-2xl border bg-card p-3 shadow-elevated"
             >
               <div className="flex items-center gap-3 border-b px-1 pb-3">
                 <Avatar>

@@ -72,7 +72,7 @@ export function NumberDesignEditor({
             aria-label="Design zoom"
             value={zoom}
             onChange={(e) => setZoom(Number(e.target.value))}
-            className="rounded border bg-background p-1"
+            className="h-8 rounded-[10px] border border-input bg-background px-2"
           >
             {[1, 1.5, 2, 3].map((z) => (
               <option key={z} value={z}>
@@ -82,17 +82,17 @@ export function NumberDesignEditor({
           </select>
         </label>
         <span>
-          Drag to move � Shift: straight line � Arrows: 0.1 mm � Shift+arrows: 1 mm � Ctrl+Z: undo
+          Drag to move · Shift: straight line · Arrows: 0.1 mm · Shift+arrows: 1 mm · Ctrl+Z: undo
         </span>
       </div>
-      <div className="max-h-[600px] overflow-auto rounded-xl border bg-muted/40 p-4">
+      <div className="max-h-[calc(100vh-340px)] min-h-64 overflow-auto rounded-[14px] border border-border/60 bg-muted/40 p-4">
         <svg
           ref={svg}
           tabIndex={0}
           role="group"
           aria-label="Number and fixed text editor"
           viewBox={`0 0 ${Math.max(1, width)} ${Math.max(1, height)}`}
-          className="block touch-none select-none bg-white shadow-md outline-none focus:ring-2 focus:ring-primary"
+          className="block touch-none select-none bg-white shadow-sm outline-none focus:ring-2 focus:ring-primary"
           style={{
             width: `${zoom * 100}%`,
             maxWidth: 'none',

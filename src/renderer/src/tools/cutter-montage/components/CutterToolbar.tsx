@@ -32,7 +32,11 @@ export function CutterToolbar({
   onCreateTestProject
 }: CutterToolbarProps): JSX.Element {
   return (
-    <div className="relative z-40 shrink-0 rounded-lg border bg-card/95 p-2">
+    <div
+      className="relative z-40 shrink-0 rounded-lg bg-muted/40 p-2"
+      role="toolbar"
+      aria-label="Sheet arrangement tools"
+    >
       <div className="flex flex-wrap items-center gap-2">
         {!hideModeSwitcher && (
           <div className="flex rounded-md border bg-muted/40 p-1">
@@ -64,10 +68,12 @@ export function CutterToolbar({
         <Button type="button" variant="outline" onClick={onUndoAutoArrange}>
           Undo Arrange
         </Button>
-        <details className="relative rounded-md border bg-muted/20">
-          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Sheet setup</summary>
-          <div className="absolute left-0 top-full z-50 mt-2 flex max-h-[60vh] w-[min(480px,80vw)] flex-wrap items-end gap-3 overflow-y-auto rounded-lg border bg-card p-3 shadow-xl">
-            <div className="flex h-10 min-w-44 items-center rounded-md border bg-background px-3 text-sm">
+        <details className="relative rounded-md bg-card">
+          <summary className="flex h-9 cursor-pointer items-center px-3 text-sm font-medium">
+            Sheet setup
+          </summary>
+          <div className="absolute left-0 top-full z-50 mt-2 flex max-h-[60vh] w-[min(480px,80vw)] flex-wrap items-end gap-3 overflow-y-auto rounded-lg border bg-card p-3 shadow-elevated">
+            <div className="flex h-9 min-w-44 items-center rounded-md border bg-background px-3 text-sm">
               Final width: <strong className="ml-1">auto, max 96 cm</strong>
             </div>
             <NumberControl
@@ -100,7 +106,7 @@ export function CutterToolbar({
             <label className="flex w-40 flex-col gap-1 text-xs font-medium text-muted-foreground">
               Arrangement order
               <select
-                className="h-10 rounded-md border bg-background px-2 text-sm"
+                className="h-9 rounded-md border bg-background px-2 text-sm"
                 value={settings.sortStrategy ?? 'largest-first'}
                 onChange={(event) =>
                   onSettingsChange({
@@ -157,11 +163,14 @@ export function CutterToolbar({
         </details>
       </div>
       {warnings.length > 0 && (
-        <details className="mt-1 text-xs text-amber-800">
+        <details className="mt-1 text-xs text-warning-foreground">
           <summary className="cursor-pointer">{warnings.length} sheet notice(s)</summary>
           <div className="flex flex-wrap gap-1 pt-1">
             {warnings.map((warning) => (
-              <span key={warning} className="rounded-md bg-amber-50 px-2 py-1 text-amber-900">
+              <span
+                key={warning}
+                className="rounded-md bg-warning px-2 py-1 text-warning-foreground"
+              >
                 {warning}
               </span>
             ))}
@@ -182,7 +191,7 @@ function AdvancedToggle({
   onChange: (checked: boolean) => void
 }): JSX.Element {
   return (
-    <label className="flex h-10 items-center gap-2 rounded-md border bg-background px-3 text-sm">
+    <label className="flex h-9 items-center gap-2 rounded-md border bg-background px-3 text-sm">
       <input
         type="checkbox"
         checked={checked}
@@ -213,7 +222,7 @@ function NumberControl({
   return (
     <label className="flex w-32 flex-col gap-1 text-xs font-medium text-muted-foreground">
       {label}
-      <span className="flex h-10 items-center overflow-hidden rounded-md border bg-background">
+      <span className="flex h-9 items-center overflow-hidden rounded-md border bg-background">
         <input
           className="min-w-0 flex-1 bg-transparent px-3 text-sm text-foreground outline-none"
           type="number"

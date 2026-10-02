@@ -3,6 +3,7 @@ import {
   geometryOrReviewWarning,
   makeOffsetPath,
   paintStickerMaskStroke,
+  shouldRemoveStickerBackground,
   traceMask
 } from './stickerMaker'
 
@@ -92,3 +93,46 @@ const empty = geometryOrReviewWarning(new Uint8Array(100), 10, 10, {
 })
 assert.equal(empty.pathData, '')
 assert.match(empty.warnings[0], /Restore brush/)
+
+const opaqueRgba = new Uint8ClampedArray([255, 128, 64, 255, 0, 0, 0, 255])
+const transparentRgba = new Uint8ClampedArray([255, 128, 64, 255, 0, 0, 0, 0])
+const softRgba = new Uint8ClampedArray([255, 128, 64, 128])
+assert.equal(shouldRemoveStickerBackground(opaqueRgba, 'auto'), true, 'opaque photos use AI')
+assert.equal(
+  shouldRemoveStickerBackground(transparentRgba, 'auto'),
+  false,
+  'transparent artwork skips AI'
+)
+assert.equal(shouldRemoveStickerBackground(softRgba, 'auto'), false, 'partial opacity is preserved')
+assert.equal(
+  shouldRemoveStickerBackground(transparentRgba, 'remove'),
+  true,
+  'explicit AI overrides detection'
+)
+assert.equal(
+  shouldRemoveStickerBackground(opaqueRgba, 'keep'),
+  false,
+  'keep original never needs AI'
+)
+
+for (const invalid of [
+  { offsetMm: -1 },
+  { offsetMm: NaN },
+  { threshold: 0 },
+  { threshold: 255 },
+  { smoothing: Infinity },
+  { smoothing: -1 },
+  { widthMm: 0 }
+]) {
+  assert.throws(
+    () =>
+      makeOffsetPath(mask, 10, 10, {
+        offsetMm: 2,
+        threshold: 128,
+        smoothing: 1,
+        widthMm: 80,
+        ...invalid
+      }),
+    /invalid/
+  )
+}

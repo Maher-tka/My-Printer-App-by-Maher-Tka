@@ -14,3 +14,7 @@ output/playwright
 /*.yml
 *.log
 *.tsbuildinfo
+
+release
+output
+tmp

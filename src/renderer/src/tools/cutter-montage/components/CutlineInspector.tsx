@@ -17,7 +17,7 @@ export function CutlineInspector({
 }): JSX.Element {
   if (!piece) {
     return (
-      <section className="rounded-lg border bg-card p-4">
+      <section className="space-y-3">
         <h3 className="font-semibold">Cutline Inspector</h3>
         <p className="mt-2 text-sm text-muted-foreground">Select a piece to inspect CutContour.</p>
       </section>
@@ -27,7 +27,7 @@ export function CutlineInspector({
   const state = getCutlineInspectorState(piece)
 
   return (
-    <section className="rounded-lg border bg-card p-4">
+    <section className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <h3 className="font-semibold">Cutline Inspector</h3>
         <Scissors className="size-4 text-muted-foreground" />
@@ -41,7 +41,7 @@ export function CutlineInspector({
       <div
         className={`mt-3 flex items-center gap-2 rounded-md border p-2 text-xs ${
           state.vectorSafe
-            ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+            ? 'border-emerald-300 bg-emerald-50 text-success-foreground'
             : 'border-destructive/30 bg-destructive/10 text-destructive'
         }`}
       >

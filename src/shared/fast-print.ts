@@ -6,6 +6,13 @@ export interface FastPrintPreset {
   profileId?: string
   profileName?: string
   landscape?: boolean
+  duplex?: boolean
+}
+
+export interface FastPrintBatchSource {
+  name: string
+  files: Array<{ name: string; extension: string }>
+  preset: FastPrintPreset
 }
 
 export interface FastPrintSource {

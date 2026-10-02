@@ -15,6 +15,7 @@ This is a standards-based layered PDF, not a native Illustrator document with pr
 Direct cutter output is currently a simulation/scaffold. No official SDK adapter or hardware connection was implemented. Mimaki's public MDL SDK portal requires registration/login and describes printer control; its CG-130AR coverage cannot be inferred from the site's navigation. FineCut separately refers to a Mimaki Register marks SDK. Obtain the official register-mark/cutter-control SDK and documentation covering CG-130AR before implementing transport.
 
 Official references checked 2026-09-19:
+
 - https://mimaki.com/download/sdk/
 - https://mimaki.com/product/software/cutting/fine-cut9-ai/software.html?software=444530
 - https://helpx.adobe.com/illustrator/using/pdf-options.html

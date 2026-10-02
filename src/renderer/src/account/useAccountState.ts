@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ACCESS_REFRESH_MS } from '../../../shared/cloud-access'
 import type {
   AccountMutationResult,
   AccountSnapshot,
@@ -15,6 +16,7 @@ interface AccountStateController {
   createAccount: (request: CreateAccountRequest) => Promise<AccountMutationResult>
   signIn: (request: SignInRequest) => Promise<AccountMutationResult>
   signOut: () => Promise<AccountMutationResult>
+  signInGoogle: () => Promise<AccountMutationResult>
 }
 
 export function useAccountState(): AccountStateController {
@@ -22,6 +24,7 @@ export function useAccountState(): AccountStateController {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const initialized = useRef(false)
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!window.printerApp?.account) {
@@ -31,18 +34,30 @@ export function useAccountState(): AccountStateController {
     }
 
     try {
-      setIsLoading(true)
+      if (!initialized.current) setIsLoading(true)
       setError(null)
       setState(await window.printerApp.account.getState())
     } catch (requestError) {
       setError(getErrorMessage(requestError))
     } finally {
+      initialized.current = true
       setIsLoading(false)
     }
   }, [])
 
   useEffect(() => {
     void refresh()
+    const timer = window.setInterval(() => void refresh(), ACCESS_REFRESH_MS)
+    const onFocus = (): void => {
+      void refresh()
+    }
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('online', onFocus)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('online', onFocus)
+    }
   }, [refresh])
 
   const createAccount = useCallback(
@@ -90,6 +105,16 @@ export function useAccountState(): AccountStateController {
     )
   }, [state])
 
+  const signInGoogle = useCallback(async () => {
+    if (!window.printerApp?.account) return getUnavailableResult(state)
+    return runMutation(
+      () => window.printerApp!.account.signInGoogle(),
+      setState,
+      setError,
+      setIsSubmitting
+    )
+  }, [state])
+
   return {
     state,
     isLoading,
@@ -98,7 +123,8 @@ export function useAccountState(): AccountStateController {
     refresh,
     createAccount,
     signIn,
-    signOut
+    signOut,
+    signInGoogle
   }
 }
 

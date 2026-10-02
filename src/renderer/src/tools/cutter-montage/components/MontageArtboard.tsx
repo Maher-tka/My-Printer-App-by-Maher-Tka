@@ -120,8 +120,8 @@ export function MontageArtboard({
 
   return (
     <section
-      className={`flex h-full min-h-0 min-w-0 flex-col rounded-lg border bg-slate-100 p-2 transition-shadow ${
-        active ? 'border-primary/50 shadow-sm ring-1 ring-primary/20' : ''
+      className={`flex h-full min-h-0 min-w-0 flex-col rounded-[var(--ui-radius-lg)] border bg-muted/30 p-3 ${
+        active ? 'border-primary/20' : ''
       }`}
       data-production-sheet-index={sheetNumber === undefined ? undefined : sheetNumber - 1}
       data-production-sheet-active={active ? 'true' : 'false'}
@@ -136,15 +136,15 @@ export function MontageArtboard({
                 : `Production Layout ${sheetNumber} of ${sheetCount ?? sheetNumber}`}
             </h3>
             {repeatCount > 1 && (
-              <span className="rounded bg-emerald-600 px-2 py-0.5 text-xs font-medium text-white">
+              <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
                 Print {repeatCount} copies of this sheet
               </span>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            {formatCm(settings.widthCm)} � {formatCm(settings.heightCm)}
+            {formatCm(settings.widthCm)} × {formatCm(settings.heightCm)}
             {repeatCount > 1
-              ? ` � Physical sheets ${formatSheetNumberList(physicalSheetNumbers)}`
+              ? ` · Physical sheets ${formatSheetNumberList(physicalSheetNumbers)}`
               : ''}
           </p>
         </div>
@@ -211,7 +211,7 @@ export function MontageArtboard({
                     Size
                   </summary>
                   <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-md border bg-card p-3 shadow-md">
-                    <p className="mb-2 text-xs text-muted-foreground">Selected copy � cm</p>
+                    <p className="mb-2 text-xs text-muted-foreground">Selected copy · cm</p>
                     <div className="flex items-center gap-2">
                       <SmallNumber
                         label="W"
@@ -349,10 +349,10 @@ export function MontageArtboard({
 
       <div
         ref={viewportRef}
-        className="relative min-h-0 flex-1 overflow-auto rounded-md border bg-slate-200/80 p-6"
+        className="relative min-h-0 flex-1 overflow-auto rounded-lg border bg-muted/70 p-6"
       >
         <div
-          className="relative mx-auto shrink-0 bg-white shadow-md outline-none"
+          className="relative mx-auto shrink-0 bg-white shadow-panel outline-none"
           data-production-sheet-canvas="true"
           tabIndex={0}
           style={{

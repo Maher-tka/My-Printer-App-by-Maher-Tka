@@ -17,13 +17,21 @@ import { execFile } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile, copyFile } from 'node:fs/promises'
 import { basename, extname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { assertOnlineProductionAccess } from './online-account.js'
 import { validateFastPrintPreset, type FastPrintPreset } from '../shared/fast-print.js'
+import {
+  normalizeFastPrintSelection,
+  parseFastPrintSelectionManifest
+} from '../shared/fast-print-batch.js'
 
 const execFileAsync = promisify(execFile)
 const switches = [
   '--fast-print',
   '--fast-print-menu',
+  '--fast-print-batch',
   '--install-fast-print',
+  '--install-fast-print-machine',
+  '--remove-fast-print-machine',
   '--remove-fast-print',
   '--manage-fast-print'
 ]
@@ -73,20 +81,49 @@ export async function runFastPrintCommand(): Promise<void> {
   let exitCode = 0
   try {
     if (process.platform !== 'win32') throw new Error('Explorer Fast Print requires Windows.')
-    if (args.includes('--fast-print-menu')) {
+    if (
+      args.includes('--install-fast-print-machine') ||
+      args.includes('--remove-fast-print-machine')
+    ) {
+      const remove = args.includes('--remove-fast-print-machine')
+      console.log(
+        await powershell('fast-print-machine.ps1', [
+          '-Action',
+          remove ? 'Remove' : 'Install',
+          '-Executable',
+          process.execPath,
+          ...(!app.isPackaged ? ['-AppPath', app.getAppPath()] : [])
+        ])
+      )
+      // Remove earlier per-user registrations so there is exactly one Explorer entry.
+      await powershell('fast-print-menu.ps1', ['-Action', 'Remove'])
+    } else if (args.includes('--fast-print-batch')) {
+      await assertOnlineProductionAccess()
+      const manifestPath = args[args.indexOf('--fast-print-batch') + 1]
+      if (!manifestPath) throw new Error('The Explorer batch selection is missing.')
+      const manifest = resolve(manifestPath)
+      if ((await stat(manifest)).size > 4 * 1024 * 1024)
+        throw new Error('The file selection is too large.')
+      const ownedDirectory = resolve(app.getPath('temp'), 'maher-fast-print-selection')
+      const isOwned =
+        resolve(manifest, '..').toLowerCase() === ownedDirectory.toLowerCase() &&
+        /^\{[0-9a-f-]+\}\.json$/i.test(basename(manifest))
+      let files: string[]
+      try {
+        files = parseFastPrintSelectionManifest(await readFile(manifest, 'utf8')).map((path) =>
+          resolve(path)
+        )
+      } finally {
+        if (isOwned) await rm(manifest, { force: true })
+      }
+      await showFastPrintMenu(files)
+    } else if (args.includes('--fast-print-menu')) {
+      await assertOnlineProductionAccess()
       const separator = process.argv.indexOf('--')
       const files = separator < 0 ? [] : process.argv.slice(separator + 1)
-      if (files.length !== 1) throw new Error('Select one PDF, PNG, or JPEG file.')
-      await showFastPrintMenu(resolve(files[0]))
+      await showFastPrintMenu(normalizeFastPrintSelection(files.map((path) => resolve(path))))
     } else if (args.includes('--manage-fast-print')) {
       await powershell('fast-print-settings.ps1', ['-Action', 'Manage'])
-      await powershell('fast-print-menu.ps1', [
-        '-Action',
-        'Install',
-        '-Executable',
-        process.execPath,
-        ...(!app.isPackaged ? ['-AppPath', app.getAppPath()] : [])
-      ])
     } else if (args.includes('--install-fast-print') || args.includes('--remove-fast-print')) {
       const remove = args.includes('--remove-fast-print')
       const output = await powershell('fast-print-menu.ps1', [
@@ -108,6 +145,7 @@ export async function runFastPrintCommand(): Promise<void> {
         })
       }
     } else {
+      await assertOnlineProductionAccess()
       const index = args.indexOf('--fast-print')
       const token = args[index + 1]
       if (!token || token.length > 4096)
@@ -117,8 +155,7 @@ export async function runFastPrintCommand(): Promise<void> {
       )
       const separator = process.argv.indexOf('--')
       const paths = separator < 0 ? [] : process.argv.slice(separator + 1)
-      if (paths.length !== 1) throw new Error('Select one PDF or image file for Fast Print.')
-      await runJob(resolve(paths[0]), preset)
+      await runJob(normalizeFastPrintSelection(paths.map((path) => resolve(path))), preset)
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -137,13 +174,20 @@ export async function runFastPrintCommand(): Promise<void> {
   }
 }
 
-async function showFastPrintMenu(filePath: string): Promise<void> {
-  if (
-    !['.pdf', '.png', '.jpg', '.jpeg'].includes(extname(filePath).toLowerCase()) ||
-    !(await stat(filePath)).isFile()
-  ) {
-    throw new Error('Select one PDF, PNG, or JPEG file.')
+async function validateSelection(files: string[]): Promise<void> {
+  for (const filePath of files) {
+    const file = await stat(filePath)
+    if (!file.isFile() || file.size === 0 || file.size > 512 * 1024 * 1024) {
+      throw new Error(`Choose a non-empty document smaller than 512 MB: ${basename(filePath)}`)
+    }
   }
+}
+
+async function showFastPrintMenu(filePaths: string[]): Promise<void> {
+  const files = normalizeFastPrintSelection(filePaths)
+  await validateSelection(files)
+  const selectionName =
+    files.length === 1 ? basename(files[0]) : `${files.length} documents selected`
   for (;;) {
     const devices = JSON.parse(
       await powershell('fast-print-menu.ps1', ['-Action', 'List'])
@@ -157,11 +201,13 @@ async function showFastPrintMenu(filePath: string): Promise<void> {
       return
     }
     const position = screen.getCursorScreenPoint()
+    const workArea = screen.getDisplayNearestPoint(position).workArea
     const owner = new BrowserWindow({
-      x: position.x,
-      y: position.y,
-      width: 1,
-      height: 1,
+      title: 'Fast Print',
+      x: workArea.x,
+      y: workArea.y,
+      width: workArea.width,
+      height: workArea.height,
       frame: false,
       transparent: true,
       skipTaskbar: true,
@@ -178,7 +224,7 @@ async function showFastPrintMenu(filePath: string): Promise<void> {
           : { click: () => resolveChoice(item) })
       })
       const menu = Menu.buildFromTemplate([
-        { label: basename(filePath).replaceAll('&', '&&'), enabled: false },
+        { label: selectionName.replaceAll('&', '&&'), enabled: false },
         { type: 'separator' },
         ...choices.map(convert)
       ])
@@ -187,8 +233,6 @@ async function showFastPrintMenu(filePath: string): Promise<void> {
       owner.focus()
       menu.popup({
         window: owner,
-        x: position.x,
-        y: position.y,
         callback: () => resolveChoice(null)
       })
     }).finally(() => {
@@ -200,20 +244,15 @@ async function showFastPrintMenu(filePath: string): Promise<void> {
       continue
     }
     if (choice.action === 'refresh') continue
-    if (choice.preset) await runJob(filePath, choice.preset)
+    if (choice.preset) await runJob(files, choice.preset)
     return
   }
 }
 
-async function runJob(filePath: string, preset: FastPrintPreset): Promise<void> {
-  const extension = extname(filePath).toLowerCase()
-  if (!['.pdf', '.png', '.jpg', '.jpeg'].includes(extension))
-    throw new Error(
-      'Fast Print supports PDF, PNG, and JPEG files. Export other documents to PDF first.'
-    )
-  const file = await stat(filePath)
-  if (!file.isFile() || file.size === 0 || file.size > 512 * 1024 * 1024)
-    throw new Error('Choose a non-empty file smaller than 512 MB.')
+async function runJob(filePaths: string[], preset: FastPrintPreset): Promise<void> {
+  const files = normalizeFastPrintSelection(filePaths)
+  await validateSelection(files)
+  const jobName = files.length === 1 ? basename(files[0]) : `Fast Print - ${files.length} documents`
   const printers = JSON.parse(
     await powershell('fast-print-menu.ps1', ['-Action', 'List'])
   ) as Array<{ name: string; papers: string[]; color: boolean }>
@@ -225,11 +264,16 @@ async function runJob(filePath: string, preset: FastPrintPreset): Promise<void> 
         '-ProfileId',
         preset.profileId
       ])
-    ) as { printer: string; paper: string; name: string; landscape: boolean }
+    ) as { printer: string; paper: string; name: string; landscape: boolean; duplex: string }
     if (profile.printer !== preset.printer || profile.paper !== preset.paper) {
       throw new Error('This preset has changed. Refresh the printer list and choose it again.')
     }
-    preset = { ...preset, landscape: profile.landscape, profileName: profile.name }
+    preset = {
+      ...preset,
+      landscape: profile.landscape,
+      profileName: profile.name,
+      duplex: ['Vertical', 'Horizontal'].includes(profile.duplex)
+    }
   }
   const printer = printers.find((item) => item.name === preset.printer)
   if (!printer)
@@ -262,6 +306,8 @@ async function runJob(filePath: string, preset: FastPrintPreset): Promise<void> 
   let submitted = false
   let done = false
   let acceptingSheet = false
+  let preparedBytes = 0
+  let currentSheetWrite: Promise<void> = Promise.resolve()
   let finish!: (value?: unknown) => void
   let fail!: (reason: Error) => void
   const ready = new Promise((resolve, reject) => {
@@ -281,8 +327,22 @@ async function runJob(filePath: string, preset: FastPrintPreset): Promise<void> 
   ipcMain.handle('fast-print:source', async (event) => {
     authorize(event)
     return {
+      name: jobName,
+      files: files.map((filePath) => ({
+        name: basename(filePath),
+        extension: extname(filePath).toLowerCase()
+      })),
+      preset
+    }
+  })
+  ipcMain.handle('fast-print:file', async (event, index: number) => {
+    authorize(event)
+    if (!Number.isInteger(index) || index < 0 || index >= files.length || submitted)
+      throw new Error('Invalid batch document.')
+    const filePath = files[index]
+    return {
       name: basename(filePath),
-      extension,
+      extension: extname(filePath).toLowerCase(),
       bytes: new Uint8Array(await readFile(filePath)),
       preset
     }
@@ -300,13 +360,21 @@ async function runJob(filePath: string, preset: FastPrintPreset): Promise<void> 
     acceptingSheet = true
     try {
       const output = join(temp, `${String(sheets.length + 1).padStart(5, '0')}.png`)
-      await writeFile(output, Buffer.from(png.slice('data:image/png;base64,'.length), 'base64'))
+      const bytes = Buffer.from(png.slice('data:image/png;base64,'.length), 'base64')
+      preparedBytes += bytes.length
+      if (preparedBytes > 2 * 1024 * 1024 * 1024)
+        throw new Error(
+          'The prepared batch exceeds 2 GB. Split this selection into smaller batches.'
+        )
+      currentSheetWrite = writeFile(output, bytes)
+      await currentSheetWrite
       sheets.push(output)
     } finally {
       acceptingSheet = false
     }
   })
   ipcMain.handle('fast-print:submit', async (event) => {
+    await assertOnlineProductionAccess()
     authorize(event)
     if (submitted || acceptingSheet || !sheets.length)
       throw new Error('No complete print job is ready.')
@@ -314,7 +382,7 @@ async function runJob(filePath: string, preset: FastPrintPreset): Promise<void> 
     clearTimeout(watchdog)
     const manifest = join(temp, 'job.json')
     try {
-      await writeFile(manifest, JSON.stringify({ name: basename(filePath), preset, sheets }))
+      await writeFile(manifest, JSON.stringify({ name: jobName, preset, sheets }))
       const verifyFolder = !app.isPackaged && process.env.FAST_PRINT_VERIFY_DIR
       const result = await powershell('fast-print-job.ps1', [
         '-Manifest',
@@ -327,7 +395,7 @@ async function runJob(filePath: string, preset: FastPrintPreset): Promise<void> 
         await writeFile(
           join(verifyFolder, 'job.json'),
           JSON.stringify({
-            name: basename(filePath),
+            name: jobName,
             preset,
             sheets: sheets.map((sheet) => join(verifyFolder, basename(sheet)))
           })
@@ -368,9 +436,10 @@ async function runJob(filePath: string, preset: FastPrintPreset): Promise<void> 
   } finally {
     clearTimeout(watchdog)
     done = true
-    for (const channel of ['source', 'sheet', 'submit', 'finish'])
+    for (const channel of ['source', 'file', 'sheet', 'submit', 'finish'])
       ipcMain.removeHandler(`fast-print:${channel}`)
     if (!window.isDestroyed()) window.destroy()
+    await currentSheetWrite.catch(() => undefined)
     await rm(temp, { recursive: true, force: true })
   }
 }

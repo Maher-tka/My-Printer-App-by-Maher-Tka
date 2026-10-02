@@ -11,6 +11,7 @@ import type {
   LicenseSnapshot
 } from '../shared/licensing-types.js'
 import { validateOfflineSerialKey } from './license-serial.js'
+import { getOnlineLicenseSnapshot, isOnlineAccessEnabled } from './online-account.js'
 
 const LICENSE_FILE_NAME = 'license-state.json'
 const LICENSE_INTEGRITY_KEY_FILE_NAME = 'license-integrity.key'
@@ -53,6 +54,16 @@ interface PersistedIntegrityKey {
 }
 
 export function registerLicenseHandlers(): void {
+  if (isOnlineAccessEnabled()) {
+    ipcMain.handle('license:get-state', getOnlineLicenseSnapshot)
+    ipcMain.handle('license:activate-serial', async () => ({
+      ok: false,
+      state: await getOnlineLicenseSnapshot(),
+      error: 'This version uses account approval. Sign in and request access from the owner.'
+    }))
+    if (!app.isPackaged) ipcMain.handle('license:reset-local', getOnlineLicenseSnapshot)
+    return
+  }
   ipcMain.handle('license:get-state', async () => runLicenseOperation(getLicenseSnapshot))
   ipcMain.handle('license:activate-serial', async (_event, serialKey: string) =>
     runLicenseOperation(() => activateSerialKey(serialKey))

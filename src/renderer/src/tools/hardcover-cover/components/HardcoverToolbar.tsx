@@ -19,7 +19,7 @@ interface HardcoverToolbarProps {
 
 export function HardcoverToolbar(props: HardcoverToolbarProps): JSX.Element {
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3">
+    <div className="flex flex-wrap items-center gap-2 rounded-[18px] border border-border/70 bg-card p-3">
       <ModeButton
         active={props.viewMode === 'layout'}
         onClick={() => props.onViewModeChange('layout')}

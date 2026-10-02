@@ -21,6 +21,7 @@ Local Illustrator COM responded to a version query (30.3.0), but native preparat
 Standalone USB cutting is NOT implemented. No official CG-130AR transport/register-mark SDK has been supplied and no cutter is connected to this PC. Do not represent the existing simulation or handoff as device output. FineCut's vendor release notes state that third-party register-mark recognition is supported for marks created using Mimaki Register marks SDK. Matching names and geometry alone is not proof of that metadata compatibility.
 
 Official sources:
+
 - https://mimaki.com/product/software/cutting/fine-cut9-ai/software.html?software=444530
 - https://mimaki.com/manual/cg-ar-series/operation_manual/en-US/1014576907.html
 - https://mimaki.com/download/sdk/ (registration/login required; MDL printer SDK coverage is not automatically CG-130AR coverage)

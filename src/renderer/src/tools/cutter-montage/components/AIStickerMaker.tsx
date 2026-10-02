@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ImagePlus, Trash2, ZoomIn, ZoomOut, Scan, Sparkles } from 'lucide-react'
 import { bytesToArrayBuffer } from '../lib/sourcePreview'
 import type { StickerSendOrder } from '../lib/stickerCutterAdapter'
 import {
@@ -8,6 +9,7 @@ import {
   rebuildStickerFromMask,
   updateStickerCutline,
   type StickerMaskBrushMode,
+  type StickerBackgroundMode,
   type StickerMakerResult,
   type StickerMakerSettings
 } from '../lib/stickerMaker'
@@ -25,6 +27,7 @@ interface QueueItem {
   redoMasks: Uint8Array[]
   widthMm: number
   quantity: number
+  cutOffsetMm?: number
 }
 
 type StickerPreviewMode = 'original' | 'result' | 'mask' | 'cut'
@@ -60,6 +63,11 @@ export function AIStickerMaker({
   const [items, setItems] = useState<QueueItem[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [backgroundMode, setBackgroundMode] = useState<StickerBackgroundMode>('auto')
+  const [zoom, setZoom] = useState(1)
+  const [previewBackground, setPreviewBackground] = useState('checker')
+  const [previewSize, setPreviewSize] = useState({ width: 400, height: 400 })
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [previewMode, setPreviewMode] = useState<StickerPreviewMode>('cut')
   const [brushMode, setBrushMode] = useState<StickerMaskBrushMode>('erase')
   const [brushSize, setBrushSize] = useState(32)
@@ -73,6 +81,8 @@ export function AIStickerMaker({
   })
   const fileRef = useRef<HTMLInputElement>(null)
   const maskCanvasRef = useRef<HTMLCanvasElement>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
+  const stopRef = useRef(false)
   const strokeRef = useRef<{
     itemId: string
     mask: Uint8Array
@@ -80,6 +90,18 @@ export function AIStickerMaker({
   } | null>(null)
   const queueRef = useRef(items)
   queueRef.current = items
+
+  useEffect(() => {
+    const element = previewRef.current
+    if (!element) return
+    const observer = new ResizeObserver(([entry]) => {
+      setPreviewSize({ width: entry.contentRect.width, height: entry.contentRect.height })
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => setZoom(1), [selected])
 
   useEffect(
     () => () => {
@@ -105,14 +127,38 @@ export function AIStickerMaker({
     }))
     setItems((current) => [...current, ...next])
     if (!selected && next[0]) setSelected(next[0].id)
-    if (accepted.length !== files.length) setMessage('Unsupported files were skipped.')
+    setMessage(
+      `${accepted.length} image(s) added.${accepted.length !== files.length ? ' Unsupported files were skipped.' : ' Choose a background option, then process your images.'}`
+    )
   }
 
-  const processAll = async () => {
+  const removeItem = (id: string) => {
     if (busy) return
+    const item = items.find((entry) => entry.id === id)
+    if (!item) return
+    if (item.preview) URL.revokeObjectURL(item.preview)
+    URL.revokeObjectURL(item.originalPreview)
+    const remaining = items.filter((entry) => entry.id !== id)
+    setItems(remaining)
+    if (selected === id) setSelected(remaining[0]?.id ?? null)
+    setMessage(`Removed ${item.file.name} from the queue.`)
+  }
+
+  const processAll = async (selectedOnly = false) => {
+    if (busy) return
+    const targets = items.filter((item) =>
+      selectedOnly
+        ? item.id === selected && item.status !== 'Sent'
+        : item.status === 'Waiting' || item.status === 'Failed'
+    )
+    if (!targets.length) return
     setBusy(true)
-    const targets = items.filter((item) => item.status === 'Waiting' || item.status === 'Failed')
+    stopRef.current = false
+    setProgress({ done: 0, total: targets.length })
+    let completed = 0
+    let failed = 0
     for (let index = 0; index < targets.length; index += 1) {
+      if (stopRef.current) break
       const item = targets[index]
       setItems((current) =>
         current.map((entry) =>
@@ -124,11 +170,13 @@ export function AIStickerMaker({
         const result = await processSticker(
           item.file,
           { ...settings, widthMm: item.widthMm },
-          setMessage
+          setMessage,
+          backgroundMode
         )
         const preview = URL.createObjectURL(
           new Blob([bytesToArrayBuffer(result.png)], { type: 'image/png' })
         )
+        if (item.preview) URL.revokeObjectURL(item.preview)
         setItems((current) =>
           current.map((entry) =>
             entry.id === item.id
@@ -136,6 +184,7 @@ export function AIStickerMaker({
                   ...entry,
                   status: result.pathData ? 'Ready' : 'Review',
                   result,
+                  cutOffsetMm: settings.offsetMm,
                   preview,
                   initialMask: result.contourMask.slice(),
                   undoMasks: [],
@@ -145,6 +194,7 @@ export function AIStickerMaker({
           )
         )
       } catch (error) {
+        failed += 1
         setItems((current) =>
           current.map((entry) =>
             entry.id === item.id
@@ -157,23 +207,40 @@ export function AIStickerMaker({
           )
         )
       }
+      completed += 1
+      setProgress({ done: completed, total: targets.length })
       await new Promise((resolve) => window.setTimeout(resolve, 0))
     }
-    setMessage(`Processed ${targets.length} image(s). Review each cut path before sending.`)
+    setMessage(
+      `${stopRef.current ? 'Stopped. ' : ''}${completed - failed} image(s) processed${failed ? `, ${failed} failed — retry or choose Keep original` : ''}. Review each cut path before sending.`
+    )
+    setProgress(null)
     setBusy(false)
   }
 
   const changeSettings = (patch: Partial<StickerMakerSettings>) => {
+    if (busy) return
     const next = { ...settings, ...patch }
+    if (!Number.isFinite(next.offsetMm) || next.offsetMm < 0 || next.offsetMm > 20) return
     setSettings(next)
     setItems((current) =>
       current.map((item) => {
-        if (!item.result || item.status === 'Sent') return item
+        if (!item.result || item.status === 'Sent' || item.status === 'Failed') return item
         try {
           const result = updateStickerCutline(item.result, { ...next, widthMm: item.widthMm })
-          return { ...item, result, status: result.pathData ? 'Ready' : 'Review' }
+          return {
+            ...item,
+            result,
+            cutOffsetMm: next.offsetMm,
+            error: undefined,
+            status: result.pathData ? 'Ready' : 'Review'
+          }
         } catch (error) {
-          return { ...item, error: error instanceof Error ? error.message : String(error) }
+          return {
+            ...item,
+            status: 'Review',
+            error: error instanceof Error ? error.message : String(error)
+          }
         }
       })
     )
@@ -184,9 +251,16 @@ export function AIStickerMaker({
     setItems((current) =>
       current.map((item) => {
         if (item.id !== selected || item.status === 'Sent') return item
-        if (!item.result) return { ...item, widthMm }
+        if (!item.result || item.status === 'Failed') return { ...item, widthMm }
         const result = updateStickerCutline(item.result, { ...settings, widthMm })
-        return { ...item, widthMm, result, status: result.pathData ? 'Ready' : 'Review' }
+        return {
+          ...item,
+          widthMm,
+          result,
+          cutOffsetMm: settings.offsetMm,
+          error: undefined,
+          status: result.pathData ? 'Ready' : 'Review'
+        }
       })
     )
   }
@@ -223,6 +297,7 @@ export function AIStickerMaker({
             ? {
                 ...entry,
                 result,
+                cutOffsetMm: settings.offsetMm,
                 preview,
                 undoMasks,
                 redoMasks,
@@ -272,7 +347,13 @@ export function AIStickerMaker({
 
   const beginStroke = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const item = items.find((entry) => entry.id === selected)
-    if (!item?.result || (item.status !== 'Ready' && item.status !== 'Review') || busy) return
+    if (
+      event.button !== 0 ||
+      !item?.result ||
+      (item.status !== 'Ready' && item.status !== 'Review') ||
+      busy
+    )
+      return
     event.currentTarget.setPointerCapture(event.pointerId)
     const point = getMaskPoint(event, item.result)
     const mask = item.result.contourMask.slice()
@@ -389,12 +470,21 @@ export function AIStickerMaker({
 
   const active = items.find((item) => item.id === selected)
   const readyCount = items.filter((item) => item.status === 'Ready').length
-  const outerWidthMm = active?.result ? active.result.widthMm + settings.offsetMm * 2 : 1
-  const outerHeightMm = active?.result ? active.result.heightMm + settings.offsetMm * 2 : 1
+  const readyCopies = items
+    .filter((item) => item.status === 'Ready')
+    .reduce((sum, item) => sum + item.quantity, 0)
+  const activeOffset = active?.cutOffsetMm ?? settings.offsetMm
+  const outerWidthMm = active?.result ? active.result.widthMm + activeOffset * 2 : 1
+  const outerHeightMm = active?.result ? active.result.heightMm + activeOffset * 2 : 1
+  const aspectRatio = outerWidthMm / outerHeightMm
+  const fittedWidth = Math.max(
+    1,
+    Math.min(previewSize.width - 32, (previewSize.height - 32) * aspectRatio)
+  )
   const artworkStyle = active?.result
     ? {
-        left: `${(settings.offsetMm / outerWidthMm) * 100}%`,
-        top: `${(settings.offsetMm / outerHeightMm) * 100}%`,
+        left: `${(activeOffset / outerWidthMm) * 100}%`,
+        top: `${(activeOffset / outerHeightMm) * 100}%`,
         width: `${(active.result.widthMm / outerWidthMm) * 100}%`,
         height: `${(active.result.heightMm / outerHeightMm) * 100}%`
       }
@@ -415,7 +505,15 @@ export function AIStickerMaker({
       aria-label="AI Sticker Maker"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="mr-auto text-lg font-semibold">AI Sticker Maker</h2>
+        <div className="mr-auto">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <Sparkles className="h-5 w-5 text-primary" />
+            AI Sticker Maker
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Add artwork, refine the edges, then send to your cutter.
+          </p>
+        </div>
         <input
           ref={fileRef}
           type="file"
@@ -428,8 +526,21 @@ export function AIStickerMaker({
           }}
         />
         <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}>
+          <ImagePlus className="mr-2 h-4 w-4" />
           Add images
         </Button>
+        {progress && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              stopRef.current = true
+              setMessage('Stopping after the current image finishes…')
+            }}
+          >
+            Stop after current
+          </Button>
+        )}
         <Button
           type="button"
           disabled={
@@ -441,6 +552,7 @@ export function AIStickerMaker({
         </Button>
         <Button type="button" disabled={!readyCount || busy} onClick={sendReady}>
           Send {readyCount || ''} to Cutter
+          {readyCopies > 0 ? ` · ${readyCopies} ${readyCopies === 1 ? 'copy' : 'copies'}` : ''}
         </Button>
         <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>
           Close
@@ -454,23 +566,57 @@ export function AIStickerMaker({
           addFiles(Array.from(event.dataTransfer.files))
         }}
       >
-        <div className="w-52 shrink-0 space-y-1 overflow-y-auto rounded-md border p-2">
+        <div className="w-44 shrink-0 space-y-2 overflow-y-auto rounded-md border bg-muted/20 p-2 xl:w-56">
+          <div className="flex items-center justify-between px-1 py-1 text-xs font-medium">
+            <span>Artwork queue</span>
+            <span className="text-muted-foreground">
+              {items.length} {items.length === 1 ? 'image' : 'images'}
+            </span>
+          </div>
           {items.length === 0 && (
             <p className="text-sm text-muted-foreground">Drop images here or choose Add images.</p>
           )}
           {items.map((item) => (
-            <button
+            <div
               key={item.id}
-              type="button"
-              className={`w-full rounded-md border p-2 text-left text-xs ${selected === item.id ? 'border-primary bg-primary/10' : ''}`}
-              onClick={() => setSelected(item.id)}
+              className={`group flex items-center rounded-md border ${selected === item.id ? 'border-primary bg-primary/10' : 'bg-background'}`}
             >
-              <span className="block truncate font-medium">{item.file.name}</span>
-              <span>
-                {item.status} · {item.widthMm} mm · {item.quantity} copies
-              </span>
-              {item.error && <span className="block text-destructive">{item.error}</span>}
-            </button>
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 p-2 text-left text-xs"
+                aria-pressed={selected === item.id}
+                disabled={busy}
+                onClick={() => setSelected(item.id)}
+              >
+                <img
+                  src={item.preview ?? item.originalPreview}
+                  alt=""
+                  className="h-10 w-10 shrink-0 rounded border bg-white object-contain"
+                />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{item.file.name}</span>
+                  <span
+                    className={`block ${item.status === 'Ready' ? 'text-emerald-600 dark:text-emerald-400' : item.status === 'Failed' ? 'text-destructive' : 'text-muted-foreground'}`}
+                  >
+                    {item.status}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {item.widthMm} mm · {item.quantity} {item.quantity === 1 ? 'copy' : 'copies'}
+                  </span>
+                  {item.error && <span className="block text-destructive">{item.error}</span>}
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                aria-label={`Remove ${item.file.name}`}
+                title="Remove from queue"
+                onClick={() => removeItem(item.id)}
+                className="mr-1 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
           ))}
         </div>
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-md border">
@@ -485,88 +631,208 @@ export function AIStickerMaker({
                 size="sm"
                 variant={previewMode === mode ? 'secondary' : 'ghost'}
                 aria-pressed={previewMode === mode}
-                disabled={mode !== 'original' && !active?.result}
+                disabled={busy || (mode !== 'original' && !active?.result)}
                 onClick={() => setPreviewMode(mode)}
               >
                 {mode === 'cut' ? 'Cut preview' : mode[0].toUpperCase() + mode.slice(1)}
               </Button>
             ))}
           </div>
+          <div className="flex flex-wrap items-center gap-1 border-b bg-background px-2 py-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-label="Zoom out"
+              disabled={zoom <= 1}
+              onClick={() => setZoom((value) => Math.max(1, value - 0.5))}
+            >
+              <ZoomOut className="h-4 w-4" />
+            </Button>
+            <span className="min-w-10 text-center text-xs tabular-nums">
+              {Math.round(zoom * 100)}%
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-label="Zoom in"
+              disabled={zoom >= 4 || !active}
+              onClick={() => setZoom((value) => Math.min(4, value + 0.5))}
+            >
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setZoom(1)}>
+              <Scan className="mr-1 h-3.5 w-3.5" />
+              Fit
+            </Button>
+            <select
+              aria-label="Preview background"
+              value={previewBackground}
+              onChange={(event) => setPreviewBackground(event.target.value)}
+              className="ml-auto rounded border bg-background px-2 py-1 text-xs"
+            >
+              <option value="checker">Transparency grid</option>
+              <option value="white">White background</option>
+              <option value="dark">Dark background</option>
+            </select>
+          </div>
           <div
-            className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4"
+            ref={previewRef}
+            className="min-h-0 flex-1 overflow-auto"
             style={{
-              background: 'repeating-conic-gradient(#eee 0 25%, white 0 50%) 0 0 / 24px 24px'
+              background:
+                previewBackground === 'checker'
+                  ? 'repeating-conic-gradient(#e2e8f0 0 25%, #f8fafc 0 50%) 0 0 / 24px 24px'
+                  : previewBackground === 'dark'
+                    ? '#18181b'
+                    : '#ffffff'
             }}
           >
-            {active ? (
-              <div
-                className="relative h-auto max-h-[55vh] w-full max-w-[50vw]"
-                style={{
-                  aspectRatio: active.result ? `${outerWidthMm} / ${outerHeightMm}` : '1 / 1'
-                }}
-              >
-                {(previewMode === 'original' || !active.result) && (
-                  <img
-                    src={active.originalPreview}
-                    alt={`Original ${active.file.name}`}
-                    className="absolute object-contain"
-                    style={artworkStyle}
-                  />
-                )}
-                {(previewMode === 'result' || previewMode === 'cut') && active.preview && (
-                  <img
-                    src={active.preview}
-                    alt={`Transparent result for ${active.file.name}`}
-                    className="absolute object-fill"
-                    style={artworkStyle}
-                  />
-                )}
-                {previewMode === 'mask' && active.result && (
-                  <canvas
-                    ref={maskCanvasRef}
-                    aria-label="Editable alpha mask"
-                    className="absolute cursor-crosshair touch-none"
-                    style={artworkStyle}
-                    onPointerDown={beginStroke}
-                    onPointerMove={continueStroke}
-                    onPointerUp={endStroke}
-                    onPointerCancel={() => {
-                      strokeRef.current = null
-                      if (active.result) {
-                        drawMaskPreview(
-                          maskCanvasRef.current,
-                          active.result.contourMask,
-                          active.result.contourWidth,
-                          active.result.contourHeight
-                        )
-                      }
-                    }}
-                  />
-                )}
-                {previewMode === 'cut' && active.result && (
-                  <svg
-                    viewBox="0 0 1 1"
-                    preserveAspectRatio="none"
-                    className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-                    aria-label="Vector cut contour"
-                  >
-                    <path
-                      d={active.result.pathData}
-                      fill="none"
-                      stroke="#e50093"
-                      strokeWidth=".003"
+            <div
+              className="flex min-h-full min-w-full items-center justify-center p-4"
+              style={{
+                width: active ? fittedWidth * zoom + 32 : '100%',
+                height: active ? (fittedWidth / aspectRatio) * zoom + 32 : '100%'
+              }}
+            >
+              {active ? (
+                <div
+                  className="relative shrink-0"
+                  style={{
+                    width: fittedWidth * zoom,
+                    height: (fittedWidth / aspectRatio) * zoom
+                  }}
+                >
+                  {(previewMode === 'original' || !active.result) && (
+                    <img
+                      src={active.originalPreview}
+                      alt={`Original ${active.file.name}`}
+                      className="absolute object-contain"
+                      style={artworkStyle}
                     />
-                  </svg>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Select an image to preview its original, transparent result, mask, and cut path.
+                  )}
+                  {(previewMode === 'result' || previewMode === 'cut') && active.preview && (
+                    <img
+                      src={active.preview}
+                      alt={`Transparent result for ${active.file.name}`}
+                      className="absolute object-fill"
+                      style={artworkStyle}
+                    />
+                  )}
+                  {previewMode === 'mask' && active.result && (
+                    <canvas
+                      ref={maskCanvasRef}
+                      aria-label="Editable alpha mask"
+                      className="absolute cursor-crosshair touch-none"
+                      style={artworkStyle}
+                      onPointerDown={beginStroke}
+                      onPointerMove={continueStroke}
+                      onPointerUp={endStroke}
+                      onPointerCancel={() => {
+                        strokeRef.current = null
+                        if (active.result) {
+                          drawMaskPreview(
+                            maskCanvasRef.current,
+                            active.result.contourMask,
+                            active.result.contourWidth,
+                            active.result.contourHeight
+                          )
+                        }
+                      }}
+                    />
+                  )}
+                  {previewMode === 'cut' && active.result && (
+                    <svg
+                      viewBox="0 0 1 1"
+                      preserveAspectRatio="none"
+                      className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+                      aria-label="Vector cut contour"
+                    >
+                      <path
+                        d={active.result.pathData}
+                        fill="none"
+                        stroke="#e50093"
+                        strokeWidth="1.5"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </svg>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="max-w-sm rounded-xl border-2 border-dashed border-slate-300 bg-white/95 p-8 text-center text-slate-700 shadow-sm hover:border-primary"
+                >
+                  <ImagePlus className="mx-auto mb-3 h-9 w-9 text-primary" />
+                  <span className="block text-base font-semibold">Drop your artwork here</span>
+                  <span className="mt-2 block text-sm">
+                    or click to browse JPG, PNG, and WebP images
+                  </span>
+                  <span className="mt-3 block text-xs text-slate-500">
+                    Transparent artwork is ready in seconds. Photos use local AI background removal.
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+          {active?.result && (
+            <div className="flex flex-wrap justify-between gap-2 border-t bg-background px-3 py-2 text-xs text-muted-foreground">
+              <span>
+                Artwork: {active.result.widthMm.toFixed(1)} × {active.result.heightMm.toFixed(1)} mm
+              </span>
+              <span>
+                {active.result.widthPx} × {active.result.heightPx} px ·{' '}
+                {Math.round(active.result.widthPx / (active.result.widthMm / 25.4))} DPI
+              </span>
+              {previewMode === 'cut' && (
+                <span className="text-pink-600">Pink line = cut contour</span>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="w-48 shrink-0 space-y-3 overflow-y-auto pr-1 text-sm xl:w-56">
+          <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+            <label className="block font-medium" htmlFor="sticker-background-mode">
+              Background
+            </label>
+            <select
+              id="sticker-background-mode"
+              disabled={busy}
+              value={backgroundMode}
+              onChange={(event) => setBackgroundMode(event.target.value as StickerBackgroundMode)}
+              className="w-full rounded border bg-background p-2"
+            >
+              <option value="auto">Auto detect</option>
+              <option value="remove">Remove with AI</option>
+              <option value="keep">Keep original</option>
+            </select>
+            <p className="text-xs text-muted-foreground">
+              {backgroundMode === 'auto'
+                ? 'Preserves transparent images. Removes the background from opaque photos.'
+                : backgroundMode === 'keep'
+                  ? 'Use existing artwork and transparency. No AI download needed.'
+                  : 'Use local AI to isolate the subject, including images with transparency.'}
+            </p>
+            {active && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-full"
+                disabled={busy || active.status === 'Sent'}
+                onClick={() => void processAll(true)}
+              >
+                {active.result ? 'Reprocess selected' : 'Process selected'}
+              </Button>
+            )}
+            {active?.result && active.status !== 'Sent' && (
+              <p className="text-xs text-muted-foreground">
+                Reprocessing replaces mask edits for this image.
               </p>
             )}
           </div>
-        </div>
-        <div className="w-48 shrink-0 space-y-3 overflow-y-auto text-sm">
           {previewMode === 'mask' && active?.result && (
             <div className="space-y-2 rounded-md border bg-muted/30 p-2">
               <p className="font-medium">Correct mask</p>
@@ -638,7 +904,7 @@ export function AIStickerMaker({
                   disabled={busy || !active.initialMask || active.status === 'Sent'}
                   onClick={resetMask}
                 >
-                  Reset AI
+                  Reset mask
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -648,7 +914,7 @@ export function AIStickerMaker({
             </div>
           )}
           <label className="block">
-            Artwork width for {active?.file.name ?? 'selected sticker'} (mm)
+            Artwork width (mm)
             <input
               key={`${active?.id}-width-${active?.widthMm}`}
               type="number"
@@ -669,7 +935,7 @@ export function AIStickerMaker({
             />
           </label>
           <label className="block">
-            Copies for {active?.file.name ?? 'selected sticker'}
+            Copies
             <input
               key={`${active?.id}-copies-${active?.quantity}`}
               type="number"
@@ -697,8 +963,23 @@ export function AIStickerMaker({
               min="0"
               max="20"
               step="0.5"
-              value={settings.offsetMm}
-              onChange={(event) => changeSettings({ offsetMm: Number(event.target.value) })}
+              key={`offset-${settings.offsetMm}`}
+              defaultValue={settings.offsetMm}
+              disabled={busy}
+              onBlur={(event) => {
+                const value = Number(event.currentTarget.value)
+                if (
+                  event.currentTarget.value.trim() &&
+                  Number.isFinite(value) &&
+                  value >= 0 &&
+                  value <= 20
+                )
+                  changeSettings({ offsetMm: value })
+                else event.currentTarget.value = String(settings.offsetMm)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur()
+              }}
               className="mt-1 w-full rounded border bg-background p-2"
             />
           </label>
@@ -709,6 +990,7 @@ export function AIStickerMaker({
               min="1"
               max="254"
               value={settings.threshold}
+              disabled={busy}
               onChange={(event) => changeSettings({ threshold: Number(event.target.value) })}
               className="mt-1 w-full"
             />
@@ -718,6 +1000,7 @@ export function AIStickerMaker({
             Contour smoothing
             <select
               value={settings.smoothing}
+              disabled={busy}
               onChange={(event) => changeSettings({ smoothing: Number(event.target.value) })}
               className="mt-1 w-full rounded border bg-background p-2"
             >
@@ -726,6 +1009,9 @@ export function AIStickerMaker({
               <option value={3}>High</option>
             </select>
           </label>
+          <p className="text-xs text-muted-foreground">
+            Cut settings apply to all unsent stickers.
+          </p>
           {active?.result?.warnings.map((warning) => (
             <p key={warning} className="text-amber-700">
               {warning}
@@ -736,6 +1022,14 @@ export function AIStickerMaker({
           </p>
         </div>
       </div>
+      {progress && (
+        <progress
+          aria-label="Sticker processing progress"
+          value={progress.done}
+          max={progress.total}
+          className="h-1.5 w-full accent-primary"
+        />
+      )}
       <p role="status" className="text-xs text-muted-foreground">
         {message}
       </p>

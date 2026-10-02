@@ -17,7 +17,7 @@ closing it, the menu reloads. Cancel or click outside to dismiss without printin
 
 ## Installation and removal
 
-The NSIS installer registers Fast Print for the current Windows account using the
+The NSIS installer installs for all users and registers Fast Print under HKLM using the
 installed executable path. Installation errors return a failing exit code and are
 reported by the setup hook. Uninstall removes this application's menu entries.
 
@@ -32,7 +32,7 @@ npm run fast-print:remove
 For normal main-app development use `npm run dev`. Explorer integration uses a
 built worker because it must run without the Vite development server.
 
-Registration uses `HKCU\Software\Classes\*\shell\MaherTka.FastPrint` with an
+Installed registration uses `HKLM\Software\Classes\*\shell\MaherTka.FastPrint` with an
 AppliesTo file-extension filter and a fully quoted command. The app also validates
 the selected file. Installation removes the previous app-owned shell-extension
 registrations, CLSIDs, and approval/cache entries. Other applications' entries and
@@ -99,10 +99,10 @@ a tray matches a preset name.
 
 Create these four profiles using the actual Konica driver on the work computer:
 
-| Preset name | Source and stock to configure in the driver |
-| --- | --- |
-| A4 - 80 gsm - Tray 1 | Magazine / tray 1, A4, 80 gsm |
-| A3 - 80 gsm - Tray 2 | Magazine / tray 2, A3, 80 gsm |
+| Preset name                     | Source and stock to configure in the driver                    |
+| ------------------------------- | -------------------------------------------------------------- |
+| A4 - 80 gsm - Tray 1            | Magazine / tray 1, A4, 80 gsm                                  |
+| A3 - 80 gsm - Tray 2            | Magazine / tray 2, A3, 80 gsm                                  |
 | A4 - 350 gsm - Bypass - Face up | Actual bypass source, A4, correct heavy-stock setting, face up |
 | A3 - 350 gsm - Bypass - Face up | Actual bypass source, A3, correct heavy-stock setting, face up |
 
@@ -135,3 +135,59 @@ powershell -NoProfile -STA -File scripts/verify-fast-print-profile.ps1
 The latter briefly registers a uniquely identified test preset, verifies six menu
 choices and a saved-profile render, then removes the test preset and refreshes the
 menu. It never submits a physical print job.
+
+## Verified Windows registration repair
+
+On this computer, a plain HKCU command was absent from the real Explorer menu even
+though a fresh shell probe enumerated it. The equivalent HKLM command appeared
+immediately. The installed NSIS build now uses per-machine installation and the
+`--install-fast-print-machine` / `--remove-fast-print-machine` commands, so setup
+and removal run with administrator rights and register/remove the correct hive.
+The worker still uses each interactive user's printers and encrypted presets.
+The earlier MachineTest registration and per-user registrations are migrated out
+so there is one Fast Print entry. No Windows security policy is modified.
+
+The popup owner uses the active monitor's work area, and Menu.popup uses the
+pointer's default location. Passing absolute cursor coordinates to a popup already
+anchored at that cursor placed it near the screen edge; that positioning bug is fixed.
+Final installed verification: the all-users installer completed successfully,
+registration points to `C:\Program Files\My Printer App by Maher Tka\My Printer App by Maher Tka.exe`,
+the temporary machine entry and previous HKCU entry are absent, and Fast Print was
+observed in the actual Explorer classic menu. Printer, paper and color submenus
+were opened through the installed app. The current renderer verification passed
+1-up A4 color, 2-up A4 color, and 4-up A3 grayscale. The installed Windows print
+script produced `tmp/fast-print-proof/Fast Print fixed A4 2-up proof.pdf`, verified
+as three real A4 landscape sheets from the five-page fixture.
+
+## Batch printing from Explorer
+
+Select multiple PDFs, PNGs or JPEGs in Explorer, then right-click any selected
+item and choose **Show more options > Fast Print**. Choose the printer and preset
+once. The popup shows the document count. All documents are prepared sequentially
+and submitted together as one printer job; a PDF printer asks for one output file.
+
+The order provided by Explorer is preserved, and duplicate paths are removed.
+Every document starts on a new sheet. When a captured preset is double-sided,
+a blank back is added between documents where necessary to preserve that boundary.
+A failed or unsupported document stops preparation before any part of the batch is
+submitted. Closing the progress window during preparation cancels the whole batch.
+Windows .bat/.cmd scripts are unsupported input and are never executed.
+
+The installed entry uses `MultiSelectModel=Player` and an IDropTarget selection
+bridge registered in HKLM. This delivers one complete selection through a UTF-8
+manifest instead of invoking a command per file or relying on shell placeholders.
+Selection manifests created by the bridge are removed after reading. The DLL is
+registered using a content-hash filename so updates need not overwrite a library
+currently loaded by Explorer. Uninstall removes the app-owned DropTarget CLSID.
+
+Limits: 1,000 selected files, 2,000 input pages per job, 512 MB per source file, and
+2 GB of prepared sheet images. Documents are read one at a time to bound memory.
+
+```powershell
+powershell -NoProfile -STA -File scripts/test-fast-print-selection.ps1
+node scripts/verify-fast-print-batch.mjs
+```
+
+The native test verifies a 122-file selection, exact order, Unicode, ampersands,
+and the selection limit. The renderer/driver test checks a mixed PDF/image batch,
+fresh sheet boundaries, one job, and rejection of unsupported inputs before printing.

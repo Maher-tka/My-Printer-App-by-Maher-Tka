@@ -3,7 +3,10 @@ import type {
   AccountMutationResult,
   AccountSnapshot,
   CreateAccountRequest,
-  SignInRequest
+  SignInRequest,
+  SubmitAccessRequest,
+  AdminAccessAction,
+  AccessAdminSnapshot
 } from '../shared/account-types.js'
 import type { LicenseActivationResult, LicenseSnapshot } from '../shared/licensing-types.js'
 import type { PrintPdfFileRequest, PrintPdfRequest, PrintPdfResult } from '../shared/print-types.js'
@@ -51,6 +54,22 @@ contextBridge.exposeInMainWorld('printerApp', {
   platform: process.platform,
   storageMode: 'local-first',
   account: {
+    verifyEmail: (request: { email: string; token: string }): Promise<AccountMutationResult> =>
+      ipcRenderer.invoke('account:verify-email', request),
+    sendRecovery: (email: string): Promise<AccountMutationResult> =>
+      ipcRenderer.invoke('account:send-recovery', email),
+    completeRecovery: (request: {
+      email: string
+      token: string
+      password: string
+    }): Promise<AccountMutationResult> => ipcRenderer.invoke('account:complete-recovery', request),
+    signInGoogle: (): Promise<AccountMutationResult> => ipcRenderer.invoke('account:google'),
+    cancelGoogle: (): Promise<void> => ipcRenderer.invoke('account:cancel-google'),
+    requestAccess: (request: SubmitAccessRequest): Promise<AccountMutationResult> =>
+      ipcRenderer.invoke('account:request-access', request),
+    adminList: (): Promise<AccessAdminSnapshot> => ipcRenderer.invoke('account:admin-list'),
+    adminAction: (action: AdminAccessAction): Promise<AccountMutationResult> =>
+      ipcRenderer.invoke('account:admin-action', action),
     getState: (): Promise<AccountSnapshot> => ipcRenderer.invoke('account:get-state'),
     create: (request: CreateAccountRequest): Promise<AccountMutationResult> =>
       ipcRenderer.invoke('account:create', request),

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ACCESS_MAX_AGE_MS, ACCESS_REFRESH_MS } from '../../../shared/cloud-access'
 import type { LicenseActivationResult, LicenseSnapshot } from '../../../shared/licensing-types'
 
 interface LicenseStateController {
@@ -24,6 +25,7 @@ export function useLicenseState(): LicenseStateController {
   const [error, setError] = useState<string | null>(null)
   const [activationMessage, setActivationMessage] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
+  const initialized = useRef(false)
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!window.printerApp?.license) {
@@ -33,19 +35,31 @@ export function useLicenseState(): LicenseStateController {
     }
 
     try {
-      setIsLoading(true)
+      if (!initialized.current) setIsLoading(true)
       setError(null)
       const nextSnapshot = await window.printerApp.license.getState()
       setSnapshot(nextSnapshot)
     } catch (requestError) {
       setError(getErrorMessage(requestError))
     } finally {
+      initialized.current = true
       setIsLoading(false)
     }
   }, [])
 
   useEffect(() => {
     void refresh()
+    const timer = window.setInterval(() => void refresh(), ACCESS_REFRESH_MS)
+    const onFocus = (): void => {
+      void refresh()
+    }
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('online', onFocus)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('online', onFocus)
+    }
   }, [refresh])
 
   useEffect(() => {
@@ -153,6 +167,27 @@ function createDeveloperLicenseSnapshot(snapshot: LicenseSnapshot | null): Licen
 }
 
 function getLiveLicenseSnapshot(snapshot: LicenseSnapshot): LicenseSnapshot {
+  if (snapshot.storageMode === 'supabase') {
+    const elapsed = Date.now() - Date.parse(snapshot.checkedAt)
+    const remaining = Math.max(0, snapshot.trial.remainingMs - Math.max(0, elapsed))
+    const expired =
+      elapsed > ACCESS_MAX_AGE_MS ||
+      elapsed < -5000 ||
+      (snapshot.planLabel !== 'Owner' && remaining <= 0)
+    return {
+      ...snapshot,
+      mode: expired ? 'expired' : snapshot.mode,
+      features: expired ? [] : snapshot.features,
+      canUsePaidTools: expired ? false : snapshot.canUsePaidTools,
+      statusLabel:
+        expired && snapshot.canUsePaidTools ? 'Reconnect to check access' : snapshot.statusLabel,
+      trial: {
+        ...snapshot.trial,
+        remainingMs: remaining,
+        isExpired: expired || snapshot.trial.isExpired
+      }
+    }
+  }
   if (snapshot.mode === 'activated') {
     return snapshot
   }

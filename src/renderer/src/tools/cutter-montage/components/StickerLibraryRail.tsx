@@ -29,11 +29,13 @@ export function StickerLibraryRail({
   return (
     <aside
       aria-label="Sticker artwork library"
-      className="flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card"
+      className="flex min-h-0 flex-col overflow-hidden rounded-[var(--ui-radius-lg)] border bg-card/80"
     >
-      <div className="flex items-center justify-between border-b p-2">
-        <strong className="text-xs">Artwork / stickers</strong>
-        <span className="text-xs text-muted-foreground">{pieces.length}</span>
+      <div className="flex items-center justify-between border-b px-3 py-3">
+        <strong className="text-sm font-semibold">Artwork / stickers</strong>
+        <span className="rounded-md bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+          {pieces.length}
+        </span>
       </div>
       <Button size="sm" className="m-2 shrink-0" onClick={() => input.current?.click()}>
         <Plus className="size-4" />
@@ -60,7 +62,7 @@ export function StickerLibraryRail({
             className={`border-b ${activeId === piece.id ? 'bg-primary/10' : ''}`}
           >
             <button
-              className="flex w-full items-center gap-2 p-2 text-left"
+              className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-accent/40"
               aria-pressed={activeId === piece.id}
               onClick={() => onSelect(piece.id)}
             >
@@ -73,7 +75,7 @@ export function StickerLibraryRail({
                 <span className="block truncate text-xs font-medium">
                   {index + 1}. {piece.displayName}
                 </span>
-                <span className="block text-[10px] text-muted-foreground">
+                <span className="mt-1 block text-[11px] text-muted-foreground">
                   {piece.cutlineObjectId ? 'Cut ready' : 'No cut line'} / {piece.quantity} copies
                 </span>
               </span>
@@ -141,7 +143,7 @@ export function StickerLibraryRail({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-6"
+                  className="size-8"
                   aria-label={`Duplicate ${piece.displayName}`}
                   onClick={() => onDuplicate(piece.id)}
                 >
@@ -150,7 +152,7 @@ export function StickerLibraryRail({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-6"
+                  className="size-8"
                   aria-label={`Delete ${piece.displayName}`}
                   onClick={() => onDelete(piece.id)}
                 >
@@ -161,9 +163,10 @@ export function StickerLibraryRail({
           </div>
         ))}
         {!pieces.length && (
-          <p className="p-3 text-xs text-muted-foreground">
-            Import your first design. Each sticker has its own mask, cut lines and quantity.
-          </p>
+          <div className="space-y-3 px-3 py-4 text-xs leading-relaxed text-muted-foreground">
+            <p>Import your first design. Each sticker has its own mask, cut lines and quantity.</p>
+            <p>PNG, JPG, WebP, SVG, PDF or PDF-compatible Illustrator files.</p>
+          </div>
         )}
       </div>
       <Button variant="ghost" size="sm" className="m-1 shrink-0 text-xs" onClick={onManage}>

@@ -221,7 +221,7 @@ function SpineBackgroundSection({
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
           Hex
           <input
-            className="rounded-md border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
+            className="h-9 rounded-[14px] border border-input bg-background px-3 text-[13px] text-foreground disabled:opacity-60"
             value={hexDraft}
             disabled={!customMode}
             onBlur={() => setHexDraft(activeColor.toUpperCase())}

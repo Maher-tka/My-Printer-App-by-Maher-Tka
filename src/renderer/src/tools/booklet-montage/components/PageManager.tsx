@@ -26,6 +26,7 @@ import { ColorPickerPopover } from './ColorPickerPopover'
 import { PageInspectionDialog } from './PageInspectionDialog'
 
 interface PageManagerProps {
+  compact?: boolean
   pages: BookletPage[]
   sources: BookletSource[]
   scaleMode: SheetSettings['scaleMode']
@@ -44,6 +45,7 @@ interface PageManagerProps {
 }
 
 export const PageManager = memo(function PageManager({
+  compact = false,
   pages,
   sources,
   scaleMode,
@@ -95,7 +97,10 @@ export const PageManager = memo(function PageManager({
   }, [inspectedPage, pages])
 
   return (
-    <section className="rounded-lg border bg-card p-4" data-page-order-panel="true">
+    <section
+      className="rounded-[18px] border border-border/70 bg-card p-4"
+      data-page-order-panel="true"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold">Page Order</h3>
@@ -128,7 +133,7 @@ export const PageManager = memo(function PageManager({
               Remove a mistaken import together with all pages created from it.
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <div className={compact ? 'grid gap-2' : 'grid gap-2 sm:grid-cols-2 xl:grid-cols-3'}>
             {sources.map((source) => {
               const sourcePageCount = pages.filter((page) => page.sourceId === source.id).length
               const SourceIcon = source.kind === 'image' ? Image : FileText
@@ -216,10 +221,17 @@ export const PageManager = memo(function PageManager({
         onDragCancel={() => setActivePageId(null)}
       >
         <SortableContext items={pageIds} strategy={rectSortingStrategy}>
-          <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(154px,1fr))] gap-3">
+          <div
+            className={
+              compact
+                ? 'mt-4 grid grid-cols-1 gap-2'
+                : 'mt-4 grid grid-cols-[repeat(auto-fill,minmax(154px,1fr))] gap-3'
+            }
+          >
             {pages.map((page, index) => (
               <SortablePageCard
                 key={page.id}
+                compact={compact}
                 page={page}
                 index={index}
                 selected={page.id === selectedPageId}
@@ -270,6 +282,7 @@ export const PageManager = memo(function PageManager({
 })
 
 const SortablePageCard = memo(function SortablePageCard({
+  compact,
   page,
   index,
   selected,
@@ -278,6 +291,7 @@ const SortablePageCard = memo(function SortablePageCard({
   onToggleColorPicker,
   onInspectPage
 }: {
+  compact?: boolean
   page: BookletPage
   index: number
   selected: boolean
@@ -308,12 +322,12 @@ const SortablePageCard = memo(function SortablePageCard({
       data-page-card="true"
       data-page-id={page.id}
       data-current-order={index + 1}
-      className={`relative rounded-md border bg-muted/25 p-2 shadow-sm transition-[border-color,box-shadow,opacity] ${
+      className={`relative rounded-[14px] border bg-muted/25 p-2 transition-[border-color,opacity] ${compact ? 'grid grid-cols-[64px_minmax(0,1fr)] gap-x-2' : ''} ${
         selected ? 'border-primary ring-2 ring-primary/20' : ''
       } ${isDragging ? 'z-20 opacity-35' : ''}`}
       onClick={() => onSelectPage(page.id)}
     >
-      <div className="mb-2 flex items-center justify-between gap-1">
+      <div className="col-span-2 mb-2 flex flex-wrap items-center justify-between gap-1">
         <button
           type="button"
           data-drag-handle="true"
@@ -324,7 +338,7 @@ const SortablePageCard = memo(function SortablePageCard({
         >
           <GripVertical className="h-4 w-4" />
         </button>
-        <Badge variant="secondary">Current #{index + 1}</Badge>
+        <Badge variant="secondary">#{index + 1}</Badge>
         {isBlank && (
           <Button
             type="button"

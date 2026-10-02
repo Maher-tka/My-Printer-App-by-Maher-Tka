@@ -1,6 +1,6 @@
 {
   "name": "my-printer-app-by-maher-tka",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local-first printer-shop hub desktop app by Maher Tka.",
   "author": "Maher Tka",
   "private": true,
@@ -15,7 +15,8 @@
     "storybook:build": "storybook build",
     "license:keygen": "tsx scripts/license-keygen.ts",
     "license:generate": "tsx src/main/license-generator-cli.ts",
-    "test": "npm run test:license && npm run test:print && npm run test:booklet && npm run test:projects && npm run test:cutter && npm run test:sticker && npm run test:hardcover && npm run test:preflight && npm run test:jobs && npm run test:backup && npm run test:sequential && npm run test:fast-print",
+    "test": "npm run test:access && npm run test:license && npm run test:print && npm run test:booklet && npm run test:projects && npm run test:cutter && npm run test:sticker && npm run test:hardcover && npm run test:preflight && npm run test:jobs && npm run test:backup && npm run test:sequential && npm run test:fast-print && npm run test:appearance",
+    "test:access": "tsx src/shared/cloud-access.test.ts && tsx scripts/test-access-database.ts",
     "test:license": "tsx src/main/license-serial.test.ts",
     "test:print": "tsx src/shared/print-types.test.ts",
     "test:booklet": "tsx src/renderer/src/tools/booklet-montage/lib/bookletImposition.test.ts && tsx src/renderer/src/tools/booklet-montage/lib/creepCompensation.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/booklet-montage/lib/bookletImportReliability.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/booklet-montage/lib/pdfDecoderAssetConfiguration.test.ts",
@@ -25,19 +26,20 @@
     "test:hardcover": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/coverCalculations.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/spineTextLayout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/hardcoverQuote.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/hardcoverExport.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/hardcoverSourcePdf.test.ts",
     "samples:inspect": "tsx scripts/inspect-production-samples.ts",
     "test:preflight": "tsx --tsconfig tsconfig.web.json src/renderer/src/preflight/preflight.test.ts",
-    "test:jobs": "tsx --tsconfig tsconfig.web.json src/renderer/src/jobs/jobWorkflow.test.ts",
+    "test:jobs": "tsx --tsconfig tsconfig.web.json src/renderer/src/jobs/jobWorkflow.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/assistant/assistant.test.ts",
     "test:backup": "tsx --tsconfig tsconfig.web.json src/renderer/src/backup/shopBackup.test.ts",
+    "test:appearance": "tsx --tsconfig tsconfig.web.json src/renderer/src/appearance/theme.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "preview": "electron-vite preview --config electron.vite.config.ts",
     "pack": "npm run build && npm run build:fast-print-shell && electron-builder --dir",
     "dist:dir": "npm run pack",
     "dist:win": "npm run build && npm run build:fast-print-shell && electron-builder --win nsis portable",
     "release:check": "npm run format:check && npm run typecheck && npm run test && npm run storybook:build && npm run build",
-    "release:win": "npm run release:check && npm run build:fast-print-shell && electron-builder --win nsis --publish always",
+    "release:win": "npm run release:check && npm run build:fast-print-shell && electron-builder --win nsis portable --publish always",
     "test:sequential": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/sequential-number/lib/layout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/sequential-number/lib/exportPdf.test.ts",
     "fast-print:install": "npm run build && npm run build:fast-print-shell && node scripts/fast-print-control.mjs install",
     "fast-print:remove": "node scripts/fast-print-control.mjs remove",
-    "test:fast-print": "tsx src/shared/fast-print.test.ts && tsx src/shared/fast-print-menu.test.ts",
+    "test:fast-print": "tsx src/shared/fast-print.test.ts && tsx src/shared/fast-print-menu.test.ts && tsx src/shared/fast-print-batch.test.ts",
     "build:fast-print-shell": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-fast-print-shell.ps1",
     "fast-print:settings": "node scripts/fast-print-control.mjs manage",
     "test:fast-print:driver": "powershell -NoProfile -STA -ExecutionPolicy Bypass -File scripts/test-fast-print-profiles.ps1"
@@ -55,6 +57,7 @@
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.21",
     "@radix-ui/react-tooltip": "^1.2.16",
+    "@supabase/supabase-js": "2.117.2",
     "arabic-persian-reshaper": "^1.0.1",
     "bidi-js": "^1.0.3",
     "class-variance-authority": "^0.7.0",
@@ -70,6 +73,7 @@
     "tailwind-merge": "^2.4.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@storybook/addon-a11y": "^10.5.9",
     "@storybook/addon-docs": "^10.5.9",
     "@storybook/react-vite": "^10.5.9",
@@ -127,7 +131,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "include": "scripts/fast-print-installer.nsh"
+      "include": "scripts/fast-print-installer.nsh",
+      "perMachine": true
     },
     "portable": {
       "artifactName": "My Printer App by Maher Tka Portable ${version}.${ext}"
@@ -147,7 +152,8 @@
           "fast-print-job.ps1",
           "fast-print-settings.ps1",
           "fast-print-profiles.ps1",
-          "FastPrintDriver.cs"
+          "FastPrintDriver.cs",
+          "fast-print-machine.ps1"
         ],
         "from": "scripts",
         "to": "fast-print"
@@ -155,6 +161,10 @@
       {
         "from": "out/native/fast-print-shell.dll",
         "to": "fast-print/fast-print-shell.dll"
+      },
+      {
+        "from": "out/native/fast-print-selection.dll",
+        "to": "fast-print/fast-print-selection.dll"
       }
     ]
   }

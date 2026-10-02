@@ -469,7 +469,7 @@ export function HardcoverCoverPage({
   }
 
   return (
-    <div className="workspace-shell mx-auto flex w-full max-w-[1880px] flex-col gap-4 overflow-hidden">
+    <div className="workspace-shell hardcover-workspace mx-auto flex w-full max-w-[1880px] flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="ghost" className="w-fit" onClick={() => onNavigate('dashboard')}>
           <ArrowLeft />
@@ -504,7 +504,7 @@ export function HardcoverCoverPage({
         </div>
       </div>
 
-      <section className="workspace-hero min-w-0 max-w-full overflow-hidden rounded-2xl border bg-gradient-to-br from-violet-500/10 via-card to-card p-4 sm:p-5">
+      <section className="min-w-0 max-w-full rounded-[18px] border border-border/70 bg-card p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -540,22 +540,24 @@ export function HardcoverCoverPage({
         </div>
       </section>
 
-      <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
+      <WorkflowStepNav
+        activeStep={activeStep}
+        completedSteps={completedSteps}
+        onStepChange={setActiveStep}
+      />
+
+      <div className="grid w-full min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <aside
-          className="w-full min-w-0 max-w-full overflow-hidden lg:w-[340px] 2xl:w-[400px]"
+          aria-label="Hardcover properties"
+          className="min-w-0 lg:order-2 lg:sticky lg:top-4 lg:max-h-[calc(100vh-160px)] lg:overflow-y-auto"
           data-hardcover-settings-column
         >
-          <WorkflowStepNav
-            activeStep={activeStep}
-            completedSteps={completedSteps}
-            onStepChange={setActiveStep}
-          />
-          <div className="mt-4 min-w-0 max-w-full overflow-hidden">{renderWorkflowStep()}</div>
+          <div className="min-w-0 max-w-full">{renderWorkflowStep()}</div>
         </aside>
 
         <section
           aria-label="Hardcover preview"
-          className="flex min-w-0 max-w-full flex-col gap-4 overflow-hidden lg:sticky lg:top-4 lg:self-start"
+          className="flex min-w-0 max-w-full flex-col gap-4 lg:order-1"
           data-hardcover-preview-column
         >
           <HardcoverToolbar
@@ -676,8 +678,8 @@ function WorkflowStepNav({
   onStepChange: (step: HardcoverWorkflowStep) => void
 }): JSX.Element {
   return (
-    <nav className="min-w-0 max-w-full overflow-hidden rounded-lg border bg-card p-2">
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-1">
+    <nav className="min-w-0 max-w-full rounded-[18px] border border-border/70 bg-card p-2">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {WORKFLOW_STEPS.map((step, index) => {
           const Icon = step.icon
           const active = activeStep === step.id
@@ -688,7 +690,7 @@ function WorkflowStepNav({
               key={step.id}
               type="button"
               aria-current={active ? 'step' : undefined}
-              className={`min-w-0 rounded-md border p-3 text-left transition ${
+              className={`min-w-0 rounded-[14px] border p-3 text-left transition-colors ${
                 active
                   ? 'border-primary bg-primary/10 text-primary shadow-sm'
                   : 'border-transparent bg-transparent text-foreground hover:border-border hover:bg-muted/60'
@@ -708,7 +710,7 @@ function WorkflowStepNav({
                     {index + 1}. {step.label}
                     {complete && <CheckCircle2 className="size-4 text-success" />}
                   </span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                  <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
                     {step.description}
                   </span>
                 </span>

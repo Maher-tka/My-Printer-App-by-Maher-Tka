@@ -45,7 +45,7 @@ interface Props {
   onConfirmUnsavedChanges: (action: UnsavedChangesAction) => Promise<boolean>
 }
 const inputClass =
-  'h-10 w-full rounded-lg border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+  'h-9 w-full rounded-[14px] border border-input bg-background px-3 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 function Field({ label, children }: { label: string; children: ReactNode }): JSX.Element {
   return (
     <label className="grid min-w-0 gap-1.5 text-xs font-medium text-muted-foreground">
@@ -93,8 +93,8 @@ function Card({
   children: ReactNode
 }): JSX.Element {
   return (
-    <section className="rounded-2xl border bg-card p-5 shadow-sm">
-      <h2 className="mb-4 flex items-center gap-3 text-base font-semibold">
+    <section className="rounded-[18px] border border-border/70 bg-card p-4">
+      <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold">
         <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-xs text-primary">
           {step}
         </span>
@@ -129,6 +129,7 @@ export function SequentialNumberPage({
   const [side, setSide] = useState<'front' | 'back'>('front')
   const [selectedPosition, setSelectedPosition] = useState(project.positions[0]?.id ?? '')
   const abortRef = useRef<AbortController | null>(null)
+  const [workspaceTab, setWorkspaceTab] = useState<'sheet' | 'design'>('sheet')
   const operationRef = useRef(0)
   const settings = project.settings
   const stateKey = useMemo(() => JSON.stringify(project), [project])
@@ -382,7 +383,7 @@ export function SequentialNumberPage({
     )
   }
   return (
-    <div className="mx-auto max-w-[1600px] space-y-6">
+    <div className="workspace-shell sequential-workspace mx-auto max-w-[1880px] space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Button variant="ghost" size="sm" onClick={() => onNavigate('dashboard')}>
@@ -416,8 +417,12 @@ export function SequentialNumberPage({
           onSaveAs={() => void save(true)}
         />
       </header>
-      <div className="grid items-start gap-6 xl:grid-cols-[410px_minmax(0,1fr)]">
-        <fieldset disabled={busy} className="min-w-0 space-y-4 disabled:opacity-70">
+      <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)]">
+        <fieldset
+          disabled={busy}
+          aria-label="Numbering setup"
+          className="min-w-0 space-y-4 disabled:opacity-70 lg:sticky lg:top-4 lg:max-h-[calc(100vh-180px)] lg:overflow-y-auto"
+        >
           <Card step="1" title="Your design">
             <Field label="Project name">
               <input
@@ -642,10 +647,8 @@ export function SequentialNumberPage({
               {formatSequenceNumber(settings, Math.max(0, settings.quantity - 1))}
             </div>
           </Card>
-        </fieldset>
-        <div className="min-w-0 space-y-4">
           <Card step="4" title="Choose how you will collect the numbers">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2">
               {(
                 [
                   {
@@ -667,13 +670,13 @@ export function SequentialNumberPage({
                   type="button"
                   disabled={busy}
                   aria-pressed={settings.order === choice.id}
-                  className={`rounded-xl border-2 p-4 text-left transition-colors ${settings.order === choice.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
+                  className={`rounded-[14px] border p-3 text-left transition-colors ${settings.order === choice.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
                   onClick={() => patchSettings({ order: choice.id })}
                 >
-                  <div className="mb-3 flex items-center gap-3">
+                  <div className="mb-2 flex items-center gap-2">
                     <div
                       aria-hidden="true"
-                      className="grid w-20 shrink-0 grid-cols-2 gap-1 rounded-md border bg-background p-1.5"
+                      className="grid w-16 shrink-0 grid-cols-2 gap-1 rounded-md border bg-background p-1.5"
                     >
                       {choice.numbers.map((n) => (
                         <span
@@ -698,12 +701,64 @@ export function SequentialNumberPage({
                 ' Back pages never consume a number: PDF pages 1–2 are sheet 1 front/back, pages 3–4 are sheet 2 front/back.'}
             </p>
           </Card>
-          <Card step="5" title="Place numbers and fixed text">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="max-w-md text-xs leading-5 text-muted-foreground">
-                Select and drag a number or fixed label. Use X/Y for exact positioning. Fixed text
-                stays the same on every ticket.
-              </p>
+        </fieldset>
+        <div className="min-w-0 space-y-4">
+          <div
+            className="flex items-center gap-2 rounded-[18px] border border-border/70 bg-card p-2"
+            aria-label="Numbering workspace views"
+          >
+            <Button
+              type="button"
+              variant={workspaceTab === 'sheet' ? 'default' : 'ghost'}
+              aria-pressed={workspaceTab === 'sheet'}
+              onClick={() => setWorkspaceTab('sheet')}
+            >
+              Sheet preview
+            </Button>
+            <Button
+              type="button"
+              variant={workspaceTab === 'design' ? 'default' : 'ghost'}
+              aria-pressed={workspaceTab === 'design'}
+              onClick={() => setWorkspaceTab('design')}
+            >
+              Numbers &amp; fixed text
+            </Button>
+          </div>
+
+          {workspaceTab === 'design' && (
+            <Card step="5" title="Place numbers and fixed text">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="max-w-md text-xs leading-5 text-muted-foreground">
+                  Select and drag a number or fixed label. Use X/Y for exact positioning. Fixed text
+                  stays the same on every ticket.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || project.positions.length >= 20}
+                  onClick={() => {
+                    const id = crypto.randomUUID()
+                    setProject((p) => ({
+                      ...p,
+                      positions: [
+                        ...p.positions,
+                        {
+                          id,
+                          xMm: Math.min(10, settings.ticketWidthMm / 2),
+                          yMm: Math.min(10, settings.ticketHeightMm / 2),
+                          fontSizePt: 12,
+                          color: '#000000',
+                          align: 'left'
+                        }
+                      ]
+                    }))
+                    setSelectedPosition(id)
+                  }}
+                >
+                  <Plus className="mr-2 size-4" />
+                  Add number
+                </Button>
+              </div>
               <Button
                 variant="outline"
                 size="sm"
@@ -716,8 +771,10 @@ export function SequentialNumberPage({
                       ...p.positions,
                       {
                         id,
+                        kind: 'text',
+                        text: 'Fixed text',
                         xMm: Math.min(10, settings.ticketWidthMm / 2),
-                        yMm: Math.min(10, settings.ticketHeightMm / 2),
+                        yMm: Math.min(20, settings.ticketHeightMm / 2),
                         fontSizePt: 12,
                         color: '#000000',
                         align: 'left'
@@ -727,323 +784,299 @@ export function SequentialNumberPage({
                   setSelectedPosition(id)
                 }}
               >
-                <Plus className="mr-2 size-4" />
-                Add number
+                Add fixed text
               </Button>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy || project.positions.length >= 20}
-              onClick={() => {
-                const id = crypto.randomUUID()
-                setProject((p) => ({
-                  ...p,
-                  positions: [
-                    ...p.positions,
-                    {
-                      id,
-                      kind: 'text',
-                      text: 'Fixed text',
-                      xMm: Math.min(10, settings.ticketWidthMm / 2),
-                      yMm: Math.min(20, settings.ticketHeightMm / 2),
-                      fontSizePt: 12,
-                      color: '#000000',
-                      align: 'left'
-                    }
-                  ]
-                }))
-                setSelectedPosition(id)
-              }}
-            >
-              Add fixed text
-            </Button>
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
-              <NumberDesignEditor
-                key={project.front?.name ?? 'blank'}
-                project={project}
-                selected={selectedPosition}
-                onSelect={setSelectedPosition}
-                disabled={busy}
-                onChange={(positions) => setProject((p) => ({ ...p, positions }))}
-              />
-              <fieldset disabled={busy} className="space-y-3">
-                <Field label="Number position">
-                  <select
-                    className={inputClass}
-                    value={selectedPosition}
-                    onChange={(e) => setSelectedPosition(e.target.value)}
-                  >
-                    {project.positions.map((pos, i) => (
-                      <option key={pos.id} value={pos.id}>
-                        {pos.kind === 'text' ? 'Fixed text' : 'Number'} {i + 1}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                {project.positions
-                  .filter((pos) => pos.id === selectedPosition)
-                  .map((pos) => (
-                    <div key={pos.id} className="space-y-3">
-                      {pos.kind === 'text' && (
-                        <Field label="Fixed text (same on every item)">
-                          <input
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
+                <NumberDesignEditor
+                  key={project.front?.name ?? 'blank'}
+                  project={project}
+                  selected={selectedPosition}
+                  onSelect={setSelectedPosition}
+                  disabled={busy}
+                  onChange={(positions) => setProject((p) => ({ ...p, positions }))}
+                />
+                <fieldset disabled={busy} className="space-y-3">
+                  <Field label="Number position">
+                    <select
+                      className={inputClass}
+                      value={selectedPosition}
+                      onChange={(e) => setSelectedPosition(e.target.value)}
+                    >
+                      {project.positions.map((pos, i) => (
+                        <option key={pos.id} value={pos.id}>
+                          {pos.kind === 'text' ? 'Fixed text' : 'Number'} {i + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  {project.positions
+                    .filter((pos) => pos.id === selectedPosition)
+                    .map((pos) => (
+                      <div key={pos.id} className="space-y-3">
+                        {pos.kind === 'text' && (
+                          <Field label="Fixed text (same on every item)">
+                            <input
+                              className={inputClass}
+                              maxLength={200}
+                              value={pos.text ?? ''}
+                              onChange={(e) => patchPosition(pos.id, { text: e.target.value })}
+                            />
+                            <span>English letters, numbers and symbols; up to 200 characters.</span>
+                          </Field>
+                        )}
+                        <div className="grid grid-cols-2 gap-3">
+                          <Numeric
+                            label="X (mm)"
+                            value={pos.xMm}
+                            max={settings.ticketWidthMm}
+                            step={0.1}
+                            onChange={(v) => patchPosition(pos.id, { xMm: v })}
+                          />
+                          <Numeric
+                            label="Y (mm)"
+                            value={pos.yMm}
+                            max={settings.ticketHeightMm}
+                            step={0.1}
+                            onChange={(v) => patchPosition(pos.id, { yMm: v })}
+                          />
+                          <Numeric
+                            label="Font size (pt)"
+                            value={pos.fontSizePt}
+                            min={4}
+                            max={200}
+                            step={0.5}
+                            onChange={(v) => patchPosition(pos.id, { fontSizePt: v })}
+                          />
+                          <Field label="Color">
+                            <NumberColorInput
+                              className={`${inputClass} p-1`}
+                              value={pos.color}
+                              onCommit={(color) => patchPosition(pos.id, { color })}
+                            />
+                          </Field>
+                        </div>
+                        <Field label="Text alignment">
+                          <select
                             className={inputClass}
-                            maxLength={200}
-                            value={pos.text ?? ''}
-                            onChange={(e) => patchPosition(pos.id, { text: e.target.value })}
-                          />
-                          <span>English letters, numbers and symbols; up to 200 characters.</span>
+                            value={pos.align}
+                            onChange={(e) =>
+                              patchPosition(pos.id, {
+                                align: e.target.value as NumberPosition['align']
+                              })
+                            }
+                          >
+                            <option value="left">Left</option>
+                            <option value="center">Center</option>
+                            <option value="right">Right</option>
+                          </select>
                         </Field>
-                      )}
-                      <div className="grid grid-cols-2 gap-3">
-                        <Numeric
-                          label="X (mm)"
-                          value={pos.xMm}
-                          max={settings.ticketWidthMm}
-                          step={0.1}
-                          onChange={(v) => patchPosition(pos.id, { xMm: v })}
-                        />
-                        <Numeric
-                          label="Y (mm)"
-                          value={pos.yMm}
-                          max={settings.ticketHeightMm}
-                          step={0.1}
-                          onChange={(v) => patchPosition(pos.id, { yMm: v })}
-                        />
-                        <Numeric
-                          label="Font size (pt)"
-                          value={pos.fontSizePt}
-                          min={4}
-                          max={200}
-                          step={0.5}
-                          onChange={(v) => patchPosition(pos.id, { fontSizePt: v })}
-                        />
-                        <Field label="Color">
-                          <NumberColorInput
-                            className={`${inputClass} p-1`}
-                            value={pos.color}
-                            onCommit={(color) => patchPosition(pos.id, { color })}
-                          />
-                        </Field>
-                      </div>
-                      <Field label="Text alignment">
-                        <select
-                          className={inputClass}
-                          value={pos.align}
-                          onChange={(e) =>
-                            patchPosition(pos.id, {
-                              align: e.target.value as NumberPosition['align']
-                            })
-                          }
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={project.positions.length < 2}
+                          onClick={() => {
+                            setProject((p) => ({
+                              ...p,
+                              positions: p.positions.filter((item) => item.id !== pos.id)
+                            }))
+                            setSelectedPosition(
+                              project.positions.find((item) => item.id !== pos.id)?.id ?? ''
+                            )
+                          }}
                         >
-                          <option value="left">Left</option>
-                          <option value="center">Center</option>
-                          <option value="right">Right</option>
-                        </select>
-                      </Field>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={project.positions.length < 2}
-                        onClick={() => {
-                          setProject((p) => ({
-                            ...p,
-                            positions: p.positions.filter((item) => item.id !== pos.id)
-                          }))
-                          setSelectedPosition(
-                            project.positions.find((item) => item.id !== pos.id)?.id ?? ''
-                          )
-                        }}
-                      >
-                        <Trash2 className="mr-2 size-4" />
-                        Remove position
-                      </Button>
-                    </div>
-                  ))}
-              </fieldset>
-            </div>
-          </Card>
-          <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
-              <div>
-                <h2 className="flex items-center gap-2 font-semibold">
-                  <Layers className="size-4" />
-                  Sheet preview
-                </h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {layout.capacity} items per sheet · {layout.sheetCount} physical sheets ·{' '}
-                  {layout.pdfPageCount} PDF pages
-                </p>
+                          <Trash2 className="mr-2 size-4" />
+                          Remove position
+                        </Button>
+                      </div>
+                    ))}
+                </fieldset>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="Previous sheet"
-                  disabled={safeSheet === 0}
-                  onClick={() => setSheetIndex(safeSheet - 1)}
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <span className="text-xs tabular-nums">
-                  Sheet {layout.sheetCount ? safeSheet + 1 : 0} / {layout.sheetCount}
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="Next sheet"
-                  disabled={safeSheet >= layout.sheetCount - 1}
-                  onClick={() => setSheetIndex(safeSheet + 1)}
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
+            </Card>
+          )}
+          {workspaceTab === 'sheet' && (
+            <section className="overflow-hidden rounded-[18px] border border-border/70 bg-card">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
+                <div>
+                  <h2 className="flex items-center gap-2 font-semibold">
+                    <Layers className="size-4" />
+                    Sheet preview
+                  </h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {layout.capacity} items per sheet · {layout.sheetCount} physical sheets ·{' '}
+                    {layout.pdfPageCount} PDF pages
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label="Previous sheet"
+                    disabled={safeSheet === 0}
+                    onClick={() => setSheetIndex(safeSheet - 1)}
+                  >
+                    <ChevronLeft className="size-4" />
+                  </Button>
+                  <span className="text-xs tabular-nums">
+                    Sheet {layout.sheetCount ? safeSheet + 1 : 0} / {layout.sheetCount}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label="Next sheet"
+                    disabled={safeSheet >= layout.sheetCount - 1}
+                    onClick={() => setSheetIndex(safeSheet + 1)}
+                  >
+                    <ChevronRight className="size-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center justify-between px-5 pt-4">
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant={side === 'front' ? 'default' : 'outline'}
-                  onClick={() => setSide('front')}
-                >
-                  Front
-                </Button>
-                {settings.backMode !== 'none' && (
+              <div className="flex items-center justify-between px-5 pt-4">
+                <div className="flex gap-2">
                   <Button
                     size="sm"
-                    variant={side === 'back' ? 'default' : 'outline'}
-                    onClick={() => setSide('back')}
+                    variant={side === 'front' ? 'default' : 'outline'}
+                    onClick={() => setSide('front')}
                   >
-                    Back
+                    Front
                   </Button>
-                )}
+                  {settings.backMode !== 'none' && (
+                    <Button
+                      size="sm"
+                      variant={side === 'back' ? 'default' : 'outline'}
+                      onClick={() => setSide('back')}
+                    >
+                      Back
+                    </Button>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  PDF page{' '}
+                  {safeSheet * (settings.backMode === 'none' ? 1 : 2) + (side === 'back' ? 2 : 1)}
+                </span>
               </div>
-              <span className="text-xs text-muted-foreground">
-                PDF page{' '}
-                {safeSheet * (settings.backMode === 'none' ? 1 : 2) + (side === 'back' ? 2 : 1)}
-              </span>
-            </div>
-            <div className="m-5 flex max-h-[620px] justify-center overflow-auto rounded-xl bg-slate-100 p-6 dark:bg-slate-900">
-              <svg
-                role="img"
-                aria-label={`${side} of sheet ${safeSheet + 1}`}
-                viewBox={`0 0 ${Math.max(1, settings.sheetWidthMm)} ${Math.max(1, settings.sheetHeightMm)}`}
-                className="h-auto max-w-full shrink-0 bg-white shadow-lg"
-                style={{
-                  width: `${(550 * Math.max(1, settings.sheetWidthMm)) / Math.max(1, settings.sheetHeightMm)}px`,
-                  aspectRatio: `${Math.max(1, settings.sheetWidthMm)} / ${Math.max(1, settings.sheetHeightMm)}`
-                }}
-              >
-                {(side === 'back' && settings.backMode === 'blank' ? [] : slots).map((slot) => (
-                  <g key={slot.slotIndex}>
-                    <rect
-                      x={slot.xMm}
-                      y={slot.yMm}
-                      width={settings.ticketWidthMm}
-                      height={settings.ticketHeightMm}
-                      fill="white"
-                      stroke="#cbd5e1"
-                      strokeWidth="0.15"
-                    />
-                    {slot.sequenceIndex !== null && (
-                      <>
-                        {(side === 'front'
-                          ? project.front
-                          : settings.backMode === 'artwork'
-                            ? project.back
-                            : null
-                        )?.previewDataUrl && (
-                          <image
-                            href={(side === 'front' ? project.front : project.back)!.previewDataUrl}
-                            x={slot.xMm}
-                            y={slot.yMm}
-                            width={settings.ticketWidthMm}
-                            height={settings.ticketHeightMm}
-                            preserveAspectRatio="xMidYMid meet"
-                          />
-                        )}
-                        {(side === 'front' ||
-                          (settings.backMode === 'artwork' && settings.numberBack)) &&
-                          project.positions.map((pos) => (
-                            <text
-                              key={pos.id}
-                              x={slot.xMm + pos.xMm}
-                              y={slot.yMm + pos.yMm + ((pos.fontSizePt * 25.4) / 72) * 0.718}
-                              textAnchor={
-                                pos.align === 'center'
-                                  ? 'middle'
-                                  : pos.align === 'right'
-                                    ? 'end'
-                                    : 'start'
+              <div className="m-4 flex max-h-[calc(100vh-360px)] min-h-80 justify-center overflow-auto rounded-[14px] bg-muted/50 p-4">
+                <svg
+                  role="img"
+                  aria-label={`${side} of sheet ${safeSheet + 1}`}
+                  viewBox={`0 0 ${Math.max(1, settings.sheetWidthMm)} ${Math.max(1, settings.sheetHeightMm)}`}
+                  className="h-auto max-w-full shrink-0 bg-white shadow-sm"
+                  style={{
+                    width: `${(550 * Math.max(1, settings.sheetWidthMm)) / Math.max(1, settings.sheetHeightMm)}px`,
+                    aspectRatio: `${Math.max(1, settings.sheetWidthMm)} / ${Math.max(1, settings.sheetHeightMm)}`
+                  }}
+                >
+                  {(side === 'back' && settings.backMode === 'blank' ? [] : slots).map((slot) => (
+                    <g key={slot.slotIndex}>
+                      <rect
+                        x={slot.xMm}
+                        y={slot.yMm}
+                        width={settings.ticketWidthMm}
+                        height={settings.ticketHeightMm}
+                        fill="white"
+                        stroke="#cbd5e1"
+                        strokeWidth="0.15"
+                      />
+                      {slot.sequenceIndex !== null && (
+                        <>
+                          {(side === 'front'
+                            ? project.front
+                            : settings.backMode === 'artwork'
+                              ? project.back
+                              : null
+                          )?.previewDataUrl && (
+                            <image
+                              href={
+                                (side === 'front' ? project.front : project.back)!.previewDataUrl
                               }
-                              fontFamily="Helvetica, Arial, sans-serif"
-                              fontSize={(pos.fontSizePt * 25.4) / 72}
-                              fill={pos.color}
-                            >
-                              {positionLabel(pos, slot.label ?? '')}
-                            </text>
-                          ))}
-                      </>
-                    )}
-                  </g>
-                ))}
-                {safeSheet === 0 &&
-                  side === 'front' &&
-                  getGutterCutLines(settings, slots).map((line, index) => (
-                    <line
-                      key={`gutter-${index}`}
-                      x1={line.x1}
-                      y1={line.y1}
-                      x2={line.x2}
-                      y2={line.y2}
-                      stroke={settings.cuttingLineColor ?? '#000000'}
-                      strokeWidth={GUTTER_LINE_WIDTH_MM}
-                    />
+                              x={slot.xMm}
+                              y={slot.yMm}
+                              width={settings.ticketWidthMm}
+                              height={settings.ticketHeightMm}
+                              preserveAspectRatio="xMidYMid meet"
+                            />
+                          )}
+                          {(side === 'front' ||
+                            (settings.backMode === 'artwork' && settings.numberBack)) &&
+                            project.positions.map((pos) => (
+                              <text
+                                key={pos.id}
+                                x={slot.xMm + pos.xMm}
+                                y={slot.yMm + pos.yMm + ((pos.fontSizePt * 25.4) / 72) * 0.718}
+                                textAnchor={
+                                  pos.align === 'center'
+                                    ? 'middle'
+                                    : pos.align === 'right'
+                                      ? 'end'
+                                      : 'start'
+                                }
+                                fontFamily="Helvetica, Arial, sans-serif"
+                                fontSize={(pos.fontSizePt * 25.4) / 72}
+                                fill={pos.color}
+                              >
+                                {positionLabel(pos, slot.label ?? '')}
+                              </text>
+                            ))}
+                        </>
+                      )}
+                    </g>
                   ))}
-              </svg>
-            </div>
-            <p className="px-5 pb-4 text-xs text-muted-foreground">
-              Gray outlines show item positions in this preview. Empty slots remain unprinted.
-            </p>
-            <div className="space-y-3 border-t p-5">
-              {message && (
-                <p role="status" className="rounded-lg bg-muted/50 p-3 text-sm">
-                  {message}
-                </p>
-              )}
-              {errors.length > 0 && (
-                <ul className="space-y-1 rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                  {errors.map((error, i) => (
-                    <li key={i}>{error}</li>
-                  ))}
-                </ul>
-              )}
-              {layout.warnings.length > 0 && (
-                <ul className="space-y-1 text-xs text-amber-700">
-                  {layout.warnings.map((warning, i) => (
-                    <li key={i}>{warning}</li>
-                  ))}
-                </ul>
-              )}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground">
-                  Print at actual size (100%).
-                  {settings.backMode !== 'none' && ` Use duplex ${settings.duplexFlip} printing.`}
-                </p>
-                {exporting ? (
-                  <Button variant="outline" onClick={() => abortRef.current?.abort()}>
-                    Cancel export
-                  </Button>
-                ) : (
-                  <Button disabled={busy || errors.length > 0} onClick={() => void runExport()}>
-                    <Download className="mr-2 size-4" />
-                    Export numbered PDF
-                  </Button>
-                )}
+                  {safeSheet === 0 &&
+                    side === 'front' &&
+                    getGutterCutLines(settings, slots).map((line, index) => (
+                      <line
+                        key={`gutter-${index}`}
+                        x1={line.x1}
+                        y1={line.y1}
+                        x2={line.x2}
+                        y2={line.y2}
+                        stroke={settings.cuttingLineColor ?? '#000000'}
+                        strokeWidth={GUTTER_LINE_WIDTH_MM}
+                      />
+                    ))}
+                </svg>
               </div>
-            </div>
-          </section>
+              <p className="px-5 pb-4 text-xs text-muted-foreground">
+                Gray outlines show item positions in this preview. Empty slots remain unprinted.
+              </p>
+              <div className="space-y-3 border-t p-5">
+                {message && (
+                  <p role="status" className="rounded-lg bg-muted/50 p-3 text-sm">
+                    {message}
+                  </p>
+                )}
+                {errors.length > 0 && (
+                  <ul className="space-y-1 rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                    {errors.map((error, i) => (
+                      <li key={i}>{error}</li>
+                    ))}
+                  </ul>
+                )}
+                {layout.warnings.length > 0 && (
+                  <ul className="space-y-1 text-xs text-amber-700">
+                    {layout.warnings.map((warning, i) => (
+                      <li key={i}>{warning}</li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground">
+                    Print at actual size (100%).
+                    {settings.backMode !== 'none' && ` Use duplex ${settings.duplexFlip} printing.`}
+                  </p>
+                  {exporting ? (
+                    <Button variant="outline" onClick={() => abortRef.current?.abort()}>
+                      Cancel export
+                    </Button>
+                  ) : (
+                    <Button disabled={busy || errors.length > 0} onClick={() => void runExport()}>
+                      <Download className="mr-2 size-4" />
+                      Export numbered PDF
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
           <Button
             variant="ghost"
             disabled={busy}

@@ -1,4 +1,5 @@
 import { prepareFineCutJob } from './finecut-handoff.js'
+import { assertOnlineProductionAccess } from './online-account.js'
 import { writeJsonAtomically } from './atomic-json.js'
 import {
   app,
@@ -56,9 +57,10 @@ const recentErrors: AppHealthSnapshot['recentErrors'] = []
 const reportedAutosaveIssues = new Set<string>()
 
 export function registerReleaseRuntimeHandlers(): void {
-  ipcMain.handle('runtime:prepare-finecut-job', (_event, request: unknown) =>
-    prepareFineCutJob(request)
-  )
+  ipcMain.handle('runtime:prepare-finecut-job', async (_event, request: unknown) => {
+    await assertOnlineProductionAccess()
+    return prepareFineCutJob(request)
+  })
   ipcMain.handle('runtime:get-health', getAppHealthSnapshot)
   ipcMain.handle('runtime:open-app-data', () => shell.openPath(app.getPath('userData')))
   ipcMain.handle('runtime:clear-cache', clearTemporaryCache)
@@ -68,7 +70,7 @@ export function registerReleaseRuntimeHandlers(): void {
   ipcMain.handle('runtime:list-exports', readExportHistory)
   ipcMain.handle('runtime:open-path', async (_event, filePath: string) => shell.openPath(filePath))
   ipcMain.handle('runtime:open-in-illustrator', async (_event, filePath: string) =>
-    openInIllustrator(filePath)
+    assertOnlineProductionAccess().then(() => openInIllustrator(filePath))
   )
   ipcMain.handle('runtime:open-parent-folder', (_event, filePath: string) => {
     shell.showItemInFolder(filePath)

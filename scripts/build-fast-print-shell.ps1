@@ -12,10 +12,14 @@ New-Item -ItemType Directory -Path $output -Force | Out-Null
 $includePaths = @((Join-Path $toolset.FullName 'include'), (Join-Path $sdkRoot "Include\$($sdk.Name)\ucrt"), (Join-Path $sdkRoot "Include\$($sdk.Name)\shared"), (Join-Path $sdkRoot "Include\$($sdk.Name)\um"))
 $libraryPaths = @((Join-Path $toolset.FullName 'lib\x64'), (Join-Path $sdk.FullName 'ucrt\x64'), (Join-Path $sdk.FullName 'um\x64'))
 $compiler = Join-Path $toolset.FullName 'bin\Hostx64\x64\cl.exe'
+foreach ($target in @('fast-print-shell','fast-print-selection')) {
 $arguments = @('/nologo','/LD','/MT','/O2','/EHsc','/std:c++17','/DUNICODE','/D_UNICODE')
 $arguments += $includePaths | ForEach-Object { '/I' + $_ }
-$arguments += @((Join-Path $root 'src\native\fast-print-shell.cpp'), ('/Fo' + (Join-Path $output 'fast-print-shell.obj')), '/link', ('/IMPLIB:' + (Join-Path $output 'fast-print-shell.lib')))
+$arguments += @((Join-Path $root "src\native\$target.cpp"), ('/Fo' + (Join-Path $output "$target.obj")), '/link', ('/IMPLIB:' + (Join-Path $output "$target.lib")))
 $arguments += $libraryPaths | ForEach-Object { '/LIBPATH:' + $_ }
-$arguments += @('/EXPORT:DllGetClassObject,PRIVATE','/EXPORT:DllCanUnloadNow,PRIVATE','user32.lib','ole32.lib','shell32.lib','shlwapi.lib','advapi32.lib','uuid.lib',('/OUT:' + (Join-Path $output 'fast-print-shell.dll')))
+$arguments += @('/EXPORT:DllGetClassObject,PRIVATE','/EXPORT:DllCanUnloadNow,PRIVATE','user32.lib','ole32.lib','shell32.lib','shlwapi.lib','advapi32.lib','uuid.lib',('/OUT:' + (Join-Path $output "$target.dll")))
+if ($target -eq 'fast-print-selection') { $arguments += '/EXPORT:FastPrintWriteSelectionManifest,PRIVATE' }
 & $compiler @arguments
 if ($LASTEXITCODE -ne 0) { throw 'Native Explorer handler build failed.' }
+
+}

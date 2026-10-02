@@ -22,16 +22,16 @@ export function Empty({
   return (
     <div
       className={cn(
-        'grid min-h-72 place-items-center rounded-lg border border-dashed bg-muted/45 p-8',
+        'grid min-h-48 place-items-center rounded-[var(--ui-radius-lg)] border border-dashed bg-secondary/60 p-6',
         className
       )}
     >
       <div className="flex max-w-md flex-col items-center gap-4 text-center">
-        <div className="grid size-14 place-items-center rounded-lg border bg-card text-primary shadow-sm">
-          <Icon className="size-7" aria-hidden="true" />
+        <div className="grid size-10 place-items-center rounded-full bg-card text-primary">
+          <Icon className="size-5" aria-hidden="true" />
         </div>
         <div className="flex flex-col gap-2">
-          <h3 className="text-lg font-semibold">{title}</h3>
+          <h3 className="text-base font-semibold">{title}</h3>
           <p className="text-sm leading-6 text-muted-foreground">{description}</p>
         </div>
         {actionLabel && (

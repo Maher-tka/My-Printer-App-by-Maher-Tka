@@ -34,7 +34,7 @@ export interface LicenseSnapshot {
   trial: LicenseTrialStatus
   activation?: LicenseActivationStatus
   checkedAt: string
-  storageMode: 'electron-user-data' | 'browser-local-storage'
+  storageMode: 'electron-user-data' | 'browser-local-storage' | 'supabase'
   clockWarning?: string
   integrityWarning?: string
 }

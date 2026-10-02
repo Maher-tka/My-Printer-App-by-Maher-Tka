@@ -11,7 +11,7 @@ export function StickerQuantities({
   onContinue: () => void
 }): JSX.Element {
   return (
-    <section className="flex h-full min-h-0 flex-col rounded-lg border bg-card">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--ui-radius-lg)] border bg-card/80">
       <div className="shrink-0 border-b p-4">
         <h2 className="font-semibold">How many of each sticker?</h2>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -20,7 +20,7 @@ export function StickerQuantities({
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-muted text-left text-xs">
+          <thead className="sticky top-0 bg-secondary text-left text-xs text-muted-foreground">
             <tr>
               <th className="p-3">Sticker</th>
               <th className="p-3">Cut line</th>

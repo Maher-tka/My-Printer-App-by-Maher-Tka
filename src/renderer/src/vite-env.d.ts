@@ -12,7 +12,10 @@ import type {
   AccountMutationResult,
   AccountSnapshot,
   CreateAccountRequest,
-  SignInRequest
+  SignInRequest,
+  SubmitAccessRequest,
+  AdminAccessAction,
+  AccessAdminSnapshot
 } from '../../shared/account-types'
 import type {
   PrinterAppProjectResult,
@@ -91,6 +94,18 @@ declare global {
       platform: string
       storageMode: 'local-first'
       account: {
+        verifyEmail: (request: { email: string; token: string }) => Promise<AccountMutationResult>
+        sendRecovery: (email: string) => Promise<AccountMutationResult>
+        completeRecovery: (request: {
+          email: string
+          token: string
+          password: string
+        }) => Promise<AccountMutationResult>
+        signInGoogle: () => Promise<AccountMutationResult>
+        cancelGoogle: () => Promise<void>
+        requestAccess: (request: SubmitAccessRequest) => Promise<AccountMutationResult>
+        adminList: () => Promise<AccessAdminSnapshot>
+        adminAction: (action: AdminAccessAction) => Promise<AccountMutationResult>
         getState: () => Promise<AccountSnapshot>
         create: (request: CreateAccountRequest) => Promise<AccountMutationResult>
         signIn: (request: SignInRequest) => Promise<AccountMutationResult>

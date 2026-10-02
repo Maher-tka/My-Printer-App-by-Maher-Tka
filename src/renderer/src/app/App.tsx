@@ -1,6 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAccountState } from '@/account/useAccountState'
+import { AccessRequestPage } from '@/account/AccessRequestPage'
+import { hasCurrentCloudAccess } from '../../../shared/cloud-access'
 import { scheduleDailyShopBackup } from '@/backup/shopBackup'
+import type { JobOpenRequest } from '@/jobs/jobTypes'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { ToolAccessOverlay } from '@/licensing/ToolAccessOverlay'
 import { getToolAccessState } from '@/licensing/tool-access'
@@ -181,6 +184,7 @@ function getRouteFromHash(): AppRoute {
 
 export function App(): JSX.Element {
   const [activeRoute, setActiveRoute] = useState<AppRoute>(() => getRouteFromHash())
+  const [jobOpenRequest, setJobOpenRequest] = useState<JobOpenRequest | null>(null)
   const activeRouteRef = useRef(activeRoute)
   const activeProjectSessionRef = useRef<ActiveProjectSession | null>(null)
   const [openedProject, setOpenedProject] = useState<
@@ -206,13 +210,30 @@ export function App(): JSX.Element {
     license.state?.mode === 'trial' &&
     !license.state.trial.isExpired
   const isAccessLoading = account.isLoading || license.isLoading
-  const hasAppAccess = isDeveloperAccess || hasSubscriptionAccess || hasTrialAccountAccess
+  const cloudMode = Boolean(account.state?.cloud)
+  useEffect(() => {
+    if (cloudMode) void license.refresh()
+  }, [cloudMode, account.state?.profile?.id, license.refresh])
+  const hasCloudAccess =
+    account.state?.status === 'signed-in' && hasCurrentCloudAccess(account.state.cloud)
+  const [hasOpenedCloudWorkspace, setHasOpenedCloudWorkspace] = useState(false)
+  useEffect(() => {
+    if (hasCloudAccess) setHasOpenedCloudWorkspace(true)
+    if (account.state?.status === 'signed-out') setHasOpenedCloudWorkspace(false)
+  }, [hasCloudAccess, account.state?.status])
+  const keepCloudWorkOpen =
+    cloudMode && hasOpenedCloudWorkspace && account.state?.status === 'signed-in'
+  const hasAppAccess =
+    isDeveloperAccess ||
+    (cloudMode
+      ? hasCloudAccess || keepCloudWorkOpen
+      : hasSubscriptionAccess || hasTrialAccountAccess)
   const activeTool = printerTools.find((tool) => tool.route === activeRoute)
   const activeToolAccess = activeTool
     ? getToolAccessState(activeTool, license.state, license.isLoading)
     : null
   const showToolAccessOverlay = Boolean(
-    activeToolAccess?.isCheckingLicense || activeToolAccess?.isLicenseLocked
+    !keepCloudWorkOpen && (activeToolAccess?.isCheckingLicense || activeToolAccess?.isLicenseLocked)
   )
 
   useEffect(() => {
@@ -386,6 +407,7 @@ export function App(): JSX.Element {
       clearActiveProjectSession()
       activeRouteRef.current = route
       setActiveRoute(route)
+      setJobOpenRequest(null)
       setOpenedProject(null)
       setPendingBookletPdfImport(null)
       setPendingCutterImageImport(null)
@@ -536,6 +558,16 @@ export function App(): JSX.Element {
     setPendingCutterImageImport((current) => (current?.id === requestId ? null : current))
   }, [])
 
+  const openJob = useCallback(
+    async (jobId: string): Promise<void> => {
+      await navigate('jobs')
+      if (activeRouteRef.current === 'jobs') {
+        setJobOpenRequest((current) => ({ jobId, requestId: (current?.requestId ?? 0) + 1 }))
+      }
+    },
+    [navigate]
+  )
+
   const signOut = useCallback(async (): Promise<void> => {
     if (!(await confirmUnsavedChanges('navigate'))) return
     const result = await account.signOut()
@@ -549,11 +581,24 @@ export function App(): JSX.Element {
     setPendingCutterImageImport(null)
   }, [account.signOut, clearActiveProjectSession, confirmUnsavedChanges])
 
-  if (isAccessLoading) {
+  if (isAccessLoading && !hasOpenedCloudWorkspace) {
     return <AccessLoadingScreen />
   }
 
   if (!hasAppAccess) {
+    if (cloudMode && account.state?.status === 'signed-in') {
+      return (
+        <AccessRequestPage
+          state={account.state}
+          fullPage
+          onRefresh={async () => {
+            await account.refresh()
+            await license.refresh()
+          }}
+          onSignOut={() => void signOut()}
+        />
+      )
+    }
     return (
       <Suspense fallback={<AccessLoadingScreen />}>
         <AccountAccessPage
@@ -562,6 +607,8 @@ export function App(): JSX.Element {
           accountError={account.error}
           onCreateAccount={account.createAccount}
           onSignIn={account.signIn}
+          onSignInGoogle={account.signInGoogle}
+          onRefreshAccount={account.refresh}
           licenseState={license.state}
           licenseIsLoading={license.isLoading}
           licenseIsActivating={license.isActivating}
@@ -574,6 +621,7 @@ export function App(): JSX.Element {
 
   return (
     <AppLayout
+      onOpenJob={(jobId) => void openJob(jobId)}
       activeRoute={activeRoute}
       pageMeta={activeMeta}
       onNavigate={navigate}
@@ -583,6 +631,24 @@ export function App(): JSX.Element {
       onOpenProject={() => void openProject()}
       onOpenImageFile={() => void openImageFile()}
     >
+      {cloudMode && !hasCloudAccess && !isDeveloperAccess && (
+        <div
+          role="status"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4 text-sm"
+        >
+          <span>
+            {account.state?.cloud?.error ??
+              'Your access is unavailable or has ended. Your work remains open; new prints and exports require active access.'}
+          </span>
+          <button
+            type="button"
+            className="font-semibold underline"
+            onClick={() => void navigate('license')}
+          >
+            Check account access
+          </button>
+        </div>
+      )}
       {recoveryError && !recoveryEntry && (
         <div
           role="alert"
@@ -611,6 +677,7 @@ export function App(): JSX.Element {
       {activeRoute === 'dashboard' && (
         <Suspense fallback={<ToolLoadingFallback label="Loading Dashboard..." />}>
           <DashboardPage
+            onOpenJob={(jobId) => void openJob(jobId)}
             licenseState={license.state}
             isLicenseLoading={license.isLoading}
             onNavigate={navigate}
@@ -688,7 +755,17 @@ export function App(): JSX.Element {
           />
         </Suspense>
       )}
-      {activeRoute === 'license' && (
+      {activeRoute === 'license' && cloudMode && (
+        <AccessRequestPage
+          state={account.state}
+          onRefresh={async () => {
+            await account.refresh()
+            await license.refresh()
+          }}
+          onSignOut={() => void signOut()}
+        />
+      )}
+      {activeRoute === 'license' && !cloudMode && (
         <Suspense fallback={<ToolLoadingFallback label="Loading Access & Subscription..." />}>
           <LicensePage
             licenseState={license.state}
@@ -715,7 +792,7 @@ export function App(): JSX.Element {
       )}
       {activeRoute === 'jobs' && (
         <Suspense fallback={<ToolLoadingFallback label="Loading Shop Jobs..." />}>
-          <JobsPage />
+          <JobsPage openRequest={jobOpenRequest} />
         </Suspense>
       )}
       {activeRoute === 'exports' && (

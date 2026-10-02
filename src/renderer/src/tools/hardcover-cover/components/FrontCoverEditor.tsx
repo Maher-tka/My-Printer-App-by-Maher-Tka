@@ -69,7 +69,7 @@ export function EditorSection({
   children: React.ReactNode
 }): JSX.Element {
   return (
-    <section className="rounded-lg border bg-card p-4">
+    <section className="rounded-[18px] border border-border/70 bg-card p-4">
       <h3 className="font-semibold">{title}</h3>
       <div className="mt-3 flex flex-col gap-3">{children}</div>
     </section>
@@ -88,7 +88,7 @@ export function TextField({
     <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
       {label}
       <input
-        className="rounded-md border bg-background px-3 py-2 text-sm text-foreground"
+        className="h-9 rounded-[14px] border border-input bg-background px-3 text-[13px] text-foreground"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -108,7 +108,7 @@ export function TextAreaField({
     <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
       {label}
       <textarea
-        className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm text-foreground"
+        className="min-h-20 rounded-[14px] border border-input bg-background px-3 text-[13px] text-foreground"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />

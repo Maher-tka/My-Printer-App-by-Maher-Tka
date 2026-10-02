@@ -14,6 +14,7 @@ import {
   type PrintPdfResult
 } from '../shared/print-types.js'
 import { recordAppError } from './release-runtime.js'
+import { assertOnlineProductionAccess } from './online-account.js'
 
 const PRINT_TEMP_FOLDER = 'my-printer-app-print'
 const activeTempFiles = new Set<string>()
@@ -23,6 +24,8 @@ export function registerPrintHandlers(): void {
     try {
       const validationError = getPrintPdfRequestError(request)
       if (validationError) return failedPrint(validationError)
+
+      await assertOnlineProductionAccess()
 
       const pdfName = normalizePdfPrintName(request.suggestedName)
       const tempPath = await writeTempPdf(pdfName, toBuffer(request.bytes))
@@ -44,6 +47,7 @@ export function registerPrintHandlers(): void {
       if (validationError) return failedPrint(validationError)
 
       const bytes = await readFile(request.filePath)
+      await assertOnlineProductionAccess()
       if (!isPdfByteSource(bytes)) return failedPrint('Print requires a valid PDF file.')
 
       return await printPdfFile(request.filePath, {

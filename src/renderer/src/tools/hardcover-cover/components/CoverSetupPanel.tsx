@@ -222,7 +222,7 @@ export function CoverSetupPanel({
 
   return (
     <section
-      className="min-w-0 max-w-full overflow-hidden rounded-lg border bg-card p-4"
+      className="min-w-0 max-w-full overflow-hidden rounded-[18px] border border-border/70 bg-card p-4"
       data-hardcover-setup-panel={section}
     >
       <div className="flex min-w-0 items-center justify-between gap-3">
@@ -919,7 +919,7 @@ function PdfPageCarousel({
         <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground">
           Jump to page
           <input
-            className="rounded-md border bg-background px-3 py-2 text-sm text-foreground"
+            className="h-9 rounded-[14px] border border-input bg-background px-3 text-[13px] text-foreground"
             type="number"
             min={1}
             max={source.pageCount}
@@ -1117,7 +1117,7 @@ function SelectField({
     <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
       {label}
       <select
-        className="rounded-md border bg-background px-3 py-2 text-sm text-foreground"
+        className="h-9 rounded-[14px] border border-input bg-background px-3 text-[13px] text-foreground"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >

@@ -17,7 +17,7 @@ import { runBookletPreflight } from '@/preflight/bookletPreflight'
 import { PreflightDialog } from '@/preflight/preflightUI'
 import type { PreflightReport } from '@/preflight/preflightTypes'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { AppRoute } from '@/types/navigation'
 import type {
   ActiveProjectSession,
@@ -320,9 +320,15 @@ export function BookletMontagePage({
       return
     }
 
-    handledInitialPdfImportIdRef.current = initialPdfImport.id
-    onInitialPdfImportConsumed(initialPdfImport.id)
-    void montage.importPdfFiles(initialPdfImport.files)
+    // Wait for the mount to settle: StrictMode's cleanup aborts work started in
+    // its first effect pass. Consume the dashboard request only when it runs.
+    const timer = window.setTimeout(() => {
+      if (handledInitialPdfImportIdRef.current === initialPdfImport.id) return
+      handledInitialPdfImportIdRef.current = initialPdfImport.id
+      onInitialPdfImportConsumed(initialPdfImport.id)
+      void montage.importPdfFiles(initialPdfImport.files)
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [initialPdfImport, montage.importPdfFiles, onInitialPdfImportConsumed])
 
   useEffect(() => {
@@ -353,24 +359,23 @@ export function BookletMontagePage({
   }, [viewMode])
 
   return (
-    <div className="workspace-shell mx-auto flex max-w-[1680px] flex-col gap-5">
-      <Button
-        variant="ghost"
-        className="w-fit"
-        onClick={() => onNavigate('dashboard')}
-        type="button"
-      >
-        <ArrowLeft data-icon="inline-start" />
-        Back to Dashboard
-      </Button>
-
-      <Card className="overflow-hidden">
-        <CardHeader className="flex-row items-start justify-between gap-4 border-b bg-muted/25 px-5 py-4">
-          <div className="flex flex-col gap-1.5">
-            <CardTitle className="text-xl">Booklet Montage</CardTitle>
-            <CardDescription>
-              Arrange source pages, inspect imposed print sheets, and preview the final booklet.
-            </CardDescription>
+    <div className="workspace-shell booklet-workspace mx-auto flex w-full max-w-[1880px] flex-col gap-4">
+      <Card className="border-0 bg-transparent shadow-none">
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 border-b border-border/60 px-0 pb-3 pt-0">
+          <div className="flex items-center gap-2">
+            {' '}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0"
+              aria-label="Back to Dashboard"
+              title="Back to Dashboard"
+              onClick={() => onNavigate('dashboard')}
+              type="button"
+            >
+              <ArrowLeft data-icon="inline-start" />
+            </Button>
+            <CardTitle className="text-base">Booklet Montage</CardTitle>
           </div>
           <ProjectFileActions
             filePath={projectFilePath}
@@ -382,7 +387,7 @@ export function BookletMontagePage({
             onSaveAs={() => void saveProject(true)}
           />
         </CardHeader>
-        <CardContent className="flex flex-col gap-4 p-5">
+        <CardContent className="flex flex-col gap-4 p-0 pt-4">
           <BookletToolbar
             settings={montage.settings}
             viewMode={viewMode}
@@ -410,91 +415,170 @@ export function BookletMontagePage({
             onViewModeChange={setViewMode}
           />
 
-          <section className="min-w-0">
-            <div className="flex min-w-0 flex-col gap-4">
-              {montage.error && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
-                  {montage.error}
-                </div>
-              )}
-              {largeProjectWarning && performanceSettings.preset !== 'low-end' && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-                  <span>{largeProjectWarning}</span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPerformancePreset('low-end')}
-                  >
-                    Switch to Low-end PC mode
-                  </Button>
-                </div>
-              )}
-              {viewMode === 'sheet' && (
-                <>
-                  <ModePurposeBanner
-                    title="Sheet Mode"
-                    description={`Manage the source page sequence before booklet imposition. Current order drives Montage Mode, 3D Book Mode, and export in ${readingDirectionLabel}.`}
-                  />
-                  <PageManager
-                    pages={montage.pages}
-                    sources={montage.sources}
-                    scaleMode={montage.settings.scaleMode}
-                    selectedPageId={selectedPageId}
-                    blanksNeeded={montage.blanksNeeded}
-                    pageCountIsValid={montage.pageCountIsValid}
-                    recentColors={montage.sheetBoardState.recentColors}
-                    onSelectPage={setSelectedPageId}
-                    onAddBlankPage={montage.addBlankPage}
-                    onAutoAddBlankPages={montage.autoAddBlankPages}
-                    onReorderPages={montage.reorderPages}
-                    onResetOrder={montage.resetPageOrder}
-                    onDeletePage={montage.deletePage}
-                    onDeleteSource={montage.deleteSource}
-                    onBlankPageColorChange={montage.setBlankPageColor}
-                  />
-                </>
-              )}
+          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[240px_minmax(0,1fr)_240px] 2xl:grid-cols-[280px_minmax(0,1fr)_280px]">
+            <aside
+              aria-label="Document pages"
+              className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-180px)] lg:overflow-y-auto"
+            >
+              <PageManager
+                compact
+                pages={montage.pages}
+                sources={montage.sources}
+                scaleMode={montage.settings.scaleMode}
+                selectedPageId={selectedPageId}
+                blanksNeeded={montage.blanksNeeded}
+                pageCountIsValid={montage.pageCountIsValid}
+                recentColors={montage.sheetBoardState.recentColors}
+                onSelectPage={setSelectedPageId}
+                onAddBlankPage={montage.addBlankPage}
+                onAutoAddBlankPages={montage.autoAddBlankPages}
+                onReorderPages={montage.reorderPages}
+                onResetOrder={montage.resetPageOrder}
+                onDeletePage={montage.deletePage}
+                onDeleteSource={montage.deleteSource}
+                onBlankPageColorChange={montage.setBlankPageColor}
+              />
+            </aside>
+            <section className="min-w-0" aria-label="Booklet canvas">
+              <div className="flex min-w-0 flex-col gap-4">
+                {montage.error && (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
+                    {montage.error}
+                  </div>
+                )}
+                {largeProjectWarning && performanceSettings.preset !== 'low-end' && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                    <span>{largeProjectWarning}</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPerformancePreset('low-end')}
+                    >
+                      Switch to Low-end PC mode
+                    </Button>
+                  </div>
+                )}
+                {viewMode === 'sheet' && (
+                  <>
+                    <ModePurposeBanner
+                      title="Sheet Mode"
+                      description={`Manage the source page sequence before booklet imposition. Current order drives Montage Mode, 3D Book Mode, and export in ${readingDirectionLabel}.`}
+                    />
+                    <div className="flex min-h-[360px] items-center justify-center rounded-[18px] border border-border/60 bg-muted/30 p-6">
+                      {montage.pages.length ? (
+                        (() => {
+                          const page =
+                            montage.pages.find((item) => item.id === selectedPageId) ??
+                            montage.pages[0]
+                          return (
+                            <figure className="flex max-w-full flex-col items-center gap-4">
+                              {page.thumbnailUrl ? (
+                                <img
+                                  src={page.thumbnailUrl}
+                                  alt={page.displayName || page.label}
+                                  className="max-h-[60vh] max-w-full rounded-sm bg-white shadow-sm"
+                                />
+                              ) : (
+                                <div
+                                  className="grid h-80 w-56 place-items-center border bg-white text-sm text-muted-foreground"
+                                  style={{ backgroundColor: page.colorHex }}
+                                >
+                                  Blank page
+                                </div>
+                              )}
+                              <figcaption className="text-xs text-muted-foreground">
+                                {page.displayName || page.label} · {page.widthMm.toFixed(1)} ×{' '}
+                                {page.heightMm.toFixed(1)} mm
+                              </figcaption>
+                            </figure>
+                          )
+                        })()
+                      ) : (
+                        <div className="max-w-xs text-center">
+                          <h3 className="text-base font-semibold">No document loaded</h3>
+                          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                            Import a PDF or images with the toolbar above. Your pages appear on the
+                            left, ready to arrange.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
 
-              {viewMode === 'montage' && (
-                <>
-                  <ModePurposeBanner
-                    title="Montage Mode"
-                    description={`Inspect every imposed front/back print sheet generated from the current Sheet Mode order. ${readingDirectionLabel} is active.`}
-                  />
-                  <SheetPreview
-                    sheets={montage.sheets}
-                    sources={montage.sources}
-                    settings={montage.settings}
-                    pageCountIsValid={montage.pageCountIsValid}
-                    selectedItemId={selectedItemId}
-                    inspectedItemId={inspectedItemId}
-                    boardState={montage.sheetBoardState}
-                    onInspectItem={inspectSheetItem}
-                    onCloseInspect={closeSheetInspection}
-                    onMoveItem={montage.moveSheetBoardItem}
-                    onDeleteItem={montage.deleteSheetBoardItem}
-                    onDuplicateItem={montage.duplicateSheetBoardItem}
-                    onEmptySheetColorChange={montage.setEmptySheetColor}
-                  />
-                </>
-              )}
+                {viewMode === 'montage' && (
+                  <>
+                    <ModePurposeBanner
+                      title="Montage Mode"
+                      description={`Inspect every imposed front/back print sheet generated from the current Sheet Mode order. ${readingDirectionLabel} is active.`}
+                    />
+                    <SheetPreview
+                      sheets={montage.sheets}
+                      sources={montage.sources}
+                      settings={montage.settings}
+                      pageCountIsValid={montage.pageCountIsValid}
+                      selectedItemId={selectedItemId}
+                      inspectedItemId={inspectedItemId}
+                      boardState={montage.sheetBoardState}
+                      onInspectItem={inspectSheetItem}
+                      onCloseInspect={closeSheetInspection}
+                      onMoveItem={montage.moveSheetBoardItem}
+                      onDeleteItem={montage.deleteSheetBoardItem}
+                      onDuplicateItem={montage.duplicateSheetBoardItem}
+                      onEmptySheetColorChange={montage.setEmptySheetColor}
+                    />
+                  </>
+                )}
 
-              {viewMode === 'book' && (
-                <>
-                  <ModePurposeBanner
-                    title="3D Book Mode"
-                    description={`Flip through the current booklet visually in ${readingDirectionLabel}. Print accuracy still comes from Montage Mode and export.`}
-                  />
-                  <BookFlipPreview
-                    orderedPages={montage.pages}
-                    sources={montage.sources}
-                    settings={montage.settings}
-                  />
-                </>
-              )}
-            </div>
-          </section>
+                {viewMode === 'book' && (
+                  <>
+                    <ModePurposeBanner
+                      title="3D Book Mode"
+                      description={`Flip through the current booklet visually in ${readingDirectionLabel}. Print accuracy still comes from Montage Mode and export.`}
+                    />
+                    <BookFlipPreview
+                      orderedPages={montage.pages}
+                      sources={montage.sources}
+                      settings={montage.settings}
+                    />
+                  </>
+                )}
+              </div>
+            </section>
+            <aside
+              aria-label="Booklet properties"
+              className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-180px)] lg:overflow-y-auto"
+            >
+              <BookletToolbar
+                variant="properties"
+                settings={montage.settings}
+                viewMode={viewMode}
+                blanksNeeded={montage.blanksNeeded}
+                physicalSheetCount={montage.sheets.length}
+                hasBoardItems={montage.sheetBoardState.items.length > 0}
+                canExport={canExport}
+                isBusy={importIsBusy || exportIsBusy}
+                importProgress={montage.importProgress}
+                exportProgress={montage.exportProgress}
+                onImportPdf={(files) => void importPdfFiles(files)}
+                onImportImages={montage.importImages}
+                onCancelImport={montage.cancelImport}
+                onCancelExport={montage.cancelExport}
+                onClear={() => void startNewProject()}
+                onSettingsChange={montage.updateSettings}
+                onAutoAddBlankPages={montage.autoAddBlankPages}
+                onAddEmptySheet={montage.addEmptySheet}
+                onResetSheetLayout={montage.resetSheetLayout}
+                onExportPdf={() => requestBookletAction(() => void montage.exportPdf())}
+                onPrintPdf={() => requestBookletAction(() => void printBooklet(), 'print')}
+                onExportImages={(format) =>
+                  requestBookletAction(() => void montage.exportImages(format))
+                }
+                onViewModeChange={setViewMode}
+              />
+            </aside>
+          </div>
         </CardContent>
       </Card>
       {pendingExport && (
@@ -540,9 +624,9 @@ function ModePurposeBanner({
   description: string
 }): JSX.Element {
   return (
-    <div className="rounded-lg border bg-muted/35 px-4 py-3">
+    <div className="border-b border-border/60 px-1 pb-3">
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
     </div>
   )
 }

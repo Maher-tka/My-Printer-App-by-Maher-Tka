@@ -14,7 +14,7 @@ export function PreflightPanel({
   const info = report.issues.filter((issue) => issue.severity === 'info').length
 
   return (
-    <section className="rounded-lg border bg-card p-4">
+    <section className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="font-semibold">Preflight Check</h3>
@@ -39,16 +39,16 @@ export function PreflightPanel({
         <span className="rounded bg-destructive/10 p-2 text-destructive">
           <b className="block text-base">{errors}</b>errors
         </span>
-        <span className="rounded bg-amber-50 p-2 text-amber-900">
+        <span className="rounded bg-warning p-2 text-warning-foreground">
           <b className="block text-base">{warnings}</b>warnings
         </span>
-        <span className="rounded bg-sky-50 p-2 text-sky-900">
+        <span className="rounded bg-primary/5 p-2 text-primary">
           <b className="block text-base">{info}</b>notes
         </span>
       </div>
       <div className="mt-3 flex flex-col gap-2">
         {report.issues.length === 0 ? (
-          <div className="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 p-2 text-sm text-emerald-900">
+          <div className="flex items-center gap-2 rounded-md border border-success-foreground/15 bg-success p-2 text-sm text-success-foreground">
             <CheckCircle2 className="size-4" />
             No obvious production problems detected.
           </div>
@@ -71,10 +71,10 @@ function getIssueClassName(issue: CutterPreflightIssue): string {
   }
 
   if (issue.severity === 'info') {
-    return 'flex items-start gap-2 rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-950'
+    return 'flex items-start gap-2 rounded-md border border-primary/15 bg-primary/5 p-2 text-xs text-primary'
   }
 
-  return 'flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-950'
+  return 'flex items-start gap-2 rounded-md border border-warning-foreground/15 bg-warning p-2 text-xs text-warning-foreground'
 }
 
 function getIssueIcon(issue: CutterPreflightIssue): JSX.Element {

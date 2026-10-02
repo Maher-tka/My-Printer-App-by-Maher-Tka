@@ -385,9 +385,9 @@ export function CutterMontagePage({
   useEffect(() => () => onProjectSessionChange(null), [onProjectSessionChange])
 
   return (
-    <div className="workspace-shell mx-auto flex w-full min-w-0 max-w-none flex-col overflow-hidden lg:h-[calc(100dvh-8rem)]">
+    <div className="workspace-shell cutter-workspace mx-auto flex w-full min-w-0 max-w-none flex-col overflow-hidden lg:h-[calc(100dvh-8rem)]">
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <CardHeader className="shrink-0 flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/25 px-3 py-2">
+        <CardHeader className="shrink-0 flex-row flex-wrap items-center justify-between gap-3 border-b bg-card/80 px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
             <Button
               size="icon"
@@ -454,7 +454,7 @@ export function CutterMontagePage({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex min-h-0 flex-1 flex-col gap-2 p-2">
+        <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-3">
           <div className={stickerMakerOpen ? 'flex min-h-0 flex-1' : 'hidden'}>
             <AIStickerMaker
               onSend={(results, offsetMm) => {
@@ -468,9 +468,9 @@ export function CutterMontagePage({
             <Tabs
               value={step}
               onValueChange={(value) => changeStep(value as typeof step)}
-              className="flex min-h-0 flex-1 flex-col gap-2"
+              className="flex min-h-0 flex-1 flex-col gap-3"
             >
-              <TabsList className="grid h-11 w-full grid-cols-4" aria-label="Cutter workflow steps">
+              <TabsList className="grid h-10 w-full grid-cols-4" aria-label="Cutter workflow steps">
                 <TabsTrigger value="prepare">1. Prepare artwork</TabsTrigger>
                 <TabsTrigger value="cut">2. Cut lines</TabsTrigger>
                 <TabsTrigger value="quantity">3. Quantities</TabsTrigger>
@@ -500,7 +500,7 @@ export function CutterMontagePage({
               )}
 
               <div
-                className="flex shrink-0 flex-wrap items-center gap-1 border-b pb-2"
+                className="flex shrink-0 flex-wrap items-center gap-2 border-b pb-2"
                 aria-label="Workspace panels"
               >
                 {(step === 'layout' ? (['view', 'export', 'checks'] as const) : []).map((item) => (
@@ -531,7 +531,7 @@ export function CutterMontagePage({
               </div>
               <TabsContent
                 value={step}
-                className="relative mt-0 grid min-h-0 flex-1 grid-cols-[190px_minmax(0,1fr)] gap-2"
+                className="relative mt-0 grid min-h-0 flex-1 grid-cols-[200px_minmax(0,1fr)] gap-3"
               >
                 <StickerLibraryRail
                   pieces={cutter.pieces}
@@ -551,12 +551,12 @@ export function CutterMontagePage({
                     if (piece) cutter.updatePiece(resizeFinishedStickerWidth(piece, widthMm))
                   }}
                 />
-                <div className="relative flex min-h-0 min-w-0 flex-col">
+                <div className="relative flex min-h-0 min-w-0 gap-3">
                   {panel && (
                     <aside
                       id="cutter-workspace-panel"
                       aria-label={`${panel} panel`}
-                      className="absolute inset-y-0 left-0 z-30 flex w-[min(320px,100%)] flex-col overflow-hidden rounded-lg border bg-card shadow-xl"
+                      className="order-last flex w-[280px] shrink-0 flex-col overflow-hidden rounded-[var(--ui-radius-lg)] border bg-card/80 2xl:w-[304px]"
                     >
                       <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
                         <strong className="text-sm capitalize">{panel}</strong>
@@ -570,7 +570,7 @@ export function CutterMontagePage({
                           <X />
                         </Button>
                       </div>
-                      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
+                      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
                         {panel === 'designs' && (
                           <>
                             <PieceLibrary
@@ -674,6 +674,7 @@ export function CutterMontagePage({
                       />
                     ) : step !== 'layout' ? (
                       <PieceEditor
+                        inspectorHidden={panel === 'designs'}
                         stage={step === 'prepare' ? 'prepare' : 'cut'}
                         onBackgroundApply={cutter.applyArtworkEdit}
                         piece={cutter.activePiece}
@@ -685,14 +686,14 @@ export function CutterMontagePage({
                       />
                     ) : (
                       <div className="flex h-full min-h-0 min-w-0 flex-col">
-                        <div className="mb-2 shrink-0 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-card px-3 py-2">
+                        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2">
                           <div className="text-sm">
                             <strong>
                               {productionLayoutCount} unique sheet layout
                               {productionLayoutCount === 1 ? '' : 's'} for {productionSheetCount}{' '}
                               physical sheet{productionSheetCount === 1 ? '' : 's'}
                             </strong>
-                            <span className="ml-2 text-muted-foreground">
+                            <span className="mt-1 block text-xs text-muted-foreground">
                               {cutter.placedPieces.length} total copies · Select a sticker on the
                               left to set copies and finished width · Layout {previewSheetIndex + 1}{' '}
                               selected for Mimaki package review

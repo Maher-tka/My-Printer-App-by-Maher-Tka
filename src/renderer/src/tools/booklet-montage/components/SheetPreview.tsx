@@ -131,7 +131,7 @@ export const SheetPreview = memo(function SheetPreview({
   const boardSize = getBoardCanvasSize(visibleItems)
 
   return (
-    <div className="min-h-[620px] overflow-visible rounded-lg border bg-[linear-gradient(0deg,rgba(148,163,184,0.16)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.16)_1px,transparent_1px)] bg-[length:24px_24px] p-4">
+    <div className="min-h-[440px] max-h-[calc(100vh-280px)] overflow-auto rounded-[18px] border border-border/60 bg-[linear-gradient(0deg,rgba(148,163,184,0.16)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.16)_1px,transparent_1px)] bg-[length:24px_24px] p-4">
       <div
         className="relative"
         style={{

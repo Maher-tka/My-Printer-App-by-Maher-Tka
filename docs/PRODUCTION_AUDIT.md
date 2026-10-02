@@ -8,15 +8,15 @@ uncommitted work was left intact.
 
 ## Findings
 
-| Priority | Finding | Status |
-| --- | --- | --- |
-| Critical | Project save wrote directly over the only job file. A partial write could damage the project. | Fixed: temporary write, flush, replacement, and previous-version backup. |
-| High | Concurrent saves to the same path could finish out of order. | Fixed: writes to each path now run in request order. |
-| High | Autosave and recent-project metadata also used direct JSON writes. | Fixed: both now use atomic replacement. |
-| High | Project serialization embeds source bytes as base64 in JSON in the renderer, then copies the full project through Electron IPC and stringifies it in the main process. Large jobs may cause memory spikes and pauses. | Open; measure with large production fixtures before changing the file format. |
-| High | Custom cutter paths with a nonzero offset are exported through an enlarged transform rectangle. That scales the path and is not a true geometric offset. The sticker maker has a separate polygon-offset implementation. | Open; unify path geometry across SVG, PDF, EPS, preview, and preflight. |
-| Medium | Unit conversions are implemented separately in booklet, cutter, hardcover, and sequential modules. | Open; consolidate only after cross-module physical-size fixtures exist. |
-| Medium | Project envelope validation checks much of each payload only by broad shape. Malformed nested data may reach a tool before detection. | Open; add versioned schema validation and partial recovery. |
+| Priority | Finding                                                                                                                                                                                                                  | Status                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Critical | Project save wrote directly over the only job file. A partial write could damage the project.                                                                                                                            | Fixed: temporary write, flush, replacement, and previous-version backup.      |
+| High     | Concurrent saves to the same path could finish out of order.                                                                                                                                                             | Fixed: writes to each path now run in request order.                          |
+| High     | Autosave and recent-project metadata also used direct JSON writes.                                                                                                                                                       | Fixed: both now use atomic replacement.                                       |
+| High     | Project serialization embeds source bytes as base64 in JSON in the renderer, then copies the full project through Electron IPC and stringifies it in the main process. Large jobs may cause memory spikes and pauses.    | Open; measure with large production fixtures before changing the file format. |
+| High     | Custom cutter paths with a nonzero offset are exported through an enlarged transform rectangle. That scales the path and is not a true geometric offset. The sticker maker has a separate polygon-offset implementation. | Open; unify path geometry across SVG, PDF, EPS, preview, and preflight.       |
+| Medium   | Unit conversions are implemented separately in booklet, cutter, hardcover, and sequential modules.                                                                                                                       | Open; consolidate only after cross-module physical-size fixtures exist.       |
+| Medium   | Project envelope validation checks much of each payload only by broad shape. Malformed nested data may reach a tool before detection.                                                                                    | Open; add versioned schema validation and partial recovery.                   |
 
 ## Implementation order
 

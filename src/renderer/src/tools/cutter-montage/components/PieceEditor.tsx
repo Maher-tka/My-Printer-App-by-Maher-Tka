@@ -44,6 +44,7 @@ import { PieceEditorStatusBar } from './piece-editor/PieceEditorStatusBar'
 import { PieceEditorToolbar } from './piece-editor/PieceEditorToolbar'
 
 interface PieceEditorProps {
+  inspectorHidden?: boolean
   stage?: 'prepare' | 'cut'
   onBackgroundApply?: (pieceId: string, result: ArtworkEditResult) => void
   piece: PiecePreset | null
@@ -55,7 +56,7 @@ interface PieceEditorProps {
 export function PieceEditor(props: PieceEditorProps): JSX.Element {
   if (!props.piece) {
     return (
-      <section className="grid h-full min-h-64 place-items-center rounded-lg border bg-muted/30 p-8 text-center">
+      <section className="grid h-full min-h-64 place-items-center rounded-[var(--ui-radius-lg)] border border-dashed bg-muted/25 p-8 text-center">
         <div className="max-w-md">
           <h3 className="text-lg font-semibold">No piece selected</h3>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -75,6 +76,7 @@ function ActivePieceEditor({
   onSave,
   onDuplicate,
   stage = 'cut',
+  inspectorHidden = false,
   onBackgroundApply
 }: PieceEditorProps & { piece: PiecePreset }): JSX.Element {
   const [inspector, setInspector] = useState('mask')
@@ -134,11 +136,14 @@ function ActivePieceEditor({
     setTool: editorState.setTool
   })
   return (
-    <section className="grid h-full min-h-0 min-w-0 grid-cols-1 gap-2 overflow-hidden rounded-lg border bg-muted/30 p-2 outline-none lg:grid-cols-[minmax(0,1fr)_250px]">
+    <section
+      className={`grid h-full min-h-0 min-w-0 grid-cols-1 gap-3 overflow-hidden outline-none ${inspectorHidden ? '' : 'lg:grid-cols-[minmax(0,1fr)_260px]'}`}
+      aria-label="Artwork editing workspace"
+    >
       <div className="flex min-h-0 min-w-0 flex-col">
-        <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
+        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 px-1">
           <div>
-            <h3 className="font-semibold">
+            <h3 className="text-sm font-semibold">
               {stage === 'prepare' ? 'Prepare artwork' : 'Cut lines'}
             </h3>
             <p className="text-xs text-muted-foreground">
@@ -209,13 +214,16 @@ function ActivePieceEditor({
         </details>
       </div>
 
-      <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border bg-card">
+      <aside
+        className={`${inspectorHidden ? 'hidden' : 'flex'} min-h-0 min-w-0 flex-col overflow-hidden rounded-[var(--ui-radius-lg)] border bg-card/80`}
+        aria-label="Artwork properties"
+      >
         <Tabs
           value={inspector}
           onValueChange={setInspector}
           className="flex min-h-0 flex-1 flex-col"
         >
-          <TabsList className="m-1 grid shrink-0 grid-cols-4" aria-label="Piece inspector">
+          <TabsList className="m-2 grid shrink-0 grid-cols-4" aria-label="Piece inspector">
             <TabsTrigger value="layers" className="px-1 text-xs">
               Layers
             </TabsTrigger>
@@ -229,7 +237,7 @@ function ActivePieceEditor({
               Align
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="layers" className="mt-0 min-h-0 flex-1 overflow-y-auto p-1">
+          <TabsContent value="layers" className="mt-0 min-h-0 flex-1 overflow-y-auto p-2">
             <ObjectLayerPanel
               piece={piece}
               onMaskEditingChange={(enabled) => {
@@ -252,7 +260,7 @@ function ActivePieceEditor({
               onDeleteObject={(objectId) => deleteObjects([objectId])}
             />
           </TabsContent>
-          <TabsContent value="align" className="mt-0 min-h-0 flex-1 overflow-y-auto p-1">
+          <TabsContent value="align" className="mt-0 min-h-0 flex-1 overflow-y-auto p-2">
             <AlignmentToolbar
               piece={piece}
               onSelectIds={selection.selectIds}
@@ -265,7 +273,7 @@ function ActivePieceEditor({
               onMatchMaskToCutline={() => match(piece.maskObjectId, piece.cutlineObjectId)}
             />
           </TabsContent>
-          <TabsContent value="mask" className="mt-0 min-h-0 flex-1 overflow-y-auto p-1">
+          <TabsContent value="mask" className="mt-0 min-h-0 flex-1 overflow-y-auto p-2">
             {stage === 'prepare' ? (
               <div className="space-y-3">
                 <section className="rounded-lg border p-3">
@@ -365,7 +373,7 @@ function ActivePieceEditor({
               </div>
             )}
           </TabsContent>
-          <TabsContent value="properties" className="mt-0 min-h-0 flex-1 overflow-y-auto p-1">
+          <TabsContent value="properties" className="mt-0 min-h-0 flex-1 overflow-y-auto p-2">
             <PieceEditorPropertiesPanel
               hideQuantity
               piece={piece}

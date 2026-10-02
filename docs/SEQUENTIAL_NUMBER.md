@@ -44,7 +44,6 @@ Editable projects use `.myprinter-sequential.json` and participate in recent pro
 - Browser-exported 23-item duplex sample: six pages; ticket 0001 appears on page 1 and ticket 0002 on page 3, both repeated on the stub.
 - Production build and full regression suite pass. Physical printer testing remains user-dependent.
 
-
 ## Moving numbers and fixed text
 
 Drag a number or fixed label in the design editor. Hold Shift to constrain movement to one axis. Arrow keys nudge by 0.1 mm; Shift+arrow nudges by 1 mm. X/Y fields provide exact coordinates. Snapping to a 1 mm grid is optional and off by default; zoom goes up to 300%. Escape cancels a drag. Ctrl+Z undoes placement changes and Ctrl+Shift+Z redoes them while the design editor is focused.
@@ -52,7 +51,6 @@ Drag a number or fixed label in the design editor. Hold Shift to constrain movem
 Use **Add fixed text** for an independent label repeated unchanged on each ticket. It has its own position, font size, color and alignment and is saved with the project. The current PDF font supports the fixed-text input's documented printable English characters. Text before/after the sequence can also be entered using the fixed prefix and suffix fields. On backs, these labels follow the existing back-numbering switch.
 
 Enter **0000133** in Start number, or set Start to **133** and Digits to **7**, to produce 0000133, 0000134, etc. Padding is a minimum width; longer numbers are never truncated.
-
 
 ## Gutter cutting lines
 

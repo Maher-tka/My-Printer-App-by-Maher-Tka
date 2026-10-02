@@ -97,12 +97,12 @@ export function PreflightDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4"
+      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/20 p-4"
       role="dialog"
       aria-modal="true"
       aria-label={`${actionText} preflight`}
     >
-      <div className="w-full max-w-xl rounded-xl border bg-background p-5 shadow-2xl">
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-auto rounded-[var(--ui-radius-xl)] border border-[var(--ui-border)] bg-popover p-5 shadow-elevated">
         <PreflightSummary report={report} />
         <div className="mt-4 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onCancel}>

@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { App } from './app/App'
+import { initializeTheme } from '@/appearance/theme'
 import './styles.css'
 
 interface RendererErrorBoundaryProps {
@@ -107,6 +108,7 @@ window.addEventListener('unhandledrejection', (event) => {
   })
 })
 
+initializeTheme()
 const rootElement = document.getElementById('root')
 
 if (!rootElement) {

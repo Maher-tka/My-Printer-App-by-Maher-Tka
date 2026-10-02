@@ -8,11 +8,13 @@ storybook-static/
 .env
 .env.*
 !.env.development
+!.env.example
 .license-private/
 .playwright-cli/
 output/playwright/
 output/
 tmp/
+supabase/.temp/
 /*.yml
 node_modules/
 dist/

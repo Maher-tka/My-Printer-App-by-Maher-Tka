@@ -1,16 +1,7 @@
-import { AlertTriangle, CheckCircle2, FileText, FolderOpen, RefreshCw } from 'lucide-react'
+import { FileText, FolderOpen, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table'
 import type { PrinterAppProjectResult, RecentJob } from '@/types/projects'
 
 interface RecentJobsTableProps {
@@ -67,107 +58,98 @@ export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.El
   }
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between gap-4 border-b bg-muted/25 px-5 py-4">
-        <div className="flex items-center gap-3">
-          <div className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary">
-            <FileText className="size-4" aria-hidden="true" />
-          </div>
-          <CardTitle>Recent projects</CardTitle>
-        </div>
+    <Card className="h-full overflow-hidden">
+      <CardHeader className="flex-row items-center justify-between gap-3 border-b border-[var(--ui-divider)]">
+        <CardTitle>Recent projects</CardTitle>
         <Button
           variant="ghost"
-          size="sm"
+          size="icon-sm"
           type="button"
+          aria-label="Refresh recent projects"
+          title="Refresh recent projects"
           onClick={() => void loadRecentJobs()}
           disabled={isLoading}
         >
-          <RefreshCw className={isLoading ? 'animate-spin' : undefined} />
-          Refresh
+          <RefreshCw className={isLoading ? 'animate-spin' : undefined} aria-hidden="true" />
         </Button>
       </CardHeader>
-      <CardContent className="p-5">
+      <CardContent className="p-4">
         {error && (
-          <div
-            role="alert"
-            className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+          <p
+            role={window.printerApp ? 'alert' : 'status'}
+            className="mb-3 rounded-[var(--ui-radius-md)] bg-secondary/80 p-3 text-xs leading-5 text-muted-foreground"
           >
             {error}
-          </div>
+          </p>
         )}
-
         {isLoading ? (
-          <p role="status" className="py-8 text-center text-sm text-muted-foreground">
+          <p role="status" className="py-8 text-center text-xs text-muted-foreground">
             Loading recent projects…
           </p>
         ) : jobs.length === 0 ? (
-          <div className="grid min-h-48 place-items-center rounded-lg border border-dashed bg-muted/30 p-6 text-center">
-            <div>
-              <FolderOpen className="mx-auto mb-3 size-8 text-muted-foreground" />
-              <p className="font-medium">No saved projects yet</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Saved production projects, including numbered tickets, will appear here.
-              </p>
-            </div>
+          <div className="flex min-h-40 flex-col items-center justify-center gap-3 p-5 text-center">
+            <FileText className="size-6 text-muted-foreground" aria-hidden="true" />
+            <p className="text-sm font-medium">No saved projects yet</p>
+            <p className="max-w-64 text-xs leading-5 text-muted-foreground">
+              Save a project from any production tool. Its file and settings will be available here.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const result = await onOpenProject()
+                  if (!result.ok && !result.canceled)
+                    setError(result.error ?? 'Could not open that project.')
+                } catch {
+                  setError('Could not open that project.')
+                }
+              }}
+            >
+              <FolderOpen aria-hidden="true" />
+              Browse projects
+            </Button>
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Job Name</TableHead>
-                <TableHead>Tool</TableHead>
-                <TableHead>Last Saved</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-20" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {jobs.map((job) => {
-                const isMissing = job.status === 'Missing'
-                const StatusIcon = isMissing ? AlertTriangle : CheckCircle2
-
-                return (
-                  <TableRow key={job.filePath} title={job.summary}>
-                    <TableCell>
-                      <div className="max-w-64">
-                        <p className="truncate font-medium">{job.jobName}</p>
-                        <p className="truncate text-xs text-muted-foreground" title={job.filePath}>
-                          {job.filePath}
-                        </p>
-                        {job.price !== undefined && (
-                          <p className="mt-1 text-xs font-medium text-foreground">
-                            Price: {job.price.toFixed(2)}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{job.tool}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatProjectDate(job.updatedAt)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={isMissing ? 'warning' : 'success'} className="gap-1.5">
-                        <StatusIcon className="size-3.5" aria-hidden="true" />
-                        {job.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        type="button"
-                        onClick={() => void openRecentJob(job)}
-                        disabled={openingPath !== null}
-                      >
-                        <FolderOpen />
-                        {openingPath === job.filePath ? 'Opening' : 'Open'}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+          <div className="divide-y divide-[var(--ui-divider)]">
+            {jobs.slice(0, 6).map((job) => (
+              <div
+                key={job.filePath}
+                className="flex items-start gap-3 py-3 first:pt-1"
+                title={job.summary}
+              >
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-primary">
+                  <FileText className="size-4" aria-hidden="true" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium" title={job.jobName}>
+                    {job.jobName}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{job.tool}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {formatProjectDate(job.updatedAt)}
+                  </p>
+                  {job.status === 'Missing' && (
+                    <p className="mt-1 text-xs text-warning-foreground">
+                      File missing · choose its new location
+                    </p>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  type="button"
+                  aria-label={'Open ' + job.jobName}
+                  title={'Open ' + job.jobName}
+                  onClick={() => void openRecentJob(job)}
+                  disabled={openingPath !== null}
+                >
+                  <FolderOpen className="size-4" aria-hidden="true" />
+                </Button>
+              </div>
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -176,13 +158,8 @@ export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.El
 
 function formatProjectDate(value: string): string {
   const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Unknown'
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(date)
+  if (Number.isNaN(date.getTime())) return 'Unknown date'
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
+    date
+  )
 }

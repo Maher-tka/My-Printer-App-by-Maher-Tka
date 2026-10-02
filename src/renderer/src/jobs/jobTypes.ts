@@ -1,5 +1,10 @@
 export type PrinterJobTool = 'booklet' | 'cutter' | 'hardcover' | 'sequential'
 
+export interface JobOpenRequest {
+  jobId: string
+  requestId: number
+}
+
 export type PrinterJobStatus =
   | 'draft'
   | 'waiting-customer-approval'

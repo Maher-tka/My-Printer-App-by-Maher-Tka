@@ -18,7 +18,7 @@ export function CoverCanvas({
 }): JSX.Element {
   return (
     <section
-      className="min-h-[340px] min-w-0 max-w-full overflow-hidden rounded-lg border bg-muted/40 p-2 sm:p-4 xl:min-h-[520px]"
+      className="min-h-[360px] min-w-0 max-w-full rounded-[18px] border border-border/60 bg-muted/40 p-4 xl:min-h-[440px]"
       data-hardcover-cover-canvas
     >
       {state.sourcePdf ? (

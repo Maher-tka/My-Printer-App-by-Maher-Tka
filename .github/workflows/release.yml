@@ -12,6 +12,10 @@ jobs:
   release-windows:
     runs-on: windows-latest
     timeout-minutes: 45
+    env:
+      PRINTER_SUPABASE_URL: ${{ vars.PRINTER_SUPABASE_URL }}
+      PRINTER_SUPABASE_PUBLISHABLE_KEY: ${{ vars.PRINTER_SUPABASE_PUBLISHABLE_KEY }}
+      EP_PRE_RELEASE: 'true'
 
     steps:
       - name: Check out source
@@ -35,7 +39,14 @@ jobs:
             throw "Tag version $tagVersion does not match package.json version $packageVersion."
           }
 
-      - name: Build, test, and publish Windows installer
+      - name: Verify account service configuration
+        shell: pwsh
+        run: |
+          if (!$env:PRINTER_SUPABASE_URL -or !$env:PRINTER_SUPABASE_PUBLISHABLE_KEY) {
+            throw 'Set PRINTER_SUPABASE_URL and PRINTER_SUPABASE_PUBLISHABLE_KEY repository variables before publishing.'
+          }
+
+      - name: Build, test, and publish Windows workshop packages
         run: npm run release:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

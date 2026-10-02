@@ -57,10 +57,7 @@ export function ObjectLayerPanel({
     setEditingId(null)
   }
   return (
-    <section
-      className="flex min-h-0 flex-col rounded-lg border bg-card"
-      aria-label="Layers and objects"
-    >
+    <section className="flex min-h-0 flex-col" aria-label="Layers and objects">
       <div className="flex items-center justify-between border-b px-3 py-2">
         <h4 className="text-sm font-semibold">Layers</h4>
         <span className="text-[11px] text-muted-foreground">
@@ -92,7 +89,7 @@ export function ObjectLayerPanel({
           return (
             <div
               key={object.id}
-              className={`group flex items-center gap-0.5 border-b px-1 py-1 text-sm last:border-b-0 ${isSelected ? 'bg-primary/10' : 'hover:bg-muted/50'} ${dropId === object.id ? 'border-t-2 border-t-primary' : ''}`}
+              className={`group flex items-center gap-0.5 rounded-md px-1 py-2 text-sm ${isSelected ? 'bg-primary/10' : 'hover:bg-muted/50'} ${dropId === object.id ? 'border-t-2 border-t-primary' : ''}`}
               onDragOver={(event) => {
                 if (dragId && dragId !== object.id) {
                   event.preventDefault()
@@ -134,7 +131,7 @@ export function ObjectLayerPanel({
                 )}
               </LayerButton>
               <span
-                className={`ml-1 h-7 w-0.5 shrink-0 rounded ${object.role === 'cutline' ? 'bg-fuchsia-500' : object.role === 'artwork' ? 'bg-sky-500' : 'bg-violet-500'}`}
+                className={`ml-1 h-7 w-0.5 shrink-0 rounded ${object.role === 'cutline' ? 'bg-rose-400/70' : object.role === 'artwork' ? 'bg-primary/70' : 'bg-muted-foreground/40'}`}
               />
               {editingId === object.id ? (
                 <input
@@ -169,7 +166,7 @@ export function ObjectLayerPanel({
                   }
                 >
                   <span className="block truncate text-xs font-medium">{object.name}</span>
-                  <span className="block truncate text-[10px] text-muted-foreground">
+                  <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
                     {getRoleLabel(object)}
                     {protectedMask ? ' · Active mask' : object.groupId ? ' · Grouped' : ''}
                   </span>
@@ -251,8 +248,12 @@ export function ObjectLayerPanel({
           <Trash2 />
         </LayerButton>
       </div>
-      <p className="border-t px-3 py-2 text-[10px] text-muted-foreground">
+      <p className="border-t px-3 py-3 text-[11px] leading-relaxed text-muted-foreground">
         Shift-click to select more. Drag the grip to change stacking order.
+      </p>
+      <p className="border-t px-3 py-3 text-[11px] leading-relaxed text-muted-foreground">
+        Print artwork and cutlines stay separate. Registration marks are generated at the sheet
+        stage.
       </p>
     </section>
   )
@@ -274,7 +275,7 @@ function LayerButton({
       type="button"
       size="icon"
       variant="ghost"
-      className="size-7 shrink-0 [&_svg]:size-3.5"
+      className="size-8 shrink-0 [&_svg]:size-3.5"
       disabled={disabled}
       onClick={onClick}
       aria-label={label}
@@ -287,6 +288,6 @@ function LayerButton({
 function getRoleLabel(object: EditorObject): string {
   if (object.role === 'clipping-mask') return 'Clipping mask'
   if (object.role === 'cutline') return `Cutline · ${object.strokeName || 'CutContour'}`
-  if (object.role === 'artwork') return 'Artwork'
+  if (object.role === 'artwork') return 'Print artwork'
   return 'Helper shape'
 }

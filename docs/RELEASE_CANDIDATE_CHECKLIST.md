@@ -7,7 +7,7 @@ Record the date, Windows version, tester, app version, and result for every item
 - [ ] `npm run typecheck`
 - [ ] `npm run build`
 - [ ] `npm run test`
-- [ ] Generate a lifetime Shop test license with `npm run license:generate`.
+- [ ] Configure the Supabase project, verified owner account, and an approved Shop tester account using `FREE_ACCESS_SETUP.md`.
 - [ ] Run `npm run dev`; confirm main, preload, renderer, dashboard, settings, license, and App Health load.
 - [ ] Booklet: import, reorder, add blanks, preview, preflight, save, reopen, and export PDF/images.
 - [ ] Cutter: import artwork, create CutContour, place/arrange pieces, preflight, save, reopen, and export SVG/PDF/EPS.

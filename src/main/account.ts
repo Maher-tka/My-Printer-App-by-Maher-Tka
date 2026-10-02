@@ -2,6 +2,7 @@ import { app, ipcMain, safeStorage } from 'electron'
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { isOnlineAccessEnabled, registerOnlineAccountHandlers } from './online-account.js'
 import type {
   AccountMutationResult,
   AccountProfile,
@@ -35,6 +36,10 @@ interface PersistedAccountEnvelope {
 }
 
 export function registerAccountHandlers(): void {
+  if (isOnlineAccessEnabled()) {
+    registerOnlineAccountHandlers()
+    return
+  }
   ipcMain.handle('account:get-state', () => runAccountOperation(getAccountSnapshot))
   ipcMain.handle('account:create', (_event, request: CreateAccountRequest) =>
     runAccountOperation(() => createAccount(request))

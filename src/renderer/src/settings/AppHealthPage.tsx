@@ -120,7 +120,7 @@ export function AppHealthPage({
               data-icon="inline-start"
               className={isLoading ? 'animate-spin' : undefined}
             />
-            {isLoading ? 'Refreshing�' : 'Refresh'}
+            {isLoading ? 'Refreshing…' : 'Refresh'}
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">

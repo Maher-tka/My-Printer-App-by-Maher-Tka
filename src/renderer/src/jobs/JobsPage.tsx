@@ -1,6 +1,17 @@
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog'
 import { CustomerDatabase } from '@/customers/CustomerDatabase'
+import { findCustomerJobs } from '@/assistant/taskMatching'
 import { useCustomerStore } from '@/customers/useCustomerStore'
 import { calculateJobQuote } from './jobQuote'
 export { calculateJobQuote } from './jobQuote'
@@ -11,9 +22,9 @@ import { JobList } from './JobList'
 import { JobsWorkspaceHeader, type JobsView } from './JobsWorkspaceHeader'
 import { getDeadlineState, statusLabel } from './jobWorkflow'
 import { useJobStore } from './useJobStore'
-import type { JobQuote, PrinterJob, PrinterJobStatus } from './jobTypes'
+import type { JobOpenRequest, JobQuote, PrinterJob, PrinterJobStatus } from './jobTypes'
 
-export function JobsPage(): JSX.Element {
+export function JobsPage({ openRequest }: { openRequest?: JobOpenRequest | null }): JSX.Element {
   const { jobs, saveJob, deleteJob } = useJobStore()
   const { customers, saveCustomer } = useCustomerStore()
   const [query, setQuery] = useState('')
@@ -21,20 +32,52 @@ export function JobsPage(): JSX.Element {
   const [view, setView] = useState<JobsView>('board')
   const [calendarMonth, setCalendarMonth] = useState(new Date())
   const [draft, setDraft] = useState<PrinterJob>(() => createEmptyJob())
+  const draftBaseline = useRef(draft)
+  const handledOpenRequest = useRef<JobOpenRequest | null>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [pendingJob, setPendingJob] = useState<PrinterJob | null>(null)
   const deferredQuery = useDeferredValue(query)
   const isEditing = jobs.some((job) => job.id === draft.id)
 
+  const openJobDetails = useCallback((job: PrinterJob): void => {
+    const next = structuredClone(job)
+    draftBaseline.current = next
+    setDraft(next)
+    setView((current) => (current === 'customers' ? 'board' : current))
+    setMessage(`Editing ${job.jobTitle}.`)
+    window.requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      editorRef.current?.focus({ preventScroll: true })
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!openRequest || handledOpenRequest.current === openRequest) return
+    handledOpenRequest.current = openRequest
+    const job = jobs.find((item) => item.id === openRequest.jobId)
+    if (!job) {
+      setMessage('This job is no longer available. It may have been deleted.')
+      return
+    }
+    setView((current) => (current === 'customers' ? 'board' : current))
+    if (job.id === draft.id) return
+    if (JSON.stringify(draft) !== JSON.stringify(draftBaseline.current)) {
+      setPendingJob(job)
+    } else {
+      openJobDetails(job)
+    }
+  }, [openRequest, jobs, draft, openJobDetails])
+
+  const resetDraft = (): void => {
+    const next = createEmptyJob()
+    draftBaseline.current = next
+    setDraft(next)
+  }
+
   const filteredJobs = useMemo(() => {
-    const needle = deferredQuery.trim().toLowerCase()
-    return jobs.filter(
-      (job) =>
-        (status === 'all' || job.status === status) &&
-        (!needle ||
-          job.customerName.toLowerCase().includes(needle) ||
-          job.jobTitle.toLowerCase().includes(needle) ||
-          job.phoneNumber.toLowerCase().includes(needle))
-    )
+    const matching = deferredQuery.trim() ? findCustomerJobs(jobs, deferredQuery) : jobs
+    return matching.filter((job) => status === 'all' || job.status === status)
   }, [deferredQuery, jobs, status])
 
   const quote = calculateJobQuote(draft.quote)
@@ -86,30 +129,35 @@ export function JobsPage(): JSX.Element {
       phoneNumber: draft.phoneNumber.trim(),
       jobTitle: nextTitle
     })
-    setDraft(createEmptyJob())
+    resetDraft()
     setMessage(isEditing ? `Updated ${nextTitle}.` : `Saved ${nextTitle}.`)
   }
 
   const editJob = (job: PrinterJob): void => {
-    setDraft(structuredClone(job))
-    setMessage(`Editing ${job.jobTitle}.`)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    if (job.id === draft.id) return
+    if (JSON.stringify(draft) !== JSON.stringify(draftBaseline.current)) {
+      setPendingJob(job)
+    } else {
+      openJobDetails(job)
+    }
   }
 
   const changeStatus = (job: PrinterJob, nextStatus: PrinterJobStatus): void => {
     saveJob({ ...job, status: nextStatus })
     setDraft((current) => (current.id === job.id ? { ...current, status: nextStatus } : current))
+    if (draftBaseline.current.id === job.id)
+      draftBaseline.current = { ...draftBaseline.current, status: nextStatus }
     setMessage(`${job.jobTitle} moved to ${statusLabel(nextStatus)}.`)
   }
 
   const removeJob = (job: PrinterJob): void => {
     deleteJob(job.id)
-    if (draft.id === job.id) setDraft(createEmptyJob())
+    if (draft.id === job.id) resetDraft()
     setMessage(`Deleted ${job.jobTitle}.`)
   }
 
   const cancelEditing = (): void => {
-    setDraft(createEmptyJob())
+    resetDraft()
     setMessage('Editing canceled.')
   }
 
@@ -145,19 +193,53 @@ export function JobsPage(): JSX.Element {
   return (
     <div className="workspace-shell mx-auto flex max-w-[1600px] flex-col gap-5">
       {header}
+      <AlertDialog
+        open={Boolean(pendingJob)}
+        onOpenChange={(open) => {
+          if (!open) setPendingJob(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Keep your unsaved job details?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes. Opening “{pendingJob?.jobTitle}” will discard those changes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const job = jobs.find((item) => item.id === pendingJob?.id)
+                if (job) openJobDetails(job)
+                else setMessage('This job is no longer available. Your draft has been kept.')
+              }}
+            >
+              Discard and open job
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[460px_minmax(0,1fr)]">
-        <JobEditorPanel
-          draft={draft}
-          quote={quote}
-          customers={customers}
-          isEditing={isEditing}
-          message={message}
-          onDraftChange={setDraft}
-          onQuoteChange={updateQuote}
-          onSave={saveDraft}
-          onCancelEdit={cancelEditing}
-          onCopyQuote={() => void copyQuote(draft, quote, setMessage)}
-        />
+        <div
+          ref={editorRef}
+          tabIndex={-1}
+          aria-label="Job details"
+          className="min-w-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <JobEditorPanel
+            draft={draft}
+            quote={quote}
+            customers={customers}
+            isEditing={isEditing}
+            message={message}
+            onDraftChange={setDraft}
+            onQuoteChange={updateQuote}
+            onSave={saveDraft}
+            onCancelEdit={cancelEditing}
+            onCopyQuote={() => void copyQuote(draft, quote, setMessage)}
+          />
+        </div>
 
         <Card className="min-w-0 overflow-hidden">
           <CardHeader className="border-b bg-muted/25">

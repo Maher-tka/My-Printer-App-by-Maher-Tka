@@ -46,11 +46,11 @@ export function ExportCutterPanel({
   const registration = sheet.registrationMarks!
 
   return (
-    <section className="rounded-lg border bg-card p-4">
+    <section className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">Production Export</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h3 className="text-sm font-semibold">Production Export</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             Export artwork, hidden cut paths, and registration marks as three PDF layers.
           </p>
         </div>
@@ -67,7 +67,7 @@ export function ExportCutterPanel({
       <label className="mt-4 flex flex-col gap-1 text-xs font-medium text-muted-foreground">
         Output type
         <select
-          className="h-10 rounded-md border bg-background px-3 text-sm"
+          className="h-9 rounded-md border bg-background px-3 text-sm"
           value={settings.preset}
           onChange={(event) => onPresetChange(event.target.value as CutterExportPresetId)}
         >
@@ -84,7 +84,7 @@ export function ExportCutterPanel({
           Advanced export settings
         </summary>
         <div className="grid gap-3 border-t p-3">
-          <div className="grid gap-3 rounded-md border bg-muted/20 p-3">
+          <div className="grid gap-3 border-b pb-3">
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Settings2 className="size-4" />
               Export Checklist
@@ -146,7 +146,7 @@ export function ExportCutterPanel({
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 rounded-md border bg-background p-3">
+          <div className="mt-4 grid gap-3 border-t pt-3">
             <Toggle
               label="Automatic Mimaki Type 1 marks"
               checked={registration.enabled}
@@ -188,7 +188,7 @@ export function ExportCutterPanel({
             </p>
           </div>
 
-          <div className="mt-4 grid gap-3 rounded-md border bg-background p-3">
+          <div className="mt-4 grid gap-3 border-t pt-3">
             <Toggle
               label="Production label"
               checked={label.enabled}
@@ -245,7 +245,7 @@ export function ExportCutterPanel({
       </details>
 
       <div className="mt-4 grid grid-cols-1 gap-2">
-        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
+        <p className="rounded-md border border-success-foreground/15 bg-success px-3 py-2 text-xs text-success-foreground">
           Layered PDF: Artwork and registration marks are visible. CutContour is hidden and does not
           print. Turn it on to inspect the vector paths before cutting.
         </p>
@@ -257,7 +257,7 @@ export function ExportCutterPanel({
             cutter.
           </p>
           <Button
-            className="w-full"
+            className="h-auto min-h-9 w-full whitespace-normal py-2 text-center"
             type="button"
             disabled={!canExport || fineCutBusy}
             onClick={onPrepareFineCut}
@@ -269,7 +269,12 @@ export function ExportCutterPanel({
             activation. Standalone USB cutting is not yet implemented.
           </p>
         </div>
-        <Button type="button" onClick={onBatchExport} disabled={!canExport}>
+        <Button
+          type="button"
+          onClick={onBatchExport}
+          disabled={!canExport}
+          className="h-auto min-h-9 whitespace-normal py-2 text-center"
+        >
           <FolderDown data-icon="inline-start" />
           Export Mimaki Job Folder
         </Button>

@@ -6,10 +6,16 @@ import {
   Home,
   PenLine,
   Settings,
-  Sparkles,
+  PanelLeftOpen,
+  PanelLeftClose,
+  Printer,
+  HeartPulse,
+  ShieldCheck,
   SquareStack,
   type LucideIcon
 } from 'lucide-react'
+import { useState } from 'react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { AppRoute } from '@/types/navigation'
 
@@ -17,196 +23,131 @@ interface SidebarProps {
   activeRoute: AppRoute
   onNavigate: (route: AppRoute) => void
 }
-
 interface NavItem {
   route: AppRoute
   label: string
-  description: string
   icon: LucideIcon
 }
 
-const overviewItems: NavItem[] = [
-  { route: 'dashboard', label: 'Dashboard', description: 'Shop overview', icon: Home }
-]
-
 const productionItems: NavItem[] = [
-  {
-    route: 'sequential-number',
-    label: 'Sequential Number',
-    description: 'Number tickets & invoices',
-    icon: Hash
-  },
-  {
-    route: 'booklet-montage',
-    label: 'Booklet Montage',
-    description: 'Impose PDFs for print',
-    icon: BookOpen
-  },
-  {
-    route: 'hardcover-cover',
-    label: 'Hardcover Cover',
-    description: 'Build binding covers',
-    icon: SquareStack
-  },
-  {
-    route: 'cutter-montage',
-    label: 'Cutter Montage',
-    description: 'Prepare print & cut',
-    icon: PenLine
-  }
+  { route: 'dashboard', label: 'Dashboard', icon: Home },
+  { route: 'booklet-montage', label: 'Booklet Montage', icon: BookOpen },
+  { route: 'hardcover-cover', label: 'Hardcover Cover', icon: SquareStack },
+  { route: 'cutter-montage', label: 'Cutter Montage', icon: PenLine },
+  { route: 'sequential-number', label: 'Sequential Number', icon: Hash }
 ]
-
 const operationsItems: NavItem[] = [
-  { route: 'jobs', label: 'Shop Jobs', description: 'Track production', icon: BriefcaseBusiness },
-  { route: 'exports', label: 'Export Center', description: 'Recent output', icon: History }
+  { route: 'jobs', label: 'Shop Jobs', icon: BriefcaseBusiness },
+  { route: 'exports', label: 'Export Center', icon: History }
 ]
-
 const settingsRoutes = new Set<AppRoute>(['settings', 'license', 'app-health', 'quality-lab'])
 
 export function Sidebar({ activeRoute, onNavigate }: SidebarProps): JSX.Element {
-  return (
-    <aside className="relative z-20 flex w-[76px] shrink-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground shadow-sidebar xl:w-[252px]">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-primary/20 to-transparent" />
-
-      <div className="relative flex h-[76px] items-center justify-center gap-3 border-b border-sidebar-border/80 px-3 xl:justify-start xl:px-4">
-        <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-base font-black text-white shadow-lg shadow-blue-950/30 ring-1 ring-white/15">
-          M
-        </div>
-        <div className="hidden min-w-0 xl:block">
-          <p className="truncate text-[15px] font-bold leading-tight text-white">My Printer App</p>
-          <p className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-sidebar-muted">
-            <Sparkles className="size-3 text-blue-300" aria-hidden="true" />
-            Production workspace
-          </p>
-        </div>
-      </div>
-
-      <nav
-        aria-label="Main navigation"
-        className="relative flex flex-1 flex-col gap-5 overflow-y-auto px-2 py-4 xl:px-3"
-      >
-        <NavigationGroup
-          label="Overview"
-          items={overviewItems}
-          activeRoute={activeRoute}
-          onNavigate={onNavigate}
-        />
-        <NavigationGroup
-          label="Production"
-          items={productionItems}
-          activeRoute={activeRoute}
-          onNavigate={onNavigate}
-        />
-        <NavigationGroup
-          label="Operations"
-          items={operationsItems}
-          activeRoute={activeRoute}
-          onNavigate={onNavigate}
-        />
-      </nav>
-
-      <div className="relative border-t border-sidebar-border/80 p-2 xl:p-3">
-        <div className="mb-2 hidden items-center gap-2 rounded-lg border border-sidebar-border bg-white/5 px-3 py-2.5 xl:flex">
-          <span className="relative flex size-2">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-50" />
-            <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-white">Local workspace</p>
-            <p className="mt-0.5 text-[10px] text-sidebar-muted">Files stay on this PC</p>
-          </div>
-        </div>
-        <SidebarNavButton
-          item={{
-            route: 'settings',
-            label: 'Settings',
-            description: 'App preferences',
-            icon: Settings
-          }}
-          active={settingsRoutes.has(activeRoute)}
-          onNavigate={onNavigate}
-        />
-      </div>
-    </aside>
-  )
-}
-
-function NavigationGroup({
-  label,
-  items,
-  activeRoute,
-  onNavigate
-}: {
-  label: string
-  items: NavItem[]
-  activeRoute: AppRoute
-  onNavigate: (route: AppRoute) => void
-}): JSX.Element {
-  return (
-    <section>
-      <p className="mb-2 hidden px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-sidebar-muted/75 xl:block">
-        {label}
-      </p>
-      <div className="flex flex-col gap-1">
-        {items.map((item) => (
-          <SidebarNavButton
-            key={item.route}
-            item={item}
-            active={activeRoute === item.route}
-            onNavigate={onNavigate}
-          />
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function SidebarNavButton({
-  item,
-  active,
-  onNavigate
-}: {
-  item: NavItem
-  active: boolean
-  onNavigate: (route: AppRoute) => void
-}): JSX.Element {
-  const Icon = item.icon
-
-  return (
-    <button
-      type="button"
-      onClick={() => onNavigate(item.route)}
-      className={cn(
-        'group relative flex min-h-12 w-full items-center justify-center gap-3 rounded-xl px-0 text-left transition-colors xl:justify-start xl:px-3',
-        active
-          ? 'bg-white text-slate-950 shadow-lg shadow-slate-950/20'
-          : 'text-sidebar-foreground/78 hover:bg-white/8 hover:text-white'
-      )}
-      aria-label={item.label}
-      title={item.label}
-      aria-current={active ? 'page' : undefined}
-    >
-      {active ? (
-        <span className="absolute -left-2 h-7 w-1 rounded-r-full bg-blue-400 xl:-left-3" />
-      ) : null}
-      <Icon
-        className={cn(
-          'size-5 shrink-0 transition-colors',
-          active ? 'text-primary' : 'text-sidebar-muted group-hover:text-white'
+  const [expanded, setExpanded] = useState(false)
+  const renderItem = (item: NavItem, active = activeRoute === item.route): JSX.Element => {
+    const Icon = item.icon
+    return (
+      <Tooltip key={item.route}>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={() => onNavigate(item.route)}
+            aria-label={item.label}
+            aria-current={active ? 'page' : undefined}
+            className={cn(
+              'sidebar-navigation-button group flex min-h-11 items-center gap-3 rounded-full px-3 text-left text-[13px] transition-colors ui-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              expanded ? 'w-full' : 'size-11 justify-center',
+              active
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+            )}
+          >
+            <Icon className="size-5 shrink-0" aria-hidden="true" />
+            {expanded && <span className="truncate font-medium">{item.label}</span>}
+          </button>
+        </TooltipTrigger>
+        {!expanded && (
+          <TooltipContent side="right" sideOffset={12}>
+            {item.label}
+          </TooltipContent>
         )}
-        aria-hidden="true"
-      />
-      <span className="hidden min-w-0 flex-1 xl:block">
-        <span className="block truncate text-sm font-semibold">{item.label}</span>
-        <span
+      </Tooltip>
+    )
+  }
+  return (
+    <TooltipProvider delayDuration={250}>
+      <aside
+        aria-label="Workspace navigation"
+        className={cn(
+          'floating-navigation relative z-20 flex shrink-0 flex-col text-sidebar-foreground',
+          expanded
+            ? 'w-[var(--ui-sidebar-expanded)] px-3'
+            : 'w-[var(--ui-sidebar-width)] items-center px-2'
+        )}
+      >
+        <div
           className={cn(
-            'mt-0.5 block truncate text-[10px] font-medium',
-            active ? 'text-slate-500' : 'text-sidebar-muted/80'
+            'flex h-[var(--ui-header-height)] shrink-0 items-center gap-3',
+            expanded ? 'px-1' : 'justify-center'
           )}
         >
-          {item.description}
-        </span>
-      </span>
-    </button>
+          <div
+            className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground"
+            aria-hidden="true"
+          >
+            <Printer className="size-5" />
+          </div>
+          {expanded && (
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-semibold">My Printer App</p>
+              <p className="text-[11px] text-muted-foreground">by Maher Tka</p>
+            </div>
+          )}
+        </div>
+        <nav
+          aria-label="Main navigation"
+          className="floating-navigation-items flex min-h-0 w-full flex-1 flex-col items-center gap-5 overflow-y-auto py-5"
+        >
+          <div className={cn('flex flex-col gap-2', expanded && 'w-full')}>
+            {productionItems.map((item) => renderItem(item))}
+          </div>
+          <div className={cn('pt-4', expanded && 'w-full')}>
+            <div className="flex flex-col gap-2">
+              {operationsItems.map((item) => renderItem(item))}
+            </div>
+          </div>
+        </nav>
+        <div className={cn('flex shrink-0 flex-col items-center gap-2 pb-4', expanded && 'w-full')}>
+          {renderItem({ route: 'license', label: 'Account access', icon: ShieldCheck })}
+          {renderItem({ route: 'app-health', label: 'App Health', icon: HeartPulse })}
+          {renderItem(
+            { route: 'settings', label: 'Settings', icon: Settings },
+            settingsRoutes.has(activeRoute)
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
+                aria-expanded={expanded}
+                onClick={() => setExpanded((value) => !value)}
+                className={cn(
+                  'flex h-10 items-center gap-3 rounded-[var(--ui-radius-md)] px-3 text-muted-foreground hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  expanded ? 'w-full' : 'w-11 justify-center'
+                )}
+              >
+                {expanded ? (
+                  <PanelLeftClose className="size-5" aria-hidden="true" />
+                ) : (
+                  <PanelLeftOpen className="size-5" aria-hidden="true" />
+                )}
+                {expanded && <span className="text-xs">Collapse navigation</span>}
+              </button>
+            </TooltipTrigger>
+            {!expanded && <TooltipContent side="right">Expand navigation</TooltipContent>}
+          </Tooltip>
+        </div>
+      </aside>
+    </TooltipProvider>
   )
 }
