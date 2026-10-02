@@ -1,4 +1,13 @@
-import { Copy, LockKeyhole, Maximize2, RotateCw, Trash2, ZoomIn, ZoomOut } from 'lucide-react'
+import {
+  Copy,
+  LockKeyhole,
+  Maximize2,
+  Minimize2,
+  RotateCw,
+  Trash2,
+  ZoomIn,
+  ZoomOut
+} from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
@@ -15,6 +24,7 @@ import { CUTTER_PIECE_MAX_DIMENSION_CM, CUTTER_PIECE_MIN_DIMENSION_CM } from '..
 import { getRegistrationMarksSvgMarkup } from '../lib/registrationMarks'
 import { ArtboardResizeHandle } from './ArtboardResizeHandle'
 import { PlacedPieceItem } from './PlacedPieceItem'
+import { useCanvasFullscreen } from '../hooks/useCanvasFullscreen'
 
 interface MontageArtboardProps {
   settings: CutterSheetSettings
@@ -76,6 +86,7 @@ export function MontageArtboard({
   onAlignSelected
 }: MontageArtboardProps): JSX.Element {
   const { preset: performancePreset } = usePerformanceSettings()
+  const fullscreen = useCanvasFullscreen<HTMLElement>()
   const [manualScale, setManualScale] = useState<number | null>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 640, height: 480 })
@@ -120,7 +131,8 @@ export function MontageArtboard({
 
   return (
     <section
-      className={`flex h-full min-h-0 min-w-0 flex-col rounded-[var(--ui-radius-lg)] border bg-muted/30 p-2 ${
+      ref={fullscreen.containerRef}
+      className={`flex h-full min-h-0 min-w-0 flex-col rounded-[var(--ui-radius-lg)] border ${fullscreen.isExpanded ? 'bg-card p-3' : 'bg-muted/30 p-2'} ${
         active ? 'border-primary/20' : ''
       }`}
       data-production-sheet-index={sheetNumber === undefined ? undefined : sheetNumber - 1}
@@ -157,6 +169,22 @@ export function MontageArtboard({
           </div>
           {(!stackedView || active) && (
             <>
+              <Button
+                ref={fullscreen.buttonRef}
+                type="button"
+                size="sm"
+                variant="outline"
+                aria-pressed={fullscreen.isExpanded}
+                onClick={() => void fullscreen.toggleExpanded()}
+                title={
+                  fullscreen.isExpanded
+                    ? 'Restore workspace (Esc)'
+                    : 'Use the screen for the canvas'
+                }
+              >
+                {fullscreen.isExpanded ? <Minimize2 /> : <Maximize2 />}
+                {fullscreen.isExpanded ? 'Restore workspace' : 'Expand canvas'}
+              </Button>
               <div className="flex items-center gap-1 rounded-md border bg-card p-1">
                 <Button
                   type="button"
@@ -347,6 +375,11 @@ export function MontageArtboard({
         </div>
       </div>
 
+      {fullscreen.error && (
+        <p role="alert" className="mb-2 text-sm text-destructive">
+          {fullscreen.error}
+        </p>
+      )}
       <div
         ref={viewportRef}
         className="relative min-h-0 flex-1 overflow-auto rounded-lg border bg-muted/70 p-6"

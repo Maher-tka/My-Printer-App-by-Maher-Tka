@@ -7,3 +7,7 @@ The existing `.env.development` enables `VITE_DEV_UNLOCK_ALL=true` for the non-p
 # Subscriber update preference
 
 When the user says to push an update, they mean publish a new stable app release for all subscribers, not only push Git commits. Bump the version in `package.json` and `package-lock.json`, add release notes, run the release checks, and push the matching version tag to trigger `.github/workflows/release.yml`. Verify the workflow succeeds and the published release includes the installer and automatic-update metadata before reporting completion.
+
+# Workshop PC preference
+
+Keep all application source code and development work on the main PC. Use the connected workshop PC only to inspect, install/update, and verify released builds while preserving its projects and settings. Do not clone or develop the application source on the workshop PC.

@@ -7,7 +7,7 @@ import {
 import { CutlineInspector } from './CutlineInspector'
 import { reorderLayerObject, renameLayerObject, setMaskEditing } from '../lib/editorLayers'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Redo2, Save, Undo2 } from 'lucide-react'
+import { Maximize2, Minimize2, Redo2, Save, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { AlignmentCommand, EditorObject, PiecePreset } from '../types'
@@ -34,6 +34,7 @@ import { usePieceEditorSelection } from '../hooks/usePieceEditorSelection'
 import { usePieceEditorShortcuts } from '../hooks/usePieceEditorShortcuts'
 import { usePieceEditorState } from '../hooks/usePieceEditorState'
 import { usePieceEditorTransforms } from '../hooks/usePieceEditorTransforms'
+import { useCanvasFullscreen } from '../hooks/useCanvasFullscreen'
 import { AlignmentToolbar } from './AlignmentToolbar'
 import { ObjectLayerPanel } from './ObjectLayerPanel'
 import { PieceEditorCanvas } from './PieceEditorCanvas'
@@ -81,6 +82,7 @@ function ActivePieceEditor({
 }: PieceEditorProps & { piece: PiecePreset }): JSX.Element {
   const [inspector, setInspector] = useState('mask')
   const [preparationTool, setPreparationTool] = useState<'mask' | 'background'>('mask')
+  const fullscreen = useCanvasFullscreen<HTMLElement>()
   useEffect(() => setInspector('mask'), [stage])
   const editorState = usePieceEditorState()
   const history = usePieceEditorHistory(piece, onPieceChange)
@@ -137,11 +139,12 @@ function ActivePieceEditor({
   })
   return (
     <section
-      className={`grid h-full min-h-0 min-w-0 grid-cols-1 gap-3 overflow-hidden outline-none ${inspectorHidden ? '' : 'lg:grid-cols-[minmax(0,1fr)_260px]'}`}
+      ref={fullscreen.containerRef}
+      className={`h-full min-h-0 min-w-0 gap-3 overflow-hidden outline-none ${fullscreen.isExpanded ? 'flex flex-col bg-card p-3' : `grid grid-cols-1 ${inspectorHidden ? '' : 'lg:grid-cols-[minmax(0,1fr)_260px]'}`}`}
       aria-label="Artwork editing workspace"
     >
-      <div className="flex min-h-0 min-w-0 flex-col">
-        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 px-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2 px-1">
           <div>
             <h3 className="text-sm font-semibold">
               {stage === 'prepare' ? 'Prepare artwork' : 'Cut lines'}
@@ -151,6 +154,20 @@ function ActivePieceEditor({
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              ref={fullscreen.buttonRef}
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-pressed={fullscreen.isExpanded}
+              onClick={() => void fullscreen.toggleExpanded()}
+              title={
+                fullscreen.isExpanded ? 'Restore workspace (Esc)' : 'Use the screen for the canvas'
+              }
+            >
+              {fullscreen.isExpanded ? <Minimize2 /> : <Maximize2 />}
+              {fullscreen.isExpanded ? 'Restore workspace' : 'Expand canvas'}
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -175,6 +192,11 @@ function ActivePieceEditor({
             </Button>
           </div>
         </div>
+        {fullscreen.error && (
+          <p role="alert" className="mb-2 text-sm text-destructive">
+            {fullscreen.error}
+          </p>
+        )}
 
         <PieceEditorToolbar
           tool={editorState.tool}
@@ -215,7 +237,7 @@ function ActivePieceEditor({
       </div>
 
       <aside
-        className={`${inspectorHidden ? 'hidden' : 'flex'} min-h-0 min-w-0 flex-col overflow-hidden rounded-[var(--ui-radius-lg)] border bg-card/80`}
+        className={`${inspectorHidden || fullscreen.isExpanded ? 'hidden' : 'flex'} min-h-0 min-w-0 flex-col overflow-hidden rounded-[var(--ui-radius-lg)] border bg-card/80`}
         aria-label="Artwork properties"
       >
         <Tabs
