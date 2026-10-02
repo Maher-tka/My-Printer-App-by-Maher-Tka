@@ -120,7 +120,7 @@ export function MontageArtboard({
 
   return (
     <section
-      className={`flex h-full min-h-0 min-w-0 flex-col rounded-[var(--ui-radius-lg)] border bg-muted/30 p-3 ${
+      className={`flex h-full min-h-0 min-w-0 flex-col rounded-[var(--ui-radius-lg)] border bg-muted/30 p-2 ${
         active ? 'border-primary/20' : ''
       }`}
       data-production-sheet-index={sheetNumber === undefined ? undefined : sheetNumber - 1}

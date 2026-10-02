@@ -385,9 +385,10 @@ export function CutterMontagePage({
   useEffect(() => () => onProjectSessionChange(null), [onProjectSessionChange])
 
   return (
-    <div className="workspace-shell cutter-workspace mx-auto flex w-full min-w-0 max-w-none flex-col overflow-hidden lg:h-[calc(100dvh-8rem)]">
+    // Let the page scroll on short displays instead of squeezing the work canvas.
+    <div className="workspace-shell cutter-workspace mx-auto flex w-full min-w-0 max-w-none flex-col overflow-hidden lg:h-full lg:min-h-[680px]">
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <CardHeader className="shrink-0 flex-row flex-wrap items-center justify-between gap-3 border-b bg-card/80 px-4 py-3">
+        <CardHeader className="shrink-0 flex-row flex-wrap items-center justify-between gap-3 border-b bg-card/80 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <Button
               size="icon"
@@ -454,7 +455,7 @@ export function CutterMontagePage({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+        <CardContent className="flex min-h-0 flex-1 flex-col gap-2 p-2">
           <div className={stickerMakerOpen ? 'flex min-h-0 flex-1' : 'hidden'}>
             <AIStickerMaker
               onSend={(results, offsetMm) => {
@@ -468,16 +469,28 @@ export function CutterMontagePage({
             <Tabs
               value={step}
               onValueChange={(value) => changeStep(value as typeof step)}
-              className="flex min-h-0 flex-1 flex-col gap-3"
+              className="flex min-h-0 flex-1 flex-col gap-2"
             >
-              <TabsList className="grid h-10 w-full grid-cols-4" aria-label="Cutter workflow steps">
+              <TabsList
+                className="grid h-9 w-full shrink-0 grid-cols-4"
+                aria-label="Cutter workflow steps"
+              >
                 <TabsTrigger value="prepare">1. Prepare artwork</TabsTrigger>
                 <TabsTrigger value="cut">2. Cut lines</TabsTrigger>
                 <TabsTrigger value="quantity">3. Quantities</TabsTrigger>
                 <TabsTrigger value="layout">4. Layout & export</TabsTrigger>
               </TabsList>
-              {step === 'layout' && (
-                <>
+              {cutter.error && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
+                  {cutter.error}
+                </div>
+              )}
+
+              <div
+                className="flex shrink-0 flex-wrap items-center gap-2 border-b pb-1"
+                aria-label="Workspace panels"
+              >
+                {step === 'layout' && (
                   <CutterToolbar
                     hideModeSwitcher
                     mode={cutter.mode}
@@ -490,19 +503,7 @@ export function CutterMontagePage({
                     onUndoAutoArrange={cutter.undoAutoArrange}
                     onCreateTestProject={import.meta.env.DEV ? cutter.createTestMontage : undefined}
                   />
-                </>
-              )}
-
-              {cutter.error && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
-                  {cutter.error}
-                </div>
-              )}
-
-              <div
-                className="flex shrink-0 flex-wrap items-center gap-2 border-b pb-2"
-                aria-label="Workspace panels"
-              >
+                )}
                 {(step === 'layout' ? (['view', 'export', 'checks'] as const) : []).map((item) => (
                   <Button
                     key={item}
@@ -522,7 +523,7 @@ export function CutterMontagePage({
                   </Button>
                 ))}
                 <span
-                  className="ml-auto truncate text-xs text-muted-foreground"
+                  className="ml-auto min-w-0 max-w-full truncate text-xs text-muted-foreground"
                   role="status"
                   aria-live="polite"
                 >
@@ -686,7 +687,7 @@ export function CutterMontagePage({
                       />
                     ) : (
                       <div className="flex h-full min-h-0 min-w-0 flex-col">
-                        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2">
+                        <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 px-2 py-1">
                           <div className="text-sm">
                             <strong>
                               {productionLayoutCount} unique sheet layout

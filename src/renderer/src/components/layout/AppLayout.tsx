@@ -82,9 +82,13 @@ export function AppLayout({
             ref={mainRef}
             tabIndex={-1}
             aria-label={pageMeta.title}
-            className="app-canvas min-w-0 flex-1 overflow-auto px-4 py-4 lg:px-6 lg:py-5"
+            className={`app-canvas min-h-0 min-w-0 flex-1 overflow-auto ${activeRoute === 'cutter-montage' ? 'p-2 lg:p-3' : 'px-4 py-4 lg:px-6 lg:py-5'}`}
           >
-            <div className="relative z-[1]">{children}</div>
+            <div
+              className={`relative z-[1] ${activeRoute === 'cutter-montage' ? 'lg:h-full' : ''}`}
+            >
+              {children}
+            </div>
           </main>
         </div>
         <CommandCenter
