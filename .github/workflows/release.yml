@@ -15,7 +15,7 @@ jobs:
     env:
       PRINTER_SUPABASE_URL: ${{ vars.PRINTER_SUPABASE_URL }}
       PRINTER_SUPABASE_PUBLISHABLE_KEY: ${{ vars.PRINTER_SUPABASE_PUBLISHABLE_KEY }}
-      EP_PRE_RELEASE: 'true'
+      EP_PRE_RELEASE: ${{ contains(github.ref_name, '-') && 'true' || 'false' }}
 
     steps:
       - name: Check out source
@@ -34,7 +34,7 @@ jobs:
         shell: pwsh
         run: |
           $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $tagVersion = '${{ github.ref_name }}'.TrimStart('v')
+          $tagVersion = $env:GITHUB_REF_NAME.TrimStart('v')
           if ($packageVersion -ne $tagVersion) {
             throw "Tag version $tagVersion does not match package.json version $packageVersion."
           }
@@ -46,9 +46,58 @@ jobs:
             throw 'Set PRINTER_SUPABASE_URL and PRINTER_SUPABASE_PUBLISHABLE_KEY repository variables before publishing.'
           }
 
-      - name: Build, test, and publish Windows workshop packages
+      - name: Prepare release draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $notesPath = "docs/RELEASE_$packageVersion.md"
+          gh release view $env:GITHUB_REF_NAME --json isDraft 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            $arguments = @('release', 'create', $env:GITHUB_REF_NAME, '--verify-tag', '--draft', '--title', "v$packageVersion")
+            if (Test-Path -LiteralPath $notesPath) {
+              $arguments += @('--notes-file', $notesPath)
+            } else {
+              $arguments += '--generate-notes'
+            }
+            gh @arguments
+            if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the release draft.' }
+          }
+
+      - name: Build, test, and upload Windows packages
         run: npm run release:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Publish installer checksums
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $checksumPath = "release/SHA256SUMS-$packageVersion.txt"
+          $files = Get-ChildItem release -File | Where-Object {
+            $_.Extension -in '.exe', '.blockmap' -or ($_.Extension -eq '.yml' -and $_.Name -notlike 'builder-*')
+          }
+          $checksums = foreach ($file in $files) {
+            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($file.Name.Replace(' ', '-'))"
+          }
+          $checksums | Set-Content -LiteralPath $checksumPath
+          gh release upload $env:GITHUB_REF_NAME $checksumPath --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Could not upload release checksums.' }
+
+      - name: Publish the completed release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ($env:EP_PRE_RELEASE -eq 'true') {
+            gh release edit $env:GITHUB_REF_NAME --draft=false --prerelease --latest=false
+          } else {
+            gh release edit $env:GITHUB_REF_NAME --draft=false --prerelease=false --latest
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish the completed release.' }

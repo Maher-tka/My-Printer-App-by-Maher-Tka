@@ -4,7 +4,6 @@ import type { AppUpdateActionResult, AppUpdateSnapshot } from '../shared/update-
 import { hasUnsavedProject } from './project-persistence.js'
 import { recordAppError } from './release-runtime.js'
 
-const FIRST_CHECK_DELAY_MS = 15_000
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1_000
 const STATE_EVENT = 'updates:state-changed'
 
@@ -29,10 +28,8 @@ export function registerAppUpdaterHandlers(): void {
 
   configureUpdater()
 
-  const firstCheckTimer = setTimeout(() => {
-    void checkForUpdates()
-  }, FIRST_CHECK_DELAY_MS)
-  firstCheckTimer.unref()
+  // Start the network check without delaying the main window or requiring sign-in.
+  void checkForUpdates()
 
   const recurringCheckTimer = setInterval(() => {
     void checkForUpdates()
@@ -41,12 +38,14 @@ export function registerAppUpdaterHandlers(): void {
 }
 
 function createInitialState(): AppUpdateSnapshot {
-  if (!app.isPackaged) {
+  if (!app.isPackaged || process.env.PORTABLE_EXECUTABLE_FILE) {
     return {
       enabled: false,
       status: 'disabled',
       currentVersion: app.getVersion(),
-      message: 'Automatic updates are available in the installed app.'
+      message: process.env.PORTABLE_EXECUTABLE_FILE
+        ? 'Portable builds are updated manually. Install the Setup build for automatic updates.'
+        : 'Automatic updates are available in the installed app.'
     }
   }
 
@@ -54,7 +53,7 @@ function createInitialState(): AppUpdateSnapshot {
     enabled: true,
     status: 'idle',
     currentVersion: app.getVersion(),
-    message: 'Updates are checked automatically.'
+    message: 'Updates are checked automatically on launch.'
   }
 }
 
@@ -130,7 +129,7 @@ async function checkForUpdates(): Promise<AppUpdateActionResult> {
     return { ok: false, state: { ...state }, error: state.message }
   }
 
-  if (state.status === 'downloaded') {
+  if (['available', 'downloading', 'downloaded'].includes(state.status)) {
     return { ok: true, state: { ...state } }
   }
 

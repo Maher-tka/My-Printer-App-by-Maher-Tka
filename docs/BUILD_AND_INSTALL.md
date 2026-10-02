@@ -22,17 +22,17 @@ npm run dist:win
 
 Output is written to `release/`:
 
-- `My Printer App by Maher Tka Setup 0.2.0.exe` — NSIS installer.
-- `My Printer App by Maher Tka Portable 0.2.0.exe` — portable test build.
+- `My Printer App by Maher Tka Setup 0.2.1.exe` — NSIS installer.
+- `My Printer App by Maher Tka Portable 0.2.1.exe` — portable test build.
 - `win-unpacked/` — unpacked build created by `npm run dist:dir`.
 
 The release candidate uses Electron's placeholder application icon until a final `.ico` asset is approved.
 
-## Publish version 0.2.0
+## Publish version 0.2.1
 
-Version 0.2.0 is a **workshop prerelease** on GitHub Releases with Setup and Portable packages. The tag workflow in `.github/workflows/release.yml` verifies, builds, and publishes the installer together with the `latest.yml` and blockmap files required by automatic updates.
+Version 0.2.1 is delivered through the normal GitHub Releases update feed with Setup and Portable packages. Existing v0.2.0 Setup installations can discover this update. The tag workflow in `.github/workflows/release.yml` verifies, builds, and publishes the installer together with the `latest.yml` and blockmap files required by automatic updates.
 
-Before publishing, set the repository variables `PRINTER_SUPABASE_URL` and `PRINTER_SUPABASE_PUBLISHABLE_KEY`. Follow `FREE_ACCESS_SETUP.md` for database and account setup. The tag workflow publishes workshop prereleases; stable releases require removing `EP_PRE_RELEASE` and passing workshop acceptance.
+Before publishing, set the repository variables `PRINTER_SUPABASE_URL` and `PRINTER_SUPABASE_PUBLISHABLE_KEY`. Follow `FREE_ACCESS_SETUP.md` for database and account setup. The tag workflow publishes tags such as `v0.2.1` on the normal update feed. Tags with suffixes such as `v0.3.0-beta.1` publish prereleases, which normal installed builds skip.
 
 For signed releases, configure these GitHub repository secrets:
 
@@ -41,11 +41,11 @@ For signed releases, configure these GitHub repository secrets:
 
 Code signing is strongly recommended before distributing the installer to customers. It establishes the publisher identity and reduces Windows security warnings.
 
-To publish 0.2.0 after the release changes are committed on `main`:
+To publish 0.2.1 after the release changes are committed on `main`:
 
 ```powershell
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 The tag must exactly match the `version` in `package.json`. The workflow creates a GitHub Release containing the Setup EXE, `latest.yml`, and blockmap. Do not delete or rename those generated update files.
@@ -54,19 +54,19 @@ Give new customers the **Setup EXE** from the GitHub Release. The Portable EXE i
 
 ## Publish later updates
 
-For every release, first update both `package.json` and `package-lock.json`. For example, to prepare version 0.2.1 without creating a tag automatically:
+For every release, first update both `package.json` and `package-lock.json`. For example, to prepare version 0.2.2 without creating a tag automatically:
 
 ```powershell
-npm version 0.2.1 --no-git-tag-version
+npm version 0.2.2 --no-git-tag-version
 npm run release:check
 git add package.json package-lock.json
-git commit -m "Release 0.2.1"
+git commit -m "Release 0.2.2"
 git push origin main
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.2.2
+git push origin v0.2.2
 ```
 
-Installed Setup builds check shortly after startup and every six hours. A newer version downloads in the background, then the app shows a Windows notification and a **Restart to update** button in **Settings**. That button asks the user to save any open project first. If the user simply closes the app, the downloaded update installs during the normal quit, after the existing unsaved-project prompt is resolved.
+Installed Setup builds check immediately on every main-app launch and every six hours. Checking and downloading do not require account sign-in and do not block opening the workspace. A newer version downloads in the background, then the app shows a Windows notification and a **Restart to update** button in **Settings**. That button asks the user to save any open project first. If the user simply closes the app, the downloaded update installs during the normal quit, after the existing unsaved-project prompt is resolved.
 
 Only publish a newer semantic version; replacing files on an old GitHub Release will not reliably trigger an update.
 
@@ -95,7 +95,7 @@ Uninstalling intentionally leaves local jobs, autosaves, settings, and the licen
 npm run license:generate -- --plan shop --expiry lifetime --seat SHOP01
 ```
 
-This generator applies only to legacy local-test development mode; it does not unlock v0.2.0 packaged Supabase builds. The generator is seller-side and local. Do not distribute the repository or signing source with customer builds.
+This generator applies only to legacy local-test development mode; it does not unlock v0.2.1 packaged Supabase builds. The generator is seller-side and local. Do not distribute the repository or signing source with customer builds.
 
 ## Development mode
 
