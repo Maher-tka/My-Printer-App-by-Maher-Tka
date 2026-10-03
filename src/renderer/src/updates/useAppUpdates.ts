@@ -4,7 +4,7 @@ import type { AppUpdateActionResult, AppUpdateSnapshot } from '../../../shared/u
 const unavailableState: AppUpdateSnapshot = {
   enabled: false,
   status: 'disabled',
-  currentVersion: '0.2.4',
+  currentVersion: '0.2.5',
   message: 'Automatic updates are available in the installed app.'
 }
 

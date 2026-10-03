@@ -4,6 +4,9 @@ import { DEFAULT_CUTTER_SHEET } from './cutterLayout'
 import { createPiecePresetFromSource, createPlacedPieceFromPreset } from './piecePresets'
 import { runCutterPreflight } from './preflight'
 import { applyCutterExportPreset } from './exportPresets'
+import { synchronizePieceEditorModel } from './editorObjects'
+import { autoArrangePieces, getPieceCapacityForTargetLength } from './nesting'
+import { getProductionSheetProject } from './productionSheets'
 
 function run(): void {
   const source = createSource()
@@ -197,7 +200,89 @@ function run(): void {
     'print-only PDF still blocks artwork outside the sheet'
   )
 
+  const maskedSource = { ...source, naturalWidthPx: 1280, naturalHeightPx: 698 }
+  const maskedPiece = createMaskedWorkshopPiece(maskedSource)
+  const metreSheet = { ...DEFAULT_CUTTER_SHEET, heightCm: 50, lengthMode: 'fixed' as const }
+  const capacity = getPieceCapacityForTargetLength(maskedPiece, metreSheet, 50)
+  expect(capacity === 72, 'the workshop half-metre order fits its 72 masked stickers')
+  const orderedPiece = { ...maskedPiece, quantity: capacity }
+  const arrangement = autoArrangePieces([orderedPiece], metreSheet)
+  const markedProject = getProductionSheetProject(
+    {
+      ...createProject(maskedSource, orderedPiece, arrangement.placedPieces[0]),
+      sheet: metreSheet,
+      placedPieces: arrangement.placedPieces,
+      exportSettings: applyCutterExportPreset('pdf-print-only', metreSheet).exportSettings
+    },
+    0
+  )
+  expect(markedProject.sheet.widthCm === 92.5, 'the workshop production width is 92.5 cm')
+  expect(markedProject.sheet.heightCm === 50, 'the half-metre production length stays fixed')
+  expect(
+    !runCutterPreflight(markedProject).issues.some((issue) => issue.id === 'registration-overlap'),
+    'unprinted padded image frames do not overlap marks when the real sticker footprints are clear'
+  )
+  const movedIntoMark = {
+    ...markedProject.placedPieces[0],
+    xCm: markedProject.placedPieces[0].xCm - 1.5,
+    yCm: markedProject.placedPieces[0].yCm - 1.5,
+    productionBoundsCm: { xCm: 50, yCm: 30, widthCm: 1, heightCm: 1 }
+  }
+  expect(
+    runCutterPreflight({
+      ...markedProject,
+      placedPieces: [movedIntoMark, ...markedProject.placedPieces.slice(1)]
+    }).issues.some(
+      (issue) =>
+        issue.id === 'registration-overlap' && issue.placedPieceIds.includes(movedIntoMark.id)
+    ),
+    'a real mark collision is still detected from fresh geometry despite a stale cached footprint'
+  )
+
   console.log('Preflight production-bounds tests passed.')
+}
+
+function createMaskedWorkshopPiece(source: PieceSourceFile): PiecePreset {
+  const base = createCutlineFromArtworkBounds(createPiecePresetFromSource(source, []))
+  const artwork = { xCm: 0, yCm: 0, widthCm: 16, heightCm: 8.725, rotation: 0 }
+  const mask = {
+    xCm: 4.60702505,
+    yCm: 0.915122126,
+    widthCm: 6.751488095,
+    heightCm: 6.903113027,
+    rotation: 0
+  }
+  const maskId = 'workshop-circle-mask'
+  return synchronizePieceEditorModel({
+    ...base,
+    widthCm: 16,
+    heightCm: 8.725,
+    artwork: { ...base.artwork, transform: artwork },
+    mask: { enabled: true, shape: 'ellipse', transform: mask },
+    cutline: { ...base.cutline, shape: 'ellipse', transform: { ...mask, offsetMm: 1 } },
+    maskObjectId: maskId,
+    clippingMaskEnabled: true,
+    objects: [
+      ...base.objects.map((object) => ({
+        ...object,
+        ...(object.role === 'artwork'
+          ? { transform: artwork }
+          : { transform: mask, shapeType: 'ellipse' as const, offsetMm: 1 })
+      })),
+      {
+        id: maskId,
+        type: 'mask',
+        shapeType: 'ellipse',
+        role: 'clipping-mask',
+        name: 'Workshop circle mask',
+        visible: true,
+        locked: false,
+        exportEnabled: false,
+        transform: mask,
+        fillColor: 'transparent'
+      }
+    ]
+  })
 }
 
 function createPieceWithRotatedOffsetCutline(source: PieceSourceFile): PiecePreset {

@@ -110,7 +110,9 @@ export function getRegistrationMarkOverlapIds(project: CutterProject): string[] 
   if (marks.length === 0) return []
 
   return project.placedPieces
-    .filter((piece) => marks.some((mark) => rectanglesOverlap(mark.boundsCm, piece)))
+    .filter((piece) =>
+      marks.some((mark) => rectanglesOverlap(mark.boundsCm, piece.productionBoundsCm ?? piece))
+    )
     .map((piece) => piece.id)
 }
 

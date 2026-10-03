@@ -27,6 +27,7 @@ import { autoArrangePieces } from './nesting'
 import { detectOutOfBounds, detectOverlaps } from './nestingStrategies'
 import { runCutterPreflight } from './preflight'
 import { createProductionNotesText } from './productionNotes'
+import { getPlacedProductionBounds } from './cutlineGenerator'
 import { getRegistrationMarkOutOfBoundsCount, getRegistrationMarks } from './registrationMarks'
 import { createCutlineFromArtworkBounds, validateCutterCutlines } from './cutlineValidation'
 import { appendPenPoint, normalizePenPath } from './penPath'
@@ -656,13 +657,20 @@ async function run(): Promise<void> {
     'production SVG contains app-generated Mimaki marks'
   )
   expectMatch(registrationSvg, /<g id="ProductionInfo"/, 'production label in SVG')
+  const placedFootprint = getPlacedProductionBounds(placed, piece)
   const overlappingMarksPreflight = runCutterPreflight({
     ...registrationProject,
-    placedPieces: [{ ...placed, xCm: 0.7, yCm: 0.7 }]
+    placedPieces: [
+      {
+        ...placed,
+        xCm: placed.xCm + 0.7 - placedFootprint.xCm,
+        yCm: placed.yCm + 0.7 - placedFootprint.yCm
+      }
+    ]
   })
   expect(
     overlappingMarksPreflight.issues.some((issue) => issue.id === 'registration-overlap'),
-    'preflight prevents artwork from covering app-generated marks'
+    'preflight detects actual production footprints covering app-generated marks'
   )
   const mimakiPreset = applyCutterExportPreset('mimaki-cutcontour-svg', registrationProject.sheet)
   expectEqual(

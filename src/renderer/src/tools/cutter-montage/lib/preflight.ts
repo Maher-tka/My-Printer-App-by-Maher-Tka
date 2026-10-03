@@ -104,7 +104,10 @@ export function runCutterPreflight(project: CutterProject): CutterPreflightRepor
       return Math.min(dpiX, dpiY) < 120
     })
     .map((placed) => placed.id)
-  const registrationOverlapIds = getRegistrationMarkOverlapIds(project)
+  const registrationOverlapIds = getRegistrationMarkOverlapIds({
+    ...project,
+    placedPieces: placedPiecesWithValidProductionBounds
+  })
   const registrationOutOfBoundsCount = getRegistrationMarkOutOfBoundsCount(project)
 
   if (project.placedPieces.length === 0)
