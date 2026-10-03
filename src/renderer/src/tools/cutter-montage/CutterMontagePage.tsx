@@ -2,7 +2,7 @@ import { StickerLibraryRail } from './components/StickerLibraryRail'
 import { StickerQuantities } from './components/StickerQuantities'
 import { AIStickerMaker } from './components/AIStickerMaker'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, FileDown, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -522,6 +522,18 @@ export function CutterMontagePage({
                     }
                   </Button>
                 ))}
+                {step === 'layout' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!cutter.canExport}
+                    onClick={() => void cutter.handleExportPdf()}
+                  >
+                    <FileDown />
+                    Export PDF
+                  </Button>
+                )}
                 <span
                   className="ml-auto min-w-0 max-w-full truncate text-xs text-muted-foreground"
                   role="status"
@@ -543,10 +555,8 @@ export function CutterMontagePage({
                   onDelete={cutter.deletePiece}
                   onManage={() => setPanel('designs')}
                   showProductionControls={step === 'layout'}
-                  onQuantity={(id, quantity) => {
-                    const piece = cutter.pieces.find((item) => item.id === id)
-                    if (piece) cutter.updatePiece({ ...piece, quantity, orderMode: 'copies' })
-                  }}
+                  onQuantity={cutter.updatePieceQuantity}
+                  onTargetLength={cutter.updatePieceTargetLength}
                   onFinishedWidthChange={(id, widthMm) => {
                     const piece = cutter.pieces.find((item) => item.id === id)
                     if (piece) cutter.updatePiece(resizeFinishedStickerWidth(piece, widthMm))
@@ -664,13 +674,10 @@ export function CutterMontagePage({
                       <StickerQuantities
                         pieces={cutter.pieces}
                         onQuantity={cutter.updatePieceQuantity}
+                        onTargetLength={cutter.updatePieceTargetLength}
                         onEdit={(id) => {
                           editPieceAndFocus(id)
                           changeStep('cut')
-                        }}
-                        onContinue={() => {
-                          cutter.runAutoArrange()
-                          changeStep('layout')
                         }}
                       />
                     ) : step !== 'layout' ? (

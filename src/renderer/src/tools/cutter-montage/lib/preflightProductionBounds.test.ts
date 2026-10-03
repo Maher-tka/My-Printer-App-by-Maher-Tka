@@ -3,6 +3,7 @@ import { createCutlineFromArtworkBounds } from './cutlineValidation'
 import { DEFAULT_CUTTER_SHEET } from './cutterLayout'
 import { createPiecePresetFromSource, createPlacedPieceFromPreset } from './piecePresets'
 import { runCutterPreflight } from './preflight'
+import { applyCutterExportPreset } from './exportPresets'
 
 function run(): void {
   const source = createSource()
@@ -159,6 +160,41 @@ function run(): void {
         issue.placedPieceIds.includes(missingPresetPlaced.id)
     ),
     'a valid cached footprint for a missing preset is not misreported as invalid geometry'
+  )
+
+  const artworkOnlyPiece = createPiecePresetFromSource(source, [])
+  const artworkOnlyProject = createProject(
+    source,
+    artworkOnlyPiece,
+    createPlacedPieceFromPreset(artworkOnlyPiece, 1.5, 1.5)
+  )
+  const printProject = {
+    ...artworkOnlyProject,
+    exportSettings: applyCutterExportPreset('pdf-print-only', artworkOnlyProject.sheet)
+      .exportSettings
+  }
+  expect(
+    runCutterPreflight(printProject).canExport,
+    'print-only PDF accepts placed artwork without CutContour'
+  )
+  expect(
+    !runCutterPreflight(artworkOnlyProject).canExport,
+    'print-and-cut export still requires CutContour'
+  )
+  expect(
+    !runCutterPreflight({
+      ...artworkOnlyProject,
+      exportSettings: applyCutterExportPreset('svg-eps-cut-only', artworkOnlyProject.sheet)
+        .exportSettings
+    }).canExport,
+    'cut-only export still requires CutContour'
+  )
+  expect(
+    !runCutterPreflight({
+      ...printProject,
+      placedPieces: [{ ...printProject.placedPieces[0], xCm: 100 }]
+    }).canExport,
+    'print-only PDF still blocks artwork outside the sheet'
   )
 
   console.log('Preflight production-bounds tests passed.')

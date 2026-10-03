@@ -329,6 +329,10 @@ export function HardcoverCoverPage({
   }
 
   const requestHardcoverAction = (run: () => void, action: 'export' | 'print' = 'export'): void => {
+    if (hardcoverPreflight.canExport) {
+      run()
+      return
+    }
     setPendingExport({
       report: hardcoverPreflight,
       run,

@@ -1,4 +1,4 @@
-import { Download, FolderDown, Printer, Settings2 } from 'lucide-react'
+import { Download, FileDown, FolderDown, Printer, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CUTTER_EXPORT_PRESETS, type CutterExportPresetId } from '../lib/exportPresets'
 import { TARGET_CUTTER_LABEL } from '../lib/cutterDeviceProfile'
@@ -46,7 +46,7 @@ export function ExportCutterPanel({
   const registration = sheet.registrationMarks!
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-3" aria-label="Production export options">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">Production Export</h3>
@@ -78,6 +78,15 @@ export function ExportCutterPanel({
           ))}
         </select>
       </label>
+
+      <Button type="button" onClick={onExportPdf} disabled={!canExport} className="w-full">
+        <FileDown data-icon="inline-start" />
+        Export PDF
+      </Button>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Save the arranged layouts as one PDF at their actual sheet sizes. Uses the selected output
+        settings. Print at 100% / Actual size.
+      </p>
 
       <details className="mt-4 rounded-md border bg-muted/20">
         <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
@@ -291,9 +300,6 @@ export function ExportCutterPanel({
             <Button type="button" variant="outline" onClick={onExportSvg} disabled={!canExport}>
               <Download data-icon="inline-start" />
               Export SVG
-            </Button>
-            <Button type="button" variant="outline" onClick={onExportPdf} disabled={!canExport}>
-              Export Layered PDF
             </Button>
             <Button type="button" variant="outline" onClick={onExportEps} disabled={!canExport}>
               Export EPS CutContour Only

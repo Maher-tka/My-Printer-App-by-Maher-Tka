@@ -9,6 +9,7 @@ import {
   getRegistrationMarkOverlapIds
 } from './registrationMarks'
 import { getPieceSourceKind } from './sourcePreview'
+import { getCutterExportSemantics } from './exportPresets'
 
 const GEOMETRY_EPSILON_CM = 1e-9
 
@@ -32,6 +33,8 @@ export interface CutterPreflightReport {
 
 export function runCutterPreflight(project: CutterProject): CutterPreflightReport {
   const issues: CutterPreflightIssue[] = []
+  const requiresCutlines =
+    getCutterExportSemantics(project.exportSettings).contourRenderKind === 'production'
   const pieceMap = new Map(project.pieces.map((piece) => [piece.id, piece]))
   const productionGeometry = resolveProductionGeometry(project, pieceMap)
   const placedPiecesWithValidProductionBounds = project.placedPieces.flatMap((placed) => {
@@ -135,7 +138,7 @@ export function runCutterPreflight(project: CutterProject): CutterPreflightRepor
     )
   if (overlapIds.length)
     issues.push(issue('overlap', 'error', `${overlaps.length} overlap(s) detected.`, overlapIds))
-  if (missingCutlineIds.length)
+  if (requiresCutlines && missingCutlineIds.length)
     issues.push(
       issue(
         'missing-cutline',
@@ -144,7 +147,7 @@ export function runCutterPreflight(project: CutterProject): CutterPreflightRepor
         missingCutlineIds
       )
     )
-  if (hiddenCutlineIds.length)
+  if (requiresCutlines && hiddenCutlineIds.length)
     issues.push(
       issue(
         'hidden-cutline',
@@ -262,7 +265,7 @@ export function runCutterPreflight(project: CutterProject): CutterPreflightRepor
         []
       )
     )
-  for (const cutlineIssue of validateCutterCutlines(project)) {
+  for (const cutlineIssue of requiresCutlines ? validateCutterCutlines(project) : []) {
     issues.push({
       id: cutlineIssue.id,
       severity: cutlineIssue.severity,

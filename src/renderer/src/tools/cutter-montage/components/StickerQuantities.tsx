@@ -1,21 +1,23 @@
 import type { PiecePreset } from '../types'
+import { PieceOrderControls } from './PieceOrderControls'
 export function StickerQuantities({
   pieces,
   onQuantity,
-  onEdit,
-  onContinue
+  onTargetLength,
+  onEdit
 }: {
   pieces: PiecePreset[]
   onQuantity: (id: string, value: number) => void
+  onTargetLength: (id: string, lengthCm: number) => boolean
   onEdit: (id: string) => void
-  onContinue: () => void
 }): JSX.Element {
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--ui-radius-lg)] border bg-card/80">
       <div className="shrink-0 border-b p-4">
-        <h2 className="font-semibold">How many of each sticker?</h2>
+        <h2 className="font-semibold">Order by copies or metres</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Set a quantity for each design, then arrange your print sheets.
+          Choose Copies or By metre for each design. For example, 0.5 m fills a 50 cm vertical
+          section across the usable roll width, with cutter margins reserved.
         </p>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
@@ -24,7 +26,7 @@ export function StickerQuantities({
             <tr>
               <th className="p-3">Sticker</th>
               <th className="p-3">Cut line</th>
-              <th className="p-3">Copies</th>
+              <th className="p-3">Quantity / metres</th>
             </tr>
           </thead>
           <tbody>
@@ -52,24 +54,10 @@ export function StickerQuantities({
                   {piece.cutlineObjectId ? 'Ready' : 'Needs cut line'}
                 </td>
                 <td className="p-3">
-                  <input
-                    aria-label={`Copies of ${piece.displayName}`}
-                    type="number"
-                    min={1}
-                    max={100000}
-                    step={1}
-                    key={`${piece.id}-${piece.quantity}`}
-                    defaultValue={piece.quantity}
-                    className="h-9 w-24 rounded border bg-background px-2"
-                    onBlur={(e) => {
-                      const value = Number(e.target.value)
-                      if (Number.isSafeInteger(value) && value >= 1 && value <= 100000)
-                        onQuantity(piece.id, value)
-                      else e.target.value = String(piece.quantity)
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') e.currentTarget.blur()
-                    }}
+                  <PieceOrderControls
+                    piece={piece}
+                    onQuantity={onQuantity}
+                    onTargetLength={onTargetLength}
                   />
                 </td>
               </tr>
@@ -85,6 +73,9 @@ export function StickerQuantities({
       <div className="flex shrink-0 items-center justify-between border-t p-3">
         <span className="text-sm">
           {pieces.reduce((sum, piece) => sum + piece.quantity, 0)} total copies
+          {pieces.some((piece) => piece.orderMode === 'target-length') && (
+            <> · Includes copies calculated from metre orders</>
+          )}
         </span>
       </div>
     </section>

@@ -169,7 +169,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   updatePiece: (updatedPiece: PiecePreset) => void
   applyArtworkEdit: (pieceId: string, result: ArtworkEditResult) => void
   updatePieceQuantity: (pieceId: string, quantity: number) => void
-  updatePieceTargetLength: (pieceId: string, targetLengthCm: number) => void
+  updatePieceTargetLength: (pieceId: string, targetLengthCm: number) => boolean
   renamePiece: (pieceId: string, name: string) => void
   updatePieceRotationAllowed: (pieceId: string, rotationAllowed: boolean) => void
   duplicatePiece: (pieceId: string) => void
@@ -791,9 +791,9 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   )
 
   const updatePieceTargetLength = useCallback(
-    (pieceId: string, targetLengthCm: number): void => {
+    (pieceId: string, targetLengthCm: number): boolean => {
       const piece = piecesRef.current.find((candidate) => candidate.id === pieceId)
-      if (!piece) return
+      if (!piece) return false
 
       const normalizedTargetLengthCm = clampSheetHeight(targetLengthCm)
       const arrangementSheet = normalizeCutterSheetSettings({
@@ -809,7 +809,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
 
       if (quantity < 1) {
         setError(`${piece.displayName} is too large for this target sheet length.`)
-        return
+        return false
       }
 
       const nextPieces = piecesRef.current.map((candidate) =>
@@ -832,9 +832,10 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
       setSelectedPlacedIds(result.placedPieces[0] ? [result.placedPieces[0].id] : [])
       setMode('montage-sheet')
       setStatus(
-        `Filled a ${Number((normalizedTargetLengthCm / 100).toFixed(1))} m target sheet with ${quantity} ${piece.displayName} copies.`
+        `Filled a ${Number((normalizedTargetLengthCm / 100).toFixed(2))} m target sheet with ${quantity} ${piece.displayName} copies.`
       )
       setError(result.warning ?? null)
+      return true
     },
     [sheet]
   )

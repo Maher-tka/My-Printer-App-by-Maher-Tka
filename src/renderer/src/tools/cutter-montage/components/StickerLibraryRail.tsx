@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { Plus, Copy, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { PiecePreset } from '../types'
+import { PieceOrderControls } from './PieceOrderControls'
 export function StickerLibraryRail({
   pieces,
   activeId,
@@ -11,6 +12,7 @@ export function StickerLibraryRail({
   onDelete,
   onManage,
   onQuantity,
+  onTargetLength,
   onFinishedWidthChange,
   showProductionControls = false
 }: {
@@ -22,6 +24,7 @@ export function StickerLibraryRail({
   onDelete: (id: string) => void
   onManage: () => void
   onQuantity: (id: string, quantity: number) => void
+  onTargetLength: (id: string, lengthCm: number) => boolean
   onFinishedWidthChange: (id: string, widthMm: number) => void
   showProductionControls?: boolean
 }): JSX.Element {
@@ -76,36 +79,20 @@ export function StickerLibraryRail({
                   {index + 1}. {piece.displayName}
                 </span>
                 <span className="mt-1 block text-[11px] text-muted-foreground">
-                  {piece.cutlineObjectId ? 'Cut ready' : 'No cut line'} / {piece.quantity} copies
+                  {piece.cutlineObjectId ? 'Cut ready' : 'No cut line'} /{' '}
+                  {piece.orderMode === 'target-length'
+                    ? `${(piece.targetLengthCm ?? 100) / 100} m · ${piece.quantity} copies`
+                    : `${piece.quantity} copies`}
                 </span>
               </span>
             </button>
             {activeId === piece.id && showProductionControls && (
               <div className="space-y-2 border-t px-2 py-2 text-xs">
-                <label className="block font-medium">
-                  Copies
-                  <input
-                    aria-label={`Copies of ${piece.displayName}`}
-                    key={`${piece.id}-copies-${piece.quantity}`}
-                    type="number"
-                    min={1}
-                    max={100000}
-                    step={1}
-                    defaultValue={piece.quantity}
-                    className="mt-1 h-8 w-full rounded border bg-background px-2"
-                    onBlur={(event) => {
-                      const value = Number(event.currentTarget.value)
-                      if (Number.isSafeInteger(value) && value >= 1 && value <= 100000) {
-                        if (value !== piece.quantity) onQuantity(piece.id, value)
-                      } else {
-                        event.currentTarget.value = String(piece.quantity)
-                      }
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') event.currentTarget.blur()
-                    }}
-                  />
-                </label>
+                <PieceOrderControls
+                  piece={piece}
+                  onQuantity={onQuantity}
+                  onTargetLength={onTargetLength}
+                />
                 <label className="block font-medium">
                   Finished width (mm)
                   <input
