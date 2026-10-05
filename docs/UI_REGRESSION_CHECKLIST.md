@@ -238,3 +238,31 @@ Screenshots: `output/playwright/startup-update-*.png`.
 Local v0.2.7 release checks passed: repository formatting, TypeScript, all automated
 suites, Storybook and the production build. Windows packaging and publication are
 verified separately by the tag-triggered release workflow.
+
+## EPS native artboard preservation — 2026-10-05
+
+- EPS conversion now opens the temporary copy in Illustrator instead of placing
+  the entire EPS onto one new canvas. All native artboards are saved as individual
+  PDF pages; page count, ordering and each artboard's dimensions are validated.
+  Existing front/back assignment and page selection controls are reused unchanged.
+- Generated a native two-artboard Illustrator EPS with red front and blue back.
+  Its combined BoundingBox is 510×150 pt; actual conversion produces two separate
+  240×150 pt pages, retains vector artwork and exports a two-page card montage.
+  Actual single-artboard PostScript EPS conversion also passed at 240×150 pt.
+- Browser checks use the actual Illustrator-converted PDF through a simulated
+  desktop bridge. Artboard 1 is selected for front and artboard 2 for back;
+  pixel samples verify red front and blue back. Inspected 1366×768 English/light,
+  1920×1080 French/dark and 1366×768 Arabic/dark with low-end mode. No horizontal
+  overflow or new controls/styles/subtitles; existing panels scroll normally.
+- Card regression tests, TypeScript and changed-file formatting passed. Regression
+  coverage checks multi-artboard saving, differing page dimensions, missing/lost
+  artboards, invalid geometry, conversion failures and Illustrator state cleanup.
+  The user's original EPS was unavailable, so verification with that exact file
+  remains pending. Full installed-app IPC and physical printing remain pending.
+- Existing imported combined pages require Clear and reimporting the original EPS.
+
+Fixtures/screenshots: `output/playwright/card-two-artboards*` and
+`output/playwright/eps-artboards-*.png`.
+
+Local v0.2.8 release checks passed: repository formatting, TypeScript, all automated
+suites, Storybook and the production build.

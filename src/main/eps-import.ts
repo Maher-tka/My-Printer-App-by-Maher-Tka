@@ -14,35 +14,57 @@ import {
 const execute = promisify(execFile)
 let pending = false
 
-export function createEpsImportScript(
-  epsPath: string,
-  pdfPath: string,
-  dimensions: { widthPt: number; heightPt: number }
-): string {
+export function createEpsImportScript(epsPath: string, pdfPath: string): string {
   return `(function(){
  var previous=app.userInteractionLevel,doc=null;
  try {
   app.userInteractionLevel=UserInteractionLevel.DONTDISPLAYALERTS;
-  var size=${JSON.stringify(dimensions)};
-  doc=app.documents.add(DocumentColorSpace.CMYK,size.widthPt,size.heightPt);
-  var artwork=doc.placedItems.add();artwork.file=new File(${JSON.stringify(epsPath)});
-  if(Math.abs(artwork.width-size.widthPt)>1||Math.abs(artwork.height-size.heightPt)>1)
-   throw new Error('The EPS artwork size does not match its bounding box. Export it as PDF from the original design.');
-  artwork.position=[0,size.heightPt];artwork.embed();
+  doc=app.open(new File(${JSON.stringify(epsPath)}));
   if(!doc.pageItems.length)throw new Error('The EPS contains no artwork.');
+  if(!doc.artboards.length||doc.artboards.length>200)throw new Error('Import up to 200 EPS artboards at a time.');
+  var sizes=[];
+  for(var i=0;i<doc.artboards.length;i++){
+   var box=doc.artboards[i].artboardRect,w=box[2]-box[0],h=box[1]-box[3];
+   if(!isFinite(w)||!isFinite(h)||w<=0||h<=0)throw new Error('The EPS has invalid artboard dimensions.');
+   sizes.push('['+w+','+h+']');
+  }
   for(var i=0;i<doc.placedItems.length;i++){
    if(!doc.placedItems[i].file.exists)throw new Error('The EPS has a missing linked image. Embed images before importing.');
   }
   var options=new PDFSaveOptions();options.preserveEditability=false;
   options.compatibility=PDFCompatibility.ACROBAT7;options.generateThumbnails=false;
-  options.viewAfterSaving=false;options.artboardRange='1';
+  options.viewAfterSaving=false;options.artboardRange='';
   doc.saveAs(new File(${JSON.stringify(pdfPath)}),options);
-  return 'EPS converted';
+  return '['+sizes.join(',')+']';
  }finally{
   if(doc){try{doc.close(SaveOptions.DONOTSAVECHANGES);}finally{app.userInteractionLevel=previous;}}
   else app.userInteractionLevel=previous;
  }
 })()`
+}
+
+export function validateConvertedEpsPdf(pdf: PDFDocument, artboards: unknown): void {
+  if (
+    !Array.isArray(artboards) ||
+    !artboards.length ||
+    artboards.length > 200 ||
+    artboards.some(
+      (size) =>
+        !Array.isArray(size) ||
+        size.length !== 2 ||
+        size.some((value) => typeof value !== 'number' || !Number.isFinite(value) || value <= 0)
+    )
+  )
+    throw new Error('The EPS conversion returned invalid artboard dimensions.')
+  if (pdf.getPageCount() !== artboards.length)
+    throw new Error('EPS artboards were lost during conversion. Export all artboards as PDF.')
+  pdf.getPages().forEach((page, index) => {
+    const [width, height] = artboards[index] as number[]
+    if (Math.abs(page.getWidth() - width) > 0.1 || Math.abs(page.getHeight() - height) > 0.1)
+      throw new Error(
+        'EPS artboard dimensions changed during conversion. Export it as PDF from the original design.'
+      )
+  })
 }
 
 export async function importEpsArtwork(
@@ -65,11 +87,11 @@ export async function importEpsArtwork(
     const pdfPath = join(folder, 'artwork.pdf')
     const scriptPath = join(folder, 'convert.jsx')
     await writeFile(epsPath, request.bytes)
-    const dimensions = getEpsDimensions(request.bytes)
-    await writeFile(scriptPath, createEpsImportScript(epsPath, pdfPath, dimensions), 'utf8')
+    getEpsDimensions(request.bytes)
+    await writeFile(scriptPath, createEpsImportScript(epsPath, pdfPath), 'utf8')
     const literal = scriptPath.replace(/'/g, "''")
     const ps = `$ErrorActionPreference='Stop';$illustrator=New-Object -ComObject Illustrator.Application;$result=$illustrator.DoJavaScriptFile('${literal}');Write-Output $result`
-    await execute(
+    const { stdout } = await execute(
       'powershell.exe',
       [
         '-NoProfile',
@@ -84,15 +106,9 @@ export async function importEpsArtwork(
       throw new Error('The converted EPS is empty or larger than 30 MB.')
     const bytes = await readFile(pdfPath)
     const pdf = await PDFDocument.load(bytes)
-    if (!pdf.getPageCount()) throw new Error('The converted EPS has no printable page.')
-    const page = pdf.getPage(0)
-    if (
-      Math.abs(page.getWidth() - dimensions.widthPt) > 0.1 ||
-      Math.abs(page.getHeight() - dimensions.heightPt) > 0.1
-    )
-      throw new Error(
-        'EPS dimensions changed during conversion. Export it as PDF from the original design.'
-      )
+    // Each native artboard must become its own PDF page, in the original order.
+    // The EPS BoundingBox describes the combined artwork, not an individual side.
+    validateConvertedEpsPdf(pdf, JSON.parse(stdout.trim()))
     return { ok: true, bytesBase64: bytes.toString('base64') }
   } catch (error) {
     console.error('[eps-import]', error)
