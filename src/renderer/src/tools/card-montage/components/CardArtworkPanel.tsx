@@ -74,13 +74,18 @@ export function CardArtworkPanel({
           <span className="block truncate text-sm font-medium">
             {artwork?.name ?? `Import ${side} design`}
           </span>
-          <span className="text-xs text-muted-foreground">AI, PDF, PNG, JPG · up to 30 MB</span>
+          <span
+            className="text-xs text-muted-foreground"
+            title={t('EPS import requires Adobe Illustrator. Use installed or outlined fonts.')}
+          >
+            {t('AI, EPS, PDF, PNG, JPG · up to 30 MB')}
+          </span>
         </span>
         <input
           className="sr-only"
           type="file"
           aria-label={`Import ${side} design`}
-          accept="application/pdf,image/png,image/jpeg,.ai,.pdf,.png,.jpg,.jpeg"
+          accept="application/pdf,application/postscript,image/png,image/jpeg,.ai,.eps,.pdf,.png,.jpg,.jpeg"
           disabled={busy}
           onChange={(event) => {
             const file = event.target.files?.[0]
@@ -137,10 +142,16 @@ export function CardArtworkPanel({
           {artwork.pdfInfo && (
             <div className="space-y-1 rounded-xl border p-3 text-xs">
               <p className="font-semibold">
-                {artwork.pdfInfo.sourceFormat === 'illustrator'
-                  ? 'PDF-compatible Illustrator'
-                  : 'PDF'}{' '}
-                · original artwork preserved
+                {artwork.pdfInfo.sourceFormat === 'eps' ? (
+                  t('EPS converted to PDF')
+                ) : (
+                  <>
+                    {artwork.pdfInfo.sourceFormat === 'illustrator'
+                      ? 'PDF-compatible Illustrator'
+                      : 'PDF'}{' '}
+                    · original artwork preserved
+                  </>
+                )}
               </p>
               {missing.length ? (
                 <p role="alert" className="text-destructive">
@@ -150,8 +161,12 @@ export function CardArtworkPanel({
               ) : (
                 <p className="text-muted-foreground">
                   {fonts.length
-                    ? `${fonts.length} embedded font${fonts.length === 1 ? '' : 's'} preserved. No installed fonts or Illustrator required.`
-                    : 'Original vector artwork and embedded images preserved.'}
+                    ? artwork.pdfInfo.sourceFormat === 'eps'
+                      ? t('EPS fonts embedded in the converted PDF.')
+                      : `${fonts.length} embedded font${fonts.length === 1 ? '' : 's'} preserved. No installed fonts or Illustrator required.`
+                    : artwork.pdfInfo.sourceFormat === 'eps'
+                      ? t('Vector artwork and embedded images are stored in the project.')
+                      : 'Original vector artwork and embedded images preserved.'}
                 </p>
               )}
             </div>

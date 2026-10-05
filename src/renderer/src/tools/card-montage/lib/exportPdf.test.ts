@@ -350,6 +350,86 @@ const noMarks = await PDFDocument.load(
 )
 assert.ok(!content(noMarks).includes('0.1875 w'))
 assert.ok(!content(noMarks).includes('1 0 0 RG'))
+for (const orientation of ['portrait', 'landscape'] as const) {
+  const sheetWidth = orientation === 'portrait' ? 210 : 297
+  const sheetHeight = orientation === 'portrait' ? 297 : 210
+  const verticalPositions = orientation === 'portrait' ? [20, 105, 190] : [21, 106, 191, 276]
+  const horizontalPositions =
+    orientation === 'portrait' ? [11, 66, 121, 176, 231, 286] : [22.5, 77.5, 132.5, 187.5]
+  const doc = await PDFDocument.load(
+    await exportCardMontagePdf(
+      png,
+      {
+        ...settings,
+        mode: 'zero',
+        orientation,
+        cutMarks: true,
+        includeBack: true
+      },
+      png
+    )
+  )
+  assert.equal(doc.getPageCount(), 2)
+  assert.ok(!content(doc, 1).includes('0.1875 w'), 'The back sheet has no cutting lines.')
+  for (const pageIndex of [0]) {
+    const stream = content(doc, pageIndex)
+    const lines = [...stream.matchAll(/(-?[\d.]+) (-?[\d.]+) m\n(-?[\d.]+) (-?[\d.]+) l/g)].map(
+      (match) => match.slice(1).map(Number)
+    )
+    assert.equal(
+      lines.length,
+      verticalPositions.length + horizontalPositions.length,
+      'The front sheet has one guide per shared boundary and outer trim.'
+    )
+    for (const x of verticalPositions)
+      assert.ok(
+        lines.some(
+          ([x1, y1, x2, y2]) =>
+            Math.abs(x1 - pt(x)) < 1e-5 &&
+            Math.abs(x2 - pt(x)) < 1e-5 &&
+            Math.abs(y1 - pt(sheetHeight)) < 1e-5 &&
+            Math.abs(y2) < 1e-5
+        ),
+        'Vertical cutting guides extend from top to bottom of A4.'
+      )
+    for (const y of horizontalPositions)
+      assert.ok(
+        lines.some(
+          ([x1, y1, x2, y2]) =>
+            Math.abs(x1) < 1e-5 &&
+            Math.abs(x2 - pt(sheetWidth)) < 1e-5 &&
+            Math.abs(y1 - pt(sheetHeight - y)) < 1e-5 &&
+            Math.abs(y2 - y1) < 1e-5
+        ),
+        'Horizontal cutting guides extend from left to right of A4.'
+      )
+    assert.equal((stream.match(/0\.1875 w/g) ?? []).length, lines.length)
+  }
+  const disabled = await PDFDocument.load(
+    await exportCardMontagePdf(png, {
+      ...settings,
+      mode: 'zero',
+      orientation,
+      cutMarks: false
+    })
+  )
+  assert.ok(!content(disabled).includes('0.1875 w'))
+  const printDraft = {
+    artwork: png,
+    back: png,
+    settings: { ...settings, mode: 'zero' as const, orientation, cutMarks: true }
+  }
+  for (const side of ['front', 'back', 'both'] as const) {
+    const printed = await PDFDocument.load(await createCardPrintPdf(printDraft, side))
+    assert.equal(printed.getPageCount(), side === 'both' ? 2 : 1)
+    assert.equal(content(printed).includes('0.1875 w'), side !== 'back')
+    if (side === 'both') assert.ok(!content(printed, 1).includes('0.1875 w'))
+    for (const page of printed.getPages()) {
+      close(page.getWidth(), pt(sheetWidth))
+      close(page.getHeight(), pt(sheetHeight))
+    }
+  }
+}
 const blueOutlines = await PDFDocument.load(
   await exportCardMontagePdf(
     png,

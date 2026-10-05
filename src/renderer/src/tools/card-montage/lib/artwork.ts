@@ -7,6 +7,30 @@ import {
 import type { CardArtwork } from '../types'
 import { inspectCardPageFonts } from './pdfFonts'
 import { getPerformanceSettingsSnapshot } from '../../../performance/performanceSettings'
+import {
+  assertEpsImportRequest,
+  getEpsDimensions,
+  MAX_EPS_BYTES
+} from '../../../../../shared/eps-import'
+
+export async function prepareCardArtworkFile(file: File): Promise<File> {
+  if (!file.size) throw new Error('This file is empty. Choose an AI, EPS, PDF, PNG, or JPG design.')
+  if (file.size > MAX_EPS_BYTES) throw new Error('Choose a design smaller than 30 MB.')
+  if (!/\.eps$/i.test(file.name)) return file
+  const request = { fileName: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }
+  assertEpsImportRequest(request)
+  getEpsDimensions(request.bytes)
+  const converter = window.printerApp?.runtime?.importEpsArtwork
+  if (!converter)
+    throw new Error(
+      'EPS import requires the desktop app and Adobe Illustrator. Export the EPS as PDF to import it here.'
+    )
+  const result = await converter(request)
+  if (!result.ok) throw new Error(result.error)
+  return new File([new Uint8Array(artworkBytes(result.bytesBase64))], file.name, {
+    type: 'application/pdf'
+  })
+}
 
 export function assertCardFileSupported(bytes: Uint8Array, fileName: string): void {
   if (
@@ -25,7 +49,11 @@ async function addPdfInfo(artwork: CardArtwork): Promise<CardArtwork> {
   return {
     ...artwork,
     pdfInfo: {
-      sourceFormat: /\.ai$/i.test(artwork.name) ? 'illustrator' : 'pdf',
+      sourceFormat: /\.eps$/i.test(artwork.name)
+        ? 'eps'
+        : /\.ai$/i.test(artwork.name)
+          ? 'illustrator'
+          : 'pdf',
       pages: source
         .getPages()
         .map((page, index) => ({ pageNumber: index + 1, fonts: inspectCardPageFonts(page) }))
@@ -34,9 +62,10 @@ async function addPdfInfo(artwork: CardArtwork): Promise<CardArtwork> {
 }
 
 export async function loadCardArtwork(file: File): Promise<CardArtwork> {
-  const header = new Uint8Array(await file.slice(0, 1024).arrayBuffer())
-  assertCardFileSupported(header, file.name)
-  const artwork = await addPdfInfo(await loadNumberArtwork(file))
+  const prepared = await prepareCardArtworkFile(file)
+  const header = new Uint8Array(await prepared.slice(0, 1024).arrayBuffer())
+  assertCardFileSupported(header, prepared.name)
+  const artwork = await addPdfInfo(await loadNumberArtwork(prepared))
   return artwork.kind === 'pdf' && artwork.pageCount > 1
     ? loadCardPagePreviews(artwork, 1)
     : artwork

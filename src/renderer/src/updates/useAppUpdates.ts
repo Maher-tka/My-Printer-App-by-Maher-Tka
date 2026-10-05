@@ -10,11 +10,13 @@ const unavailableState: AppUpdateSnapshot = {
 
 export function useAppUpdates(): {
   state: AppUpdateSnapshot
+  isLoading: boolean
   isChecking: boolean
   checkForUpdates: () => Promise<AppUpdateActionResult>
   installUpdate: () => Promise<AppUpdateActionResult>
 } {
   const [state, setState] = useState<AppUpdateSnapshot>(unavailableState)
+  const [isLoading, setIsLoading] = useState(Boolean(window.printerApp?.updates))
 
   useEffect(() => {
     let active = true
@@ -22,13 +24,25 @@ export function useAppUpdates(): {
 
     if (!updates) return undefined
 
-    void updates.getState().then((nextState) => {
-      if (active) setState(nextState)
-    })
-
+    let receivedEvent = false
     const unsubscribe = updates.onStateChanged((nextState) => {
-      if (active) setState(nextState)
+      receivedEvent = true
+      if (active) {
+        setState(nextState)
+        setIsLoading(false)
+      }
     })
+    void updates
+      .getState()
+      .then((nextState) => {
+        if (active && !receivedEvent) setState(nextState)
+      })
+      .catch(() => {
+        // A failed bridge request must not prevent the workspace from opening.
+      })
+      .finally(() => {
+        if (active) setIsLoading(false)
+      })
 
     return () => {
       active = false
@@ -54,6 +68,7 @@ export function useAppUpdates(): {
 
   return {
     state,
+    isLoading,
     isChecking: state.status === 'checking',
     checkForUpdates,
     installUpdate

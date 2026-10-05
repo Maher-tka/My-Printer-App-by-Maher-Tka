@@ -5,11 +5,13 @@ export type AppUpdateStatus =
   | 'available'
   | 'downloading'
   | 'downloaded'
+  | 'installing'
   | 'up-to-date'
   | 'error'
 
 export interface AppUpdateSnapshot {
   enabled: boolean
+  startupPending?: boolean
   status: AppUpdateStatus
   currentVersion: string
   availableVersion?: string

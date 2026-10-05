@@ -21,6 +21,7 @@ export function PieceEditorShortcuts({ tool }: { tool: EditorTool }): JSX.Elemen
           Esc cancel · Ctrl/Cmd+C/V copy/paste · Ctrl/Cmd+D duplicate · Ctrl/Cmd+G group ·
           Ctrl/Cmd+Z undo · Ctrl/Cmd+Shift+Z redo
         </p>
+        <p className="mt-1">{t('Ctrl + scroll to zoom')}</p>
       </details>
     </div>
   )

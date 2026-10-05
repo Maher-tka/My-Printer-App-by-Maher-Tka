@@ -156,6 +156,9 @@ declare global {
         files: PrinterAppWriteFileRequest[]
       ) => Promise<PrinterAppWriteFilesResult>
       runtime: {
+        importEpsArtwork: (
+          request: import('../../shared/eps-import').EpsImportRequest
+        ) => Promise<import('../../shared/eps-import').EpsImportResult>
         exportIllustratorPdfBatch: (
           request: import('../../shared/illustrator-pdf-export').IllustratorPdfBatchRequest
         ) => Promise<import('../../shared/illustrator-pdf-export').IllustratorPdfBatchResult>

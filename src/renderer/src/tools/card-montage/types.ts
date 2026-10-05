@@ -9,7 +9,7 @@ export interface CardPdfFont {
 export interface CardArtwork extends NumberArtwork {
   pagePreviews?: PdfPageThumbnail[]
   pdfInfo?: {
-    sourceFormat: 'pdf' | 'illustrator'
+    sourceFormat: 'pdf' | 'illustrator' | 'eps'
     pages: { pageNumber: number; fonts: CardPdfFont[] }[]
   }
 }

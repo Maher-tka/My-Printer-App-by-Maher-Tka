@@ -141,7 +141,53 @@ for (const layout of [auto, zero, spaced, landscape, edgeFit]) {
   }
 }
 assert.deepEqual(getCardLayout({ ...DEFAULT_CARD_SETTINGS, cutMarks: false }).marks, [])
-assert.equal(zero.marks.length, (zero.columns + 1) * (zero.rows + 1) * 2)
+assert.equal(zero.marks.length, zero.columns + zero.rows + 2)
+for (const orientation of ['portrait', 'landscape'] as const) {
+  for (const [widthMm, heightMm] of [
+    [85, 55],
+    [83.3, 52.7],
+    [200, 150]
+  ]) {
+    const layout = getCardLayout({
+      ...DEFAULT_CARD_SETTINGS,
+      mode: 'zero',
+      orientation,
+      widthMm,
+      heightMm
+    })
+    assert.deepEqual(layout.errors, [])
+    const vertical = layout.marks.filter((line) => line.x1 === line.x2)
+    const horizontal = layout.marks.filter((line) => line.y1 === line.y2)
+    assert.equal(vertical.length, layout.columns + 1)
+    assert.equal(horizontal.length, layout.rows + 1)
+    assert.equal(new Set(vertical.map((line) => line.x1)).size, vertical.length)
+    assert.equal(new Set(horizontal.map((line) => line.y1)).size, horizontal.length)
+    for (const line of vertical) {
+      assert.equal(line.y1, 0)
+      assert.equal(line.y2, layout.sheetHeightMm)
+    }
+    for (const line of horizontal) {
+      assert.equal(line.x1, 0)
+      assert.equal(line.x2, layout.sheetWidthMm)
+    }
+    for (const slot of layout.slots) {
+      for (const x of [slot.xMm, slot.xMm + layout.widthMm])
+        assert.ok(
+          vertical.some((line) => Math.abs(line.x1 - x) < 1e-6),
+          'Every card edge has a full-height cutting line.'
+        )
+      for (const y of [slot.yMm, slot.yMm + layout.heightMm])
+        assert.ok(
+          horizontal.some((line) => Math.abs(line.y1 - y) < 1e-6),
+          'Every card edge has a full-width cutting line.'
+        )
+    }
+    assert.deepEqual(
+      getCardLayout({ ...DEFAULT_CARD_SETTINGS, mode: 'zero', orientation, cutMarks: false }).marks,
+      []
+    )
+  }
+}
 assert.equal(spaced.marks.length, spaced.capacity * 8)
 for (const layout of [zero, spaced]) {
   for (const slot of layout.slots)
@@ -260,4 +306,16 @@ assert.equal(
   shareCardPagePreviews(differentFile, 'front', cachedDraft.artwork).back,
   differentFile.back
 )
+const frontCutLayout = getCardLayout({ ...DEFAULT_CARD_SETTINGS, mode: 'zero' }, 'front')
+const backCutLayout = getCardLayout({ ...DEFAULT_CARD_SETTINGS, mode: 'zero' }, 'back')
+assert.ok(frontCutLayout.marks.length > 0)
+assert.equal(backCutLayout.marks.length, 0)
+assert.deepEqual(backCutLayout.slots, frontCutLayout.slots)
+for (const mode of ['spaced', 'auto'] as const) {
+  const settings = { ...DEFAULT_CARD_SETTINGS, mode, cardOutline: true }
+  const front = getCardLayout(settings, 'front')
+  const back = getCardLayout(settings, 'back')
+  assert.deepEqual(back.marks, front.marks)
+  assert.deepEqual(back.outlines, front.outlines)
+}
 console.log('Card montage layout tests passed.')

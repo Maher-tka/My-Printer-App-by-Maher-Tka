@@ -9,16 +9,27 @@ const pt = (mm: number) => (mm * 72) / 25.4
 export async function exportCardMontagePdf(
   artwork: CardArtwork,
   settings: CardMontageSettings,
-  back?: CardArtwork | null
+  back?: CardArtwork | null,
+  singleSide: 'front' | 'back' = 'front'
 ): Promise<Uint8Array> {
   const layout = getCardLayout(settings)
   if (layout.errors.length) throw new Error(layout.errors.join('\n'))
   if (settings.includeBack && !back)
     throw new Error('Import or select the back-side design before exporting both sides.')
   const doc = await PDFDocument.create()
-  const assets: { asset: PDFEmbeddedPage | PDFImage; rotation: number; kind: 'pdf' | 'image' }[] =
-    []
-  for (const sideArtwork of settings.includeBack ? [artwork, back!] : [artwork]) {
+  const assets: {
+    asset: PDFEmbeddedPage | PDFImage
+    rotation: number
+    kind: 'pdf' | 'image'
+    side: 'front' | 'back'
+  }[] = []
+  const sides = settings.includeBack
+    ? [
+        { artwork, side: 'front' as const },
+        { artwork: back!, side: 'back' as const }
+      ]
+    : [{ artwork, side: singleSide }]
+  for (const { artwork: sideArtwork, side } of sides) {
     if (sideArtwork.kind === 'pdf') {
       const source = await PDFDocument.load(sideArtwork.bytesBase64)
       if (
@@ -55,23 +66,26 @@ export async function exportCardMontagePdf(
                 top: media.y + media.height
               }
         )
-        assets.push({ asset, rotation, kind: 'pdf' })
+        assets.push({ asset, rotation, kind: 'pdf', side })
       }
     } else if (sideArtwork.kind === 'png')
       assets.push({
         asset: await doc.embedPng(sideArtwork.bytesBase64),
         rotation: 0,
-        kind: 'image'
+        kind: 'image',
+        side
       })
     else if (sideArtwork.kind === 'jpeg')
       assets.push({
         asset: await doc.embedJpg(sideArtwork.bytesBase64),
         rotation: 0,
-        kind: 'image'
+        kind: 'image',
+        side
       })
     else throw new Error('Choose a PDF, PNG or JPEG design.')
   }
-  for (const { asset, rotation, kind } of assets) {
+  for (const { asset, rotation, kind, side } of assets) {
+    const layout = getCardLayout(settings, side)
     if (![asset.width, asset.height].every((value) => Number.isFinite(value) && value > 0))
       throw new Error('The artwork has invalid dimensions.')
     const swapped = rotation === 90 || rotation === 270

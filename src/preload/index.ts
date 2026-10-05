@@ -153,6 +153,10 @@ contextBridge.exposeInMainWorld('printerApp', {
     )
   },
   runtime: {
+    importEpsArtwork: (
+      request: import('../shared/eps-import.js').EpsImportRequest
+    ): Promise<import('../shared/eps-import.js').EpsImportResult> =>
+      ipcRenderer.invoke('runtime:import-eps-artwork', request),
     exportIllustratorPdfBatch: (
       request: import('../shared/illustrator-pdf-export.js').IllustratorPdfBatchRequest
     ): Promise<import('../shared/illustrator-pdf-export.js').IllustratorPdfBatchResult> =>

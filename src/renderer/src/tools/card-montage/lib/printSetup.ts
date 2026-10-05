@@ -40,6 +40,7 @@ export async function createCardPrintPdf(
   return exportCardMontagePdf(
     side === 'back' ? draft.back! : draft.artwork!,
     { ...draft.settings, includeBack: side === 'both', exportAllPdfPages: false },
-    side === 'both' ? draft.back : null
+    side === 'both' ? draft.back : null,
+    side === 'back' ? 'back' : 'front'
   )
 }

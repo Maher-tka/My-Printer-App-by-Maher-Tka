@@ -1,6 +1,7 @@
 import {
   memo,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -27,6 +28,8 @@ interface PieceEditorCanvasProps {
   showTransparency?: boolean
   piece: PiecePreset
   scale: number
+  zoom: number
+  onZoomChange: (zoom: number) => void
   tool: EditorTool
   showGrid: boolean
   snapToGrid: boolean
@@ -73,6 +76,8 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
   showTransparency = false,
   piece,
   scale,
+  zoom,
+  onZoomChange,
   tool,
   showGrid,
   snapToGrid,
@@ -86,6 +91,13 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
 }: PieceEditorCanvasProps): JSX.Element {
   const artboardRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
+  const zoomRef = useRef(zoom)
+  const zoomAnchorRef = useRef<{
+    x: number
+    y: number
+    fractionX: number
+    fractionY: number
+  } | null>(null)
   const dragRef = useRef<DragState | null>(null)
   const panRef = useRef<PanState | null>(null)
   const frameRef = useRef<number | null>(null)
@@ -117,6 +129,51 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
       ),
     [piece]
   )
+
+  useLayoutEffect(() => {
+    zoomRef.current = zoom
+    const anchor = zoomAnchorRef.current
+    const viewport = viewportRef.current
+    const artboard = artboardRef.current
+    if (!anchor || !viewport || !artboard) return
+    zoomAnchorRef.current = null
+    const bounds = artboard.getBoundingClientRect()
+    viewport.scrollLeft += bounds.left + bounds.width * anchor.fractionX - anchor.x
+    viewport.scrollTop += bounds.top + bounds.height * anchor.fractionY - anchor.y
+  }, [zoom, scale])
+
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    const onWheel = (event: WheelEvent): void => {
+      if (!event.ctrlKey || !event.deltaY) return
+      event.preventDefault()
+      event.stopPropagation()
+      // Keep an in-progress pointer gesture in its original coordinate system.
+      if (dragRef.current || drawRef.current || panRef.current || penRef.current) return
+      const artboard = artboardRef.current
+      if (!artboard) return
+      const delta =
+        event.deltaY *
+        (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1)
+      const next = Math.max(
+        0.45,
+        Math.min(2.5, zoomRef.current * Math.exp(-Math.max(-300, Math.min(300, delta)) * 0.002))
+      )
+      if (next === zoomRef.current) return
+      const bounds = artboard.getBoundingClientRect()
+      zoomAnchorRef.current = {
+        x: event.clientX,
+        y: event.clientY,
+        fractionX: (event.clientX - bounds.left) / bounds.width,
+        fractionY: (event.clientY - bounds.top) / bounds.height
+      }
+      zoomRef.current = next
+      onZoomChange(next)
+    }
+    viewport.addEventListener('wheel', onWheel, { passive: false })
+    return () => viewport.removeEventListener('wheel', onWheel)
+  }, [onZoomChange])
 
   useEffect(() => {
     dragRef.current = null
@@ -193,6 +250,7 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
       aria-label="Piece editor canvas"
       className={`flex min-h-0 min-w-0 flex-1 items-start justify-start overflow-auto rounded-lg border bg-slate-100 p-6 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${isPanning ? 'cursor-grabbing' : tool === 'pan' ? 'cursor-grab' : ''}`}
       style={{
+        overflowAnchor: 'none',
         backgroundImage: showGrid
           ? 'linear-gradient(0deg,rgba(148,163,184,0.20)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.20)_1px,transparent_1px)'
           : undefined,

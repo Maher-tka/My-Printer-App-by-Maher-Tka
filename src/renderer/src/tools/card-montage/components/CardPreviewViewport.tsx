@@ -14,12 +14,14 @@ export function CardPreviewViewport({
   sides,
   front,
   back,
-  layout
+  layout,
+  backLayout
 }: {
   sides: ('front' | 'back')[]
   front: CardArtwork | null
   back: CardArtwork | null
   layout: ReturnType<typeof getCardLayout>
+  backLayout: ReturnType<typeof getCardLayout>
 }): JSX.Element {
   const { t } = useLanguage()
 
@@ -138,7 +140,7 @@ export function CardPreviewViewport({
                 key={side}
                 side={side}
                 artwork={side === 'front' ? front : back}
-                layout={layout}
+                layout={side === 'back' ? backLayout : layout}
                 showLabel={paired}
                 sheetWidthPx={fitWidth * zoom}
               />

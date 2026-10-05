@@ -6,6 +6,8 @@ import { recordAppError } from './release-runtime.js'
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1_000
 const STATE_EVENT = 'updates:state-changed'
+const STARTUP_CHECK_TIMEOUT_MS = 15_000
+const STARTUP_DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1_000
 
 let state: AppUpdateSnapshot
 let checkInProgress: Promise<AppUpdateActionResult> | null = null
@@ -22,13 +24,13 @@ export function registerAppUpdaterHandlers(): void {
 
   ipcMain.handle('updates:get-state', (): AppUpdateSnapshot => ({ ...state }))
   ipcMain.handle('updates:check', checkForUpdates)
-  ipcMain.handle('updates:install', installDownloadedUpdate)
+  ipcMain.handle('updates:install', () => installDownloadedUpdate())
 
   if (!state.enabled) return
 
   configureUpdater()
 
-  // Start the network check without delaying the main window or requiring sign-in.
+  // The renderer holds the workspace until this check/download/install finishes.
   void checkForUpdates()
 
   const recurringCheckTimer = setInterval(() => {
@@ -51,6 +53,7 @@ function createInitialState(): AppUpdateSnapshot {
 
   return {
     enabled: true,
+    startupPending: true,
     status: 'idle',
     currentVersion: app.getVersion(),
     message: 'Updates are checked automatically on launch.'
@@ -99,7 +102,7 @@ function configureUpdater(): void {
       downloadPercent: 100,
       message: `Version ${info.version} is ready. Restart to finish updating.`
     })
-    showReadyNotification(info.version)
+    if (!state.startupPending) showReadyNotification(info.version)
   })
 
   autoUpdater.on('update-not-available', (info: UpdateInfo) => {
@@ -117,6 +120,7 @@ function configureUpdater(): void {
     recordAppError('app-updater', error)
     updateState({
       status: 'error',
+      startupPending: false,
       message: getErrorMessage(error),
       downloadPercent: undefined,
       lastCheckedAt: new Date().toISOString()
@@ -129,7 +133,7 @@ async function checkForUpdates(): Promise<AppUpdateActionResult> {
     return { ok: false, state: { ...state }, error: state.message }
   }
 
-  if (['available', 'downloading', 'downloaded'].includes(state.status)) {
+  if (['available', 'downloading', 'downloaded', 'installing'].includes(state.status)) {
     return { ok: true, state: { ...state } }
   }
 
@@ -145,14 +149,34 @@ async function checkForUpdates(): Promise<AppUpdateActionResult> {
 }
 
 async function runUpdateCheck(): Promise<AppUpdateActionResult> {
+  const atStartup = Boolean(state.startupPending)
   try {
-    await autoUpdater.checkForUpdates()
+    const check = autoUpdater.checkForUpdates()
+    const result = atStartup
+      ? await withTimeout(check, STARTUP_CHECK_TIMEOUT_MS, 'The startup update check timed out.')
+      : await check
     updateState({ lastCheckedAt: new Date().toISOString() })
+    if (atStartup && result?.downloadPromise) {
+      await withTimeout(
+        result.downloadPromise,
+        STARTUP_DOWNLOAD_TIMEOUT_MS,
+        'The startup update download timed out.'
+      )
+      if (state.startupPending && state.status === 'downloaded') {
+        const installed = installDownloadedUpdate(true)
+        if (installed.ok) return installed
+      }
+    } else if (result?.downloadPromise) {
+      // Background downloads report failures through the updater error event.
+      void result.downloadPromise.catch(() => {})
+    }
+    if (atStartup) updateState({ startupPending: false })
     return { ok: true, state: { ...state } }
   } catch (error) {
     recordAppError('app-updater-check', error)
     updateState({
       status: 'error',
+      startupPending: false,
       message: getErrorMessage(error),
       downloadPercent: undefined,
       lastCheckedAt: new Date().toISOString()
@@ -161,7 +185,7 @@ async function runUpdateCheck(): Promise<AppUpdateActionResult> {
   }
 }
 
-function installDownloadedUpdate(): AppUpdateActionResult {
+function installDownloadedUpdate(atStartup = false): AppUpdateActionResult {
   if (state.status !== 'downloaded') {
     const error = 'No downloaded update is ready to install.'
     return { ok: false, state: { ...state }, error }
@@ -173,7 +197,17 @@ function installDownloadedUpdate(): AppUpdateActionResult {
     return { ok: false, state: { ...state }, error }
   }
 
-  setTimeout(() => autoUpdater.quitAndInstall(false, true), 200)
+  updateState({ status: 'installing', message: 'Installing update…' })
+  setTimeout(() => {
+    if (state.status !== 'installing' || (atStartup && !state.startupPending)) return
+    try {
+      // Startup is automatic; manual restarts retain the installer UI.
+      autoUpdater.quitAndInstall(atStartup, true)
+    } catch (error) {
+      recordAppError('app-updater-install', error)
+      updateState({ status: 'error', startupPending: false, message: getErrorMessage(error) })
+    }
+  }, 200)
   return { ok: true, state: { ...state } }
 }
 
@@ -199,4 +233,18 @@ function showReadyNotification(version: string): void {
 function getErrorMessage(error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error)
   return `Could not check for updates. ${detail}`
+}
+
+async function withTimeout<T>(promise: Promise<T>, delay: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), delay)
+      })
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
 }

@@ -113,3 +113,128 @@ Screenshots: `artboard-selector-1366-selected.png`, `selector-1920-dark-fr.png`,
   pending. Other historical pending checks retain their existing status.
 
 Screenshots: `output/playwright/release-0.2.6/`.
+
+## Cutter masking canvas wheel zoom — 2026-10-05
+
+- Ctrl + scroll zooms the shared Prepare artwork / Cut lines canvas within the
+  existing 45–250% limits. Zoom anchors to the cursor where scrolling permits;
+  unmodified wheel events retain normal scrolling. The native non-passive wheel
+  listener prevents browser zoom locally and is removed on unmount.
+- In-progress pointer drawing, dragging, and panning retain their original scale.
+  Zoom changes only editor view state; it creates no artwork undo entry.
+  Existing zoom controls remain in their shared toolbar; the existing translated
+  shortcut is listed inside Keyboard shortcuts. No new command or subtitle added.
+- Browser checks passed for zoom in/out, both limits, cursor anchoring, normal
+  scrolling, Fit, keyboard zoom, expanded canvas, and both editing steps. Drew and
+  applied a rectangle mask after zooming; checked that Ctrl + scroll during the
+  drawing did not change its scale.
+- Inspected 1366×768 English/light, 1920×1080 French/dark, and 1366×768 Arabic/light
+  with low-end mode. No horizontal page overflow was found.
+- TypeScript, changed-file formatting, diff whitespace, and the full cutter
+  regression suite passed. Hardware printing/cutting remains pending; no job sent.
+
+Screenshots: `output/playwright/cutter-wheel/`.
+
+## Card Montage EPS import — 2026-10-05
+
+- Existing front/back file pickers and drop areas now accept EPS alongside AI,
+  PDF, PNG and JPG. Reused existing shared controls, busy state and error area;
+  no new primary action, duplicate command, heading subtitle or styling system.
+- Windows imports use installed Adobe Illustrator to embed EPS on a page sized
+  from its BoundingBox/HiResBoundingBox. The stored project contains converted
+  PDF bytes with the original EPS filename; reopening/exporting needs no further
+  Illustrator conversion. Fonts must be installed or outlined and images embedded.
+- Actual Illustrator conversion of representative front/back EPS files and a
+  two-page montage export passed, including original page-dimension verification.
+  Automated tests cover text/binary headers, invalid/oversized input, bounding
+  boxes, converter errors, Illustrator cleanup, project roundtrip and vector export.
+- Browser file selection, back-side drag/drop, keyboard Tab access and the
+  browser-only import error were checked. Browser success checks used the real
+  converted PDFs through a stubbed desktop bridge; full desktop IPC and installed
+  release checks remain pending.
+- Inspected the empty state at 1366×768 and loaded artwork at 1366×768
+  English/light, 1920×1080 French/dark, 1366×768 Arabic/dark and 1920×1080
+  Arabic/light. Arabic passes used low-end mode. No horizontal page overflow;
+  new format, EPS status, help and error text has French/Arabic translations.
+- TypeScript, production build, Card regression tests, translation tests,
+  changed-file formatting and diff whitespace passed. No hardware print job sent;
+  physical printing and workshop released-build acceptance remain pending.
+
+Screenshots and native conversion fixtures: `output/playwright/card-eps-*`.
+
+## Card Montage zero-spacing cutting lines — 2026-10-05
+
+- Zero spacing uses continuous vertical/horizontal guides through every card
+  boundary and outer trim edge, extending across the full A4 page. Shared
+  boundaries are drawn once. Preview, PDF and printing share the same geometry,
+  existing 0.25 px stroke, color setting and enable/disable control.
+- Spaced-mode corner crosses and auto-mode optional outlines retain their behavior.
+  Reused existing Advanced controls; updated their zero-mode labels in English,
+  French and Arabic. No additional command, subtitle or styling system added.
+- Regression tests verify full-sheet endpoints, all boundaries, fractional card
+  dimensions, single-card layouts, both A4 orientations and disabled guides.
+  PDF stream checks verify exact line placement and thickness on front/back pages.
+- Inspected empty and loaded previews, 1366×768 English/light, 1920×1080
+  French/dark and 1366×768 Arabic/dark with low-end mode. No horizontal page
+  overflow; the long French label wraps within its panel. Keyboard Space toggles
+  guides; Tab reaches the color input and disabling guides disables that input.
+- TypeScript, Card regression tests, translation tests, changed-file formatting
+  and diff whitespace passed. Physical printing/cutting remains pending; no
+  hardware job was sent.
+
+Screenshots: `output/playwright/card-lines-*`.
+
+## Card Montage front-only cutting lines and Clear — 2026-10-05
+
+- Zero-spacing sheet cutting lines appear on the front only in previews,
+  exported PDFs and front/back/both print preparation. Back-only printing also
+  omits them. Artwork placement, sheet dimensions, spaced-mode crop crosses and
+  auto-mode optional rectangles retain their behavior.
+- Renamed the existing file-clearing command from New project to Clear, using
+  the shared ActionButton reset icon, ghost variant and existing translations.
+  Clear removes loaded front/back artwork, resets preview/print selection and
+  messages, and preserves montage settings. It is disabled while busy or empty.
+  No new command duplication, primary action, heading subtitle or styling system.
+- Inspected loaded sources, Clear focus, Advanced controls and both previews at
+  1366×768 English/light, 1920×1080 French/dark and 1366×768 Arabic/dark with
+  low-end mode. No horizontal page overflow; labels wrap without clipping.
+  Keyboard Tab shows the shared focus ring and Enter clears both sources;
+  empty-state, disabled Clear, preview zoom reset and retained mode were checked.
+- TypeScript, Card regression tests, translation tests, changed-file formatting
+  and diff whitespace passed. Tests check front/back PDF strokes and all three
+  print-side selections in both sheet orientations. Physical printing/cutting
+  and packaged desktop checks remain pending; no hardware job was sent.
+
+Screenshots: `output/playwright/card-front-only-*.png` and
+`output/playwright/card-clear-empty-1366.png`.
+
+## Startup updates before workspace — 2026-10-05
+
+- Installed Setup builds hold workspace mounting during the launch update check,
+  download and installation. Available stable updates install silently and
+  relaunch before work begins. Browser, development and portable builds bypass
+  the automatic startup update. Existing background checks retain project-save
+  protection and do not take over an open workspace.
+- Startup checks have a 15-second deadline; downloads have a 10-minute deadline.
+  Offline/check/download/installer failures release the workspace. A download
+  completing after the deadline cannot automatically restart current work.
+  State subscriptions ignore stale initial snapshots after receiving an event.
+- Reused shared surface/color/radius tokens, translated status text and accessible
+  progress semantics. No commands, heading subtitles, animation or new primary
+  action were introduced. Storybook covers checking, downloading and installing.
+- Browser checks with a simulated desktop update bridge exercised all three
+  startup states, workspace release on error and background update behavior at
+  1366×768 English/light, 1920×1080 French/dark and 1600×900 Arabic/dark with
+  low-end mode. Screenshots inspected; no horizontal overflow or clipping.
+  Progress exposes its actual percentage; no keyboard-only action is required.
+- Updater regression tests and TypeScript passed. Tests exercise startup silent
+  install/relaunch, deadlines, canceled/failed installation, late downloads,
+  recurring checks, retries, duplicate installation and unsaved-work protection.
+  A real subscriber-to-newer-version startup installation remains pending until
+  a subsequent stable release exists. No hardware print/cut job was sent.
+
+Screenshots: `output/playwright/startup-update-*.png`.
+
+Local v0.2.7 release checks passed: repository formatting, TypeScript, all automated
+suites, Storybook and the production build. Windows packaging and publication are
+verified separately by the tag-triggered release workflow.

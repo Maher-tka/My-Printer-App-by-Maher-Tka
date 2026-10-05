@@ -92,6 +92,7 @@ export function CardMontagePage({
   const previewSides: ('front' | 'back')[] =
     previewSide === 'both' ? ['front', 'back'] : [previewSide]
   const layout = useMemo(() => getCardLayout(settings), [settings])
+  const backLayout = useMemo(() => getCardLayout(settings, 'back'), [settings])
   const outputPageCount = settings.includeBack
     ? 2
     : artwork?.kind === 'pdf' && settings.exportAllPdfPages
@@ -314,12 +315,14 @@ export function CardMontagePage({
         }}
         actions={
           <ActionButton
-            action="newProject"
+            action="reset"
             size="sm"
             variant="ghost"
             disabled={Boolean(busy) || (!artwork && !draft.back && !message && !error)}
             onClick={clear}
-          />
+          >
+            {t('Clear')}
+          </ActionButton>
         }
       />
       <CardPrintDialog
@@ -339,7 +342,7 @@ export function CardMontagePage({
           role="alert"
           className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
         >
-          {error}
+          {t(error)}
         </p>
       )}
       {message && (
@@ -408,7 +411,13 @@ export function CardMontagePage({
             advanced={
               <section className="space-y-3 rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4">
                 <h2 className="text-sm font-semibold">
-                  {settings.mode === 'auto' ? t('Margins') : t('Margins & crop crosses')}
+                  {t(
+                    settings.mode === 'auto'
+                      ? 'Margins'
+                      : settings.mode === 'zero'
+                        ? 'Margins & cutting lines'
+                        : 'Margins & crop crosses'
+                  )}
                 </h2>
                 <NumericField
                   label={t('Minimum sheet margin (mm)')}
@@ -424,15 +433,21 @@ export function CardMontagePage({
                         onChange={(event) => updateSettings({ cutMarks: event.target.checked })}
                         className="accent-primary"
                       />
-                      {t('Crop crosses (0.25 px)')}
+                      {t(
+                        settings.mode === 'zero'
+                          ? 'Cutting lines on front only (0.25 px)'
+                          : 'Crop crosses (0.25 px)'
+                      )}
                     </label>
                     <label className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
-                      {t('Crop cross color')}
+                      {t(settings.mode === 'zero' ? 'Cutting line color' : 'Crop cross color')}
                       <span className="flex items-center gap-2">
                         <span>{layout.lineColor}</span>
                         <input
                           type="color"
-                          aria-label={t('Crop cross color')}
+                          aria-label={t(
+                            settings.mode === 'zero' ? 'Cutting line color' : 'Crop cross color'
+                          )}
                           value={layout.lineColor}
                           disabled={!settings.cutMarks}
                           onChange={(event) =>
@@ -687,6 +702,7 @@ export function CardMontagePage({
               front={artwork}
               back={draft.back ?? null}
               layout={layout}
+              backLayout={backLayout}
             />
           )}
           <p className="text-xs text-muted-foreground">

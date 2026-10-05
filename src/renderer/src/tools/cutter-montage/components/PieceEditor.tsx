@@ -225,6 +225,8 @@ function ActivePieceEditor({
             showTransparency={stage === 'prepare'}
             piece={piece}
             scale={scale}
+            zoom={editorState.zoom}
+            onZoomChange={editorState.setZoom}
             tool={editorState.tool}
             showGrid={editorState.showGrid}
             snapToGrid={editorState.snapToGrid}

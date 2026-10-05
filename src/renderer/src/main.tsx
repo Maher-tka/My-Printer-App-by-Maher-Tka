@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { App } from './app/App'
+import { StartupUpdateGate } from './updates/StartupUpdateGate'
 import { initializeTheme } from '@/appearance/theme'
 import { initializeLanguage } from '@/i18n/language'
 import './styles.css'
@@ -120,7 +121,9 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <RendererErrorBoundary>
-      <App />
+      <StartupUpdateGate>
+        <App />
+      </StartupUpdateGate>
     </RendererErrorBoundary>
   </React.StrictMode>
 )

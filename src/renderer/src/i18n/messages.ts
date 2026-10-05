@@ -1,5 +1,86 @@
 // App-owned English copy is the stable key. Missing translations fall back to English.
 export const messages: Record<string, { fr: string; ar: string }> = {
+  'Checking for updates…': { fr: 'Recherche de mises à jour…', ar: 'جارٍ البحث عن تحديثات…' },
+  'Installing update…': { fr: 'Installation de la mise à jour…', ar: 'جارٍ تثبيت التحديث…' },
+  'Downloading update…': { fr: 'Téléchargement de la mise à jour…', ar: 'جارٍ تنزيل التحديث…' },
+  'Cutting lines on front only (0.25 px)': {
+    fr: 'Lignes de découpe au recto uniquement (0,25 px)',
+    ar: 'خطوط القص على الوجه الأمامي فقط (0.25 بكسل)'
+  },
+  'Margins & cutting lines': {
+    fr: 'Marges et lignes de découpe',
+    ar: 'الهوامش وخطوط القص'
+  },
+  'Cutting lines across sheet (0.25 px)': {
+    fr: 'Lignes de découpe sur toute la feuille (0,25 px)',
+    ar: 'خطوط القص عبر الورقة (0.25 بكسل)'
+  },
+  'Cutting line color': {
+    fr: 'Couleur des lignes de découpe',
+    ar: 'لون خطوط القص'
+  },
+  'Vector artwork and embedded images are stored in the project.': {
+    fr: 'Les illustrations vectorielles et les images incorporées sont enregistrées dans le projet.',
+    ar: 'الرسومات المتجهة والصور المضمنة محفوظة في المشروع.'
+  },
+  'Could not import EPS. Check that Adobe Illustrator is installed and activated, close its dialogs, and use embedded images and installed or outlined fonts. You can also export the design as PDF.':
+    {
+      fr: 'Impossible d’importer l’EPS. Vérifiez qu’Adobe Illustrator est installé et activé, fermez ses boîtes de dialogue et utilisez des images incorporées et des polices installées ou vectorisées. Vous pouvez aussi exporter le dessin en PDF.',
+      ar: 'تعذر استيراد EPS. تأكد من تثبيت Adobe Illustrator وتفعيله، وأغلق نوافذه الحوارية، واستخدم صورًا مضمنة وخطوطًا مثبتة أو محوّلة إلى مسارات. يمكنك أيضًا تصدير التصميم إلى PDF.'
+    },
+  'EPS import requires the desktop app and Adobe Illustrator. Export the EPS as PDF to import it here.':
+    {
+      fr: 'L’import EPS nécessite l’application de bureau et Adobe Illustrator. Exportez l’EPS en PDF pour l’importer ici.',
+      ar: 'استيراد EPS يتطلب تطبيق سطح المكتب وAdobe Illustrator. صدّر EPS إلى PDF لاستيراده هنا.'
+    },
+  'This file is empty. Choose an AI, EPS, PDF, PNG, or JPG design.': {
+    fr: 'Ce fichier est vide. Choisissez un dessin AI, EPS, PDF, PNG ou JPG.',
+    ar: 'هذا الملف فارغ. اختر تصميمًا بصيغة AI أو EPS أو PDF أو PNG أو JPG.'
+  },
+  'Choose a design smaller than 30 MB.': {
+    fr: 'Choisissez un dessin de moins de 30 Mo.',
+    ar: 'اختر تصميمًا أصغر من 30 ميغابايت.'
+  },
+  'Choose an EPS design.': {
+    fr: 'Choisissez un dessin EPS.',
+    ar: 'اختر تصميم EPS.'
+  },
+  'This EPS file is empty.': {
+    fr: 'Ce fichier EPS est vide.',
+    ar: 'ملف EPS هذا فارغ.'
+  },
+  'This EPS file has an invalid preview header.': {
+    fr: 'L’en-tête d’aperçu de ce fichier EPS est invalide.',
+    ar: 'ترويسة المعاينة في ملف EPS غير صالحة.'
+  },
+  'This EPS file has an invalid PostScript section.': {
+    fr: 'La section PostScript de ce fichier EPS est invalide.',
+    ar: 'قسم PostScript في ملف EPS غير صالح.'
+  },
+  'This file is not a supported EPS design.': {
+    fr: 'Ce fichier n’est pas un dessin EPS pris en charge.',
+    ar: 'هذا الملف ليس تصميم EPS مدعومًا.'
+  },
+  'The EPS has no valid bounding box. Export it as PDF from the original design.': {
+    fr: 'L’EPS n’a pas de cadre de dimensions valide. Exportez le dessin original en PDF.',
+    ar: 'ملف EPS لا يحتوي على حدود أبعاد صالحة. صدّر التصميم الأصلي إلى PDF.'
+  },
+  'EPS import requires Adobe Illustrator. Use installed or outlined fonts.': {
+    fr: 'L’import EPS nécessite Adobe Illustrator. Utilisez des polices installées ou vectorisées.',
+    ar: 'استيراد EPS يتطلب Adobe Illustrator. استخدم خطوطًا مثبتة أو محوّلة إلى مسارات.'
+  },
+  'AI, EPS, PDF, PNG, JPG · up to 30 MB': {
+    fr: 'AI, EPS, PDF, PNG, JPG · jusqu’à 30 Mo',
+    ar: 'AI، EPS، PDF، PNG، JPG · حتى 30 ميغابايت'
+  },
+  'EPS converted to PDF': {
+    fr: 'EPS converti en PDF',
+    ar: 'EPS محوّل إلى PDF'
+  },
+  'EPS fonts embedded in the converted PDF.': {
+    fr: 'Polices EPS incorporées dans le PDF converti.',
+    ar: 'خطوط EPS مضمنة في ملف PDF المحوّل.'
+  },
   'App language': {
     fr: 'Langue de l’application',
     ar: 'لغة التطبيق'

@@ -1,6 +1,6 @@
 {
   "name": "my-printer-app-by-maher-tka",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Local-first printer-shop hub desktop app by Maher Tka.",
   "author": "Maher Tka",
   "private": true,
@@ -16,7 +16,7 @@
     "license:keygen": "tsx scripts/license-keygen.ts",
     "license:generate": "tsx src/main/license-generator-cli.ts",
     "test": "npm run test:access && npm run test:license && npm run test:print && npm run test:booklet && npm run test:projects && npm run test:cutter && npm run test:sticker && npm run test:hardcover && npm run test:preflight && npm run test:jobs && npm run test:backup && npm run test:sequential && npm run test:card && npm run test:fast-print && npm run test:appearance && npm run test:i18n && npm run test:updates",
-    "test:card": "tsx src/renderer/src/tools/card-montage/lib/layout.test.ts && tsx src/renderer/src/tools/card-montage/lib/exportPdf.test.ts",
+    "test:card": "tsx src/renderer/src/tools/card-montage/lib/layout.test.ts && tsx src/renderer/src/tools/card-montage/lib/exportPdf.test.ts && tsx src/renderer/src/tools/card-montage/lib/artwork.test.ts && tsx src/main/eps-import.test.ts",
     "test:access": "tsx src/shared/cloud-access.test.ts && tsx scripts/test-access-database.ts",
     "test:license": "tsx src/main/license-serial.test.ts",
     "test:print": "tsx src/shared/print-types.test.ts",
