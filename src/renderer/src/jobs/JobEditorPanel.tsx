@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { Clipboard, PencilLine, Plus, ReceiptText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,6 +44,8 @@ export function JobEditorPanel({
   onCancelEdit,
   onCopyQuote
 }: JobEditorPanelProps): JSX.Element {
+  const { t } = useLanguage()
+
   const updateDraft = <Key extends keyof PrinterJob>(key: Key, value: PrinterJob[Key]): void => {
     onDraftChange({ ...draft, [key]: value })
   }
@@ -79,16 +82,18 @@ export function JobEditorPanel({
 
       <CardContent className="flex flex-col gap-5 p-5">
         <FieldSet className="gap-4">
-          <FieldLegend>Customer and production</FieldLegend>
+          <FieldLegend>{t('Customer and production')}</FieldLegend>
           <FieldGroup className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field className="gap-2 sm:col-span-2">
-              <FieldLabel htmlFor="job-saved-customer">Saved customer</FieldLabel>
+              <FieldLabel htmlFor="job-saved-customer">{t('Saved customer')}</FieldLabel>
               <Select value={draft.customerId ?? NEW_CUSTOMER_VALUE} onValueChange={selectCustomer}>
                 <SelectTrigger id="job-saved-customer">
-                  <SelectValue placeholder="Choose a saved customer" />
+                  <SelectValue placeholder={t('Choose a saved customer')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NEW_CUSTOMER_VALUE}>New or unlinked customer</SelectItem>
+                  <SelectItem value={NEW_CUSTOMER_VALUE}>
+                    {t('New or unlinked customer')}
+                  </SelectItem>
                   {customers.map((customer) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.name}
@@ -101,14 +106,14 @@ export function JobEditorPanel({
 
             <TextField
               id="job-customer"
-              label="Customer name"
+              label={t('Customer name')}
               value={draft.customerName}
               autoComplete="name"
               onChange={(value) => updateDraft('customerName', value)}
             />
             <TextField
               id="job-phone"
-              label="Phone number"
+              label={t('Phone number')}
               value={draft.phoneNumber}
               type="tel"
               autoComplete="tel"
@@ -116,16 +121,16 @@ export function JobEditorPanel({
             />
             <TextField
               id="job-title"
-              label="Job title (required)"
+              label={t('Job title (required)')}
               required
               value={draft.jobTitle}
               className="sm:col-span-2"
-              placeholder="Example: 200 wedding invitations"
+              placeholder={t('Example: 200 wedding invitations')}
               onChange={(value) => updateDraft('jobTitle', value)}
             />
 
             <Field className="gap-2">
-              <FieldLabel htmlFor="job-tool">Production tool</FieldLabel>
+              <FieldLabel htmlFor="job-tool">{t('Production tool')}</FieldLabel>
               <Select
                 value={draft.tool}
                 onValueChange={(value) => updateDraft('tool', value as PrinterJobTool)}
@@ -134,16 +139,16 @@ export function JobEditorPanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="booklet">Booklet</SelectItem>
-                  <SelectItem value="cutter">Cutter</SelectItem>
-                  <SelectItem value="hardcover">Hardcover</SelectItem>
-                  <SelectItem value="sequential">Sequential Number</SelectItem>
+                  <SelectItem value="booklet">{t('Booklet')}</SelectItem>
+                  <SelectItem value="cutter">{t('Cutter')}</SelectItem>
+                  <SelectItem value="hardcover">{t('Hardcover')}</SelectItem>
+                  <SelectItem value="sequential">{t('Sequential Number')}</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
 
             <Field className="gap-2">
-              <FieldLabel htmlFor="job-status">Status</FieldLabel>
+              <FieldLabel htmlFor="job-status">{t('Status')}</FieldLabel>
               <Select
                 value={draft.status}
                 onValueChange={(value) => updateDraft('status', value as PrinterJobStatus)}
@@ -154,7 +159,7 @@ export function JobEditorPanel({
                 <SelectContent>
                   {JOB_STATUS_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
-                      {option.label}
+                      {t(option.label)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -163,16 +168,16 @@ export function JobEditorPanel({
 
             <TextField
               id="job-deadline"
-              label="Deadline"
+              label={t('Deadline')}
               type="date"
               value={draft.deadline ?? ''}
               onChange={(value) => updateDraft('deadline', value || undefined)}
             />
             <TextField
               id="job-project-path"
-              label="Linked project path"
+              label={t('Linked project path')}
               value={draft.localProjectPath ?? ''}
-              placeholder="Optional local project file"
+              placeholder={t('Optional local project file')}
               onChange={(value) => updateDraft('localProjectPath', value || undefined)}
             />
           </FieldGroup>
@@ -182,7 +187,7 @@ export function JobEditorPanel({
 
         <FieldSet className="gap-4">
           <div className="flex items-center justify-between gap-3">
-            <FieldLegend className="mb-0">Quote and payment</FieldLegend>
+            <FieldLegend className="mb-0">{t('Quote and payment')}</FieldLegend>
             <ReceiptText className="size-4 text-muted-foreground" aria-hidden="true" />
           </div>
           <p className="text-xs text-muted-foreground">
@@ -206,7 +211,7 @@ export function JobEditorPanel({
               <NumberField
                 key={key}
                 id={`job-quote-${key}`}
-                label={label}
+                label={t(label)}
                 value={Number(draft.quote[key] ?? 0)}
                 step={key === 'quantity' ? 1 : 0.01}
                 min={key === 'quantity' ? 1 : 0}
@@ -217,17 +222,17 @@ export function JobEditorPanel({
         </FieldSet>
 
         <div className="grid grid-cols-3 overflow-hidden rounded-lg border bg-muted/25">
-          <QuoteMetric label="Total" value={quote.finalPrice} />
-          <QuoteMetric label="Deposit" value={quote.depositPaid} className="border-x" />
-          <QuoteMetric label="Remaining" value={quote.remainingAmount} emphasized />
+          <QuoteMetric label={t('Total')} value={quote.finalPrice} />
+          <QuoteMetric label={t('Deposit')} value={quote.depositPaid} className="border-x" />
+          <QuoteMetric label={t('Remaining')} value={quote.remainingAmount} emphasized />
         </div>
 
         <Field className="gap-2">
-          <FieldLabel htmlFor="job-notes">Production notes</FieldLabel>
+          <FieldLabel htmlFor="job-notes">{t('Production notes')}</FieldLabel>
           <Textarea
             id="job-notes"
             className="min-h-24 resize-y"
-            placeholder="Finishing, delivery, or customer instructions"
+            placeholder={t('Finishing, delivery, or customer instructions')}
             value={draft.notes}
             onChange={(event) => updateDraft('notes', event.target.value)}
           />
@@ -240,12 +245,12 @@ export function JobEditorPanel({
           </Button>
           {isEditing ? (
             <Button type="button" variant="outline" onClick={onCancelEdit}>
-              Cancel editing
+              {t('Cancel editing')}
             </Button>
           ) : null}
           <Button type="button" variant="outline" onClick={onCopyQuote}>
             <Clipboard aria-hidden="true" />
-            Copy quote
+            {t('Copy quote')}
           </Button>
         </div>
 
@@ -276,9 +281,11 @@ function TextField({
   onChange: (value: string) => void
   className?: string
 } & Omit<React.ComponentProps<typeof Input>, 'id' | 'value' | 'onChange'>): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <Field className={`gap-2 ${className ?? ''}`}>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <FieldLabel htmlFor={id}>{t(label)}</FieldLabel>
       <Input
         id={id}
         value={value}
@@ -304,9 +311,11 @@ function NumberField({
   min: number
   onChange: (value: number) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <Field className="gap-2">
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <FieldLabel htmlFor={id}>{t(label)}</FieldLabel>
       <Input
         id={id}
         type="number"
@@ -330,10 +339,12 @@ function QuoteMetric({
   emphasized?: boolean
   className?: string
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div className={`min-w-0 px-3 py-3 text-center ${className}`}>
       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
+        {t(label)}
       </p>
       <p className={`mt-1 truncate text-sm font-bold ${emphasized ? 'text-primary' : ''}`}>
         {value.toFixed(2)}

@@ -1,7 +1,10 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 
 export function EmailAccountHelp({ onRefresh }: { onRefresh?: () => Promise<void> }): JSX.Element {
+  const { t } = useLanguage()
+
   const [mode, setMode] = useState<'verify' | 'recover' | null>(null)
   const [email, setEmail] = useState('')
   const [token, setToken] = useState('')
@@ -50,7 +53,7 @@ export function EmailAccountHelp({ onRefresh }: { onRefresh?: () => Promise<void
             setNotice(null)
           }}
         >
-          Verify email with a code
+          {t('Verify email with a code')}
         </Button>
         <Button
           size="sm"
@@ -62,7 +65,7 @@ export function EmailAccountHelp({ onRefresh }: { onRefresh?: () => Promise<void
             setNotice(null)
           }}
         >
-          Forgot password?
+          {t('Forgot password?')}
         </Button>
       </div>
       {mode && (
@@ -72,7 +75,7 @@ export function EmailAccountHelp({ onRefresh }: { onRefresh?: () => Promise<void
           </h3>
           <fieldset disabled={busy} className="mt-3 grid gap-3">
             <label className="grid gap-1 text-sm">
-              Email
+              {t('Email')}
               <input
                 className="h-10 rounded-md border bg-background px-3"
                 type="email"
@@ -94,11 +97,11 @@ export function EmailAccountHelp({ onRefresh }: { onRefresh?: () => Promise<void
                   })
                 }
               >
-                Send recovery code
+                {t('Send recovery code')}
               </Button>
             )}
             <label className="grid gap-1 text-sm">
-              Email code
+              {t('Email code')}
               <input
                 className="h-10 rounded-md border bg-background px-3"
                 required
@@ -111,7 +114,7 @@ export function EmailAccountHelp({ onRefresh }: { onRefresh?: () => Promise<void
             </label>
             {mode === 'recover' && (
               <label className="grid gap-1 text-sm">
-                New password
+                {t('New password')}
                 <input
                   className="h-10 rounded-md border bg-background px-3"
                   type="password"

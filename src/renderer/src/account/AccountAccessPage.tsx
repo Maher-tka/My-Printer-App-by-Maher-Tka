@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import {
   ArrowRight,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/appearance/ThemeToggle'
+import { LanguageSwitcher } from '@/i18n/LanguageSwitcher'
 import { EmailAccountHelp } from './EmailAccountHelp'
 import './AccountAccessPage.css'
 import { cn } from '@/lib/utils'
@@ -55,6 +57,8 @@ export function AccountAccessPage({
   licenseError,
   onActivateSerial
 }: AccountAccessPageProps): JSX.Element {
+  const { t } = useLanguage()
+
   const cloudMode = Boolean(accountState?.cloud)
   const [mode, setMode] = useState<AccessMode>(
     cloudMode || accountState?.accountExists ? 'sign-in' : 'create'
@@ -148,6 +152,7 @@ export function AccountAccessPage({
               </span>
             </a>
             <ThemeToggle />
+            <LanguageSwitcher />
           </div>
           <div className="atelier-access__intro">
             <p className="atelier-access__eyebrow">
@@ -174,7 +179,7 @@ export function AccountAccessPage({
 
         <section className="atelier-access__entry" id="workspace-access">
           <div className="atelier-access__form-wrap">
-            <p className="atelier-access__eyebrow">Workspace access</p>
+            <p className="atelier-access__eyebrow">{t('Workspace access')}</p>
             <h2>
               {mode === 'create'
                 ? 'Create your account'
@@ -201,7 +206,7 @@ export function AccountAccessPage({
                 disabled={isSubmitting}
                 icon={UserRound}
               >
-                Create account
+                {t('Create account')}
               </AccessModeButton>
               <AccessModeButton
                 active={mode === 'sign-in'}
@@ -209,7 +214,7 @@ export function AccountAccessPage({
                 disabled={isSubmitting}
                 icon={Mail}
               >
-                Sign in
+                {t('Sign in')}
               </AccessModeButton>
               {!cloudMode && (
                 <AccessModeButton
@@ -218,7 +223,7 @@ export function AccountAccessPage({
                   disabled={isSubmitting}
                   icon={KeyRound}
                 >
-                  Subscription
+                  {t('Subscription')}
                 </AccessModeButton>
               )}
             </div>
@@ -235,7 +240,7 @@ export function AccountAccessPage({
                   if (!result.ok) setFormError(result.error ?? 'Google sign-in failed.')
                 }}
               >
-                Continue with Google
+                {t('Continue with Google')}
               </Button>
             )}
             {cloudMode && !accountState?.cloud?.configured && (
@@ -256,7 +261,7 @@ export function AccountAccessPage({
                 {mode === 'create' && (
                   <FormField
                     id="account-display-name"
-                    label="Your name"
+                    label={t('Your name')}
                     value={displayName}
                     onChange={setDisplayName}
                     placeholder="Maher Tka"
@@ -267,7 +272,7 @@ export function AccountAccessPage({
                 {mode !== 'subscription' && (
                   <FormField
                     id="account-email"
-                    label="Email address"
+                    label={t('Email address')}
                     type="email"
                     value={email}
                     onChange={setEmail}
@@ -279,7 +284,7 @@ export function AccountAccessPage({
                 {mode !== 'subscription' && (
                   <FormField
                     id="account-password"
-                    label="Password"
+                    label={t('Password')}
                     type="password"
                     value={password}
                     onChange={setPassword}
@@ -293,11 +298,11 @@ export function AccountAccessPage({
                 {mode === 'create' && (
                   <FormField
                     id="account-confirm-password"
-                    label="Confirm password"
+                    label={t('Confirm password')}
                     type="password"
                     value={confirmPassword}
                     onChange={setConfirmPassword}
-                    placeholder="Repeat your password"
+                    placeholder={t('Repeat your password')}
                     icon={LockKeyhole}
                     autoComplete="new-password"
                   />
@@ -305,7 +310,7 @@ export function AccountAccessPage({
                 {mode === 'subscription' && (
                   <FormField
                     id="subscription-key"
-                    label="Subscription key"
+                    label={t('Subscription key')}
                     value={serialKey}
                     onChange={(value) =>
                       setSerialKey(value.toUpperCase().replace(/[\u2013\u2014]/g, '-'))
@@ -340,7 +345,7 @@ export function AccountAccessPage({
                       ? 'Activate and open app'
                       : mode === 'create'
                         ? cloudMode
-                          ? 'Create account'
+                          ? t('Create account')
                           : 'Create account and start trial'
                         : 'Sign in and open app'}
                 </span>
@@ -360,14 +365,14 @@ export function AccountAccessPage({
                 className="mt-2"
                 onClick={() => void window.printerApp?.account.cancelGoogle()}
               >
-                Cancel Google sign-in
+                {t('Cancel Google sign-in')}
               </Button>
             )}
 
             {!cloudMode && (
               <div className="atelier-access__statuses">
                 <AccessStatusCard
-                  label="Trial access"
+                  label={t('Trial access')}
                   value={
                     licenseIsLoading
                       ? 'Checking…'
@@ -381,7 +386,7 @@ export function AccountAccessPage({
                   active={Boolean(trialIsReady)}
                 />
                 <AccessStatusCard
-                  label="Subscription"
+                  label={t('Subscription')}
                   value={activeSubscription ? 'Active' : 'Pro & Shop'}
                   detail={
                     activeSubscription
@@ -465,10 +470,12 @@ function FormField({
   spellCheck?: boolean
   inputClassName?: string
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const [showPassword, setShowPassword] = useState(false)
   return (
     <div className="atelier-access__field">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>{t(label)}</label>
       <div className="atelier-access__input-wrap">
         <Icon className="atelier-access__input-icon" size={16} aria-hidden="true" />
         <input
@@ -513,10 +520,12 @@ function AccessStatusCard({
   detail: string
   active: boolean
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div className="atelier-access__status">
       <p>
-        {label}
+        {t(label)}
         {active && <Check size={13} aria-hidden="true" />}
       </p>
       <strong>{value}</strong>

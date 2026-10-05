@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ImagePlus, Trash2, ZoomIn, ZoomOut, Scan, Sparkles } from 'lucide-react'
@@ -60,6 +61,8 @@ export function AIStickerMaker({
   onSend: (orders: StickerSendOrder[], offsetMm: number) => void
   onClose: () => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const [items, setItems] = useState<QueueItem[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -502,17 +505,14 @@ export function AIStickerMaker({
   return (
     <section
       className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden rounded-lg border bg-card p-3"
-      aria-label="AI Sticker Maker"
+      aria-label={t('AI Sticker Maker')}
     >
       <div className="flex flex-wrap items-center gap-2">
         <div className="mr-auto">
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <Sparkles className="h-5 w-5 text-primary" />
-            AI Sticker Maker
+            {t('AI Sticker Maker')}
           </h2>
-          <p className="text-xs text-muted-foreground">
-            Add artwork, refine the edges, then send to your cutter.
-          </p>
         </div>
         <input
           ref={fileRef}
@@ -527,7 +527,7 @@ export function AIStickerMaker({
         />
         <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}>
           <ImagePlus className="mr-2 h-4 w-4" />
-          Add images
+          {t('Add images')}
         </Button>
         {progress && (
           <Button
@@ -538,7 +538,7 @@ export function AIStickerMaker({
               setMessage('Stopping after the current image finishes…')
             }}
           >
-            Stop after current
+            {t('Stop after current')}
           </Button>
         )}
         <Button
@@ -551,11 +551,11 @@ export function AIStickerMaker({
           {busy ? 'Processing…' : 'Process all'}
         </Button>
         <Button type="button" disabled={!readyCount || busy} onClick={sendReady}>
-          Send {readyCount || ''} to Cutter
+          {t('Send')} {readyCount || ''} {t('to Cutter')}
           {readyCopies > 0 ? ` · ${readyCopies} ${readyCopies === 1 ? 'copy' : 'copies'}` : ''}
         </Button>
         <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>
-          Close
+          {t('Close')}
         </Button>
       </div>
       <div
@@ -568,13 +568,15 @@ export function AIStickerMaker({
       >
         <div className="w-44 shrink-0 space-y-2 overflow-y-auto rounded-md border bg-muted/20 p-2 xl:w-56">
           <div className="flex items-center justify-between px-1 py-1 text-xs font-medium">
-            <span>Artwork queue</span>
+            <span>{t('Artwork queue')}</span>
             <span className="text-muted-foreground">
               {items.length} {items.length === 1 ? 'image' : 'images'}
             </span>
           </div>
           {items.length === 0 && (
-            <p className="text-sm text-muted-foreground">Drop images here or choose Add images.</p>
+            <p className="text-sm text-muted-foreground">
+              {t('Drop images here or choose Add images.')}
+            </p>
           )}
           {items.map((item) => (
             <div
@@ -643,7 +645,7 @@ export function AIStickerMaker({
               type="button"
               size="sm"
               variant="ghost"
-              aria-label="Zoom out"
+              aria-label={t('Zoom out')}
               disabled={zoom <= 1}
               onClick={() => setZoom((value) => Math.max(1, value - 0.5))}
             >
@@ -656,7 +658,7 @@ export function AIStickerMaker({
               type="button"
               size="sm"
               variant="ghost"
-              aria-label="Zoom in"
+              aria-label={t('Zoom in')}
               disabled={zoom >= 4 || !active}
               onClick={() => setZoom((value) => Math.min(4, value + 0.5))}
             >
@@ -664,7 +666,7 @@ export function AIStickerMaker({
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setZoom(1)}>
               <Scan className="mr-1 h-3.5 w-3.5" />
-              Fit
+              {t('Fit')}
             </Button>
             <select
               aria-label="Preview background"
@@ -672,9 +674,9 @@ export function AIStickerMaker({
               onChange={(event) => setPreviewBackground(event.target.value)}
               className="ml-auto rounded border bg-background px-2 py-1 text-xs"
             >
-              <option value="checker">Transparency grid</option>
-              <option value="white">White background</option>
-              <option value="dark">Dark background</option>
+              <option value="checker">{t('Transparency grid')}</option>
+              <option value="white">{t('White background')}</option>
+              <option value="dark">{t('Dark background')}</option>
             </select>
           </div>
           <div
@@ -766,12 +768,16 @@ export function AIStickerMaker({
                   className="max-w-sm rounded-xl border-2 border-dashed border-slate-300 bg-white/95 p-8 text-center text-slate-700 shadow-sm hover:border-primary"
                 >
                   <ImagePlus className="mx-auto mb-3 h-9 w-9 text-primary" />
-                  <span className="block text-base font-semibold">Drop your artwork here</span>
+                  <span className="block text-base font-semibold">
+                    {t('Drop your artwork here')}
+                  </span>
                   <span className="mt-2 block text-sm">
-                    or click to browse JPG, PNG, and WebP images
+                    {t('or click to browse JPG, PNG, and WebP images')}
                   </span>
                   <span className="mt-3 block text-xs text-slate-500">
-                    Transparent artwork is ready in seconds. Photos use local AI background removal.
+                    {t(
+                      'Transparent artwork is ready in seconds. Photos use local AI background removal.'
+                    )}
                   </span>
                 </button>
               )}
@@ -795,7 +801,7 @@ export function AIStickerMaker({
         <div className="w-48 shrink-0 space-y-3 overflow-y-auto pr-1 text-sm xl:w-56">
           <div className="space-y-2 rounded-md border bg-muted/20 p-3">
             <label className="block font-medium" htmlFor="sticker-background-mode">
-              Background
+              {t('Background')}
             </label>
             <select
               id="sticker-background-mode"
@@ -804,9 +810,9 @@ export function AIStickerMaker({
               onChange={(event) => setBackgroundMode(event.target.value as StickerBackgroundMode)}
               className="w-full rounded border bg-background p-2"
             >
-              <option value="auto">Auto detect</option>
-              <option value="remove">Remove with AI</option>
-              <option value="keep">Keep original</option>
+              <option value="auto">{t('Auto detect')}</option>
+              <option value="remove">{t('Remove with AI')}</option>
+              <option value="keep">{t('Keep original')}</option>
             </select>
             <p className="text-xs text-muted-foreground">
               {backgroundMode === 'auto'
@@ -829,13 +835,13 @@ export function AIStickerMaker({
             )}
             {active?.result && active.status !== 'Sent' && (
               <p className="text-xs text-muted-foreground">
-                Reprocessing replaces mask edits for this image.
+                {t('Reprocessing replaces mask edits for this image.')}
               </p>
             )}
           </div>
           {previewMode === 'mask' && active?.result && (
             <div className="space-y-2 rounded-md border bg-muted/30 p-2">
-              <p className="font-medium">Correct mask</p>
+              <p className="font-medium">{t('Correct mask')}</p>
               <div className="flex gap-1">
                 <Button
                   type="button"
@@ -844,7 +850,7 @@ export function AIStickerMaker({
                   disabled={busy || active.status === 'Sent'}
                   onClick={() => setBrushMode('erase')}
                 >
-                  Erase
+                  {t('Erase')}
                 </Button>
                 <Button
                   type="button"
@@ -853,11 +859,11 @@ export function AIStickerMaker({
                   disabled={busy || active.status === 'Sent'}
                   onClick={() => setBrushMode('restore')}
                 >
-                  Restore
+                  {t('Restore')}
                 </Button>
               </div>
               <label className="block">
-                Brush size: {brushSize} px
+                {t('Brush size:')} {brushSize} px
                 <input
                   type="range"
                   min="4"
@@ -868,7 +874,7 @@ export function AIStickerMaker({
                 />
               </label>
               <label className="block">
-                Hardness: {Math.round(brushHardness * 100)}%
+                {t('Hardness:')} {Math.round(brushHardness * 100)}%
                 <input
                   type="range"
                   min="0"
@@ -886,7 +892,7 @@ export function AIStickerMaker({
                   disabled={busy || !active.undoMasks.length || active.status === 'Sent'}
                   onClick={undoMask}
                 >
-                  Undo
+                  {t('Undo')}
                 </Button>
                 <Button
                   type="button"
@@ -895,7 +901,7 @@ export function AIStickerMaker({
                   disabled={busy || !active.redoMasks.length || active.status === 'Sent'}
                   onClick={redoMask}
                 >
-                  Redo
+                  {t('Redo')}
                 </Button>
                 <Button
                   type="button"
@@ -904,17 +910,18 @@ export function AIStickerMaker({
                   disabled={busy || !active.initialMask || active.status === 'Sent'}
                   onClick={resetMask}
                 >
-                  Reset mask
+                  {t('Reset mask')}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Paint white to keep pixels or black to remove them. The cutline updates when you
-                finish a stroke.
+                {t(
+                  'Paint white to keep pixels or black to remove them. The cutline updates when you finish a stroke.'
+                )}
               </p>
             </div>
           )}
           <label className="block">
-            Artwork width (mm)
+            {t('Artwork width (mm)')}
             <input
               key={`${active?.id}-width-${active?.widthMm}`}
               type="number"
@@ -935,7 +942,7 @@ export function AIStickerMaker({
             />
           </label>
           <label className="block">
-            Copies
+            {t('Copies')}
             <input
               key={`${active?.id}-copies-${active?.quantity}`}
               type="number"
@@ -957,7 +964,7 @@ export function AIStickerMaker({
             />
           </label>
           <label className="block">
-            Cut offset (mm)
+            {t('Cut offset (mm)')}
             <input
               type="number"
               min="0"
@@ -984,7 +991,7 @@ export function AIStickerMaker({
             />
           </label>
           <label className="block">
-            Alpha threshold
+            {t('Alpha threshold')}
             <input
               type="range"
               min="1"
@@ -997,20 +1004,20 @@ export function AIStickerMaker({
             <span>{settings.threshold} / 255</span>
           </label>
           <label className="block">
-            Contour smoothing
+            {t('Contour smoothing')}
             <select
               value={settings.smoothing}
               disabled={busy}
               onChange={(event) => changeSettings({ smoothing: Number(event.target.value) })}
               className="mt-1 w-full rounded border bg-background p-2"
             >
-              <option value={0}>Low</option>
-              <option value={1}>Medium</option>
-              <option value={3}>High</option>
+              <option value={0}>{t('Low')}</option>
+              <option value={1}>{t('Medium')}</option>
+              <option value={3}>{t('High')}</option>
             </select>
           </label>
           <p className="text-xs text-muted-foreground">
-            Cut settings apply to all unsent stickers.
+            {t('Cut settings apply to all unsent stickers.')}
           </p>
           {active?.result?.warnings.map((warning) => (
             <p key={warning} className="text-amber-700">
@@ -1018,7 +1025,7 @@ export function AIStickerMaker({
             </p>
           ))}
           <p className="text-xs text-muted-foreground">
-            The model downloads once, then runs locally. Artwork stays on this machine.
+            {t('The model downloads once, then runs locally. Artwork stays on this machine.')}
           </p>
         </div>
       </div>

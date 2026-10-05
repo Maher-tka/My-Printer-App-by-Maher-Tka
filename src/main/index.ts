@@ -254,7 +254,7 @@ function registerBookletExportHandlers(): void {
     'booklet:save-file',
     async (event, request: SaveFileRequest, context?: ExportContext) => {
       try {
-        await assertOnlineProductionAccess()
+        await assertOnlineProductionAccess('paid-tools', context?.toolId)
         const owner = BrowserWindow.fromWebContents(event.sender)
         const options = {
           title: 'Save booklet montage file',
@@ -326,7 +326,10 @@ function registerBookletExportHandlers(): void {
       context?: ExportContext
     ) => {
       try {
-        await assertOnlineProductionAccess(files.length > 1 ? 'batch-exports' : 'paid-tools')
+        await assertOnlineProductionAccess(
+          files.length > 1 ? 'batch-exports' : 'paid-tools',
+          context?.toolId
+        )
         const folder = resolve(folderPath)
         const writtenPaths: string[] = []
 

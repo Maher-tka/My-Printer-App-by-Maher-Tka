@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import {
   AlignCenter,
   AlignEndHorizontal,
@@ -23,6 +24,8 @@ interface AlignmentToolbarProps {
 }
 
 export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
+  const { t } = useLanguage()
+
   const selected = new Set(props.piece.selectedObjectIds)
   const artwork = props.piece.objects.find((object) => object.id === props.piece.artworkObjectId)
   const mask = props.piece.objects.find((object) => object.id === props.piece.maskObjectId)
@@ -40,22 +43,22 @@ export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <section className="rounded-lg border bg-card p-3">
-        <h4 className="text-sm font-semibold">Selection</h4>
+        <h4 className="text-sm font-semibold">{t('Selection')}</h4>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <SelectButton
-            label="Artwork"
+            label={t('Artwork')}
             objectId={artwork?.id}
             piece={props.piece}
             onSelectIds={props.onSelectIds}
           />
           <SelectButton
-            label="Mask"
+            label={t('Mask')}
             objectId={mask?.id}
             piece={props.piece}
             onSelectIds={props.onSelectIds}
           />
           <SelectButton
-            label="Cutline"
+            label={t('Cutline')}
             objectId={cutline?.id}
             piece={props.piece}
             onSelectIds={props.onSelectIds}
@@ -66,51 +69,51 @@ export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
             variant={primaryIds.every((id) => selected.has(id)) ? 'default' : 'outline'}
             onClick={() => props.onSelectIds(primaryIds)}
           >
-            Main objects
+            {t('Main objects')}
           </Button>
         </div>
       </section>
 
       <section className="rounded-lg border bg-card p-3">
         <div className="flex items-center justify-between gap-2">
-          <h4 className="text-sm font-semibold">Key-object alignment</h4>
+          <h4 className="text-sm font-semibold">{t('Key-object alignment')}</h4>
           <span className="text-[11px] text-muted-foreground">
             {props.piece.keyObjectId ? 'Key stays fixed' : 'Choose a key in Objects'}
           </span>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
           <IconButton
-            label="Align left"
+            label={t('Align left')}
             icon={AlignStartVertical}
             disabled={!canAlign}
             onClick={() => props.onAlign('left')}
           />
           <IconButton
-            label="Align center horizontal"
+            label={t('Align center horizontal')}
             icon={AlignCenter}
             disabled={!canAlign}
             onClick={() => props.onAlign('center-horizontal')}
           />
           <IconButton
-            label="Align right"
+            label={t('Align right')}
             icon={AlignEndVertical}
             disabled={!canAlign}
             onClick={() => props.onAlign('right')}
           />
           <IconButton
-            label="Align top"
+            label={t('Align top')}
             icon={AlignStartHorizontal}
             disabled={!canAlign}
             onClick={() => props.onAlign('top')}
           />
           <IconButton
-            label="Align center vertical"
+            label={t('Align center vertical')}
             icon={AlignHorizontalJustifyCenter}
             disabled={!canAlign}
             onClick={() => props.onAlign('center-vertical')}
           />
           <IconButton
-            label="Align bottom"
+            label={t('Align bottom')}
             icon={AlignEndHorizontal}
             disabled={!canAlign}
             onClick={() => props.onAlign('bottom')}
@@ -125,7 +128,7 @@ export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
             onClick={props.onCenterArtworkToMask}
           >
             <Crosshair data-icon="inline-start" />
-            Center artwork inside mask
+            {t('Center artwork inside mask')}
           </Button>
           <Button
             type="button"
@@ -135,7 +138,7 @@ export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
             onClick={props.onCenterArtworkToCutline}
           >
             <Crosshair data-icon="inline-start" />
-            Center artwork inside cutline
+            {t('Center artwork inside cutline')}
           </Button>
           <Button
             type="button"
@@ -145,7 +148,7 @@ export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
             onClick={props.onCenterCutlineToMask}
           >
             <Crosshair data-icon="inline-start" />
-            Center cutline around mask
+            {t('Center cutline around mask')}
           </Button>
           <Button
             type="button"
@@ -154,7 +157,7 @@ export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
             disabled={!cutline || !mask}
             onClick={props.onMatchCutlineToMask}
           >
-            Match cutline to mask
+            {t('Match cutline to mask')}
           </Button>
           <Button
             type="button"
@@ -163,7 +166,7 @@ export function AlignmentToolbar(props: AlignmentToolbarProps): JSX.Element {
             disabled={!cutline || !mask || activeMaskPairLocked}
             onClick={props.onMatchMaskToCutline}
           >
-            Match mask to cutline
+            {t('Match mask to cutline')}
           </Button>
         </div>
       </section>
@@ -182,6 +185,8 @@ function SelectButton({
   piece: PiecePreset
   onSelectIds: (ids: string[]) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <Button
       type="button"
@@ -194,7 +199,7 @@ function SelectButton({
       }
       onClick={() => objectId && onSelectIds([objectId])}
     >
-      {label}
+      {t(label)}
     </Button>
   )
 }
@@ -210,6 +215,8 @@ function IconButton({
   onClick: () => void
   disabled: boolean
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <Button
       type="button"
@@ -217,7 +224,7 @@ function IconButton({
       variant="outline"
       disabled={disabled}
       onClick={onClick}
-      aria-label={label}
+      aria-label={t(label)}
     >
       <Icon />
     </Button>

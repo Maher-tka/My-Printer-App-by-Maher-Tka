@@ -1,4 +1,6 @@
-import { CircleStop, FileDown, ImageDown } from 'lucide-react'
+import { ActionIcon } from '@/components/ui/action-button'
+import { useLanguage } from '@/i18n/useLanguage'
+import { CircleStop } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { ExportProgress } from '../types'
 import { ProgressLine } from './ProgressLine'
@@ -20,6 +22,8 @@ export function ExportPanel({
   onExportImages,
   onCancelExport
 }: ExportPanelProps): JSX.Element {
+  const { t } = useLanguage()
+
   const canCancel =
     exportProgress.phase === 'preparing-pages' ||
     exportProgress.phase === 'rendering-page' ||
@@ -28,15 +32,12 @@ export function ExportPanel({
   return (
     <div className="flex flex-col gap-4 rounded-lg border bg-card p-4">
       <div>
-        <h3 className="font-semibold">Export</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Exports use the selected paper size and millimeter settings.
-        </p>
+        <h3 className="font-semibold">{t('Export')}</h3>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" onClick={onExportPdf} disabled={!canExport || isBusy}>
-          <FileDown data-icon="inline-start" />
-          Export PDF
+          <ActionIcon action="export" />
+          {t('Export PDF')}
         </Button>
         <Button
           type="button"
@@ -44,8 +45,8 @@ export function ExportPanel({
           onClick={() => onExportImages('png')}
           disabled={!canExport || isBusy}
         >
-          <ImageDown data-icon="inline-start" />
-          PNG sheets
+          <ActionIcon action="export" />
+          {t('PNG sheets')}
         </Button>
         <Button
           type="button"
@@ -53,13 +54,13 @@ export function ExportPanel({
           onClick={() => onExportImages('jpg')}
           disabled={!canExport || isBusy}
         >
-          <ImageDown data-icon="inline-start" />
-          JPG sheets
+          <ActionIcon action="export" />
+          {t('JPG sheets')}
         </Button>
         {canCancel && (
           <Button type="button" variant="outline" onClick={onCancelExport}>
             <CircleStop data-icon="inline-start" />
-            Cancel
+            {t('Cancel')}
           </Button>
         )}
       </div>

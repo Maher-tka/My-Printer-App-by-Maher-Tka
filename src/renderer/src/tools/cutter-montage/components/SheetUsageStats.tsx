@@ -1,15 +1,18 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { Ruler } from 'lucide-react'
 import type { CutterProject } from '../types'
 import { getSheetUsageStats } from '../lib/sheetUsage'
 
 export function SheetUsageStats({ project }: { project: CutterProject }): JSX.Element {
+  const { t } = useLanguage()
+
   const stats = getSheetUsageStats(project)
   const topDuplicates = stats.duplicateCountByDesign.slice(0, 3)
 
   return (
     <section className="rounded-lg border bg-card p-4">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="font-semibold">Sheet Usage</h3>
+        <h3 className="font-semibold">{t('Sheet Usage')}</h3>
         <Ruler className="size-4 text-muted-foreground" />
       </div>
       <p className="mt-2 text-sm text-muted-foreground">

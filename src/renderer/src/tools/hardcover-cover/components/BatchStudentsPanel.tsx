@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { Plus, Trash2, Upload } from 'lucide-react'
 import { useRef } from 'react'
 import { Button } from '@/components/ui/button'
@@ -20,12 +21,14 @@ export function BatchStudentsPanel({
   onImportCsv: (csv: string) => void
   onPreview: (student: BatchStudent) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const inputRef = useRef<HTMLInputElement>(null)
   return (
     <section className="rounded-lg border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-semibold">Batch students</h3>
+          <h3 className="font-semibold">{t('Batch students')}</h3>
           <p className="text-sm text-muted-foreground">
             CSV columns: studentName,title,year,department,supervisor,spineTitle
           </p>
@@ -38,11 +41,11 @@ export function BatchStudentsPanel({
             onClick={() => inputRef.current?.click()}
           >
             <Upload />
-            Import CSV
+            {t('Import CSV')}
           </Button>
           <Button type="button" size="sm" onClick={onAdd}>
             <Plus />
-            Add student
+            {t('Add student')}
           </Button>
         </div>
       </div>
@@ -54,7 +57,7 @@ export function BatchStudentsPanel({
       <div className="mt-3 flex max-h-96 flex-col gap-3 overflow-auto">
         {students.length === 0 ? (
           <div className="rounded-md border border-dashed p-5 text-center text-sm text-muted-foreground">
-            Add students manually or import a CSV file.
+            {t('Add students manually or import a CSV file.')}
           </div>
         ) : (
           students.map((student, index) => (
@@ -64,31 +67,31 @@ export function BatchStudentsPanel({
             >
               <input
                 className="rounded border bg-background px-2 py-1.5 text-sm"
-                placeholder="Student name"
+                placeholder={t('Student name')}
                 value={student.studentName}
                 onChange={(event) => onChange(student.id, { studentName: event.target.value })}
               />
               <input
                 className="rounded border bg-background px-2 py-1.5 text-sm md:col-span-2"
-                placeholder="Title"
+                placeholder={t('Title')}
                 value={student.title}
                 onChange={(event) => onChange(student.id, { title: event.target.value })}
               />
               <input
                 className="rounded border bg-background px-2 py-1.5 text-sm"
-                placeholder="Year"
+                placeholder={t('Year')}
                 value={student.year}
                 onChange={(event) => onChange(student.id, { year: event.target.value })}
               />
               <input
                 className="rounded border bg-background px-2 py-1.5 text-sm"
-                placeholder="Department"
+                placeholder={t('Department')}
                 value={student.department}
                 onChange={(event) => onChange(student.id, { department: event.target.value })}
               />
               <input
                 className="rounded border bg-background px-2 py-1.5 text-sm"
-                placeholder="Spine short title"
+                placeholder={t('Spine short title')}
                 value={student.spineTitle}
                 onChange={(event) => onChange(student.id, { spineTitle: event.target.value })}
               />
@@ -99,7 +102,7 @@ export function BatchStudentsPanel({
                   variant="outline"
                   onClick={() => onPreview(student)}
                 >
-                  Preview {index + 1}
+                  {t('Preview')} {index + 1}
                 </Button>
                 <Button
                   type="button"
@@ -108,12 +111,12 @@ export function BatchStudentsPanel({
                   onClick={() => onRemove(student.id)}
                 >
                   <Trash2 />
-                  Remove
+                  {t('Remove')}
                 </Button>
               </div>
               {(!student.studentName || !student.title) && (
                 <p className="text-xs text-destructive md:col-span-3">
-                  Student name and title are required before batch export.
+                  {t('Student name and title are required before batch export.')}
                 </p>
               )}
             </div>

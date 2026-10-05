@@ -10,7 +10,7 @@ import {
 } from './mimakiJobPackage'
 import { createProductionNotesText, textToBytes } from './productionNotes'
 import { getProductionSheetLayoutGroups } from './productionSheetGroups'
-import { getProductionSheetProject } from './productionSheets'
+import { getSingleProductionSheetProject } from './productionSheets'
 import { exportCutterSvg } from './svgExport'
 
 export interface CutterBatchExportFile {
@@ -40,8 +40,7 @@ export async function exportCutterProductionBatch(
     const group = layoutGroups[layoutIndex]
     const sheetIndex = group.templateSheetIndex
     const layoutNumber = String(layoutIndex + 1).padStart(2, '0')
-    const printRepeat =
-      group.repeatCount === 1 ? 'PRINT_1_COPY' : `PRINT_${group.repeatCount}_COPIES`
+    const printRepeat = `x${group.repeatCount}`
     const cutRepeat =
       group.repeatCount === 1 ? 'RUN_1_CUT_PASS' : `RUN_${group.repeatCount}_CUT_PASSES`
     const printPdf = `01_Mimaki_Marked_Print_Layout_${layoutNumber}_${printRepeat}.pdf`
@@ -50,10 +49,10 @@ export async function exportCutterProductionBatch(
     const cutSvg = `03_CutOnly_CutContour_Layout_${layoutNumber}_${cutRepeat}.svg`
     const cutEps = `04_CutOnly_CutContour_Layout_${layoutNumber}_${cutRepeat}.eps`
     const previewPdf = `05_Customer_Preview_Layout_${layoutNumber}_${printRepeat}.pdf`
-    const printSheetProject = getProductionSheetProject(printOnly, sheetIndex)
-    const printCutSheetProject = getProductionSheetProject(printCut, sheetIndex)
-    const cutOnlySheetProject = getProductionSheetProject(cutOnly, sheetIndex)
-    const previewSheetProject = getProductionSheetProject(preview, sheetIndex)
+    const printSheetProject = getSingleProductionSheetProject(printOnly, sheetIndex)
+    const printCutSheetProject = getSingleProductionSheetProject(printCut, sheetIndex)
+    const cutOnlySheetProject = getSingleProductionSheetProject(cutOnly, sheetIndex)
+    const previewSheetProject = getSingleProductionSheetProject(preview, sheetIndex)
 
     files.push(renameExport(await exportCutterPdf(printSheetProject), `${folderName}/${printPdf}`))
     files.push(

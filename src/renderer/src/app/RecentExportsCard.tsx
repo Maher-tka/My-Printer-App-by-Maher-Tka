@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { ArrowDownToLine, ArrowUpRight, ExternalLink } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +12,8 @@ export function RecentExportsCard({
 }: {
   onNavigate: (route: AppRoute) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const [exports, setExports] = useState<ExportHistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -36,9 +39,9 @@ export function RecentExportsCard({
       <CardHeader className="flex-row items-center justify-between gap-3 px-5 pb-4 pt-6 sm:px-6">
         <div>
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            Made & ready
+            {t('Made & ready')}
           </p>
-          <CardTitle className="text-base font-semibold">Recent exports</CardTitle>
+          <CardTitle className="text-base font-semibold">{t('Recent exports')}</CardTitle>
         </div>
         <Button
           type="button"
@@ -47,13 +50,13 @@ export function RecentExportsCard({
           className="text-primary"
           onClick={() => onNavigate('exports')}
         >
-          View all <ArrowUpRight className="size-3.5" />
+          {t('View all')} <ArrowUpRight className="size-3.5" />
         </Button>
       </CardHeader>
       <CardContent className="flex flex-col gap-0 px-5 pb-6 pt-0 sm:px-6">
         {loading ? (
           <p role="status" className="py-8 text-center text-sm text-muted-foreground">
-            Loading exports…
+            {t('Loading exports…')}
           </p>
         ) : error ? (
           <p
@@ -68,9 +71,9 @@ export function RecentExportsCard({
               <ArrowDownToLine className="size-5" strokeWidth={1.5} aria-hidden="true" />
             </span>
             <div>
-              <p className="text-sm font-medium">The finishing touch.</p>
+              <p className="text-sm font-medium">{t('The finishing touch.')}</p>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                Your exported files will gather here, ready for their next step.
+                {t('Your exported files will gather here, ready for their next step.')}
               </p>
             </div>
           </div>

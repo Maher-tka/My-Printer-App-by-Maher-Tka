@@ -15,17 +15,18 @@ import {
 } from '../shared/print-types.js'
 import { recordAppError } from './release-runtime.js'
 import { assertOnlineProductionAccess } from './online-account.js'
+import type { ExportContext } from '../shared/release-types.js'
 
 const PRINT_TEMP_FOLDER = 'my-printer-app-print'
 const activeTempFiles = new Set<string>()
 
 export function registerPrintHandlers(): void {
-  ipcMain.handle('print:pdf', async (_event, request: PrintPdfRequest) => {
+  ipcMain.handle('print:pdf', async (_event, request: PrintPdfRequest, context?: ExportContext) => {
     try {
       const validationError = getPrintPdfRequestError(request)
       if (validationError) return failedPrint(validationError)
 
-      await assertOnlineProductionAccess()
+      await assertOnlineProductionAccess('paid-tools', context?.toolId)
 
       const pdfName = normalizePdfPrintName(request.suggestedName)
       const tempPath = await writeTempPdf(pdfName, toBuffer(request.bytes))
@@ -33,7 +34,8 @@ export function registerPrintHandlers(): void {
         cleanupAfterPrint: true,
         jobTitle: request.jobTitle,
         pdfName,
-        silent: request.silent === true
+        silent: request.silent === true,
+        copies: request.copies
       })
     } catch (error) {
       recordAppError('print-pdf', error)
@@ -47,14 +49,15 @@ export function registerPrintHandlers(): void {
       if (validationError) return failedPrint(validationError)
 
       const bytes = await readFile(request.filePath)
-      await assertOnlineProductionAccess()
+      await assertOnlineProductionAccess('paid-tools', request.toolId)
       if (!isPdfByteSource(bytes)) return failedPrint('Print requires a valid PDF file.')
 
       return await printPdfFile(request.filePath, {
         cleanupAfterPrint: false,
         jobTitle: request.jobTitle,
         pdfName: normalizePdfPrintName(request.suggestedName ?? basename(request.filePath)),
-        silent: request.silent === true
+        silent: request.silent === true,
+        copies: request.copies
       })
     } catch (error) {
       recordAppError('print-pdf-file', error)
@@ -76,6 +79,7 @@ async function printPdfFile(
     jobTitle?: string
     pdfName: string
     silent: boolean
+    copies?: number
   }
 ): Promise<PrintPdfResult> {
   const window = new BrowserWindow({
@@ -98,7 +102,7 @@ async function printPdfFile(
   try {
     await window.loadURL(pathToFileURL(filePath).toString())
     await waitForPdfViewer()
-    const result = await printWindow(window, options.silent)
+    const result = await printWindow(window, options.silent, options.copies)
 
     if (result.ok) {
       return {
@@ -114,12 +118,17 @@ async function printPdfFile(
   }
 }
 
-function printWindow(window: BrowserWindow, silent: boolean): Promise<PrintPdfResult> {
+function printWindow(
+  window: BrowserWindow,
+  silent: boolean,
+  copies?: number
+): Promise<PrintPdfResult> {
   return new Promise((resolve) => {
     window.webContents.print(
       {
         silent,
-        printBackground: true
+        printBackground: true,
+        ...(copies !== undefined ? { copies, collate: true } : {})
       },
       (success, failureReason) => {
         resolve(createPrintDialogResult(success, failureReason))

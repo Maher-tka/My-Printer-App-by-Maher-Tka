@@ -1,7 +1,8 @@
 import type { PiecePreset, PieceSourceFile } from '../types'
 import type { StickerMakerResult } from './stickerMaker'
 import { createCutterId } from './nesting'
-import { createPiecePresetFromSource, resizePiecePreset } from './piecePresets'
+import { createPiecePresetFromSource } from './piecePresets'
+import { getPieceSize, resizePieceToSize } from './pieceSize'
 import { synchronizePieceEditorModel } from './editorObjects'
 import { bytesToArrayBuffer } from './sourcePreview'
 
@@ -95,7 +96,7 @@ export function createStickerCutterAssets(
 /** Scale the finished artwork and vector contour together in Cutter Montage. */
 export function resizeFinishedStickerWidth(piece: PiecePreset, widthMm: number): PiecePreset {
   if (!Number.isFinite(widthMm) || widthMm < 5 || widthMm > 960) return piece
-  const resized = resizePiecePreset(piece, widthMm / 10, piece.heightCm, 'width')
+  const resized = resizePieceToSize(piece, widthMm / 10, getPieceSize(piece).heightCm, 'width')
   return {
     ...resized,
     stickerMakerOffsetMm:

@@ -1,0 +1,17 @@
+Local spine recognition components
+
+Tesseract.js 7.0.0 and Tesseract.js Core
+https://github.com/naptha/tesseract.js
+https://github.com/naptha/tesseract.js-core
+Apache License 2.0: see the adjacent tesseract-js-Apache-2.0.txt and
+tesseract-core-Apache-2.0.txt files.
+
+Arabic, French, and English trained data supplied by
+@tesseract.js-data/ara, @tesseract.js-data/fra, @tesseract.js-data/eng 1.0.0.
+https://github.com/naptha/tessdata
+Underlying trained-data repository: Apache License 2.0.
+NPM language-package metadata: MIT; Balearica, Jerome Wu, and contributors.
+The bundled trained data is unmodified.
+
+Application integration by Maher Tka: local asset loading, bounded page
+recognition, cancellation, and multilingual cover-role parsing.

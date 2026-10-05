@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -25,6 +26,8 @@ import { useJobStore } from './useJobStore'
 import type { JobOpenRequest, JobQuote, PrinterJob, PrinterJobStatus } from './jobTypes'
 
 export function JobsPage({ openRequest }: { openRequest?: JobOpenRequest | null }): JSX.Element {
+  const { t } = useLanguage()
+
   const { jobs, saveJob, deleteJob } = useJobStore()
   const { customers, saveCustomer } = useCustomerStore()
   const [query, setQuery] = useState('')
@@ -177,9 +180,11 @@ export function JobsPage({ openRequest }: { openRequest?: JobOpenRequest | null 
         {header}
         <Card>
           <CardHeader className="border-b bg-muted/25">
-            <CardTitle>Customer database</CardTitle>
+            <CardTitle>{t('Customer database')}</CardTitle>
             <CardDescription>
-              Customer details, order history, and outstanding balances stay on this computer.
+              {t(
+                'Customer details, order history, and outstanding balances stay on this computer.'
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
@@ -207,7 +212,7 @@ export function JobsPage({ openRequest }: { openRequest?: JobOpenRequest | null 
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogCancel>{t('Keep editing')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 const job = jobs.find((item) => item.id === pendingJob?.id)

@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { memo } from 'react'
 import { Eye, EyeOff, KeyRound, LockKeyhole, UnlockKeyhole } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -12,10 +13,12 @@ interface PieceEditorObjectPanelProps {
 }
 
 export function PieceEditorObjectPanel(props: PieceEditorObjectPanelProps): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <section className="rounded-lg border bg-card p-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold">Objects</h4>
+        <h4 className="text-sm font-semibold">{t('Objects')}</h4>
         <span className="text-[11px] text-muted-foreground">
           {props.piece.selectedObjectIds.length} selected
         </span>

@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAccountState } from '@/account/useAccountState'
 import { AccessRequestPage } from '@/account/AccessRequestPage'
@@ -18,6 +19,7 @@ import {
 } from '@/projects/projectFiles'
 import { AutosaveRecoveryBanner } from '@/projects/AutosaveRecoveryBanner'
 import type { SequentialProject } from '@/tools/sequential-number/types'
+import { DEFAULT_CARD_SETTINGS, type CardMontageDraft } from '@/tools/card-montage/types'
 import type { AppRoute, PageMeta } from '@/types/navigation'
 import type {
   ActiveProjectSession,
@@ -29,6 +31,9 @@ import type { AutosaveEntry } from '../../../shared/release-types'
 
 const SequentialNumberPage = lazy(async () => ({
   default: (await import('@/tools/sequential-number/SequentialNumberPage')).SequentialNumberPage
+}))
+const CardMontagePage = lazy(async () => ({
+  default: (await import('@/tools/card-montage/CardMontagePage')).CardMontagePage
 }))
 
 const AUTOSAVE_INTERVAL_MS = 60_000
@@ -65,6 +70,10 @@ const HardcoverCoverPage = lazy(async () => ({
 }))
 
 const pageMeta: Record<AppRoute, PageMeta> = {
+  'card-montage': {
+    title: 'Card Montage',
+    subtitle: 'Business cards on A4'
+  },
   'sequential-number': {
     title: 'Sequential Number',
     subtitle: 'Tickets, invoices, and cut-stack numbering'
@@ -113,6 +122,7 @@ const pageMeta: Record<AppRoute, PageMeta> = {
 
 const appRoutes = new Set<AppRoute>([
   'dashboard',
+  'card-montage',
   'booklet-montage',
   'hardcover-cover',
   'cutter-montage',
@@ -144,18 +154,22 @@ function openedImageToFile(image: PrinterAppOpenedImageFile): File {
 }
 
 function ToolLoadingFallback({ label }: { label: string }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div
       role="status"
       aria-live="polite"
       className="rounded-md border bg-card px-4 py-3 text-sm font-medium text-muted-foreground"
     >
-      {label}
+      {t(label)}
     </div>
   )
 }
 
 function AccessLoadingScreen(): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <main className="grid min-h-screen place-items-center bg-background px-6">
       <div className="flex max-w-sm flex-col items-center gap-4 text-center">
@@ -163,9 +177,9 @@ function AccessLoadingScreen(): JSX.Element {
           M
         </div>
         <div className="flex flex-col gap-1.5">
-          <p className="text-lg font-bold text-foreground">Preparing workspace access…</p>
+          <p className="text-lg font-bold text-foreground">{t('Preparing workspace access…')}</p>
           <p className="text-sm leading-6 text-muted-foreground">
-            Checking your local account and subscription status.
+            {t('Checking your local account and subscription status.')}
           </p>
         </div>
         <div className="h-1.5 w-48 overflow-hidden rounded-full bg-muted">
@@ -183,7 +197,14 @@ function getRouteFromHash(): AppRoute {
 }
 
 export function App(): JSX.Element {
+  const { t } = useLanguage()
+
   const [activeRoute, setActiveRoute] = useState<AppRoute>(() => getRouteFromHash())
+  const [cardDraft, setCardDraft] = useState<CardMontageDraft>(() => ({
+    artwork: null,
+    back: null,
+    settings: { ...DEFAULT_CARD_SETTINGS }
+  }))
   const [jobOpenRequest, setJobOpenRequest] = useState<JobOpenRequest | null>(null)
   const activeRouteRef = useRef(activeRoute)
   const activeProjectSessionRef = useRef<ActiveProjectSession | null>(null)
@@ -229,11 +250,36 @@ export function App(): JSX.Element {
       ? hasCloudAccess || keepCloudWorkOpen
       : hasSubscriptionAccess || hasTrialAccountAccess)
   const activeTool = printerTools.find((tool) => tool.route === activeRoute)
+  useEffect(() => {
+    window.printerApp?.setActiveTool?.(activeRoute)
+  }, [activeRoute])
   const activeToolAccess = activeTool
     ? getToolAccessState(activeTool, license.state, license.isLoading)
     : null
+  const lastAllowedTool = useRef<{ route: AppRoute; userId?: string } | null>(null)
+  useEffect(() => {
+    if (
+      activeTool &&
+      activeToolAccess &&
+      !activeToolAccess.isLicenseLocked &&
+      !activeToolAccess.isCheckingLicense
+    ) {
+      lastAllowedTool.current = { route: activeRoute, userId: account.state?.profile?.id }
+    }
+  }, [
+    activeRoute,
+    activeTool,
+    activeToolAccess?.isLicenseLocked,
+    activeToolAccess?.isCheckingLicense,
+    account.state?.profile?.id
+  ])
+  const preserveActiveTool =
+    keepCloudWorkOpen &&
+    lastAllowedTool.current?.route === activeRoute &&
+    lastAllowedTool.current?.userId === account.state?.profile?.id
   const showToolAccessOverlay = Boolean(
-    !keepCloudWorkOpen && (activeToolAccess?.isCheckingLicense || activeToolAccess?.isLicenseLocked)
+    !preserveActiveTool &&
+    (activeToolAccess?.isCheckingLicense || activeToolAccess?.isLicenseLocked)
   )
 
   useEffect(() => {
@@ -263,6 +309,7 @@ export function App(): JSX.Element {
   }, [])
 
   const clearActiveProjectSession = useCallback((): void => {
+    lastAllowedTool.current = null
     activeProjectSessionRef.current = null
     void window.printerApp?.setProjectDirty(false, 'Untitled Project')
     window.printerApp?.setActiveProjectSnapshot(null)
@@ -645,8 +692,15 @@ export function App(): JSX.Element {
             className="font-semibold underline"
             onClick={() => void navigate('license')}
           >
-            Check account access
+            {t('Check account access')}
           </button>
+        </div>
+      )}
+      {hasCloudAccess && activeToolAccess?.isLicenseLocked && preserveActiveTool && (
+        <div role="status" className="mb-4 rounded-xl border bg-card p-4 text-sm">
+          This tool is no longer included in your subscription. Your current work remains open so
+          you can save the project; printing and exporting are blocked. Contact the owner to change
+          access.
         </div>
       )}
       {recoveryError && !recoveryEntry && (
@@ -660,7 +714,7 @@ export function App(): JSX.Element {
             className="font-semibold underline underline-offset-4"
             onClick={() => setRecoveryError(null)}
           >
-            Dismiss
+            {t('Dismiss')}
           </button>
         </div>
       )}
@@ -675,7 +729,7 @@ export function App(): JSX.Element {
         />
       )}
       {activeRoute === 'dashboard' && (
-        <Suspense fallback={<ToolLoadingFallback label="Loading Dashboard..." />}>
+        <Suspense fallback={<ToolLoadingFallback label={t('Loading Dashboard...')} />}>
           <DashboardPage
             onOpenJob={(jobId) => void openJob(jobId)}
             licenseState={license.state}
@@ -688,7 +742,7 @@ export function App(): JSX.Element {
         </Suspense>
       )}
       {activeRoute === 'booklet-montage' && !showToolAccessOverlay && (
-        <Suspense fallback={<ToolLoadingFallback label="Loading Booklet Montage..." />}>
+        <Suspense fallback={<ToolLoadingFallback label={t('Loading Booklet Montage...')} />}>
           <BookletMontagePage
             key={openedProject?.instanceId ?? 'new-booklet'}
             onNavigate={navigate}
@@ -705,8 +759,13 @@ export function App(): JSX.Element {
           />
         </Suspense>
       )}
+      {activeRoute === 'card-montage' && !showToolAccessOverlay && (
+        <Suspense fallback={<ToolLoadingFallback label={t('Loading Card Montage…')} />}>
+          <CardMontagePage draft={cardDraft} onDraftChange={setCardDraft} onNavigate={navigate} />
+        </Suspense>
+      )}
       {activeRoute === 'hardcover-cover' && !showToolAccessOverlay && (
-        <Suspense fallback={<ToolLoadingFallback label="Loading Hardcover Cover..." />}>
+        <Suspense fallback={<ToolLoadingFallback label={t('Loading Hardcover Cover...')} />}>
           <HardcoverCoverPage
             key={openedProject?.instanceId ?? 'new-hardcover'}
             onNavigate={navigate}
@@ -722,7 +781,7 @@ export function App(): JSX.Element {
         </Suspense>
       )}
       {activeRoute === 'cutter-montage' && !showToolAccessOverlay && (
-        <Suspense fallback={<ToolLoadingFallback label="Loading Cutter Montage..." />}>
+        <Suspense fallback={<ToolLoadingFallback label={t('Loading Cutter Montage...')} />}>
           <CutterMontagePage
             key={openedProject?.instanceId ?? 'new-cutter'}
             onNavigate={navigate}
@@ -740,7 +799,7 @@ export function App(): JSX.Element {
         </Suspense>
       )}
       {activeRoute === 'sequential-number' && !showToolAccessOverlay && (
-        <Suspense fallback={<ToolLoadingFallback label="Loading Sequential Number…" />}>
+        <Suspense fallback={<ToolLoadingFallback label={t('Loading Sequential Number…')} />}>
           <SequentialNumberPage
             key={openedProject?.instanceId ?? 'new-sequential'}
             onNavigate={navigate}
@@ -766,7 +825,7 @@ export function App(): JSX.Element {
         />
       )}
       {activeRoute === 'license' && !cloudMode && (
-        <Suspense fallback={<ToolLoadingFallback label="Loading Access & Subscription..." />}>
+        <Suspense fallback={<ToolLoadingFallback label={t('Loading Access & Subscription...')} />}>
           <LicensePage
             licenseState={license.state}
             isLoading={license.isLoading}
@@ -782,7 +841,7 @@ export function App(): JSX.Element {
         </Suspense>
       )}
       {activeRoute === 'settings' && (
-        <Suspense fallback={<ToolLoadingFallback label="Loading Settings..." />}>
+        <Suspense fallback={<ToolLoadingFallback label={t('Loading Settings...')} />}>
           <SettingsPage
             licenseState={license.state}
             isDeveloperMode={license.isDeveloperMode}
@@ -791,17 +850,17 @@ export function App(): JSX.Element {
         </Suspense>
       )}
       {activeRoute === 'jobs' && (
-        <Suspense fallback={<ToolLoadingFallback label="Loading Shop Jobs..." />}>
+        <Suspense fallback={<ToolLoadingFallback label={t('Loading Shop Jobs...')} />}>
           <JobsPage openRequest={jobOpenRequest} />
         </Suspense>
       )}
       {activeRoute === 'exports' && (
-        <Suspense fallback={<ToolLoadingFallback label="Loading Export Center..." />}>
+        <Suspense fallback={<ToolLoadingFallback label={t('Loading Export Center...')} />}>
           <ExportCenterPage onNavigate={navigate} />
         </Suspense>
       )}
       {activeRoute === 'app-health' && (
-        <Suspense fallback={<ToolLoadingFallback label="Loading App Health..." />}>
+        <Suspense fallback={<ToolLoadingFallback label={t('Loading App Health...')} />}>
           <AppHealthPage
             license={license.state}
             performance={performanceSettings}

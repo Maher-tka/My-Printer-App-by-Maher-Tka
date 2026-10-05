@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { AlertTriangle, Check, FileText, Info, Loader2, X } from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,8 @@ export function PdfPageImportDialog({
   onCancel,
   onImport
 }: PdfPageImportDialogProps): JSX.Element {
+  const { t } = useLanguage()
+
   const dialogRef = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const rangeErrorId = useId()
@@ -84,7 +87,13 @@ export function PdfPageImportDialog({
               {session.pageCount} pages · {session.loadedPageCount} thumbnails loaded
             </p>
           </div>
-          <Button type="button" size="icon" variant="ghost" onClick={onCancel} aria-label="Close">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={onCancel}
+            aria-label={t('Close')}
+          >
             <X className="size-4" />
           </Button>
         </header>
@@ -141,7 +150,7 @@ export function PdfPageImportDialog({
                       )}
                     </span>
                     <span className="block truncate px-2 py-2 text-sm font-medium">
-                      Page {page.pageNumber}
+                      {t('Page')} {page.pageNumber}
                     </span>
                     {page.productionMetadata?.physicalSizeMm && (
                       <span className="block px-2 pb-2 text-[11px] text-muted-foreground">
@@ -168,22 +177,22 @@ export function PdfPageImportDialog({
                   )
                 }
               >
-                Select all
+                {t('Select all')}
               </Button>
               <Button type="button" variant="outline" onClick={() => setSelectedPages(new Set())}>
-                Select none
+                {t('Select none')}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setSelectedPages(new Set([1]))}
               >
-                Page 1 only
+                {t('Page 1 only')}
               </Button>
             </div>
 
             <label className="mt-4 block text-xs font-medium text-muted-foreground">
-              Page range
+              {t('Page range')}
               <input
                 className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm text-foreground"
                 value={rangeValue}
@@ -203,7 +212,7 @@ export function PdfPageImportDialog({
               />
             </label>
             <Button type="button" variant="outline" className="mt-2 w-full" onClick={applyRange}>
-              Apply range
+              {t('Apply range')}
             </Button>
             {rangeError && (
               <p id={rangeErrorId} role="alert" className="mt-2 text-xs text-destructive">
@@ -232,7 +241,7 @@ export function PdfPageImportDialog({
                 disabled={busy}
               >
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                Load more pages
+                {t('Load more pages')}
               </Button>
             )}
 
@@ -243,7 +252,7 @@ export function PdfPageImportDialog({
               onClick={() => onImport(selectedPageNumbers)}
             >
               {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-              Import {selectedPageNumbers.length || 'selected'}{' '}
+              {t('Import')} {selectedPageNumbers.length || 'selected'}{' '}
               {selectedPageNumbers.length === 1 ? 'page' : 'pages'}
             </Button>
           </aside>
@@ -258,6 +267,8 @@ function PdfProductionMetadataPanel({
 }: {
   metadata: PdfProductionMetadata
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const layerSummary = metadata.layers.length
     ? metadata.layers
         .map((layer) => `${layer.name} (${layer.defaultVisible ? 'visible' : 'hidden'})`)
@@ -270,7 +281,7 @@ function PdfProductionMetadataPanel({
   return (
     <section
       className="mb-3 rounded-md border bg-muted/20 p-3 text-xs"
-      aria-label="PDF production inspection"
+      aria-label={t('PDF production inspection')}
     >
       <div className="flex flex-wrap items-center gap-2">
         <Info className="size-4 text-primary" />

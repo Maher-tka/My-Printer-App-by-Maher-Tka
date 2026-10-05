@@ -1,6 +1,8 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import {
   Activity,
   BookOpenCheck,
+  CreditCard,
   BriefcaseBusiness,
   FileImage,
   FolderOpen,
@@ -49,6 +51,14 @@ interface CommandItem {
 }
 
 const commands: CommandItem[] = [
+  {
+    id: 'card-montage',
+    label: 'Card Montage',
+    description: 'Arrange business cards on A4 with zero or custom spacing',
+    keywords: 'business card cards carte visite montage imposition pdf image a4 8.8 5.6',
+    icon: CreditCard,
+    route: 'card-montage'
+  },
   {
     id: 'sequential-number',
     label: 'Sequential Number',
@@ -166,6 +176,8 @@ export function CommandCenter({
   onOpenJob,
   isDeveloperMode = false
 }: CommandCenterProps): JSX.Element | null {
+  const { t } = useLanguage()
+
   const [query, setQuery] = useState('')
   const { jobs } = useJobStore()
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -264,7 +276,7 @@ export function CommandCenter({
         }}
         role="dialog"
         aria-modal="true"
-        aria-label="Command Center"
+        aria-label={t('Command Center')}
         className="w-full max-w-2xl overflow-hidden rounded-[var(--ui-radius-xl)] border border-[var(--ui-border)] bg-popover shadow-elevated"
       >
         <div className="flex items-center gap-3 border-b px-4">
@@ -304,7 +316,7 @@ export function CommandCenter({
                 runCommand(filteredCommands[selectedIndex])
               }
             }}
-            placeholder="Describe a task, or find a customer / job…"
+            placeholder={t('Describe a task, or find a customer / job…')}
             className="h-12 min-w-0 flex-1 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground"
           />
           <button
@@ -351,18 +363,20 @@ export function CommandCenter({
                     {command.label}
                     {command.jobId ? (
                       <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                        Job
+                        {t('Job')}
                       </span>
                     ) : null}
                     {isActive ? (
                       <span className="rounded-full bg-success px-2 py-0.5 text-[10px] font-bold uppercase text-success-foreground">
-                        Current
+                        {t('Current')}
                       </span>
                     ) : null}
                   </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {command.description}
-                  </span>
+                  {command.jobId && (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {command.description}
+                    </span>
+                  )}
                 </span>
                 <span className="text-xs font-medium text-muted-foreground">↵</span>
               </button>
@@ -376,7 +390,7 @@ export function CommandCenter({
         </div>
         <div className="flex items-center justify-between border-t bg-muted/40 px-4 py-2 text-[11px] font-medium text-muted-foreground">
           <span>↑↓ Navigate · Enter Open · Esc Close</span>
-          <span>Command Center</span>
+          <span>{t('Command Center')}</span>
         </div>
       </div>
     </div>

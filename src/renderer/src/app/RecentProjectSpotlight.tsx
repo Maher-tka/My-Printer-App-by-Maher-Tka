@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { FileText, FolderOpen, ArrowUpRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -8,6 +9,8 @@ export function RecentProjectSpotlight({
 }: {
   onOpenProject: (filePath?: string | null) => Promise<PrinterAppProjectResult>
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const [project, setProject] = useState<RecentJob | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -46,7 +49,7 @@ export function RecentProjectSpotlight({
     <section aria-labelledby="recent-project-heading" className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h3 id="recent-project-heading" className="text-base font-semibold">
-          Continue a project
+          {t('Continue a project')}
         </h3>
         <FolderOpen className="size-4 text-muted-foreground" aria-hidden="true" />
       </div>
@@ -61,7 +64,7 @@ export function RecentProjectSpotlight({
         </p>
         <p className="max-w-full break-words text-xs leading-5 text-muted-foreground">
           {project?.summary ||
-            (project ? project.tool : 'Open a saved project or import your first document.')}
+            (project ? project.tool : t('Open a saved project or import your first document.'))}
         </p>
       </div>
       {project && (
@@ -82,7 +85,7 @@ export function RecentProjectSpotlight({
         disabled={busy || loading}
         onClick={() => void open()}
       >
-        <span>{busy ? 'Opening…' : project ? 'Open recent project' : 'Open saved project'}</span>
+        <span>{busy ? t('Opening…') : project ? 'Open recent project' : 'Open saved project'}</span>
         <ArrowUpRight className="size-4" aria-hidden="true" />
       </Button>
     </section>

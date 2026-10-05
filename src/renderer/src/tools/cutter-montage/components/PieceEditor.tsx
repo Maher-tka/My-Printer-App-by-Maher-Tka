@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { ArtworkBackgroundTools } from './ArtworkBackgroundTools'
 import type { ArtworkEditResult } from '../lib/applyArtworkEdit'
 import {
@@ -26,7 +27,7 @@ import {
   setObjectGroup
 } from '../lib/editorObjects'
 import { syncLegacyFieldsFromObjects } from '../lib/pieceModelSync'
-import { resizePiecePreset } from '../lib/piecePresets'
+import { getPieceSize, resizePieceToSize } from '../lib/pieceSize'
 import { formatCm } from '../lib/units'
 import { usePieceEditorClipboard } from '../hooks/usePieceEditorClipboard'
 import { usePieceEditorHistory } from '../hooks/usePieceEditorHistory'
@@ -55,13 +56,17 @@ interface PieceEditorProps {
 }
 
 export function PieceEditor(props: PieceEditorProps): JSX.Element {
+  const { t } = useLanguage()
+
   if (!props.piece) {
     return (
       <section className="grid h-full min-h-64 place-items-center rounded-[var(--ui-radius-lg)] border border-dashed bg-muted/25 p-8 text-center">
         <div className="max-w-md">
-          <h3 className="text-lg font-semibold">No piece selected</h3>
+          <h3 className="text-lg font-semibold">{t('Start with your artwork')}</h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            Import a design and click Edit to prepare artwork and cutline before montage.
+            {t(
+              'Import a design using the button on the left, then prepare its artwork and cut line.'
+            )}
           </p>
         </div>
       </section>
@@ -80,6 +85,8 @@ function ActivePieceEditor({
   inspectorHidden = false,
   onBackgroundApply
 }: PieceEditorProps & { piece: PiecePreset }): JSX.Element {
+  const { t } = useLanguage()
+
   const [inspector, setInspector] = useState('mask')
   const [preparationTool, setPreparationTool] = useState<'mask' | 'background'>('mask')
   const fullscreen = useCanvasFullscreen<HTMLElement>()
@@ -150,7 +157,8 @@ function ActivePieceEditor({
               {stage === 'prepare' ? 'Prepare artwork' : 'Cut lines'}
             </h3>
             <p className="text-xs text-muted-foreground">
-              {piece.displayName} · {formatCm(piece.widthCm)} x {formatCm(piece.heightCm)}
+              {piece.displayName} · {formatCm(getPieceSize(piece).widthCm)} x{' '}
+              {formatCm(getPieceSize(piece).heightCm)}
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -166,29 +174,29 @@ function ActivePieceEditor({
               }
             >
               {fullscreen.isExpanded ? <Minimize2 /> : <Maximize2 />}
-              {fullscreen.isExpanded ? 'Restore workspace' : 'Expand canvas'}
+              {fullscreen.isExpanded ? t('Restore workspace') : t('Expand canvas')}
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              aria-label="Undo"
+              aria-label={t('Undo')}
               disabled={!history.canUndo}
               onClick={history.undo}
             >
               <Undo2 data-icon="inline-start" />
-              Undo
+              {t('Undo')}
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              aria-label="Redo"
+              aria-label={t('Redo')}
               disabled={!history.canRedo}
               onClick={history.redo}
             >
               <Redo2 data-icon="inline-start" />
-              Redo
+              {t('Redo')}
             </Button>
           </div>
         </div>
@@ -231,7 +239,7 @@ function ActivePieceEditor({
         </div>
         <PieceEditorStatusBar piece={piece} tool={editorState.tool} zoom={editorState.zoom} />
         <details className="shrink-0 text-xs text-muted-foreground">
-          <summary className="cursor-pointer py-1">Keyboard shortcuts</summary>
+          <summary className="cursor-pointer py-1">{t('Keyboard shortcuts')}</summary>
           <PieceEditorShortcuts tool={editorState.tool} />
         </details>
       </div>
@@ -247,16 +255,16 @@ function ActivePieceEditor({
         >
           <TabsList className="m-2 grid shrink-0 grid-cols-4" aria-label="Piece inspector">
             <TabsTrigger value="layers" className="px-1 text-xs">
-              Layers
+              {t('Layers')}
             </TabsTrigger>
             <TabsTrigger value="properties" className="px-1 text-xs">
-              Properties
+              {t('Properties')}
             </TabsTrigger>
             <TabsTrigger value="mask" className="px-1 text-xs">
               {stage === 'prepare' ? 'Prepare' : 'Cut tools'}
             </TabsTrigger>
             <TabsTrigger value="align" className="px-1 text-xs">
-              Align
+              {t('Align')}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="layers" className="mt-0 min-h-0 flex-1 overflow-y-auto p-2">
@@ -299,10 +307,11 @@ function ActivePieceEditor({
             {stage === 'prepare' ? (
               <div className="space-y-3">
                 <section className="rounded-lg border p-3">
-                  <h4 className="text-sm font-semibold">Mask / trim</h4>
+                  <h4 className="text-sm font-semibold">{t('Mask / trim')}</h4>
                   <p className="my-2 text-xs text-muted-foreground">
-                    Draw around the part you want to keep, then apply the mask. The original image
-                    stays intact.
+                    {t(
+                      'Draw around the part you want to keep, then apply the mask. The original image stays intact.'
+                    )}
                   </p>
                   <div className="grid grid-cols-2 gap-2">
                     <Button
@@ -310,19 +319,20 @@ function ActivePieceEditor({
                       size="sm"
                       onClick={() => editorState.setTool('rectangle')}
                     >
-                      Trim rectangle
+                      {t('Trim rectangle')}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => editorState.setTool('ellipse')}
                     >
-                      Oval mask
+                      {t('Oval mask')}
                     </Button>
                   </div>
                   <Button
                     className="mt-2 w-full"
                     size="sm"
+                    variant="outline"
                     disabled={!selectedShape || !piece.artworkObjectId}
                     onClick={() => {
                       if (selectedShape && piece.artworkObjectId) {
@@ -336,7 +346,7 @@ function ActivePieceEditor({
                       }
                     }}
                   >
-                    Apply mask / trim
+                    {t('Apply mask / trim')}
                   </Button>
                   <Button
                     className="mt-2 w-full"
@@ -345,7 +355,7 @@ function ActivePieceEditor({
                     disabled={!piece.clippingMaskEnabled}
                     onClick={releaseMask}
                   >
-                    Release mask
+                    {t('Release mask')}
                   </Button>
                 </section>
                 {onBackgroundApply && (
@@ -361,25 +371,30 @@ function ActivePieceEditor({
             ) : (
               <div className="space-y-3">
                 <section className="space-y-2 rounded-lg border p-3">
-                  <h4 className="text-sm font-semibold">Create cut line</h4>
+                  <h4 className="text-sm font-semibold">{t('Create cut line')}</h4>
                   <p className="text-xs text-muted-foreground">
-                    Use the prepared mask, artwork bounds, or draw a shape on the canvas.
+                    {t('Use the prepared mask, artwork bounds, or draw a shape on the canvas.')}
                   </p>
                   <Button
                     className="w-full"
                     size="sm"
+                    variant={
+                      !piece.cutlineObjectId && piece.clippingMaskEnabled ? 'default' : 'outline'
+                    }
                     disabled={!piece.clippingMaskEnabled}
                     onClick={() => history.commit(createCutlineFromMaskBounds(piece))}
                   >
-                    Cut around mask
+                    {t('Cut around mask')}
                   </Button>
                   <Button
                     className="w-full"
                     size="sm"
-                    variant="outline"
+                    variant={
+                      !piece.cutlineObjectId && !piece.clippingMaskEnabled ? 'default' : 'outline'
+                    }
                     onClick={() => history.commit(createCutlineFromArtworkBounds(piece))}
                   >
-                    Cut around artwork
+                    {t('Cut around artwork')}
                   </Button>
                   <Button
                     className="w-full"
@@ -388,7 +403,7 @@ function ActivePieceEditor({
                     disabled={!selectedShape}
                     onClick={duplicateAsCutline}
                   >
-                    Use selected shape
+                    {t('Use selected shape')}
                   </Button>
                 </section>
                 <CutlineInspector piece={piece} onPieceChange={(next) => history.commit(next)} />
@@ -402,7 +417,7 @@ function ActivePieceEditor({
               selectedObject={selectedObject}
               onPieceSizeChange={(widthCm, heightCm, source) =>
                 history.commit((currentPiece) =>
-                  resizePiecePreset(currentPiece, widthCm, heightCm, source)
+                  resizePieceToSize(currentPiece, widthCm, heightCm, source)
                 )
               }
               onQuantityChange={(quantity) =>
@@ -428,9 +443,9 @@ function ActivePieceEditor({
             />
           </TabsContent>
         </Tabs>
-        <Button className="m-2 shrink-0" type="button" onClick={onSave}>
+        <Button className="m-2 shrink-0" variant="outline" type="button" onClick={onSave}>
           <Save data-icon="inline-start" />
-          Save piece preset
+          {t('Save piece preset')}
         </Button>
       </aside>
 

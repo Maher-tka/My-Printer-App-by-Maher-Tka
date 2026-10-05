@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import {
   memo,
   useEffect,
@@ -96,6 +97,8 @@ function SourcePageDragLayer({
   dimensions: ReturnType<typeof calculateCoverDimensions>
   onPositionChange: (position: HardcoverPdfPagePosition, target?: HardcoverPdfCoverTarget) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const dragRef = useRef<DragState | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const [activeTarget, setActiveTarget] = useState<HardcoverPdfCoverTarget | null>(null)
@@ -188,7 +191,7 @@ function SourcePageDragLayer({
           activeTarget === target ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         }`}
       >
-        Drag {target}
+        {t('Drag')} {target}
       </span>
     </div>
   )

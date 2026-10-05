@@ -1,10 +1,12 @@
 import { Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTheme } from './useTheme'
+import { useLanguage } from '@/i18n/useLanguage'
 
 export function ThemeToggle({ dashboard = false }: { dashboard?: boolean }): JSX.Element {
   const { resolved, setPreference } = useTheme()
-  const label = resolved === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
+  const { t } = useLanguage()
+  const label = t(resolved === 'dark' ? 'Switch to light mode' : 'Switch to dark mode')
   return (
     <Button
       type="button"

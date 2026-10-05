@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { LockKeyhole, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +18,8 @@ export function ToolAccessOverlay({
   onBack,
   onManageLicense
 }: ToolAccessOverlayProps): JSX.Element {
+  const { t } = useLanguage()
+
   const Icon = isChecking ? ShieldCheck : LockKeyhole
 
   return (
@@ -26,19 +29,19 @@ export function ToolAccessOverlay({
           <div className="mb-2 grid size-14 place-items-center rounded-full bg-amber-100 text-amber-700">
             <Icon className="size-7" aria-hidden="true" />
           </div>
-          <CardTitle>{isChecking ? 'Checking local license' : `${toolName} is locked`}</CardTitle>
+          <CardTitle>{isChecking ? t('Checking access') : `${toolName} is locked`}</CardTitle>
           <CardDescription>
             {isChecking
-              ? 'The local license check is still in progress.'
-              : `${reason ?? 'A valid license is required'}. Your project stays on this tool and unlocks immediately after activation.`}
+              ? 'The access check is still in progress.'
+              : `${reason ?? 'Active access is required'}. Your saved projects remain available when access is restored.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap justify-center gap-3">
           <Button type="button" variant="outline" onClick={onBack}>
-            Back to Dashboard
+            {t('Back to Dashboard')}
           </Button>
           <Button type="button" onClick={onManageLicense} disabled={isChecking}>
-            Manage Subscription
+            {t('Manage Subscription')}
           </Button>
         </CardContent>
       </Card>

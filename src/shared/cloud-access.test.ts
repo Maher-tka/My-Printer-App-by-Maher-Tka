@@ -5,6 +5,11 @@ import {
   resolveCloudAccessStatus
 } from './cloud-access.js'
 import type { AccountSnapshot, AccessGrantRecord, CloudAccountAccess } from './account-types.js'
+import {
+  SUBSCRIPTION_TOOLS,
+  canUseSubscriptionTool,
+  productionAccessError
+} from './subscription-tools.js'
 
 const now = '2026-10-02T10:00:00.000Z'
 const grant: AccessGrantRecord = {
@@ -71,3 +76,64 @@ assert.deepEqual(
   ['paid-tools']
 )
 console.log('Cloud access expiry, revocation, signout, server-time and plan checks passed.')
+const limitedState: AccountSnapshot = {
+  ...state,
+  cloud: {
+    ...state.cloud!,
+    allowedTools: ['booklet-montage'],
+    batchExports: false
+  }
+}
+const limited = cloudLicenseSnapshot(limitedState)
+assert.equal(canUseSubscriptionTool(limited, 'booklet-montage'), true)
+assert.equal(canUseSubscriptionTool(limited, 'cutter-montage'), false)
+assert.equal(canUseSubscriptionTool(limited, 'card-montage'), false)
+assert.equal(canUseSubscriptionTool(limited, 'fast-print'), false)
+assert.equal(productionAccessError(limited, 'paid-tools', 'booklet-montage'), null)
+assert.match(productionAccessError(limited, 'paid-tools', 'cutter-montage')!, /not included/)
+assert.match(productionAccessError(limited, 'paid-tools')!, /Choose an included tool/)
+assert.match(productionAccessError(limited, 'batch-exports', 'booklet-montage')!, /Batch exports/)
+assert.equal(
+  canUseSubscriptionTool(cloudLicenseSnapshot(state), 'booklet-montage'),
+  false,
+  'missing permissions fail closed'
+)
+const expiredTools = cloudLicenseSnapshot({
+  ...limitedState,
+  cloud: {
+    ...limitedState.cloud!,
+    checkedAt: new Date(Date.now() - 90_001).toISOString()
+  }
+})
+assert.equal(canUseSubscriptionTool(expiredTools, 'booklet-montage'), false)
+assert.equal(
+  canUseSubscriptionTool(
+    cloudLicenseSnapshot({ ...limitedState, status: 'signed-out' }),
+    'booklet-montage'
+  ),
+  false
+)
+assert.equal(
+  canUseSubscriptionTool(
+    cloudLicenseSnapshot({ ...limitedState, cloud: { ...limitedState.cloud!, status: 'revoked' } }),
+    'booklet-montage'
+  ),
+  false
+)
+const ownerLicense = cloudLicenseSnapshot({ ...state, cloud: { ...state.cloud!, isAdmin: true } })
+assert.deepEqual(
+  ownerLicense.allowedTools,
+  SUBSCRIPTION_TOOLS.map((tool) => tool.id)
+)
+assert.equal(productionAccessError(ownerLicense, 'batch-exports', 'cutter-montage'), null)
+assert.equal(productionAccessError(ownerLicense, 'paid-tools'), null)
+assert.equal(
+  canUseSubscriptionTool(
+    { ...limited, storageMode: 'electron-user-data', allowedTools: undefined },
+    'booklet-montage'
+  ),
+  true
+)
+console.log(
+  'Per-tool enforcement, restricted native actions, missing permissions, stale access and owner access passed.'
+)

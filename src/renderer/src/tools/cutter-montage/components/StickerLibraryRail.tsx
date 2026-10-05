@@ -1,13 +1,18 @@
+import { ActionIcon } from '@/components/ui/action-button'
+import { useLanguage } from '@/i18n/useLanguage'
 import { useRef } from 'react'
-import { Plus, Copy, Trash2 } from 'lucide-react'
+import { Sparkles, Copy, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { PiecePreset } from '../types'
 import { PieceOrderControls } from './PieceOrderControls'
+import { getPieceSize } from '../lib/pieceSize'
+import { LiveNumberInput } from './LiveNumberInput'
 export function StickerLibraryRail({
   pieces,
   activeId,
   onSelect,
   onImport,
+  onOpenStickerMaker,
   onDuplicate,
   onDelete,
   onManage,
@@ -19,6 +24,7 @@ export function StickerLibraryRail({
   pieces: PiecePreset[]
   activeId: string | null
   onSelect: (id: string) => void
+  onOpenStickerMaker?: () => void
   onImport: (files: File[]) => void
   onDuplicate: (id: string) => void
   onDelete: (id: string) => void
@@ -28,6 +34,8 @@ export function StickerLibraryRail({
   onFinishedWidthChange: (id: string, widthMm: number) => void
   showProductionControls?: boolean
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const input = useRef<HTMLInputElement>(null)
   return (
     <aside
@@ -35,15 +43,30 @@ export function StickerLibraryRail({
       className="flex min-h-0 flex-col overflow-hidden rounded-[var(--ui-radius-lg)] border bg-card/80"
     >
       <div className="flex items-center justify-between border-b px-3 py-3">
-        <strong className="text-sm font-semibold">Artwork / stickers</strong>
+        <strong className="text-sm font-semibold">{t('Artwork / stickers')}</strong>
         <span className="rounded-md bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
           {pieces.length}
         </span>
       </div>
-      <Button size="sm" className="m-2 shrink-0" onClick={() => input.current?.click()}>
-        <Plus className="size-4" />
-        Import artwork
+      <Button
+        size="sm"
+        variant={pieces.length === 0 ? 'default' : 'outline'}
+        className="m-2 shrink-0"
+        onClick={() => input.current?.click()}
+      >
+        <ActionIcon action="import" />
+        {t('Import artwork')}
       </Button>
+      {onOpenStickerMaker && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="mx-2 mb-2 shrink-0"
+          onClick={onOpenStickerMaker}
+        >
+          <Sparkles aria-hidden="true" /> {t('AI Sticker Maker')}
+        </Button>
+      )}
       <input
         ref={input}
         type="file"
@@ -94,34 +117,25 @@ export function StickerLibraryRail({
                   onTargetLength={onTargetLength}
                 />
                 <label className="block font-medium">
-                  Finished width (mm)
-                  <input
+                  {t('Finished width (mm)')}
+                  <LiveNumberInput
                     aria-label={`Finished width of ${piece.displayName} in mm`}
-                    key={`${piece.id}-width-${piece.widthCm}`}
-                    type="number"
+                    key={`${piece.id}-width`}
                     min={5}
                     max={960}
                     step={0.5}
-                    defaultValue={Number((piece.widthCm * 10).toFixed(2))}
+                    value={getPieceSize(piece).widthCm * 10}
+                    precision={2}
+                    onValueChange={(value) => onFinishedWidthChange(piece.id, value)}
                     className="mt-1 h-8 w-full rounded border bg-background px-2"
-                    onBlur={(event) => {
-                      const value = Number(event.currentTarget.value)
-                      if (Number.isFinite(value) && value >= 5 && value <= 960) {
-                        if (Math.abs(value - piece.widthCm * 10) > 0.01)
-                          onFinishedWidthChange(piece.id, value)
-                      } else {
-                        event.currentTarget.value = String(Number((piece.widthCm * 10).toFixed(2)))
-                      }
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') event.currentTarget.blur()
-                    }}
                   />
                 </label>
                 <p className="text-muted-foreground">
-                  Artwork {Number((piece.artwork.transform.widthCm * 10).toFixed(1))} ×{' '}
-                  {Number((piece.artwork.transform.heightCm * 10).toFixed(1))} mm. Finished size
-                  includes the cut margin.
+                  {t('Artwork')} {Number((piece.artwork.transform.widthCm * 10).toFixed(1))} ×{' '}
+                  {Number((piece.artwork.transform.heightCm * 10).toFixed(1))} mm. Finished size{' '}
+                  {piece.clippingMaskEnabled
+                    ? 'is measured from the mask.'
+                    : 'includes the cut margin.'}
                 </p>
               </div>
             )}
@@ -151,13 +165,17 @@ export function StickerLibraryRail({
         ))}
         {!pieces.length && (
           <div className="space-y-3 px-3 py-4 text-xs leading-relaxed text-muted-foreground">
-            <p>Import your first design. Each sticker has its own mask, cut lines and quantity.</p>
+            <p>
+              {t(
+                'Import your first design. Each sticker has its own mask, cut lines and quantity.'
+              )}
+            </p>
             <p>PNG, JPG, WebP, SVG, PDF or PDF-compatible Illustrator files.</p>
           </div>
         )}
       </div>
       <Button variant="ghost" size="sm" className="m-1 shrink-0 text-xs" onClick={onManage}>
-        More import options
+        {t('More import options')}
       </Button>
     </aside>
   )

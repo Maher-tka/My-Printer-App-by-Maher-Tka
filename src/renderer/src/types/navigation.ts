@@ -3,6 +3,7 @@ export type AppRoute =
   | 'booklet-montage'
   | 'hardcover-cover'
   | 'cutter-montage'
+  | 'card-montage'
   | 'sequential-number'
   | 'jobs'
   | 'exports'

@@ -1,3 +1,5 @@
+import type { SubscriptionToolId } from './subscription-tools.js'
+
 export type AccountStatus = 'signed-out' | 'signed-in'
 
 export interface AccountProfile {
@@ -45,6 +47,8 @@ export interface AccessGrantRecord {
   starts_at: string
   ends_at: string
   reason: string
+  tool_ids?: SubscriptionToolId[] | null
+  batch_exports?: boolean | null
 }
 
 export interface CloudAccountAccess {
@@ -56,6 +60,8 @@ export interface CloudAccountAccess {
   grant?: AccessGrantRecord
   request?: AccessRequestRecord
   error?: string
+  allowedTools?: SubscriptionToolId[]
+  batchExports?: boolean
 }
 
 export interface SubmitAccessRequest {
@@ -65,12 +71,20 @@ export interface SubmitAccessRequest {
 }
 
 export interface AdminAccessAction {
-  action: 'approve' | 'deny' | 'trial' | 'grant' | 'extend' | 'revoke'
+  action: 'approve' | 'deny' | 'trial' | 'grant' | 'extend' | 'revoke' | 'manage'
   userId: string
   requestId?: string
   plan: AccessPlan
   days: number
   reason: string
+  toolIds?: SubscriptionToolId[] | null
+  batchExports?: boolean | null
+}
+
+export interface SubscriptionPlanRecord {
+  plan: AccessPlan
+  tool_ids: SubscriptionToolId[]
+  batch_exports: boolean
 }
 
 export interface AccessAdminCustomer {
@@ -90,6 +104,7 @@ export interface AccessAuditRecord {
 }
 
 export interface AccessAdminSnapshot {
+  plans?: SubscriptionPlanRecord[]
   customers: AccessAdminCustomer[]
   requests: AccessRequestRecord[]
   grants: AccessGrantRecord[]

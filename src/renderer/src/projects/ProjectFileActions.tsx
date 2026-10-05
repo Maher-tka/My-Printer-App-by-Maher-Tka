@@ -1,5 +1,6 @@
-import { FolderOpen, Save } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { useLanguage } from '@/i18n/useLanguage'
+import { ActionButton } from '@/components/ui/action-button'
+import type { ReactNode } from 'react'
 
 interface ProjectFileActionsProps {
   filePath: string | null
@@ -9,6 +10,8 @@ interface ProjectFileActionsProps {
   onOpen: () => void
   onSave: () => void
   onSaveAs: () => void
+  onNew?: () => void
+  additionalActions?: ReactNode
 }
 
 export function ProjectFileActions({
@@ -18,32 +21,38 @@ export function ProjectFileActions({
   message,
   onOpen,
   onSave,
-  onSaveAs
+  onSaveAs,
+  onNew,
+  additionalActions
 }: ProjectFileActionsProps): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div className="flex max-w-xl flex-col items-end gap-2">
       <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onOpen} disabled={isBusy}>
-          <FolderOpen data-icon="inline-start" />
-          Open
-        </Button>
-        <Button type="button" onClick={onSave} disabled={isBusy}>
-          <Save data-icon="inline-start" />
-          Save
-        </Button>
-        <Button type="button" variant="outline" onClick={onSaveAs} disabled={isBusy}>
-          Save As
-        </Button>
+        {onNew && (
+          <ActionButton
+            action="newProject"
+            size="sm"
+            variant="ghost"
+            onClick={onNew}
+            disabled={isBusy}
+          />
+        )}
+        <ActionButton action="open" size="sm" onClick={onOpen} disabled={isBusy} />
+        <ActionButton action="save" size="sm" onClick={onSave} disabled={isBusy} />
+        <ActionButton action="saveAs" size="sm" onClick={onSaveAs} disabled={isBusy} />
+        {additionalActions}
       </div>
       <div className="flex max-w-xl items-center justify-end gap-2 text-xs">
         {isDirty && (
-          <span className="inline-flex shrink-0 items-center gap-1.5 font-medium text-amber-700">
-            <span className="size-2 rounded-full bg-amber-500" aria-hidden="true" />
-            Unsaved changes
+          <span className="inline-flex shrink-0 items-center gap-1.5 font-medium text-warning-foreground">
+            <span className="size-2 rounded-full bg-warning-foreground" aria-hidden="true" />
+            {t('Unsaved changes')}
           </span>
         )}
         <p className="truncate text-right text-muted-foreground" title={filePath ?? undefined}>
-          {filePath ?? 'Not saved yet'}
+          {filePath ?? t('Not saved yet')}
         </p>
       </div>
       {message && (

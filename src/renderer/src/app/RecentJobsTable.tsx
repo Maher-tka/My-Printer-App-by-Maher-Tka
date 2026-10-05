@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { FileText, FolderOpen, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,8 @@ interface RecentJobsTableProps {
 }
 
 export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.Element {
+  const { t } = useLanguage()
+
   const [jobs, setJobs] = useState<RecentJob[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [openingPath, setOpeningPath] = useState<string | null>(null)
@@ -60,13 +63,13 @@ export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.El
   return (
     <Card className="h-full overflow-hidden">
       <CardHeader className="flex-row items-center justify-between gap-3 border-b border-[var(--ui-divider)]">
-        <CardTitle>Recent projects</CardTitle>
+        <CardTitle>{t('Recent projects')}</CardTitle>
         <Button
           variant="ghost"
           size="icon-sm"
           type="button"
-          aria-label="Refresh recent projects"
-          title="Refresh recent projects"
+          aria-label={t('Refresh recent projects')}
+          title={t('Refresh recent projects')}
           onClick={() => void loadRecentJobs()}
           disabled={isLoading}
         >
@@ -84,12 +87,12 @@ export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.El
         )}
         {isLoading ? (
           <p role="status" className="py-8 text-center text-xs text-muted-foreground">
-            Loading recent projects…
+            {t('Loading recent projects…')}
           </p>
         ) : jobs.length === 0 ? (
           <div className="flex min-h-40 flex-col items-center justify-center gap-3 p-5 text-center">
             <FileText className="size-6 text-muted-foreground" aria-hidden="true" />
-            <p className="text-sm font-medium">No saved projects yet</p>
+            <p className="text-sm font-medium">{t('No saved projects yet')}</p>
             <p className="max-w-64 text-xs leading-5 text-muted-foreground">
               Save a project from any production tool. Its file and settings will be available here.
             </p>
@@ -108,7 +111,7 @@ export function RecentJobsTable({ onOpenProject }: RecentJobsTableProps): JSX.El
               }}
             >
               <FolderOpen aria-hidden="true" />
-              Browse projects
+              {t('Browse projects')}
             </Button>
           </div>
         ) : (

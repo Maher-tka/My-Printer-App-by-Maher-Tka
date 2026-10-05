@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { CalendarClock, ChevronLeft, ChevronRight, FolderOpen, Pencil } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,6 +15,8 @@ export function JobBoard({
   onEdit: (job: PrinterJob) => void
   onStatusChange: (job: PrinterJob, status: PrinterJobStatus) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const activeJobs = jobs.filter((job) => job.status !== 'canceled')
 
   return (
@@ -35,7 +38,7 @@ export function JobBoard({
               <div className="flex min-h-32 flex-col gap-2">
                 {columnJobs.length === 0 ? (
                   <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-                    No jobs
+                    {t('No jobs')}
                   </p>
                 ) : null}
                 {columnJobs.map((job) => (
@@ -67,6 +70,8 @@ function BoardCard({
   onEdit: (job: PrinterJob) => void
   onStatusChange: (job: PrinterJob, status: PrinterJobStatus) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const deadlineState = getDeadlineState(job)
   const previous = BOARD_STATUSES[columnIndex - 1]?.value
   const next = BOARD_STATUSES[columnIndex + 1]?.value
@@ -87,8 +92,8 @@ function BoardCard({
       </button>
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Badge variant="outline">{job.tool}</Badge>
-        {deadlineState === 'overdue' ? <Badge variant="destructive">Overdue</Badge> : null}
-        {deadlineState === 'today' ? <Badge variant="warning">Due today</Badge> : null}
+        {deadlineState === 'overdue' ? <Badge variant="destructive">{t('Overdue')}</Badge> : null}
+        {deadlineState === 'today' ? <Badge variant="warning">{t('Due today')}</Badge> : null}
       </div>
       {job.deadline ? (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -96,7 +101,9 @@ function BoardCard({
           {job.deadline}
         </p>
       ) : null}
-      <p className="mt-2 text-xs font-medium">Balance: {job.quote.remainingAmount.toFixed(2)}</p>
+      <p className="mt-2 text-xs font-medium">
+        {t('Balance:')} {job.quote.remainingAmount.toFixed(2)}
+      </p>
       <div className="mt-3 flex items-center justify-between border-t pt-2">
         <Button
           type="button"
@@ -115,7 +122,7 @@ function BoardCard({
               type="button"
               variant="ghost"
               size="icon"
-              title="Open linked project"
+              title={t('Open linked project')}
               onClick={() => void window.printerApp?.runtime.openPath(job.localProjectPath!)}
             >
               <FolderOpen />
@@ -125,7 +132,7 @@ function BoardCard({
             type="button"
             variant="ghost"
             size="icon"
-            title="Edit job"
+            title={t('Edit job')}
             aria-label={`Edit ${job.jobTitle}`}
             onClick={() => onEdit(job)}
           >

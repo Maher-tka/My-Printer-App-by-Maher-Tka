@@ -61,8 +61,9 @@ export interface CutterExportPreset {
 export const CUTTER_EXPORT_PRESETS: CutterExportPreset[] = [
   {
     id: 'layered-print-cut-pdf',
-    title: 'Layered Print + Cut PDF',
-    detail: 'Artwork and registration marks print; thin vector CutContour stays hidden',
+    title: 'Illustrator Print + Cut PDF',
+    detail:
+      'Native Illustrator layers: artwork, hidden CutContour and separate registration marks. Requires Illustrator.',
     output: 'pdf',
     settings: {
       strokeName: CUT_CONTOUR_NAME,

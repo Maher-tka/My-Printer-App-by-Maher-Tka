@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import {
   BookOpen,
   Hash,
@@ -60,17 +61,19 @@ export function JobList({
   onEdit,
   onDelete
 }: JobListProps): JSX.Element {
+  const { t } = useLanguage()
+
   const [pendingDelete, setPendingDelete] = useState<PrinterJob | null>(null)
 
   return (
     <>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row">
         <label className="relative min-w-0 flex-1">
-          <span className="sr-only">Search jobs</span>
+          <span className="sr-only">{t('Search jobs')}</span>
           <Search className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="Search by job, customer, or phone"
+            placeholder={t('Search by job, customer, or phone')}
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
           />
@@ -80,10 +83,10 @@ export function JobList({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="all">{t('All statuses')}</SelectItem>
             {JOB_STATUS_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
-                {option.label}
+                {t(option.label)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -97,7 +100,7 @@ export function JobList({
               onStatusChange('all')
             }}
           >
-            Clear filters
+            {t('Clear filters')}
           </Button>
         )}
       </div>
@@ -131,14 +134,14 @@ export function JobList({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this shop job?</AlertDialogTitle>
+            <AlertDialogTitle>{t('Delete this shop job?')}</AlertDialogTitle>
             <AlertDialogDescription>
               “{pendingDelete?.jobTitle}” will be removed from the local job tracker. This action
               cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep job</AlertDialogCancel>
+            <AlertDialogCancel>{t('Keep job')}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
@@ -146,7 +149,7 @@ export function JobList({
                 setPendingDelete(null)
               }}
             >
-              Delete job
+              {t('Delete job')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -164,6 +167,8 @@ function JobListItem({
   onEdit: (job: PrinterJob) => void
   onDelete: () => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const [openError, setOpenError] = useState<string | null>(null)
   const deadline = getDeadlineState(job)
   const ToolIcon = toolIcons[job.tool]
@@ -181,17 +186,19 @@ function JobListItem({
               <Badge variant={job.status === 'ready-to-print' ? 'success' : 'secondary'}>
                 {statusLabel(job.status)}
               </Badge>
-              {deadline === 'overdue' ? <Badge variant="destructive">Overdue</Badge> : null}
-              {deadline === 'today' ? <Badge variant="warning">Due today</Badge> : null}
+              {deadline === 'overdue' ? <Badge variant="destructive">{t('Overdue')}</Badge> : null}
+              {deadline === 'today' ? <Badge variant="warning">{t('Due today')}</Badge> : null}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {job.customerName || 'No customer'} · {job.phoneNumber || 'No phone'}
             </p>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span>Deadline: {job.deadline || 'Not set'}</span>
+              <span>
+                {t('Deadline:')} {job.deadline || t('Not set')}
+              </span>
               <span>{job.exportPaths.length} exports</span>
               <span className="font-semibold text-foreground">
-                Balance: {job.quote.remainingAmount.toFixed(2)}
+                {t('Balance:')} {job.quote.remainingAmount.toFixed(2)}
               </span>
             </div>
           </div>
@@ -200,7 +207,7 @@ function JobListItem({
         <div className="flex shrink-0 flex-wrap gap-1">
           <Button type="button" size="sm" variant="ghost" onClick={() => onEdit(job)}>
             <Pencil aria-hidden="true" />
-            Edit
+            {t('Edit')}
           </Button>
           {job.localProjectPath ? (
             <Button
@@ -223,7 +230,7 @@ function JobListItem({
               }}
             >
               <FolderOpen aria-hidden="true" />
-              Project
+              {t('Project')}
             </Button>
           ) : null}
           <Button
@@ -234,7 +241,7 @@ function JobListItem({
             onClick={onDelete}
           >
             <Trash2 aria-hidden="true" />
-            Delete
+            {t('Delete')}
           </Button>
         </div>
       </div>

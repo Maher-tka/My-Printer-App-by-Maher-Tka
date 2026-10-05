@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -19,6 +20,8 @@ export function Empty({
   onAction,
   className
 }: EmptyProps): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div
       className={cn(
@@ -32,7 +35,7 @@ export function Empty({
         </div>
         <div className="flex flex-col gap-2">
           <h3 className="text-base font-semibold">{title}</h3>
-          <p className="text-sm leading-6 text-muted-foreground">{description}</p>
+          <p className="text-sm leading-6 text-muted-foreground">{t(description)}</p>
         </div>
         {actionLabel && (
           <Button onClick={onAction} type="button">

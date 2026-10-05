@@ -104,6 +104,9 @@ declare global {
         signInGoogle: () => Promise<AccountMutationResult>
         cancelGoogle: () => Promise<void>
         requestAccess: (request: SubmitAccessRequest) => Promise<AccountMutationResult>
+        adminPlan: (
+          plan: import('../../shared/account-types').SubscriptionPlanRecord
+        ) => Promise<AccountMutationResult>
         adminList: () => Promise<AccessAdminSnapshot>
         adminAction: (action: AdminAccessAction) => Promise<AccountMutationResult>
         getState: () => Promise<AccountSnapshot>
@@ -143,6 +146,7 @@ declare global {
           preflight?: Pick<ExportContext, 'warningsCount' | 'preflightStatus'>
         } | null
       ) => void
+      setActiveTool: (route: string) => void
       onSaveBeforeClose: (callback: () => void) => () => void
       finishCloseAfterSave: (saved: boolean) => Promise<void>
       listRecentProjects: () => Promise<PrinterAppRecentProjectsResult>
@@ -152,6 +156,12 @@ declare global {
         files: PrinterAppWriteFileRequest[]
       ) => Promise<PrinterAppWriteFilesResult>
       runtime: {
+        exportIllustratorPdfBatch: (
+          request: import('../../shared/illustrator-pdf-export').IllustratorPdfBatchRequest
+        ) => Promise<import('../../shared/illustrator-pdf-export').IllustratorPdfBatchResult>
+        exportIllustratorPdf: (
+          request: import('../../shared/illustrator-pdf-export').IllustratorPdfExportRequest
+        ) => Promise<import('../../shared/illustrator-pdf-export').IllustratorPdfExportResult>
         getHealth: () => Promise<AppHealthSnapshot>
         openAppDataFolder: () => Promise<string>
         clearTemporaryCache: () => Promise<{ ok: boolean; message?: string; error?: string }>

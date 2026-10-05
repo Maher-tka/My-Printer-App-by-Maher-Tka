@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { EmptySheetBoardItem } from '../types'
@@ -28,6 +29,8 @@ export function EmptySheetCard({
   onCloseColorPicker,
   onColorChange
 }: EmptySheetCardProps): JSX.Element {
+  const { t } = useLanguage()
+
   const textColor = getReadableTextColor(item.colorHex)
 
   return (
@@ -40,16 +43,16 @@ export function EmptySheetCard({
         showDelete={false}
       />
       <div className="mb-2 flex items-center justify-between gap-2 pr-28">
-        <span className="truncate text-sm font-semibold">{item.label}</span>
+        <span className="truncate text-sm font-semibold">{t(item.label)}</span>
         <div className="flex shrink-0 items-center gap-1">
-          <span className="text-xs text-muted-foreground">Empty</span>
+          <span className="text-xs text-muted-foreground">{t('Empty')}</span>
           <Button
             data-no-drag="true"
             type="button"
             size="icon"
             variant="ghost"
             className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-            title="Delete empty sheet"
+            title={t('Delete empty sheet')}
             aria-label={`Delete ${item.label}`}
             onClick={(event) => {
               event.stopPropagation()
@@ -77,7 +80,7 @@ export function EmptySheetCard({
         />
         <div className="absolute inset-4 grid place-items-center rounded border border-current/20 bg-white/10 text-center">
           <div>
-            <p className="text-sm font-semibold">Empty Sheet</p>
+            <p className="text-sm font-semibold">{t('Empty Sheet')}</p>
             <p className="mt-1 text-xs opacity-80">{item.colorHex}</p>
           </div>
         </div>

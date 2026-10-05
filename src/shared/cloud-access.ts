@@ -6,6 +6,7 @@ import type {
   AccountSnapshot
 } from './account-types.js'
 import type { LicenseSnapshot } from './licensing-types.js'
+import { SUBSCRIPTION_TOOLS } from './subscription-tools.js'
 
 export const ACCESS_REFRESH_MS = 60_000
 export const ACCESS_MAX_AGE_MS = 90_000
@@ -75,7 +76,16 @@ export function cloudLicenseSnapshot(account: AccountSnapshot): LicenseSnapshot 
     planLabel: access?.isAdmin ? 'Owner' : trial ? 'Trial' : plan === 'shop' ? 'Shop' : 'Pro',
     statusLabel:
       access?.isAdmin && allowed ? 'Owner access' : labels[access?.status ?? 'unavailable'],
-    features: allowed ? (plan === 'shop' ? ['paid-tools', 'batch-exports'] : ['paid-tools']) : [],
+    features: allowed
+      ? access?.isAdmin || (access?.batchExports ?? plan === 'shop')
+        ? ['paid-tools', 'batch-exports']
+        : ['paid-tools']
+      : [],
+    allowedTools: allowed
+      ? access?.isAdmin
+        ? SUBSCRIPTION_TOOLS.map((tool) => tool.id)
+        : (access?.allowedTools ?? [])
+      : [],
     canUsePaidTools: allowed,
     trial: {
       startedAt: grant?.starts_at ?? now,

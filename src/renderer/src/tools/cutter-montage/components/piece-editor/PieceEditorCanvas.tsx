@@ -20,6 +20,7 @@ import { getShapeDrawTransform, translateDraftShape } from '../../lib/shapeDraw'
 import { MaskedArtwork } from '../MaskedArtwork'
 import { isSelectableLayerObject } from '../../lib/editorLayers'
 import { getNormalizedShapePath } from '../../lib/shapeGeometry'
+import { getCutlinePreviewTransform } from '../../lib/cutlineAdjustment'
 import { PieceEditorTransformBox, type TransformHandle } from './PieceEditorTransformBox'
 
 interface PieceEditorCanvasProps {
@@ -187,6 +188,7 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
   return (
     <div
       ref={viewportRef}
+      dir="ltr"
       tabIndex={0}
       aria-label="Piece editor canvas"
       className={`flex min-h-0 min-w-0 flex-1 items-start justify-start overflow-auto rounded-lg border bg-slate-100 p-6 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${isPanning ? 'cursor-grabbing' : tool === 'pan' ? 'cursor-grab' : ''}`}
@@ -784,7 +786,7 @@ const CanvasObject = memo(function CanvasObject({
   onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void
 }): JSX.Element | null {
   if (!object.visible) return null
-  const transform = object.transform
+  const transform = getCutlinePreviewTransform(object, piece)
   const commonStyle = {
     left: transform.xCm * scale,
     top: transform.yCm * scale,

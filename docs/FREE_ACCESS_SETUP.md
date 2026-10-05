@@ -97,6 +97,8 @@ table, not profile metadata. Customers cannot insert or edit owner memberships.
 
 ## Day-to-day use
 
+For plan tool lists and individual subscription settings, see [Subscription controls](SUBSCRIPTION_CONTROLS.md).
+
 Customers sign up, submit a shop name/plan/message, and wait for review. Signup
 does not start a trial automatically. Only one pending request per account is
 allowed. Customers can read only their own request and access records.

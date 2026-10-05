@@ -4,6 +4,8 @@ import { prioritizeJobs } from './jobPriorities'
 import type { PrinterJob } from '@/jobs/jobTypes'
 
 for (const [query, expected] of [
+  ['montage business cards on A4', 'card-montage'],
+  ['cartes de visite', 'card-montage'],
   ['I want to print 500 raffle tickets', 'sequential-number'],
   ['please make stickers for me', 'cutter-montage'],
   ['stikers', 'cutter-montage'],

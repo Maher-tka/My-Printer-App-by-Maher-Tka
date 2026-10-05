@@ -48,7 +48,8 @@ export const DEFAULT_CUTTER_SHEET: CutterSheetSettings = {
   preferSameDesignGrouping: true,
   fillDirection: 'left-to-right',
   sortStrategy: 'largest-first',
-  lengthMode: 'auto-trim-last'
+  lengthMode: 'auto-trim-last',
+  autoExpandHeight: true
 }
 
 export function normalizeCutterSheetSettings(settings: CutterSheetSettings): CutterSheetSettings {

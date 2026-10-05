@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { Copy, Eye, Palette, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
@@ -17,23 +18,25 @@ export function SheetHoverActions({
   onColor,
   showDelete = true
 }: SheetHoverActionsProps): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div className="pointer-events-none absolute right-3 top-3 z-20 flex translate-y-1 gap-1 opacity-0 transition group-hover:translate-y-0 group-hover:opacity-100">
-      <ActionButton title="Inspect sheet" onClick={onInspect}>
+      <ActionButton title={t('Inspect sheet')} onClick={onInspect}>
         <Eye className="h-4 w-4" />
       </ActionButton>
       {onColor && (
-        <ActionButton title="Sheet color" onClick={onColor}>
+        <ActionButton title={t('Sheet color')} onClick={onColor}>
           <Palette className="h-4 w-4" />
         </ActionButton>
       )}
       {onDuplicate && (
-        <ActionButton title="Duplicate sheet" onClick={onDuplicate}>
+        <ActionButton title={t('Duplicate sheet')} onClick={onDuplicate}>
           <Copy className="h-4 w-4" />
         </ActionButton>
       )}
       {showDelete ? (
-        <ActionButton title="Delete sheet" danger onClick={onDelete}>
+        <ActionButton title={t('Delete sheet')} danger onClick={onDelete}>
           <Trash2 className="h-4 w-4" />
         </ActionButton>
       ) : null}

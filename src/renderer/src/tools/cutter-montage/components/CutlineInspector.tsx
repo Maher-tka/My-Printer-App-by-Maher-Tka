@@ -1,5 +1,7 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { CheckCircle2, Scissors, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CutlinePrecisionPanel } from './CutlinePrecisionPanel'
 import type { PiecePreset } from '../types'
 import {
   createCutlineFromArtworkBounds,
@@ -15,11 +17,15 @@ export function CutlineInspector({
   piece: PiecePreset | null
   onPieceChange: (piece: PiecePreset) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   if (!piece) {
     return (
       <section className="space-y-3">
-        <h3 className="font-semibold">Cutline Inspector</h3>
-        <p className="mt-2 text-sm text-muted-foreground">Select a piece to inspect CutContour.</p>
+        <h3 className="font-semibold">{t('Cutline Inspector')}</h3>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {t('Select a piece to inspect CutContour.')}
+        </p>
       </section>
     )
   }
@@ -28,15 +34,16 @@ export function CutlineInspector({
 
   return (
     <section className="space-y-3">
+      <CutlinePrecisionPanel piece={piece} onPieceChange={onPieceChange} />
       <div className="flex items-center justify-between gap-3">
-        <h3 className="font-semibold">Cutline Inspector</h3>
+        <h3 className="font-semibold">{t('Cutline Inspector')}</h3>
         <Scissors className="size-4 text-muted-foreground" />
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-        <Metric label="Shape" value={state.shape} />
+        <Metric label={t('Shape')} value={state.shape} />
         <Metric label="Spot" value={state.strokeName} />
-        <Metric label="Stroke" value={`${state.strokeWidthPt} pt`} />
-        <Metric label="Offset" value={`${state.offsetMm} mm`} />
+        <Metric label={t('Stroke')} value={`${state.strokeWidthPt} pt`} />
+        <Metric label={t('Offset')} value={`${state.offsetMm} mm`} />
       </div>
       <div
         className={`mt-3 flex items-center gap-2 rounded-md border p-2 text-xs ${
@@ -59,6 +66,7 @@ export function CutlineInspector({
         <Button
           type="button"
           size="sm"
+          variant="outline"
           onClick={() => onPieceChange(fixPieceCutlineForMimaki(piece))}
         >
           <Wrench data-icon="inline-start" />
@@ -70,7 +78,7 @@ export function CutlineInspector({
           variant="outline"
           onClick={() => onPieceChange(createCutlineFromArtworkBounds(piece))}
         >
-          Create from artwork bounds
+          {t('Create from artwork bounds')}
         </Button>
         <Button
           type="button"
@@ -79,7 +87,7 @@ export function CutlineInspector({
           disabled={!piece.mask.enabled && !piece.maskObjectId}
           onClick={() => onPieceChange(createCutlineFromMaskBounds(piece))}
         >
-          Create from mask
+          {t('Create from mask')}
         </Button>
       </div>
     </section>
@@ -87,10 +95,12 @@ export function CutlineInspector({
 }
 
 function Metric({ label, value }: { label: string; value: string }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <span className="rounded bg-muted p-2">
       <b className="block truncate text-sm text-foreground">{value}</b>
-      {label}
+      {t(label)}
     </span>
   )
 }

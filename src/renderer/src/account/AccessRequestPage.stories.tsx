@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { AccessRequestPage } from './AccessRequestPage'
 import type { AccountSnapshot, AccessAdminSnapshot } from '../../../shared/account-types'
+import { SUBSCRIPTION_TOOLS } from '../../../shared/subscription-tools'
 
 const account: AccountSnapshot = {
   status: 'signed-in',
@@ -23,6 +24,14 @@ const account: AccountSnapshot = {
   }
 }
 const inbox: AccessAdminSnapshot = {
+  plans: [
+    {
+      plan: 'pro',
+      tool_ids: ['card-montage', 'sequential-number', 'booklet-montage'],
+      batch_exports: false
+    },
+    { plan: 'shop', tool_ids: SUBSCRIPTION_TOOLS.map((tool) => tool.id), batch_exports: true }
+  ],
   customers: [
     {
       id: 'customer-preview',
@@ -73,6 +82,11 @@ function PreviewBridge({ children }: { children: ReactNode }): JSX.Element {
       account: {
         ...previous?.account,
         adminList: async () => inbox,
+        adminPlan: async () => ({
+          ok: false,
+          state: account,
+          error: 'Design preview only. Save plans in the desktop app.'
+        }),
         adminAction: async () => ({
           ok: false,
           state: account,

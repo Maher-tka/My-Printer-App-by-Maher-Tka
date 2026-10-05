@@ -125,6 +125,7 @@ export interface CutterSheetSettings {
   sortStrategy?: 'largest-first' | 'smallest-first' | 'piece-name' | 'quantity'
   /** Full sheets keep this packing length. Auto mode trims only the final sheet. */
   lengthMode?: CutterSheetLengthMode
+  autoExpandHeight?: boolean
 }
 
 export interface CutterRegistrationSettings {

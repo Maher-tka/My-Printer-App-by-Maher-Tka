@@ -1,6 +1,8 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import {
   ArrowUpRight,
   BookOpen,
+  CreditCard,
   Hash,
   Lock,
   PenLine,
@@ -18,6 +20,7 @@ interface ToolCardProps {
   licenseReason?: string | null
 }
 const icons = {
+  'card-montage': CreditCard,
   'sequential-number': Hash,
   'booklet-montage': BookOpen,
   'hardcover-cover': SquareStack,
@@ -31,6 +34,8 @@ export function ToolCard({
   isLicenseLocked = false,
   licenseReason
 }: ToolCardProps): JSX.Element {
+  const { t } = useLanguage()
+
   const Icon = icons[tool.id as keyof typeof icons] ?? FileIcon
   const active = tool.status === 'active' || tool.status === 'mvp'
   const label = !active
@@ -55,10 +60,7 @@ export function ToolCard({
         <Icon className="size-[18px]" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-semibold">{tool.shortTitle}</span>
-        <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-          {tool.description}
-        </span>
+        <span className="block text-[13px] font-semibold">{t(tool.shortTitle)}</span>
         {tool.status === 'mvp' && (
           <span className="mt-1 block text-[11px] text-muted-foreground">Beta</span>
         )}

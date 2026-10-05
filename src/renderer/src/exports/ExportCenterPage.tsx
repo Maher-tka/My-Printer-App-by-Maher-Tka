@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import {
   Clipboard,
   ExternalLink,
@@ -23,6 +24,8 @@ export function ExportCenterPage({
 }: {
   onNavigate: (route: AppRoute) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const [entries, setEntries] = useState<ExportHistoryEntry[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -97,6 +100,7 @@ export function ExportCenterPage({
         setMessage(`Opening print dialog for ${getFileName(entry.filePath)}...`)
         const result = await printPdfFile({
           filePath: entry.filePath,
+          toolId: toolRoute(entry.toolType),
           suggestedName: getFileName(entry.filePath),
           jobTitle: entry.projectName,
           silent: false
@@ -135,25 +139,25 @@ export function ExportCenterPage({
       <Card className="overflow-hidden">
         <CardHeader className="flex-row items-start justify-between gap-4 border-b bg-muted/25">
           <div>
-            <CardTitle>Export Center</CardTitle>
+            <CardTitle>{t('Export Center')}</CardTitle>
             <CardDescription>
-              Local export history. Customer artwork is never copied into this log.
+              {t('Local export history. Customer artwork is never copied into this log.')}
             </CardDescription>
           </div>
           <Button type="button" variant="outline" onClick={() => void load()} disabled={loading}>
             <RefreshCw data-icon="inline-start" />
-            {loading ? 'Refreshing…' : 'Refresh'}
+            {loading ? 'Refreshing…' : t('Refresh')}
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 pt-5">
           <div className="flex flex-col gap-3 sm:flex-row">
             <label className="relative min-w-0 flex-1">
-              <span className="sr-only">Search exports</span>
+              <span className="sr-only">{t('Search exports')}</span>
               <Search className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" />
               <input
                 type="search"
                 className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm"
-                placeholder="Search project, file, or tool"
+                placeholder={t('Search project, file, or tool')}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
@@ -164,10 +168,10 @@ export function ExportCenterPage({
               value={status}
               onChange={(event) => setStatus(event.target.value)}
             >
-              <option value="all">All statuses</option>
-              <option value="success">Successful</option>
-              <option value="failed">Failed</option>
-              <option value="canceled">Canceled</option>
+              <option value="all">{t('All statuses')}</option>
+              <option value="success">{t('Successful')}</option>
+              <option value="failed">{t('Failed')}</option>
+              <option value="canceled">{t('Canceled')}</option>
             </select>
           </div>
           <p className="text-xs text-muted-foreground" aria-live="polite">
@@ -197,7 +201,7 @@ export function ExportCenterPage({
                     setStatus('all')
                   }}
                 >
-                  Clear filters
+                  {t('Clear filters')}
                 </Button>
               )}
             </p>
@@ -242,7 +246,7 @@ export function ExportCenterPage({
                         onClick={() => void runFileAction('open', entry.filePath!)}
                       >
                         <ExternalLink />
-                        Open File
+                        {t('Open File')}
                       </Button>
                       <Button
                         type="button"
@@ -251,7 +255,7 @@ export function ExportCenterPage({
                         onClick={() => void runFileAction('folder', entry.filePath!)}
                       >
                         <FolderOpen />
-                        Open Folder
+                        {t('Open Folder')}
                       </Button>
                       <Button
                         type="button"
@@ -260,7 +264,7 @@ export function ExportCenterPage({
                         onClick={() => void runFileAction('copy', entry.filePath!)}
                       >
                         <Clipboard />
-                        Copy Path
+                        {t('Copy Path')}
                       </Button>
                       {isPdfPath(entry.filePath) && (
                         <Button
@@ -270,7 +274,7 @@ export function ExportCenterPage({
                           onClick={() => void printExport(entry)}
                         >
                           <Printer />
-                          {printingId === entry.id ? 'Printing…' : 'Print'}
+                          {printingId === entry.id ? 'Printing…' : t('Print')}
                         </Button>
                       )}
                     </>
@@ -282,7 +286,7 @@ export function ExportCenterPage({
                     onClick={() => onNavigate(toolRoute(entry.toolType))}
                   >
                     <RotateCcw />
-                    Open tool
+                    {t('Open tool')}
                   </Button>
                 </div>
               </div>
@@ -296,6 +300,7 @@ export function ExportCenterPage({
 
 function toolRoute(tool: string): AppRoute {
   const value = tool.toLowerCase()
+  if (value.includes('card')) return 'card-montage'
   if (value.includes('cutter')) return 'cutter-montage'
   if (value.includes('sequential')) return 'sequential-number'
   if (value.includes('hardcover')) return 'hardcover-cover'

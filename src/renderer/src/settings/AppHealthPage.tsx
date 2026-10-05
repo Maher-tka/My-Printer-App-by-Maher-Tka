@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import {
   Activity,
   ArrowLeft,
@@ -30,6 +31,8 @@ export function AppHealthPage({
   onResetLicense: () => Promise<void>
   onNavigate: (route: AppRoute) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const [health, setHealth] = useState<AppHealthSnapshot | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [isBusy, setIsBusy] = useState(false)
@@ -97,17 +100,17 @@ export function AppHealthPage({
         type="button"
       >
         <ArrowLeft data-icon="inline-start" />
-        Back to Settings
+        {t('Back to Settings')}
       </Button>
       <Card className="overflow-hidden">
         <CardHeader className="flex-row items-start justify-between gap-4 border-b bg-muted/25">
           <div>
             <CardTitle className="flex items-center gap-2">
               <Activity className="text-primary" />
-              App Health
+              {t('App Health')}
             </CardTitle>
             <CardDescription>
-              Release, storage, licensing, exports, and performance diagnostics.
+              {t('Release, storage, licensing, exports, and performance diagnostics.')}
             </CardDescription>
           </div>
           <Button
@@ -120,41 +123,44 @@ export function AppHealthPage({
               data-icon="inline-start"
               className={isLoading ? 'animate-spin' : undefined}
             />
-            {isLoading ? 'Refreshing…' : 'Refresh'}
+            {isLoading ? 'Refreshing…' : t('Refresh')}
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
           {!health ? (
-            <p className="text-sm text-muted-foreground">Reading local app health…</p>
+            <p className="text-sm text-muted-foreground">{t('Reading local app health…')}</p>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <HealthStat label="App version" value={health.appVersion} />
+                <HealthStat label={t('App version')} value={health.appVersion} />
                 <HealthStat label="Electron" value={health.electronVersion} />
-                <HealthStat label="Platform" value={`${health.platform} ${health.architecture}`} />
                 <HealthStat
-                  label="Build"
+                  label={t('Platform')}
+                  value={`${health.platform} ${health.architecture}`}
+                />
+                <HealthStat
+                  label={t('Build')}
                   value={health.isPackaged ? 'Installed package' : 'Development'}
                 />
-                <HealthStat label="License" value={license?.statusLabel ?? 'Unavailable'} />
-                <HealthStat label="Performance" value={performance.label} />
-                <HealthStat label="Recent jobs" value={String(health.recentJobsCount)} />
-                <HealthStat label="Recent exports" value={String(health.recentExportsCount)} />
+                <HealthStat label={t('License')} value={license?.statusLabel ?? 'Unavailable'} />
+                <HealthStat label={t('Performance')} value={performance.label} />
+                <HealthStat label={t('Recent jobs')} value={String(health.recentJobsCount)} />
+                <HealthStat label={t('Recent exports')} value={String(health.recentExportsCount)} />
               </div>
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                <PathRow label="Project data folder" value={health.appDataPath} />
-                <PathRow label="Autosaves" value={health.autosavePath} />
+                <PathRow label={t('Project data folder')} value={health.appDataPath} />
+                <PathRow label={t('Autosaves')} value={health.autosavePath} />
                 <PathRow
-                  label="Last export"
+                  label={t('Last export')}
                   value={health.lastExportPath ?? 'No export recorded'}
                 />
                 <PathRow
-                  label="Last error"
+                  label={t('Last error')}
                   value={health.lastError ?? 'No runtime error recorded'}
                 />
               </div>
               <div>
-                <p className="mb-2 text-sm font-medium">Available tools</p>
+                <p className="mb-2 text-sm font-medium">{t('Available tools')}</p>
                 <div className="flex flex-wrap gap-2">
                   {health.availableTools.map((tool) => (
                     <Badge key={tool} variant="secondary">
@@ -183,7 +189,7 @@ export function AppHealthPage({
               }
             >
               <FolderOpen data-icon="inline-start" />
-              Open App Data Folder
+              {t('Open App Data Folder')}
             </Button>
             <Button
               type="button"
@@ -192,7 +198,7 @@ export function AppHealthPage({
               onClick={() => void runAction(exportReport)}
             >
               <Download data-icon="inline-start" />
-              Export Diagnostic Report
+              {t('Export Diagnostic Report')}
             </Button>
             <Button
               type="button"
@@ -201,7 +207,7 @@ export function AppHealthPage({
               onClick={() => void runAction(clearCache)}
             >
               <Trash2 data-icon="inline-start" />
-              Clear Temporary Cache
+              {t('Clear Temporary Cache')}
             </Button>
             {isDeveloperMode && (
               <Button
@@ -211,7 +217,7 @@ export function AppHealthPage({
                 onClick={() => void runAction(onResetLicense)}
               >
                 <Wrench data-icon="inline-start" />
-                Reset Local Trial / License
+                {t('Reset Local Trial / License')}
               </Button>
             )}
             {isDeveloperMode && (
@@ -232,7 +238,7 @@ export function AppHealthPage({
                 }
               >
                 <Database data-icon="inline-start" />
-                Create Test Projects
+                {t('Create Test Projects')}
               </Button>
             )}
           </div>
@@ -243,9 +249,11 @@ export function AppHealthPage({
 }
 
 function HealthStat({ label, value }: { label: string; value: string }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div className="rounded-xl border bg-muted/25 p-4">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium text-muted-foreground">{t(label)}</p>
       <p className="mt-1 truncate font-semibold" title={value}>
         {value}
       </p>
@@ -253,9 +261,11 @@ function HealthStat({ label, value }: { label: string; value: string }): JSX.Ele
   )
 }
 function PathRow({ label, value }: { label: string; value: string }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div className="rounded-xl border bg-muted/15 p-3">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium text-muted-foreground">{t(label)}</p>
       <p className="mt-1 break-all text-sm">{value}</p>
     </div>
   )

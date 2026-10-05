@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { useMemo, useState, type FormEvent } from 'react'
 import {
   AlertTriangle,
@@ -49,6 +50,8 @@ export function LicensePage({
   isDeveloperMode,
   onNavigate
 }: LicensePageProps): JSX.Element {
+  const { t } = useLanguage()
+
   const [serialKey, setSerialKey] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
   const tone = getLicenseTone(licenseState)
@@ -93,7 +96,7 @@ export function LicensePage({
           type="button"
         >
           <ArrowLeft data-icon="inline-start" />
-          Back to Settings
+          {t('Back to Settings')}
         </Button>
         {isDeveloperMode && (
           <Button
@@ -112,7 +115,7 @@ export function LicensePage({
           type="button"
         >
           <RefreshCw data-icon="inline-start" />
-          Refresh
+          {t('Refresh')}
         </Button>
       </div>
 
@@ -125,20 +128,22 @@ export function LicensePage({
             </CardDescription>
           </div>
           <Badge variant={tone}>
-            {isLoading && !licenseState ? 'Checking' : (licenseState?.statusLabel ?? 'Unavailable')}
+            {isLoading && !licenseState
+              ? t('Checking')
+              : (licenseState?.statusLabel ?? 'Unavailable')}
           </Badge>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
             <StatusMetric
               icon={ShieldCheck}
-              label="Current Plan"
+              label={t('Current Plan')}
               value={planLabel}
               detail={licenseState?.mode === 'activated' ? 'Local activation' : 'Trial mode'}
             />
             <StatusMetric
               icon={Clock3}
-              label="Trial Remaining"
+              label={t('Trial Remaining')}
               value={trialRemaining}
               detail={
                 licenseState
@@ -148,7 +153,7 @@ export function LicensePage({
             />
             <StatusMetric
               icon={BadgeCheck}
-              label="Paid Tools"
+              label={t('Paid Tools')}
               value={paidToolsLabel}
               detail={
                 licenseState?.canUsePaidTools ? 'Available on this device' : 'Activation required'
@@ -156,7 +161,7 @@ export function LicensePage({
             />
             <StatusMetric
               icon={HardDrive}
-              label="Machine Code"
+              label={t('Machine Code')}
               value={licenseState?.machineCode ?? 'Checking'}
               detail={formatStorageMode(licenseState)}
             />
@@ -195,7 +200,7 @@ export function LicensePage({
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <Card>
           <CardHeader>
-            <CardTitle>Activate Subscription Key</CardTitle>
+            <CardTitle>{t('Activate Subscription Key')}</CardTitle>
             <CardDescription>
               Subscription keys are checked locally and stored on this machine.
             </CardDescription>
@@ -204,7 +209,7 @@ export function LicensePage({
             <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-foreground" htmlFor="serial-key">
-                  Subscription Key
+                  {t('Subscription Key')}
                 </label>
                 <Input
                   id="serial-key"
@@ -230,7 +235,7 @@ export function LicensePage({
                   }}
                   type="button"
                 >
-                  Clear
+                  {t('Clear')}
                 </Button>
               </div>
             </form>
@@ -239,23 +244,23 @@ export function LicensePage({
 
         <Card>
           <CardHeader>
-            <CardTitle>Local Record</CardTitle>
+            <CardTitle>{t('Local Record')}</CardTitle>
             <CardDescription>Activation details saved by the desktop app.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <DetailRow
-              label="Trial Started"
+              label={t('Trial Started')}
               value={licenseState ? formatDateTime(licenseState.trial.startedAt) : 'Checking'}
             />
             <DetailRow
-              label="Trial Ends"
+              label={t('Trial Ends')}
               value={licenseState ? formatDateTime(licenseState.trial.endsAt) : 'Checking'}
             />
             <DetailRow label="Serial Suffix" value={activationDetails.serial} />
             <DetailRow label="Seat" value={activationDetails.seat} />
-            <DetailRow label="Expires" value={activationDetails.expires} />
+            <DetailRow label={t('Expires')} value={activationDetails.expires} />
             <DetailRow
-              label="Last Checked"
+              label={t('Last Checked')}
               value={licenseState ? formatDateTime(licenseState.checkedAt) : 'Checking'}
             />
           </CardContent>
@@ -273,11 +278,13 @@ interface StatusMetricProps {
 }
 
 function StatusMetric({ icon: Icon, label, value, detail }: StatusMetricProps): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div className="rounded-lg border bg-muted/35 p-4">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Icon className="size-4" aria-hidden="true" />
-        <span>{label}</span>
+        <span>{t(label)}</span>
       </div>
       <p className="mt-2 break-words text-2xl font-bold text-foreground">{value}</p>
       <p className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</p>
@@ -291,9 +298,11 @@ interface DetailRowProps {
 }
 
 function DetailRow({ label, value }: DetailRowProps): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div className="flex items-center justify-between gap-4 border-b pb-3 last:border-b-0 last:pb-0">
-      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm text-muted-foreground">{t(label)}</span>
       <span className="text-right text-sm font-semibold text-foreground">{value}</span>
     </div>
   )

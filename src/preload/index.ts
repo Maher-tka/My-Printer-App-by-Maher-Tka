@@ -8,6 +8,8 @@ import type {
   AdminAccessAction,
   AccessAdminSnapshot
 } from '../shared/account-types.js'
+import type { SubscriptionPlanRecord } from '../shared/account-types.js'
+import { SUBSCRIPTION_TOOLS } from '../shared/subscription-tools.js'
 import type { LicenseActivationResult, LicenseSnapshot } from '../shared/licensing-types.js'
 import type { PrintPdfFileRequest, PrintPdfRequest, PrintPdfResult } from '../shared/print-types.js'
 import type { UnsavedChangesRequest, UnsavedChangesResult } from '../shared/project-types.js'
@@ -25,6 +27,7 @@ let activeProjectState: {
   filePath?: string | null
   preflight?: Pick<ExportContext, 'warningsCount' | 'preflightStatus'>
 } | null = null
+let activeToolId: string | undefined
 
 async function autosaveActiveProject(): Promise<void> {
   if (!activeProjectState?.isDirty) return
@@ -36,12 +39,13 @@ async function autosaveActiveProject(): Promise<void> {
 
 function getActiveExportContext(): ExportContext | undefined {
   if (!activeProjectState?.project || typeof activeProjectState.project !== 'object')
-    return undefined
+    return activeToolId ? { toolId: activeToolId, toolType: activeToolId } : undefined
   const project = activeProjectState.project as {
     metadata?: { id?: string; jobName?: string; toolLabel?: string; tool?: string }
     payload?: { job?: { customerName?: string } }
   }
   return {
+    toolId: activeToolId ?? project.metadata?.tool,
     toolType: project.metadata?.toolLabel ?? project.metadata?.tool,
     projectId: project.metadata?.id,
     projectName: project.metadata?.jobName,
@@ -51,9 +55,14 @@ function getActiveExportContext(): ExportContext | undefined {
 }
 
 contextBridge.exposeInMainWorld('printerApp', {
+  setActiveTool: (route: string): void => {
+    activeToolId = SUBSCRIPTION_TOOLS.find((tool) => tool.id === route)?.id
+  },
   platform: process.platform,
   storageMode: 'local-first',
   account: {
+    adminPlan: (plan: SubscriptionPlanRecord): Promise<AccountMutationResult> =>
+      ipcRenderer.invoke('account:admin-plan', plan),
     verifyEmail: (request: { email: string; token: string }): Promise<AccountMutationResult> =>
       ipcRenderer.invoke('account:verify-email', request),
     sendRecovery: (email: string): Promise<AccountMutationResult> =>
@@ -144,6 +153,14 @@ contextBridge.exposeInMainWorld('printerApp', {
     )
   },
   runtime: {
+    exportIllustratorPdfBatch: (
+      request: import('../shared/illustrator-pdf-export.js').IllustratorPdfBatchRequest
+    ): Promise<import('../shared/illustrator-pdf-export.js').IllustratorPdfBatchResult> =>
+      ipcRenderer.invoke('runtime:export-illustrator-pdf-batch', request),
+    exportIllustratorPdf: (
+      request: import('../shared/illustrator-pdf-export.js').IllustratorPdfExportRequest
+    ): Promise<import('../shared/illustrator-pdf-export.js').IllustratorPdfExportResult> =>
+      ipcRenderer.invoke('runtime:export-illustrator-pdf', request),
     getHealth: () => ipcRenderer.invoke('runtime:get-health'),
     openAppDataFolder: () => ipcRenderer.invoke('runtime:open-app-data'),
     clearTemporaryCache: () => ipcRenderer.invoke('runtime:clear-cache'),

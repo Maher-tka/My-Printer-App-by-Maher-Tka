@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { ArrowLeft, CheckCircle2, Clock, FolderOpen, FlaskConical, Play } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -21,6 +22,8 @@ export default function QualityLabPage({
 }: {
   onNavigate: (route: AppRoute) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const [results, setResults] = useState<
     Array<{ label: string; durationMs: number; report?: PreflightReport; path?: string }>
   >([])
@@ -89,13 +92,13 @@ export default function QualityLabPage({
         type="button"
       >
         <ArrowLeft data-icon="inline-start" />
-        Back to Settings
+        {t('Back to Settings')}
       </Button>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FlaskConical className="text-primary" />
-            Quality Lab
+            {t('Quality Lab')}
           </CardTitle>
           <CardDescription>
             Development-only synthetic checks. No customer files are used.

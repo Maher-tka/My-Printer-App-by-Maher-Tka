@@ -1,8 +1,23 @@
 import type { CutterSheetSettings, EditorObject, PiecePreset, PlacedPiece } from '../types'
 import { getPieceProductionFootprint, getPlacedProductionBounds } from './cutlineGenerator'
 import { calculateUsedArea, detectOutOfBounds, detectOverlaps } from './nestingStrategies'
+import {
+  getCutlinePreviewTransform,
+  matchCutlineToMask,
+  nudgeCutline,
+  setCutlineOffset
+} from './cutlineAdjustment'
+import { createPiecePresetFromSource, createPlacedPieceFromPreset } from './piecePresets'
+import {
+  createCutlineFromArtworkBounds,
+  createCutlineFromMaskBounds,
+  getCutlineInspectorState
+} from './cutlineValidation'
+import { getCutlineObject, syncLegacyFieldsFromObjects } from './pieceModelSync'
+import { getPlacedEditorObjectRect } from './cutlineGenerator'
 
 function run(): void {
+  checkContourPrecision()
   expectBounds(
     getPieceProductionFootprint(createPiece(createArtwork(0))),
     { xCm: 2, yCm: 3, widthCm: 8, heightCm: 4 },
@@ -151,6 +166,126 @@ function run(): void {
   )
 
   console.log('Cutline production-bounds tests passed.')
+}
+
+function checkContourPrecision(): void {
+  const base = createPiecePresetFromSource(
+    {
+      id: 'edge-source',
+      fileName: 'edge.png',
+      displayName: 'Edge',
+      mimeType: 'image/png',
+      bytes: new Uint8Array(),
+      previewUrl: '',
+      naturalWidthPx: 400,
+      naturalHeightPx: 400
+    },
+    []
+  )
+  const created = createCutlineFromArtworkBounds(base)
+  expect(created.cutline.transform.offsetMm === 0, 'new cut contours do not add an unwanted border')
+  expect(
+    !getCutlineInspectorState(created).issues.some(
+      (issue) => issue.id === 'piece-cutline-offset-small'
+    ),
+    'zero border is a valid intentional cut setting'
+  )
+  const mask: EditorObject = {
+    id: 'edge-mask',
+    type: 'mask',
+    role: 'clipping-mask',
+    shapeType: 'ellipse',
+    name: 'Mask',
+    visible: true,
+    locked: true,
+    transform: { xCm: 0.5, yCm: 0.7, widthCm: 3, heightCm: 2, rotation: 30 }
+  }
+  const masked = syncLegacyFieldsFromObjects({
+    ...created,
+    objects: [...created.objects, mask],
+    maskObjectId: mask.id,
+    clippingMaskEnabled: true
+  })
+  const aroundMask = createCutlineFromMaskBounds(masked)
+  const id = aroundMask.cutlineObjectId!
+  const adjusted = setCutlineOffset(aroundMask, id, -0.2)
+  const cut = getCutlineObject(adjusted)!
+  expectBounds(
+    getCutlinePreviewTransform({ ...cut, offsetMm: undefined }, adjusted),
+    { xCm: 0.52, yCm: 0.72, widthCm: 2.96, heightCm: 1.96 },
+    'legacy primary contours keep their stored cut adjustment in the preview'
+  )
+  expectBounds(
+    getCutlinePreviewTransform(cut),
+    { xCm: 0.52, yCm: 0.72, widthCm: 2.96, heightCm: 1.96 },
+    'inward trim in the editor is exactly 0.2 mm per side'
+  )
+  expect(
+    adjusted.cutline.transform.offsetMm === -0.2,
+    'precision adjustment synchronizes saved and placed contour settings'
+  )
+  const placed = createPlacedPieceFromPreset(adjusted, 10, 20)
+  const production = getPlacedEditorObjectRect(placed, adjusted, cut)
+  const zero = getPlacedEditorObjectRect(
+    createPlacedPieceFromPreset(aroundMask, 10, 20),
+    aroundMask,
+    getCutlineObject(aroundMask)!
+  )
+  expectClose(production.widthCm, zero.widthCm - 0.04, 'production trim matches the editor width')
+  expectClose(
+    production.heightCm,
+    zero.heightCm - 0.04,
+    'production trim matches the editor height'
+  )
+  expectClose(production.rotation, 30, 'rotated masks keep contour rotation when trimming')
+  const moved = nudgeCutline(adjusted, id, 0.01, -0.05)
+  expectClose(moved.cutline.transform.xCm, 0.501, '0.01 mm nudge stays precise')
+  expectClose(moved.cutline.transform.yCm, 0.695, '0.05 mm vertical nudge stays precise')
+  expect(
+    JSON.stringify(moved.artwork) === JSON.stringify(adjusted.artwork) &&
+      JSON.stringify(moved.mask) === JSON.stringify(adjusted.mask),
+    'contour adjustments preserve artwork and its locked mask'
+  )
+  const matched = matchCutlineToMask(moved, id)
+  expectBounds(
+    matched.cutline.transform,
+    mask.transform,
+    'matching removes both offset and position drift'
+  )
+  expect(
+    matched.cutline.transform.offsetMm === 0 && matched.cutline.shape === 'ellipse',
+    'matching uses the mask shape with no extra margin'
+  )
+  const locked = syncLegacyFieldsFromObjects({
+    ...adjusted,
+    objects: adjusted.objects.map((object) =>
+      object.id === id ? { ...object, locked: true } : object
+    )
+  })
+  expect(
+    setCutlineOffset(locked, id, 1) === locked &&
+      nudgeCutline(locked, id, 1, 1) === locked &&
+      matchCutlineToMask(locked, id) === locked,
+    'precision tools respect contour locks'
+  )
+  expect(
+    setCutlineOffset(adjusted, id, -10) === adjusted &&
+      setCutlineOffset(adjusted, id, NaN) === adjusted,
+    'invalid and collapsed contours are rejected'
+  )
+  const customMask = syncLegacyFieldsFromObjects({
+    ...masked,
+    objects: masked.objects.map((object) =>
+      object.id === mask.id
+        ? { ...object, shapeType: 'path' as const, pathData: 'M 0 0 L 1 0 L .5 1 Z' }
+        : object
+    )
+  })
+  const pathMatched = matchCutlineToMask(customMask, id)
+  expect(
+    pathMatched.cutline.customPathData === 'M 0 0 L 1 0 L .5 1 Z',
+    'matching custom masks copies the actual path'
+  )
 }
 
 function createArtwork(rotation: number, overrides: Partial<EditorObject> = {}): EditorObject {

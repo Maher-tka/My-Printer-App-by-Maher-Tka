@@ -1,8 +1,11 @@
-import { ChevronDown, ChevronRight, FileImage, LogOut, Search, Settings } from 'lucide-react'
+import { ActionIcon } from '@/components/ui/action-button'
+import { useLanguage } from '@/i18n/useLanguage'
+import { ChevronDown, ChevronRight, LogOut, Search, Settings } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/appearance/ThemeToggle'
+import { LanguageSwitcher } from '@/i18n/LanguageSwitcher'
 import type { AppRoute, PageMeta } from '@/types/navigation'
 import type { AccountProfile } from '../../../../shared/account-types'
 
@@ -27,6 +30,8 @@ export function TopBar({
   isDashboard = false,
   onNavigate
 }: TopBarProps): JSX.Element {
+  const { t } = useLanguage()
+
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const accountMenuRef = useRef<HTMLDivElement>(null)
   const accountButtonRef = useRef<HTMLButtonElement>(null)
@@ -49,7 +54,7 @@ export function TopBar({
     }
   }, [accountMenuOpen])
   const accountLabel =
-    account?.displayName ?? (isDeveloperMode ? 'Developer mode' : 'Subscription access')
+    account?.displayName ?? t(isDeveloperMode ? 'Developer mode' : 'Subscription access')
   const accountInitials = getInitials(account?.displayName ?? 'SA')
 
   return (
@@ -64,7 +69,9 @@ export function TopBar({
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2.5">
             {!isDashboard && (
-              <span className="hidden text-xs text-muted-foreground md:inline">Workspace</span>
+              <span className="hidden text-xs text-muted-foreground md:inline">
+                {t('Workspace')}
+              </span>
             )}
             <ChevronRight
               className={isDashboard ? 'hidden' : 'hidden size-3 text-muted-foreground/60 md:block'}
@@ -77,7 +84,7 @@ export function TopBar({
                   : 'truncate text-base font-semibold tracking-[-0.015em] text-foreground'
               }
             >
-              {isDashboard ? 'My Printer App' : pageMeta.title}
+              {isDashboard ? 'My Printer App' : t(pageMeta.title)}
             </h1>
           </div>
         </div>
@@ -92,11 +99,11 @@ export function TopBar({
               ? 'dashboard-header-icon'
               : 'hidden h-9 w-60 items-center gap-2 rounded-[var(--ui-radius-md)] border border-[var(--ui-border)] bg-card/70 px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-card lg:flex'
           }
-          aria-label="Quick open"
-          title="Quick open (Ctrl+K)"
+          aria-label={t('Quick open')}
+          title={t('Quick open (Ctrl+K)')}
         >
           <Search className="size-4" aria-hidden="true" />
-          <span className={isDashboard ? 'sr-only' : 'flex-1'}>Find anything…</span>
+          <span className={isDashboard ? 'sr-only' : 'flex-1'}>{t('Find anything…')}</span>
           <kbd
             className={
               isDashboard
@@ -112,8 +119,8 @@ export function TopBar({
           size="icon"
           type="button"
           onClick={onOpenCommandCenter}
-          aria-label="Quick open"
-          title="Quick open (Ctrl+K)"
+          aria-label={t('Quick open')}
+          title={t('Quick open (Ctrl+K)')}
           className={isDashboard ? 'hidden' : 'lg:hidden'}
         >
           <Search className="size-4" />
@@ -123,16 +130,17 @@ export function TopBar({
             type="button"
             className="dashboard-header-icon"
             onClick={() => onNavigate('settings')}
-            aria-label="Settings"
-            title="Settings"
+            aria-label={t('Settings')}
+            title={t('Settings')}
           >
             <Settings className="size-4" aria-hidden="true" />
           </button>
         )}
         <ThemeToggle dashboard={isDashboard} />
+        <LanguageSwitcher dashboard={isDashboard} />
         <Button
-          aria-label="Import artwork"
-          title="Import artwork into Cutter Montage"
+          aria-label={t('Import artwork')}
+          title={t('Import artwork into Cutter Montage')}
           variant="outline"
           type="button"
           onClick={onOpenImageFile}
@@ -140,8 +148,10 @@ export function TopBar({
             isDashboard ? 'dashboard-header-icon border-0 p-0' : 'rounded-lg px-3.5 text-xs'
           }
         >
-          <FileImage className="size-4" aria-hidden="true" />
-          <span className={isDashboard ? 'sr-only' : 'hidden sm:inline'}>Import artwork</span>
+          <ActionIcon action="import" />
+          <span className={isDashboard ? 'sr-only' : 'hidden sm:inline'}>
+            {t('Import artwork')}
+          </span>
         </Button>
 
         <div
@@ -162,7 +172,7 @@ export function TopBar({
             ref={accountButtonRef}
             aria-expanded={accountMenuOpen}
             aria-controls={accountMenuOpen ? 'account-details' : undefined}
-            aria-label="Account menu"
+            aria-label={t('Account menu')}
             onClick={() => setAccountMenuOpen((open) => !open)}
           >
             <Avatar className="size-8 border border-primary/10">
@@ -181,7 +191,7 @@ export function TopBar({
           {accountMenuOpen ? (
             <div
               id="account-details"
-              className="absolute right-0 top-12 z-30 w-72 rounded-2xl border bg-card p-3 shadow-elevated"
+              className="absolute end-0 top-12 z-30 w-72 rounded-2xl border bg-card p-3 shadow-elevated"
             >
               <div className="flex items-center gap-3 border-b px-1 pb-3">
                 <Avatar>
@@ -190,7 +200,7 @@ export function TopBar({
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-foreground">{accountLabel}</p>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {account?.email ?? 'Local subscription workspace'}
+                    {account?.email ?? t('Local subscription workspace')}
                   </p>
                 </div>
               </div>
@@ -205,11 +215,11 @@ export function TopBar({
                   }}
                 >
                   <LogOut aria-hidden="true" />
-                  Sign out
+                  {t('Sign out')}
                 </Button>
               ) : (
                 <p className="px-2 pt-3 text-xs leading-5 text-muted-foreground">
-                  This computer is unlocked by the current local subscription.
+                  {t('This computer is unlocked by the current local subscription.')}
                 </p>
               )}
             </div>

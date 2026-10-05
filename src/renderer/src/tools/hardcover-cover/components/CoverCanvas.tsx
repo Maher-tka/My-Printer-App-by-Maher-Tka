@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { Move } from 'lucide-react'
 import type {
   HardcoverPdfCoverTarget,
@@ -16,6 +17,8 @@ export function CoverCanvas({
     target?: HardcoverPdfCoverTarget
   ) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <section
       className="min-h-[360px] min-w-0 max-w-full rounded-[18px] border border-border/60 bg-muted/40 p-4 xl:min-h-[440px]"
@@ -24,7 +27,7 @@ export function CoverCanvas({
       {state.sourcePdf ? (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
           <Move className="size-4 shrink-0 text-primary" aria-hidden="true" />
-          Drag the front or back artwork directly on the preview to adjust its position.
+          {t('Drag the front or back artwork directly on the preview to adjust its position.')}
         </div>
       ) : null}
       <div className="min-w-0 max-w-full overflow-auto">

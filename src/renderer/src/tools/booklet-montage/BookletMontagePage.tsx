@@ -1,4 +1,5 @@
-import { ArrowLeft } from 'lucide-react'
+import { useLanguage } from '@/i18n/useLanguage'
+import { ToolHeader } from '../shared/ToolHeader'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { createPrintedJob } from '@/jobs/printHistory'
@@ -17,7 +18,7 @@ import { runBookletPreflight } from '@/preflight/bookletPreflight'
 import { PreflightDialog } from '@/preflight/preflightUI'
 import type { PreflightReport } from '@/preflight/preflightTypes'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import type { AppRoute } from '@/types/navigation'
 import type {
   ActiveProjectSession,
@@ -53,6 +54,8 @@ export function BookletMontagePage({
   onProjectSessionChange,
   onConfirmUnsavedChanges
 }: BookletMontagePageProps): JSX.Element {
+  const { t } = useLanguage()
+
   const montage = useBookletMontage(openedProject?.project)
   const { jobs, saveJob } = useJobStore()
   const handledInitialPdfImportIdRef = useRef<number | null>(null)
@@ -66,6 +69,7 @@ export function BookletMontagePage({
     openedProject?.project.metadata ?? null
   )
   const [projectIsBusy, setProjectIsBusy] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
   const [projectMessage, setProjectMessage] = useState<string | null>(
     openedProject ? `Opened ${openedProject.project.metadata.jobName}` : null
   )
@@ -255,26 +259,33 @@ export function BookletMontagePage({
   }
 
   const printBooklet = useCallback(async (): Promise<void> => {
-    setProjectMessage('Preparing booklet PDF for printing...')
-    const result = await montage.printPdf(projectName)
-    setProjectMessage(getPrintResultMessage(result, 'booklet-montage.pdf'))
+    setIsPrinting(true)
+    try {
+      setProjectMessage('Preparing booklet PDF for printing...')
+      const result = await montage.printPdf(projectName)
+      setProjectMessage(getPrintResultMessage(result, 'booklet-montage.pdf'))
 
-    if (!result.ok) return
+      if (!result.ok) return
 
-    const existingJob = projectMetadata?.id
-      ? jobs.find((job) => job.id === projectMetadata.id)
-      : undefined
-    saveJob(
-      createPrintedJob({
-        existingJob,
-        projectId: projectMetadata?.id,
-        tool: 'booklet',
-        jobName: projectName,
-        pdfName: result.pdfName ?? 'booklet-montage.pdf',
-        printerName: result.printerName,
-        localProjectPath: projectFilePath
-      })
-    )
+      const existingJob = projectMetadata?.id
+        ? jobs.find((job) => job.id === projectMetadata.id)
+        : undefined
+      saveJob(
+        createPrintedJob({
+          existingJob,
+          projectId: projectMetadata?.id,
+          tool: 'booklet',
+          jobName: projectName,
+          pdfName: result.pdfName ?? 'booklet-montage.pdf',
+          printerName: result.printerName,
+          localProjectPath: projectFilePath
+        })
+      )
+    } catch (error) {
+      setProjectMessage(getProjectErrorMessage(error))
+    } finally {
+      setIsPrinting(false)
+    }
   }, [jobs, montage, projectFilePath, projectMetadata?.id, projectName, saveJob])
 
   const importPdfFiles = async (files: File[]): Promise<void> => {
@@ -361,32 +372,31 @@ export function BookletMontagePage({
   return (
     <div className="workspace-shell booklet-workspace mx-auto flex w-full max-w-[1880px] flex-col gap-4">
       <Card className="border-0 bg-transparent shadow-none">
-        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 border-b border-border/60 px-0 pb-3 pt-0">
-          <div className="flex items-center gap-2">
-            {' '}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 shrink-0"
-              aria-label="Back to Dashboard"
-              title="Back to Dashboard"
-              onClick={() => onNavigate('dashboard')}
-              type="button"
-            >
-              <ArrowLeft data-icon="inline-start" />
-            </Button>
-            <CardTitle className="text-base">Booklet Montage</CardTitle>
-          </div>
-          <ProjectFileActions
-            filePath={projectFilePath}
-            isBusy={projectIsBusy || importIsBusy || exportIsBusy}
-            isDirty={isDirty}
-            message={projectMessage}
-            onOpen={() => void openProject()}
-            onSave={() => void saveProject(false)}
-            onSaveAs={() => void saveProject(true)}
-          />
-        </CardHeader>
+        <ToolHeader
+          title={t('Booklet Montage')}
+          onBack={() => onNavigate('dashboard')}
+          print={{
+            disabled: !canExport || projectIsBusy || importIsBusy || exportIsBusy,
+            isBusy: isPrinting,
+            onPrint: () => requestBookletAction(() => void printBooklet(), 'print')
+          }}
+          exportPdf={{
+            disabled: !canExport || projectIsBusy || importIsBusy || exportIsBusy,
+            onExport: () => requestBookletAction(() => void montage.exportPdf())
+          }}
+          actions={
+            <ProjectFileActions
+              filePath={projectFilePath}
+              isBusy={projectIsBusy || importIsBusy || exportIsBusy}
+              isDirty={isDirty}
+              message={projectMessage}
+              onOpen={() => void openProject()}
+              onSave={() => void saveProject(false)}
+              onSaveAs={() => void saveProject(true)}
+              onNew={() => void startNewProject()}
+            />
+          }
+        />
         <CardContent className="flex flex-col gap-4 p-0 pt-4">
           <BookletToolbar
             settings={montage.settings}
@@ -402,13 +412,10 @@ export function BookletMontagePage({
             onImportImages={montage.importImages}
             onCancelImport={montage.cancelImport}
             onCancelExport={montage.cancelExport}
-            onClear={() => void startNewProject()}
             onSettingsChange={montage.updateSettings}
             onAutoAddBlankPages={montage.autoAddBlankPages}
             onAddEmptySheet={montage.addEmptySheet}
             onResetSheetLayout={montage.resetSheetLayout}
-            onExportPdf={() => requestBookletAction(() => void montage.exportPdf())}
-            onPrintPdf={() => requestBookletAction(() => void printBooklet(), 'print')}
             onExportImages={(format) =>
               requestBookletAction(() => void montage.exportImages(format))
             }
@@ -461,10 +468,7 @@ export function BookletMontagePage({
                 )}
                 {viewMode === 'sheet' && (
                   <>
-                    <ModePurposeBanner
-                      title="Sheet Mode"
-                      description={`Manage the source page sequence before booklet imposition. Current order drives Montage Mode, 3D Book Mode, and export in ${readingDirectionLabel}.`}
-                    />
+                    <ModeHeading title={t('Sheet Mode')} />
                     <div className="flex min-h-[360px] items-center justify-center rounded-[18px] border border-border/60 bg-muted/30 p-6">
                       {montage.pages.length ? (
                         (() => {
@@ -484,7 +488,7 @@ export function BookletMontagePage({
                                   className="grid h-80 w-56 place-items-center border bg-white text-sm text-muted-foreground"
                                   style={{ backgroundColor: page.colorHex }}
                                 >
-                                  Blank page
+                                  {t('Blank page')}
                                 </div>
                               )}
                               <figcaption className="text-xs text-muted-foreground">
@@ -496,10 +500,11 @@ export function BookletMontagePage({
                         })()
                       ) : (
                         <div className="max-w-xs text-center">
-                          <h3 className="text-base font-semibold">No document loaded</h3>
+                          <h3 className="text-base font-semibold">{t('No document loaded')}</h3>
                           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                            Import a PDF or images with the toolbar above. Your pages appear on the
-                            left, ready to arrange.
+                            {t(
+                              'Import a PDF or images with the toolbar above. Your pages appear on the left, ready to arrange.'
+                            )}
                           </p>
                         </div>
                       )}
@@ -509,10 +514,7 @@ export function BookletMontagePage({
 
                 {viewMode === 'montage' && (
                   <>
-                    <ModePurposeBanner
-                      title="Montage Mode"
-                      description={`Inspect every imposed front/back print sheet generated from the current Sheet Mode order. ${readingDirectionLabel} is active.`}
-                    />
+                    <ModeHeading title={t('Montage Mode')} />
                     <SheetPreview
                       sheets={montage.sheets}
                       sources={montage.sources}
@@ -533,10 +535,7 @@ export function BookletMontagePage({
 
                 {viewMode === 'book' && (
                   <>
-                    <ModePurposeBanner
-                      title="3D Book Mode"
-                      description={`Flip through the current booklet visually in ${readingDirectionLabel}. Print accuracy still comes from Montage Mode and export.`}
-                    />
+                    <ModeHeading title={t('3D Book Mode')} />
                     <BookFlipPreview
                       orderedPages={montage.pages}
                       sources={montage.sources}
@@ -565,13 +564,10 @@ export function BookletMontagePage({
                 onImportImages={montage.importImages}
                 onCancelImport={montage.cancelImport}
                 onCancelExport={montage.cancelExport}
-                onClear={() => void startNewProject()}
                 onSettingsChange={montage.updateSettings}
                 onAutoAddBlankPages={montage.autoAddBlankPages}
                 onAddEmptySheet={montage.addEmptySheet}
                 onResetSheetLayout={montage.resetSheetLayout}
-                onExportPdf={() => requestBookletAction(() => void montage.exportPdf())}
-                onPrintPdf={() => requestBookletAction(() => void printBooklet(), 'print')}
                 onExportImages={(format) =>
                   requestBookletAction(() => void montage.exportImages(format))
                 }
@@ -616,17 +612,10 @@ function getEmptyBookletProjectStateKey(
   })
 }
 
-function ModePurposeBanner({
-  title,
-  description
-}: {
-  title: string
-  description: string
-}): JSX.Element {
+function ModeHeading({ title }: { title: string }): JSX.Element {
   return (
     <div className="border-b border-border/60 px-1 pb-3">
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
     </div>
   )
 }

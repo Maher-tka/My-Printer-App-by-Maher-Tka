@@ -1,5 +1,6 @@
 @import './design-system/tokens.css';
 @import './appearance/dark-surfaces.css';
+@import './i18n/rtl.css';
 
 @tailwind base;
 @tailwind components;

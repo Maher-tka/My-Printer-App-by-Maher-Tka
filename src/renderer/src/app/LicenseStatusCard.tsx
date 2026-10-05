@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { AlertTriangle, KeyRound, ShieldCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,8 @@ export function LicenseStatusCard({
   error,
   onActivate
 }: LicenseStatusCardProps): JSX.Element {
+  const { t } = useLanguage()
+
   const tone = getLicenseTone(licenseState)
   const isExpired = licenseState?.mode === 'expired'
   const Icon = error || isExpired ? AlertTriangle : ShieldCheck
@@ -39,22 +42,22 @@ export function LicenseStatusCard({
           </div>
           <div className="flex flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium text-muted-foreground">Access Status</p>
+              <p className="text-sm font-medium text-muted-foreground">{t('Access Status')}</p>
               <Badge variant={tone}>
                 {isLoading && !licenseState
-                  ? 'Checking'
+                  ? t('Checking')
                   : (licenseState?.statusLabel ?? 'Unavailable')}
               </Badge>
             </div>
             <p className="text-xl font-bold">
-              Current Plan: <span className="text-primary">{planLabel}</span>
+              {t('Current Plan:')} <span className="text-primary">{planLabel}</span>
             </p>
             <p className="text-sm text-muted-foreground">
               {error ? error : getLicenseSummary(licenseState)}
             </p>
             {licenseState && (
               <p className="text-xs text-muted-foreground">
-                Trial ends {formatDateTime(licenseState.trial.endsAt)}
+                {t('Trial ends')} {formatDateTime(licenseState.trial.endsAt)}
               </p>
             )}
           </div>
@@ -66,7 +69,7 @@ export function LicenseStatusCard({
           type="button"
         >
           <KeyRound data-icon="inline-start" />
-          {licenseState?.mode === 'activated' ? 'Manage Subscription' : 'Activate Subscription'}
+          {licenseState?.mode === 'activated' ? t('Manage Subscription') : 'Activate Subscription'}
         </Button>
       </CardContent>
     </Card>

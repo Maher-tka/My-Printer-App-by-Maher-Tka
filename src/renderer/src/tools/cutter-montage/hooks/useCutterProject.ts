@@ -1,4 +1,10 @@
+import { getPrintResultMessage, printPdf } from '@/print/printPdf'
 import { createFineCutHandoff } from '../lib/finecutHandoff'
+import { getCutterSheetPdfFileName } from '../../../../../shared/illustrator-pdf-export'
+import { getProductionSheetLayoutGroups } from '../lib/productionSheetGroups'
+import { createIllustratorPdfExport, createIllustratorPdfBatch } from '../lib/illustratorPdfExport'
+import { getOrderLayoutSignature, rebuildOrderLayout } from '../lib/orderLayout'
+import { getCutterOrderLimitMessage, CUTTER_QUANTITY_LIMIT_MESSAGE } from '../lib/layoutLimits'
 import { createEditedArtwork, type ArtworkEditResult } from '../lib/applyArtworkEdit'
 import {
   useCallback,
@@ -45,7 +51,11 @@ import { createStickerCutterAssets, type StickerSendOrder } from '../lib/sticker
 import { runCutterPreflight, type CutterPreflightReport } from '../lib/preflight'
 import type { CutterPdfImportSession } from '../lib/pdfImport'
 import { ImportOperationGuard } from '../lib/importOperation'
-import { getProductionSheetCount, MIN_PRODUCTION_SHEET_HEIGHT_CM } from '../lib/productionSheets'
+import {
+  getProductionSheetCount,
+  getSingleProductionSheetProject,
+  MIN_PRODUCTION_SHEET_HEIGHT_CM
+} from '../lib/productionSheets'
 import {
   bytesToArrayBuffer,
   bytesToDataUrl,
@@ -152,6 +162,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   exportSettings: CutterExportSettings
   canExport: boolean
   fineCutBusy: boolean
+  printBusy: boolean
   prepareFineCut: (sheetIndex: number) => Promise<void>
   status: string
   error: string | null
@@ -192,7 +203,9 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   nudgeSelected: (dxCm: number, dyCm: number) => void
   alignSelected: (command: AlignmentCommand) => void
   handleExportSvg: () => Promise<void>
-  handleExportPdf: () => Promise<void>
+  handleExportPdf: (sheetIndex?: number) => Promise<void>
+  handlePrintPdf: (sheetIndex?: number) => Promise<void>
+  handleExportAllSheetPdfs: () => Promise<void>
   handleExportEps: () => Promise<void>
   handleBatchExport: () => Promise<void>
   setExportMode: (mode: NonNullable<CutterExportSettings['mode']>) => void
@@ -202,6 +215,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   clearProject: () => void
 } {
   const [fineCutBusy, setFineCutBusy] = useState(false)
+  const [printBusy, setPrintBusy] = useState(false)
   const fineCutPending = useRef(false)
   const [initialState] = useState(() => {
     if (!initialProject) return null
@@ -273,6 +287,9 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   const pendingPdfFilesRef = useRef<File[]>([])
   const autoArrangeUndoSnapshotRef = useRef<AutoArrangeUndoSnapshot | null>(null)
   const layoutAuditVersionRef = useRef(0)
+  const orderLayoutSignature = getOrderLayoutSignature(pieces, sheet)
+  const lastOrderLayoutSignatureRef = useRef<string | null>(null)
+  const hasProductionLayoutRef = useRef(placedPieces.length > 0)
   const warnings = getSheetWarnings(sheet)
   const activePiece = pieces.find((piece) => piece.id === activePieceId) ?? null
   const { selectedEditorObjects, keyObject } = useMemo(
@@ -295,6 +312,28 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   useEffect(() => {
     placedPiecesRef.current = placedPieces
   }, [placedPieces])
+
+  useEffect(() => {
+    const firstArrangement = !hasProductionLayoutRef.current && placedPieces.length > 0
+    if (placedPieces.length > 0) hasProductionLayoutRef.current = true
+    if (lastOrderLayoutSignatureRef.current === orderLayoutSignature && !firstArrangement) return
+    lastOrderLayoutSignatureRef.current = orderLayoutSignature
+    if (!hasProductionLayoutRef.current) return
+    const rebuilt = rebuildOrderLayout(piecesRef.current, sheetRef.current, placedPiecesRef.current)
+    lastOrderLayoutSignatureRef.current = getOrderLayoutSignature(rebuilt.pieces, rebuilt.sheet)
+    sheetRef.current = rebuilt.sheet
+    piecesRef.current = rebuilt.pieces
+    placedPiecesRef.current = rebuilt.placedPieces
+    setPieces(rebuilt.pieces)
+    setSheet(rebuilt.sheet)
+    setPlacedPieces(rebuilt.placedPieces)
+    const ids = new Set(rebuilt.placedPieces.map((placed) => placed.id))
+    setSelectedPlacedIds((current) => current.filter((id) => ids.has(id)))
+    setError(rebuilt.warning ?? null)
+    setStatus(
+      `Layout updated: ${rebuilt.placedCount} copies across ${rebuilt.sheetCount ?? 1} sheet(s).`
+    )
+  }, [orderLayoutSignature, placedPieces.length])
 
   useEffect(() => {
     if (
@@ -370,7 +409,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     [exportSettings, initialProject?.metadata.jobName, layers, pieces, placedPieces, sheet, sources]
   )
   const preflight = useMemo(() => runCutterPreflight(project), [project])
-  const canExport = placedPieces.length > 0 && preflight.canExport
+  const canExport = placedPieces.length > 0 && preflight.canExport && !fineCutBusy
 
   const applySheetHeightAndRepack = useCallback(
     (heightCm: number, baseSheet: CutterSheetSettings = sheetRef.current): void => {
@@ -422,7 +461,10 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
       }
 
       if (patch.heightCm !== undefined && piecesRef.current.length > 0) {
-        applySheetHeightAndRepack(updatedSheet.heightCm, updatedSheet)
+        applySheetHeightAndRepack(updatedSheet.heightCm, {
+          ...updatedSheet,
+          autoExpandHeight: false
+        })
         return
       }
 
@@ -436,7 +478,8 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     (heightCm: number): void => {
       applySheetHeightAndRepack(heightCm, {
         ...sheetRef.current,
-        lengthMode: 'fixed'
+        lengthMode: 'fixed',
+        autoExpandHeight: false
       })
     },
     [applySheetHeightAndRepack]
@@ -702,6 +745,26 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
 
   const updatePiece = useCallback(
     (updatedPiece: PiecePreset): void => {
+      const proposed = piecesRef.current.map((piece) =>
+        piece.id === updatedPiece.id
+          ? {
+              ...updatedPiece,
+              quantity:
+                updatedPiece.orderMode === 'target-length'
+                  ? getPieceCapacityForTargetLength(
+                      updatedPiece,
+                      sheetRef.current,
+                      updatedPiece.targetLengthCm ?? sheetRef.current.heightCm
+                    )
+                  : updatedPiece.quantity
+            }
+          : piece
+      )
+      const limitMessage = getCutterOrderLimitMessage(proposed)
+      if (limitMessage) {
+        setError(limitMessage)
+        return
+      }
       const result = reconcilePieceUpdate(
         piecesRef.current,
         placedPiecesRef.current,
@@ -759,7 +822,11 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   )
 
   const updatePieceQuantity = useCallback(
-    (pieceId: string, quantity: number): void => {
+    (pieceId: string, quantity: number): boolean => {
+      if (!Number.isSafeInteger(quantity) || quantity < 1) {
+        setError(CUTTER_QUANTITY_LIMIT_MESSAGE)
+        return false
+      }
       const nextPieces = piecesRef.current.map((piece) =>
         piece.id === pieceId
           ? {
@@ -770,9 +837,14 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
           : piece
       )
       const hasTargetLengthOrder = nextPieces.some((piece) => piece.orderMode === 'target-length')
+      const limitMessage = getCutterOrderLimitMessage(nextPieces)
+      if (limitMessage) {
+        setError(limitMessage)
+        return false
+      }
       const arrangementSheet = normalizeCutterSheetSettings({
-        ...sheet,
-        lengthMode: hasTargetLengthOrder ? 'fixed' : 'auto-trim-last'
+        ...sheetRef.current,
+        lengthMode: hasTargetLengthOrder ? 'fixed' : sheetRef.current.lengthMode
       })
       const result = autoArrangePieces(nextPieces, arrangementSheet, [])
       piecesRef.current = nextPieces
@@ -786,6 +858,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
         `Placed ${result.placedCount} requested copy/copies across ${result.sheetCount ?? 1} production sheet(s).`
       )
       setError(result.warning ?? null)
+      return true
     },
     [sheet]
   )
@@ -799,7 +872,8 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
       const arrangementSheet = normalizeCutterSheetSettings({
         ...sheet,
         heightCm: normalizedTargetLengthCm,
-        lengthMode: 'fixed'
+        lengthMode: 'fixed',
+        autoExpandHeight: false
       })
       const quantity = getPieceCapacityForTargetLength(
         piece,
@@ -822,6 +896,11 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
             }
           : candidate
       )
+      const limitMessage = getCutterOrderLimitMessage(nextPieces)
+      if (limitMessage) {
+        setError(limitMessage)
+        return false
+      }
       const result = autoArrangePieces(nextPieces, arrangementSheet, [])
 
       piecesRef.current = nextPieces
@@ -1377,16 +1456,148 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     }
   }, [preflight, project, saveExport])
 
-  const handleExportPdf = useCallback(async (): Promise<void> => {
+  const handleExportPdf = useCallback(
+    async (sheetIndex = 0): Promise<void> => {
+      if (fineCutPending.current) return
+      try {
+        setError(null)
+        if (!confirmPreflight(preflight)) return
+        if ((project.exportSettings.mode ?? 'print-cut') === 'print-cut') {
+          if (!window.printerApp?.runtime?.exportIllustratorPdf)
+            throw new Error(
+              'Open the updated Windows desktop app to export an editable Illustrator PDF.'
+            )
+          if (
+            !project.exportSettings.includeArtwork ||
+            !project.exportSettings.includeCutlines ||
+            project.exportSettings.includeRegistrationMarks === false
+          )
+            throw new Error(
+              'Print + Cut PDF requires artwork, cut paths and registration marks. Enable all three, or select Print only.'
+            )
+          fineCutPending.current = true
+          setFineCutBusy(true)
+          setStatus('Exporting native Illustrator layers and verifying the saved PDF...')
+          const result = await window.printerApp.runtime.exportIllustratorPdf(
+            await createIllustratorPdfExport(project, sheetIndex)
+          )
+          if (result.canceled) {
+            setStatus('Export canceled.')
+            return
+          }
+          if (!result.ok) throw new Error(result.error ?? 'Illustrator PDF export failed.')
+          setStatus(
+            `Saved verified Illustrator PDF: ${result.filePath}. Artwork and marks visible; CutContour hidden and non-printing.`
+          )
+          return
+        }
+        setStatus('Creating PDF export...')
+        const groups = getProductionSheetLayoutGroups(project)
+        const index = groups.findIndex((group) => group.sheetIndices.includes(sheetIndex))
+        if (index < 0) throw new Error('Select a production sheet before exporting.')
+        const result = await exportCutterPdf(getSingleProductionSheetProject(project, sheetIndex))
+        await saveExport({
+          ...result,
+          fileName: getCutterSheetPdfFileName(
+            index + 1,
+            groups[index].repeatCount,
+            project.exportSettings.mode
+          )
+        })
+      } catch (exportError) {
+        setError(getErrorMessage(exportError))
+      } finally {
+        fineCutPending.current = false
+        setFineCutBusy(false)
+      }
+    },
+    [preflight, project, saveExport]
+  )
+
+  const handlePrintPdf = useCallback(
+    async (sheetIndex = 0): Promise<void> => {
+      if (fineCutPending.current || !canExport) return
+      try {
+        setError(null)
+        if (!confirmPreflight(preflight)) return
+        const groups = getProductionSheetLayoutGroups(project)
+        const layoutIndex = groups.findIndex((group) => group.sheetIndices.includes(sheetIndex))
+        if (layoutIndex < 0) throw new Error('Select a production sheet before printing.')
+        const copies = groups[layoutIndex].repeatCount
+        if (copies > 999)
+          throw new Error(
+            'This layout needs more than 999 copies. Export its PDF and print in batches.'
+          )
+        fineCutPending.current = true
+        setFineCutBusy(true)
+        setPrintBusy(true)
+        setStatus(`Preparing layout ${layoutIndex + 1} for printing (${copies} copies)...`)
+        const printProject = getSingleProductionSheetProject(project, sheetIndex)
+        const exported = await exportCutterPdf({
+          ...printProject,
+          exportSettings: {
+            ...printProject.exportSettings,
+            mode: 'print-only',
+            includeArtwork: true,
+            includeCutlines: false
+          }
+        })
+        const name = getCutterSheetPdfFileName(layoutIndex + 1, copies, 'print-only')
+        const result = await printPdf({
+          bytes: await exported.blob.arrayBuffer(),
+          suggestedName: name,
+          jobTitle: `Cutter Montage - Layout ${layoutIndex + 1}`,
+          copies,
+          silent: false
+        })
+        setStatus(getPrintResultMessage(result, name))
+      } catch (printError) {
+        setError(getErrorMessage(printError))
+      } finally {
+        fineCutPending.current = false
+        setFineCutBusy(false)
+        setPrintBusy(false)
+      }
+    },
+    [canExport, preflight, project]
+  )
+
+  const handleExportAllSheetPdfs = useCallback(async (): Promise<void> => {
+    if (fineCutPending.current) return
     try {
       setError(null)
       if (!confirmPreflight(preflight)) return
-      setStatus('Creating PDF export...')
-      await saveExport(await exportCutterPdf(project))
-    } catch (exportError) {
-      setError(getErrorMessage(exportError))
+      if (!window.printerApp?.runtime?.exportIllustratorPdfBatch)
+        throw new Error(
+          'Open the updated Windows desktop app to export separate Illustrator sheet PDFs.'
+        )
+      if (
+        !project.exportSettings.includeArtwork ||
+        !project.exportSettings.includeCutlines ||
+        project.exportSettings.includeRegistrationMarks === false
+      )
+        throw new Error('Enable artwork, cut paths and registration marks for Print + Cut PDFs.')
+      fineCutPending.current = true
+      setFineCutBusy(true)
+      setStatus('Saving each unique sheet as a separate, verified one-page PDF...')
+      const result = await window.printerApp.runtime.exportIllustratorPdfBatch(
+        await createIllustratorPdfBatch(project)
+      )
+      if (result.canceled) {
+        setStatus('Export canceled.')
+        return
+      }
+      if (!result.ok) throw new Error(result.error ?? 'PDF sheet export failed.')
+      setStatus(
+        `Saved ${result.filePaths?.length ?? 0} separate PDFs in ${result.folderPath}. xN in each filename means print that PDF N times.`
+      )
+    } catch (error) {
+      setError(getErrorMessage(error))
+    } finally {
+      fineCutPending.current = false
+      setFineCutBusy(false)
     }
-  }, [preflight, project, saveExport])
+  }, [preflight, project])
 
   const handleExportEps = useCallback(async (): Promise<void> => {
     try {
@@ -1512,6 +1723,8 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     placedPiecesRef.current = []
     repackWarningPieceIdsRef.current.clear()
     autoArrangeUndoSnapshotRef.current = null
+    hasProductionLayoutRef.current = false
+    lastOrderLayoutSignatureRef.current = null
     setLayers(defaultLayers)
     setExportSettings(getDefaultCutterExportSettings())
     setActivePieceId(null)
@@ -1537,6 +1750,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     exportSettings,
     canExport,
     fineCutBusy,
+    printBusy,
     prepareFineCut,
     status,
     error,
@@ -1578,6 +1792,8 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     alignSelected,
     handleExportSvg,
     handleExportPdf,
+    handlePrintPdf,
+    handleExportAllSheetPdfs,
     handleExportEps,
     handleBatchExport,
     setExportMode,

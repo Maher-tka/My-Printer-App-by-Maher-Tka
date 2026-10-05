@@ -1,13 +1,6 @@
-import {
-  FileText,
-  FolderOpen,
-  ImagePlus,
-  ListFilter,
-  PlusSquare,
-  Search,
-  Trash2,
-  Wand2
-} from 'lucide-react'
+import { ActionIcon } from '@/components/ui/action-button'
+import { useLanguage } from '@/i18n/useLanguage'
+import { ListFilter, PlusSquare, Search, Trash2, Wand2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { PdfProductionMetadata, PiecePreset, PieceSourceKind } from '../types'
@@ -48,6 +41,8 @@ export function PieceLibrary({
   onPieceRotationAllowedChange,
   onRename
 }: PieceLibraryProps): JSX.Element {
+  const { t } = useLanguage()
+
   const artworkInputRef = useRef<HTMLInputElement>(null)
   const pdfInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
@@ -86,7 +81,7 @@ export function PieceLibrary({
     <section className="min-w-0 max-w-full overflow-hidden space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">Sticker Job</h3>
+          <h3 className="font-semibold">{t('Sticker Job')}</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             {pieces.length} models · {missingCutlineCount} still need CutContour
           </p>
@@ -99,12 +94,12 @@ export function PieceLibrary({
           className="w-full justify-start"
           onClick={() => artworkInputRef.current?.click()}
         >
-          <ImagePlus data-icon="inline-start" />
-          Import Artwork
+          <ActionIcon action="import" />
+          {t('Import Artwork')}
         </Button>
         <details className="min-w-0 rounded-md border bg-muted/20">
           <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
-            More import options
+            {t('More import options')}
           </summary>
           <div className="grid min-w-0 gap-2 border-t p-2">
             <Button
@@ -114,8 +109,8 @@ export function PieceLibrary({
               className="min-w-0 justify-start"
               onClick={() => pdfInputRef.current?.click()}
             >
-              <FileText data-icon="inline-start" />
-              Import PDF / AI Pages
+              <ActionIcon action="import" />
+              {t('Import PDF / AI Pages')}
             </Button>
             <Button
               type="button"
@@ -124,15 +119,15 @@ export function PieceLibrary({
               className="min-w-0 justify-start"
               onClick={() => folderInputRef.current?.click()}
             >
-              <FolderOpen data-icon="inline-start" />
-              Import Folder
+              <ActionIcon action="import" />
+              {t('Import Folder')}
             </Button>
           </div>
         </details>
 
         {inspectedPdfPieces.length > 0 && (
           <section className="rounded-md border border-primary/15 bg-primary/5 p-3 text-xs text-primary">
-            <div className="font-semibold">PDF production inspection</div>
+            <div className="font-semibold">{t('PDF production inspection')}</div>
             <div className="mt-2 grid gap-2">
               {inspectedPdfPieces.slice(0, 4).map((piece) => (
                 <div key={piece.id} className="rounded border border-primary/15 bg-white/60 p-2">
@@ -175,7 +170,7 @@ export function PieceLibrary({
             <input
               className="min-w-0 flex-1 bg-transparent outline-none"
               value={query}
-              placeholder="Search pieces"
+              placeholder={t('Search pieces')}
               onChange={(event) => setQuery(event.target.value)}
             />
           </label>
@@ -185,7 +180,7 @@ export function PieceLibrary({
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
               <ListFilter className="size-3" />
-              Filter
+              {t('Filter')}
             </span>
             {(
               [
@@ -202,7 +197,7 @@ export function PieceLibrary({
                 variant={filter === value ? 'default' : 'outline'}
                 onClick={() => setFilter(value)}
               >
-                {label}
+                {t(label)}
               </Button>
             ))}
           </div>
@@ -219,7 +214,7 @@ export function PieceLibrary({
               onClick={() => onAddSelectedToSheet(selectedVisibleIds)}
             >
               <PlusSquare data-icon="inline-start" />
-              Add selected
+              {t('Add selected')}
             </Button>
             <Button
               type="button"
@@ -230,7 +225,7 @@ export function PieceLibrary({
               onClick={() => onAutoArrangeSelected(selectedVisibleIds)}
             >
               <Wand2 data-icon="inline-start" />
-              Arrange selected
+              {t('Arrange selected')}
             </Button>
             <Button
               type="button"
@@ -240,7 +235,7 @@ export function PieceLibrary({
               onClick={onDeleteUnusedPieces}
             >
               <Trash2 data-icon="inline-start" />
-              Delete unused
+              {t('Delete unused')}
             </Button>
           </div>
         )}

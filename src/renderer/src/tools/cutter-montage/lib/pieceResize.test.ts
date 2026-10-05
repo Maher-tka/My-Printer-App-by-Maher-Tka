@@ -1,4 +1,5 @@
-import { synchronizePieceEditorModel } from './editorObjects'
+import { releaseClippingMask, synchronizePieceEditorModel } from './editorObjects'
+import { getPieceSize, resizePieceToSize } from './pieceSize'
 import { createCutlineFromArtworkBounds } from './cutlineValidation'
 import {
   createPiecePresetFromSource,
@@ -286,6 +287,80 @@ function run(): void {
   expectClose(tallestAspect.widthCm, CUTTER_PIECE_MIN_DIMENSION_CM, 'tallest ratio is preserved')
   expectClose(tallestAspect.heightCm, CUTTER_PIECE_MAX_DIMENSION_CM, 'tallest ratio height is safe')
   expectFiniteModel(tallestAspect, 'tallest supported aspect ratio')
+
+  const cropped = withObjectTransform(piece, piece.maskObjectId!, {
+    xCm: 2,
+    yCm: 1,
+    widthCm: 4,
+    heightCm: 3,
+    rotation: 0
+  })
+  expectEqual(
+    getPieceSize(cropped),
+    { widthCm: 4, heightCm: 3 },
+    'properties use the mask, not the 10 x 5 source frame'
+  )
+  const smallerSticker = resizePieceToSize(cropped, 2, 3, 'width')
+  expectEqual(
+    getPieceSize(smallerSticker),
+    { widthCm: 2, heightCm: 1.5 },
+    'locked resize follows the mask aspect ratio'
+  )
+  expectRepresentableTransform(
+    cropped,
+    smallerSticker,
+    0.5,
+    0.5,
+    'crop, cut line and helpers scale together'
+  )
+  expectEqual(
+    smallerSticker.cutline.transform.offsetMm,
+    cropped.cutline.transform.offsetMm,
+    'physical cut margin stays unchanged'
+  )
+  expectEqual(
+    smallerSticker.objects.map((object) => object.locked),
+    cropped.objects.map((object) => object.locked),
+    'mask and artwork stay locked'
+  )
+  const tallerSticker = resizePieceToSize(cropped, 4, 6, 'height')
+  expectEqual(
+    getPieceSize(tallerSticker),
+    { widthCm: 8, heightCm: 6 },
+    'height edit follows the mask aspect ratio'
+  )
+  const stretchedSticker = resizePieceToSize({ ...cropped, lockAspectRatio: false }, 6, 6, 'width')
+  expectEqual(
+    getPieceSize(stretchedSticker),
+    { widthCm: 6, heightCm: 6 },
+    'unlocked mask width and height are editable'
+  )
+  for (const angle of [90, 30]) {
+    const rotatedMask = withObjectTransform(cropped, cropped.maskObjectId!, {
+      ...getObject(cropped, cropped.maskObjectId!).transform,
+      rotation: angle
+    })
+    const resizedMask = resizePieceToSize({ ...rotatedMask, lockAspectRatio: false }, 6, 6, 'width')
+    expectClose(getPieceSize(resizedMask).widthCm, 6, 'rotated mask width uses its own axes')
+    expectClose(getPieceSize(resizedMask).heightCm, 6, 'rotated mask height uses its own axes')
+    expectClose(
+      getObject(resizedMask, resizedMask.maskObjectId!).transform.rotation,
+      angle,
+      'mask rotation is preserved'
+    )
+    expectFiniteModel(resizedMask, 'rotated masked resize')
+  }
+  const released = releaseClippingMask(smallerSticker)
+  expectEqual(
+    getPieceSize(released),
+    { widthCm: released.widthCm, heightCm: released.heightCm },
+    'released mask restores frame sizing'
+  )
+  expectEqual(
+    getPieceSize(resizePieceToSize(released, 8, 4, 'width')),
+    { widthCm: 8, heightCm: 4 },
+    'unmasked sizing keeps existing behavior'
+  )
 
   console.log('Piece resize tests passed.')
 }

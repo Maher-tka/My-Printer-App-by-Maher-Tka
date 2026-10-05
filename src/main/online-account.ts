@@ -17,6 +17,8 @@ import type {
   AccessGrantRecord,
   AccessRequestRecord
 } from '../shared/account-types.js'
+import type { SubscriptionPlanRecord } from '../shared/account-types.js'
+import { productionAccessError, type SubscriptionToolId } from '../shared/subscription-tools.js'
 
 declare const __PRINTER_SUPABASE_URL__: string
 declare const __PRINTER_SUPABASE_KEY__: string
@@ -179,6 +181,8 @@ async function snapshot(): Promise<AccountSnapshot> {
       is_admin: boolean
       grant: AccessGrantRecord | null
       request: AccessRequestRecord | null
+      allowed_tools?: SubscriptionToolId[]
+      batch_exports?: boolean
     }
     if (!data || !Number.isFinite(Date.parse(data.server_now)))
       throw new Error('The account service returned an invalid access response.')
@@ -190,6 +194,8 @@ async function snapshot(): Promise<AccountSnapshot> {
         isAdmin: data.is_admin === true,
         checkedAt: new Date().toISOString(),
         serverNow: data.server_now,
+        allowedTools: data.allowed_tools ?? [],
+        batchExports: data.batch_exports ?? false,
         status: resolveCloudAccessStatus(
           data.grant ?? undefined,
           data.request ?? undefined,
@@ -475,16 +481,38 @@ export function registerOnlineAccountHandlers(): void {
   ipcMain.handle('account:admin-action', (_event, action: AdminAccessAction) =>
     run(() =>
       mutate(async () => {
-        const result = await getClient().rpc('printer_admin_action', {
-          p_action: action?.action,
-          p_user_id: action?.userId,
-          p_request_id: action?.requestId ?? null,
-          p_plan: action?.plan,
-          p_days: action?.days,
-          p_reason: action?.reason
-        })
+        const result =
+          action?.action === 'manage'
+            ? await getClient().rpc('printer_admin_subscription', {
+                p_user_id: action.userId,
+                p_plan: action.plan,
+                p_tool_ids: action.toolIds ?? null,
+                p_batch_exports: action.batchExports ?? null,
+                p_reason: action.reason
+              })
+            : await getClient().rpc('printer_admin_action', {
+                p_action: action?.action,
+                p_user_id: action?.userId,
+                p_request_id: action?.requestId ?? null,
+                p_plan: action?.plan,
+                p_days: action?.days,
+                p_reason: action?.reason
+              })
         if (result.error) throw result.error
         return 'Access decision saved.'
+      })
+    )
+  )
+  ipcMain.handle('account:admin-plan', (_event, plan: SubscriptionPlanRecord) =>
+    run(() =>
+      mutate(async () => {
+        const result = await getClient().rpc('printer_admin_plan', {
+          p_plan: plan?.plan,
+          p_tool_ids: plan?.tool_ids,
+          p_batch_exports: plan?.batch_exports
+        })
+        if (result.error) throw result.error
+        return 'Subscription plan saved.'
       })
     )
   )
@@ -495,13 +523,11 @@ export const getOnlineLicenseSnapshot = async () =>
   cloudLicenseSnapshot(await getOnlineAccountSnapshot())
 
 export async function assertOnlineProductionAccess(
-  feature: 'paid-tools' | 'batch-exports' = 'paid-tools'
+  feature: 'paid-tools' | 'batch-exports' = 'paid-tools',
+  toolId?: string
 ): Promise<void> {
   if (!isOnlineAccessEnabled() || isDevelopmentAccessUnlocked()) return
   const license = await getOnlineLicenseSnapshot()
-  if (!license.features.includes(feature))
-    throw new Error(
-      license.integrityWarning ??
-        `${feature === 'batch-exports' && license.canUsePaidTools ? 'Shop access is required for batch exports' : license.statusLabel}. Open My Printer App to sign in or request access.`
-    )
+  const error = productionAccessError(license, feature, toolId)
+  if (error) throw new Error(error)
 }

@@ -1,7 +1,10 @@
+import { useLanguage } from '@/i18n/useLanguage'
+import { getLanguage, translate } from '@/i18n/language'
 import {
   ArrowUpRight,
   ArrowRight,
   BookOpen,
+  CreditCard,
   FileImage,
   FilePlus2,
   FileText,
@@ -73,6 +76,7 @@ const productionActions = [
   }
 ]
 const toolIcons = {
+  'card-montage': CreditCard,
   'booklet-montage': BookOpen,
   'hardcover-cover': SquareStack,
   'cutter-montage': PenLine,
@@ -88,6 +92,8 @@ export function DashboardPage({
   onOpenImageFile,
   onOpenJob
 }: DashboardPageProps): JSX.Element {
+  const { t, language } = useLanguage()
+
   const { jobs } = useJobStore()
   const { projects, loading, error: recentError, refresh } = useDashboardProjects()
   const [projectOpenError, setProjectOpenError] = useState<string | null>(null)
@@ -148,11 +154,11 @@ export function DashboardPage({
     <div className="production-dashboard">
       <div className="dashboard-welcome">
         <div>
-          <h2>Ready for your next impression?</h2>
-          <p>Your projects, production and finishing touches — in one place.</p>
+          <h2>{t('Ready for your next impression?')}</h2>
+          <p>{t('Your projects, production and finishing touches — in one place.')}</p>
         </div>
         <span>
-          {new Intl.DateTimeFormat(undefined, {
+          {new Intl.DateTimeFormat(language, {
             weekday: 'short',
             month: 'short',
             day: 'numeric'
@@ -171,12 +177,12 @@ export function DashboardPage({
             className="dashboard-surface dashboard-current"
           >
             <div className="dashboard-card-heading">
-              <h2 id="current-project-title">Continue your work</h2>
+              <h2 id="current-project-title">{t('Continue your work')}</h2>
               <button
                 type="button"
                 onClick={() => void openProject(currentProject?.filePath)}
                 disabled={openingPath !== null || loading}
-                aria-label={currentProject ? 'Open current project' : 'Browse saved projects'}
+                aria-label={currentProject ? t('Open current project') : t('Browse saved projects')}
                 className="dashboard-round-link"
               >
                 <ArrowUpRight aria-hidden="true" />
@@ -184,16 +190,17 @@ export function DashboardPage({
             </div>
             <ProjectPreview
               thumbnail={linkedJob?.thumbnailPreview}
-              title={currentProject?.jobName ?? 'New project'}
+              title={currentProject?.jobName ?? t('New project')}
             />
             <div className="dashboard-project-copy">
               <h3>
                 {loading
-                  ? 'Loading your projects…'
-                  : (currentProject?.jobName ?? 'Your next print starts here')}
+                  ? t('Loading your projects…')
+                  : (currentProject?.jobName ?? t('Your next print starts here'))}
               </h3>
               <p>
-                {currentProject?.summary || 'Open a saved project or import your first document.'}
+                {currentProject?.summary ||
+                  t('Open a saved project or import your first document.')}
               </p>
             </div>
             {currentProject && (
@@ -204,13 +211,13 @@ export function DashboardPage({
                   onClick={() => void openProject(currentProject.filePath)}
                   disabled={openingPath !== null}
                 >
-                  {openingPath === currentProject.filePath ? 'Opening…' : 'Open project'}
+                  {openingPath === currentProject.filePath ? t('Opening…') : t('Open project')}
                   <ArrowUpRight aria-hidden="true" />
                 </button>
               </div>
             )}
             <div className="dashboard-quick">
-              <h3>Quick actions</h3>
+              <h3>{t('Quick actions')}</h3>
               <div>
                 {quickActions.map(({ title, icon: Icon, run }) => (
                   <button
@@ -223,7 +230,7 @@ export function DashboardPage({
                     <span>
                       <Icon aria-hidden="true" />
                     </span>
-                    <small>{title}</small>
+                    <small>{t(title)}</small>
                   </button>
                 ))}
               </div>
@@ -234,13 +241,13 @@ export function DashboardPage({
             className="dashboard-surface dashboard-recent"
           >
             <div className="dashboard-card-heading">
-              <h2 id="recent-files-title">Recent projects</h2>
+              <h2 id="recent-files-title">{t('Recent projects')}</h2>
               <button
                 type="button"
                 onClick={() => void refresh()}
                 disabled={loading}
                 className="dashboard-quiet-link"
-                aria-label="Refresh recent projects"
+                aria-label={t('Refresh recent projects')}
               >
                 <RefreshCw className={loading ? 'animate-spin' : ''} aria-hidden="true" />
               </button>
@@ -252,7 +259,7 @@ export function DashboardPage({
             )}
             {loading ? (
               <p role="status" className="dashboard-card-description">
-                Loading recent files…
+                {t('Loading recent files…')}
               </p>
             ) : projects.length ? (
               <div className="dashboard-recent-list">
@@ -273,7 +280,7 @@ export function DashboardPage({
                       <small>
                         {project.tool} ·{' '}
                         {project.status === 'Missing'
-                          ? 'File missing'
+                          ? t('File missing')
                           : formatDate(project.updatedAt)}
                       </small>
                     </span>
@@ -285,8 +292,10 @@ export function DashboardPage({
               <div className="dashboard-list-empty">
                 <FolderOpen aria-hidden="true" />
                 <p>
-                  No saved projects yet
-                  <small>Save a project from any production workspace to return to it here.</small>
+                  {t('No saved projects yet')}
+                  <small>
+                    {t('Save a project from any production workspace to return to it here.')}
+                  </small>
                 </p>
               </div>
             )}
@@ -296,7 +305,7 @@ export function DashboardPage({
               disabled={openingPath !== null}
               className="dashboard-text-link"
             >
-              Browse projects <ArrowRight aria-hidden="true" />
+              {t('Browse projects')} <ArrowRight aria-hidden="true" />
             </button>
           </section>
         </div>
@@ -308,9 +317,9 @@ export function DashboardPage({
             onOpenJob={onOpenJob}
           />
           <Tabs defaultValue="queue" className="dashboard-activity">
-            <TabsList aria-label="Production activity" className="dashboard-activity-tabs">
-              <TabsTrigger value="queue">Production queue</TabsTrigger>
-              <TabsTrigger value="exports">Recent exports</TabsTrigger>
+            <TabsList aria-label={t('Production activity')} className="dashboard-activity-tabs">
+              <TabsTrigger value="queue">{t('Production queue')}</TabsTrigger>
+              <TabsTrigger value="exports">{t('Recent exports')}</TabsTrigger>
             </TabsList>
             <TabsContent value="queue" className="dashboard-queue">
               <NextActions onOpenJob={onOpenJob} onOpenJobs={() => onNavigate('jobs')} />
@@ -326,13 +335,12 @@ export function DashboardPage({
             className="dashboard-surface dashboard-start"
           >
             <div className="dashboard-card-heading">
-              <h2 id="production-actions-title">Start production</h2>
+              <h2 id="production-actions-title">{t('Start production')}</h2>
               <Layers3 aria-hidden="true" />
             </div>
-            <p className="dashboard-card-description">What are we making today?</p>
             <fieldset className="dashboard-action-options">
-              <legend className="sr-only">Choose a production action</legend>
-              {productionActions.map(({ id, title, description, icon: Icon }) => (
+              <legend className="sr-only">{t('Choose a production action')}</legend>
+              {productionActions.map(({ id, title, icon: Icon }) => (
                 <label
                   key={id}
                   className={
@@ -352,23 +360,22 @@ export function DashboardPage({
                     <Icon aria-hidden="true" />
                   </span>
                   <span className="dashboard-action-copy">
-                    <strong>{title}</strong>
-                    <small>{description}</small>
+                    <strong>{t(title)}</strong>
                   </span>
                   <span className="dashboard-choice-mark" aria-hidden="true" />
                 </label>
               ))}
             </fieldset>
             <Button type="button" onClick={startProduction} className="dashboard-start-button">
-              <span>{action.button}</span>
+              <span>{t(action.button)}</span>
               <ArrowRight aria-hidden="true" />
             </Button>
-            <span className="dashboard-local-note">Files stay on this computer.</span>
+            <span className="dashboard-local-note">{t('Files stay on this computer.')}</span>
           </section>
           <section aria-labelledby="production-toolkit-title" className="dashboard-toolkit">
             <div className="dashboard-toolkit-heading">
-              <span>Made for the work you do.</span>
-              <h2 id="production-toolkit-title">Your production toolkit</h2>
+              <span>{t('Made for the work you do.')}</span>
+              <h2 id="production-toolkit-title">{t('Your production toolkit')}</h2>
             </div>
             <div className="dashboard-toolkit-options">
               {printerTools.map((tool) => {
@@ -385,25 +392,25 @@ export function DashboardPage({
                     type="button"
                     disabled={access.isCheckingLicense}
                     onClick={() => onNavigate(tool.route)}
-                    aria-label={label + ' — ' + tool.shortTitle}
-                    title={access.licenseReason ?? tool.description}
+                    aria-label={t(label) + ' — ' + t(tool.shortTitle)}
+                    title={t(access.licenseReason ?? tool.description)}
                   >
                     <Icon aria-hidden="true" />
-                    <span>{tool.shortTitle}</span>
+                    <span>{t(tool.shortTitle)}</span>
                     <ArrowUpRight aria-hidden="true" />
                   </button>
                 )
               })}
             </div>
             <div className="dashboard-toolkit-pages" aria-hidden="true">
-              <span>Pages</span>
-              <span>Sheets</span>
-              <span>Output</span>
+              <span>{t('Pages')}</span>
+              <span>{t('Sheets')}</span>
+              <span>{t('Output')}</span>
             </div>
           </section>
           <details className="dashboard-guide">
             <summary>
-              Find the right tool <ArrowUpRight aria-hidden="true" />
+              {t('Find the right tool')} <ArrowUpRight aria-hidden="true" />
             </summary>
             <TaskFinder onNavigate={onNavigate} />
           </details>
@@ -416,6 +423,6 @@ export function DashboardPage({
 function formatDate(value: string): string {
   const date = new Date(value)
   return Number.isNaN(date.getTime())
-    ? 'Unknown date'
-    : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)
+    ? translate('Unknown date')
+    : new Intl.DateTimeFormat(getLanguage(), { month: 'short', day: 'numeric' }).format(date)
 }

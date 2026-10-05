@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { Pencil, Plus, Search, Trash2, UserRound } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import {
@@ -17,6 +18,8 @@ import { useCustomerStore } from './useCustomerStore'
 import type { ShopCustomer } from './customerTypes'
 
 export function CustomerDatabase({ jobs }: { jobs: PrinterJob[] }): JSX.Element {
+  const { t } = useLanguage()
+
   const { customers, saveCustomer, deleteCustomer } = useCustomerStore()
   const [pendingDelete, setPendingDelete] = useState<ShopCustomer | null>(null)
   const [query, setQuery] = useState('')
@@ -84,39 +87,39 @@ export function CustomerDatabase({ jobs }: { jobs: PrinterJob[] }): JSX.Element 
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
           <CustomerInput
-            label="Name"
+            label={t('Name')}
             required
             autoComplete="name"
             value={draft.name}
             onChange={(name) => setDraft({ ...draft, name })}
           />
           <CustomerInput
-            label="Phone"
+            label={t('Phone')}
             type="tel"
             autoComplete="tel"
             value={draft.phone}
             onChange={(phone) => setDraft({ ...draft, phone })}
           />
           <CustomerInput
-            label="Email"
+            label={t('Email')}
             type="email"
             autoComplete="email"
             value={draft.email ?? ''}
             onChange={(email) => setDraft({ ...draft, email })}
           />
           <CustomerInput
-            label="Company"
+            label={t('Company')}
             autoComplete="organization"
             value={draft.company ?? ''}
             onChange={(company) => setDraft({ ...draft, company })}
           />
           <CustomerInput
-            label="Address"
+            label={t('Address')}
             value={draft.address ?? ''}
             onChange={(address) => setDraft({ ...draft, address })}
           />
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-            Notes
+            {t('Notes')}
             <textarea
               className="min-h-20 rounded-md border bg-background p-3 text-sm"
               value={draft.notes ?? ''}
@@ -131,7 +134,7 @@ export function CustomerDatabase({ jobs }: { jobs: PrinterJob[] }): JSX.Element 
           </Button>
           {isEditing ? (
             <Button type="button" variant="outline" onClick={() => setDraft(createEmptyCustomer())}>
-              Cancel
+              {t('Cancel')}
             </Button>
           ) : null}
         </div>
@@ -144,11 +147,11 @@ export function CustomerDatabase({ jobs }: { jobs: PrinterJob[] }): JSX.Element 
 
       <section>
         <label className="relative mb-4 block">
-          <span className="sr-only">Search customers</span>
+          <span className="sr-only">{t('Search customers')}</span>
           <Search className="absolute left-3 top-3 size-4 text-muted-foreground" />
           <input
             className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm"
-            placeholder="Search name, phone, email, or company"
+            placeholder={t('Search name, phone, email, or company')}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -196,7 +199,7 @@ export function CustomerDatabase({ jobs }: { jobs: PrinterJob[] }): JSX.Element 
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Badge variant="secondary">{stats.jobCount} job(s)</Badge>
                   <Badge variant={stats.balance > 0 ? 'warning' : 'success'}>
-                    Balance {stats.balance.toFixed(2)}
+                    {t('Balance')} {stats.balance.toFixed(2)}
                   </Badge>
                 </div>
                 {customer.notes ? (
@@ -214,7 +217,7 @@ export function CustomerDatabase({ jobs }: { jobs: PrinterJob[] }): JSX.Element 
                 : 'No customers match your search.'}
               {query && (
                 <Button type="button" variant="ghost" onClick={() => setQuery('')}>
-                  Clear search
+                  {t('Clear search')}
                 </Button>
               )}
             </p>
@@ -227,14 +230,14 @@ export function CustomerDatabase({ jobs }: { jobs: PrinterJob[] }): JSX.Element 
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete customer?</AlertDialogTitle>
+            <AlertDialogTitle>{t('Delete customer?')}</AlertDialogTitle>
             <AlertDialogDescription>
               Remove “{pendingDelete?.name}” from your customer database? Existing jobs will be
               kept. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep customer</AlertDialogCancel>
+            <AlertDialogCancel>{t('Keep customer')}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
@@ -245,7 +248,7 @@ export function CustomerDatabase({ jobs }: { jobs: PrinterJob[] }): JSX.Element 
                 setPendingDelete(null)
               }}
             >
-              Delete customer
+              {t('Delete customer')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -275,9 +278,11 @@ function CustomerInput({
   value: string
   onChange: (value: string) => void
 } & Omit<React.ComponentProps<'input'>, 'value' | 'onChange'>): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-      {label}
+      {t(label)}
       <input
         className="h-10 rounded-md border bg-background px-3 text-sm"
         name={`customer-${label.toLowerCase()}`}

@@ -1,21 +1,12 @@
-import {
-  BookOpen,
-  CircleStop,
-  Files,
-  FileDown,
-  FileImage,
-  FileText,
-  Grid2X2,
-  ImageDown,
-  LayoutGrid,
-  Plus,
-  RotateCcw
-} from 'lucide-react'
+import { useLanguage } from '@/i18n/useLanguage'
+import { BookOpen, CircleStop, Files, Grid2X2, LayoutGrid, Plus } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useRef } from 'react'
 import { PdfFilePickerInput } from '@/components/file-input/PdfFilePickerInput'
 import { Button } from '@/components/ui/button'
-import { PrintButton } from '@/print/PrintButton'
+import { ActionIcon } from '@/components/ui/action-button'
+import { WorkflowHint } from '@/components/ui/workflow-hint'
+import { ToolSettingsTabs } from '../../shared/ToolSettingsTabs'
 import type {
   BookletScaleMode,
   BookletViewMode,
@@ -44,13 +35,10 @@ export interface BookletToolbarProps {
   onImportImages: (files: File[]) => void
   onCancelImport: () => void
   onCancelExport: () => void
-  onClear: () => void
   onSettingsChange: (settings: Partial<SheetSettings>) => void
   onAutoAddBlankPages: () => void
   onAddEmptySheet: () => void
   onResetSheetLayout: () => void
-  onExportPdf: () => void
-  onPrintPdf: () => void
   onExportImages: (format: 'png' | 'jpg') => void
   onViewModeChange: (viewMode: BookletViewMode) => void
 }
@@ -87,16 +75,15 @@ export function BookletToolbar({
   onImportImages,
   onCancelImport,
   onCancelExport,
-  onClear,
   onSettingsChange,
   onAutoAddBlankPages,
   onAddEmptySheet,
   onResetSheetLayout,
-  onExportPdf,
-  onPrintPdf,
   onExportImages,
   onViewModeChange
 }: BookletToolbarProps): JSX.Element {
+  const { t } = useLanguage()
+
   const pdfInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const importCanCancel =
@@ -108,10 +95,20 @@ export function BookletToolbar({
     exportProgress.phase === 'preparing-pages' ||
     exportProgress.phase === 'rendering-page' ||
     exportProgress.phase === 'creating-pdf'
+  const hasPages = physicalSheetCount > 0 || blanksNeeded > 0 || hasBoardItems
+  const nextAction = !hasPages
+    ? 'import'
+    : blanksNeeded > 0
+      ? 'blanks'
+      : viewMode === 'sheet'
+        ? 'preview'
+        : 'export'
 
   return (
-    <div className="rounded-[18px] border border-border/70 bg-card p-4">
-      {variant === 'properties' && <h3 className="mb-4 text-sm font-semibold">Booklet settings</h3>}
+    <div className="rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4">
+      {variant === 'properties' && (
+        <h3 className="mb-4 text-sm font-semibold">{t('Booklet settings')}</h3>
+      )}
       <div
         className={
           variant === 'properties'
@@ -121,9 +118,14 @@ export function BookletToolbar({
       >
         {variant === 'actions' && (
           <>
-            <Button type="button" onClick={() => pdfInputRef.current?.click()} disabled={isBusy}>
-              <FileText data-icon="inline-start" />
-              PDF
+            <Button
+              type="button"
+              variant={nextAction === 'import' ? 'default' : 'outline'}
+              onClick={() => pdfInputRef.current?.click()}
+              disabled={isBusy}
+            >
+              <ActionIcon action="import" />
+              {t('Import PDF')}
             </Button>
             <Button
               type="button"
@@ -131,126 +133,150 @@ export function BookletToolbar({
               onClick={() => imageInputRef.current?.click()}
               disabled={isBusy}
             >
-              <FileImage data-icon="inline-start" />
-              Images
-            </Button>
-            <Button type="button" variant="ghost" onClick={onClear} disabled={isBusy}>
-              <RotateCcw data-icon="inline-start" />
-              New
+              <ActionIcon action="import" />
+              {t('Import images')}
             </Button>
           </>
         )}
         {variant === 'properties' && (
-          <>
-            <ToolbarSelect
-              label="Paper"
-              value={settings.paperSize}
-              onChange={(value) => onSettingsChange({ paperSize: value as PaperSizeOption })}
-            >
-              {paperOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option === 'custom' ? 'Custom' : option}
-                </option>
-              ))}
-            </ToolbarSelect>
-
-            <ToolbarSelect
-              label="Orientation"
-              value={settings.orientation}
-              onChange={(value) => onSettingsChange({ orientation: value as PaperOrientation })}
-            >
-              {orientationOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option[0].toUpperCase()}
-                  {option.slice(1)}
-                </option>
-              ))}
-            </ToolbarSelect>
-
-            <ToolbarSelect
-              label="Reading"
-              value={settings.readingDirection}
-              onChange={(value) =>
-                onSettingsChange({ readingDirection: value as BookletReadingDirection })
-              }
-            >
-              {readingDirectionOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </ToolbarSelect>
-
-            {settings.paperSize === 'custom' && (
+          <ToolSettingsTabs
+            label={t('Booklet settings')}
+            advanced={
               <>
-                <ToolbarNumber
-                  label="Width"
-                  value={settings.customWidthMm}
-                  onChange={(value) => onSettingsChange({ customWidthMm: value })}
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <ToolbarNumber
+                    label={t('Outer margin mm')}
+                    value={settings.outerMarginMm}
+                    min={0}
+                    step={0.5}
+                    onChange={(value) => onSettingsChange({ outerMarginMm: value })}
+                  />
+                  <ToolbarNumber
+                    label={t('Page gap mm')}
+                    value={settings.pageGapMm}
+                    min={0}
+                    step={0.5}
+                    onChange={(value) => onSettingsChange({ pageGapMm: value })}
+                  />
+                  <ToolbarCheckbox
+                    label={t('Crop marks')}
+                    checked={settings.cropMarks}
+                    onChange={(cropMarks) => onSettingsChange({ cropMarks })}
+                  />
+                  <ToolbarCheckbox
+                    label={t('Registration marks')}
+                    checked={settings.registrationMarks}
+                    onChange={(registrationMarks) => onSettingsChange({ registrationMarks })}
+                  />
+                </div>
+                <ToolbarCheckbox
+                  label={t('Creep Compensation')}
+                  checked={settings.creep.enabled}
+                  title={t(
+                    'Shift inner-sheet artwork progressively toward the saddle-stitch spine.'
+                  )}
+                  onChange={(enabled) =>
+                    onSettingsChange({
+                      creep: getSimpleCreepToggleSettings(
+                        settings.creep,
+                        enabled,
+                        physicalSheetCount
+                      )
+                    })
+                  }
                 />
-                <ToolbarNumber
-                  label="Height"
-                  value={settings.customHeightMm}
-                  onChange={(value) => onSettingsChange({ customHeightMm: value })}
-                />
+                <div className="grid gap-2 border-t pt-3">
+                  <h4 className="text-xs font-semibold">{t('Image exports')}</h4>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => onExportImages('png')}
+                    disabled={!canExport || isBusy}
+                  >
+                    <ActionIcon action="export" />
+                    {t('PNG Sheets')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => onExportImages('jpg')}
+                    disabled={!canExport || isBusy}
+                  >
+                    <ActionIcon action="export" />
+                    {t('JPG Sheets')}
+                  </Button>
+                </div>
               </>
-            )}
+            }
+          >
+            <div className="grid gap-4">
+              <ToolbarSelect
+                label={t('Paper')}
+                value={settings.paperSize}
+                onChange={(value) => onSettingsChange({ paperSize: value as PaperSizeOption })}
+              >
+                {paperOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option === 'custom' ? 'Custom' : option}
+                  </option>
+                ))}
+              </ToolbarSelect>
 
-            <ToolbarSelect
-              label="Scale"
-              value={settings.scaleMode}
-              onChange={(value) => onSettingsChange({ scaleMode: value as BookletScaleMode })}
-            >
-              {scaleOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </ToolbarSelect>
+              <ToolbarSelect
+                label={t('Orientation')}
+                value={settings.orientation}
+                onChange={(value) => onSettingsChange({ orientation: value as PaperOrientation })}
+              >
+                {orientationOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option[0].toUpperCase()}
+                    {option.slice(1)}
+                  </option>
+                ))}
+              </ToolbarSelect>
 
-            <details className="min-w-0 rounded-[14px] border border-border/60 bg-muted/30 px-3 py-2">
-              <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
-                Advanced print layout
-              </summary>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <ToolbarNumber
-                  label="Outer margin mm"
-                  value={settings.outerMarginMm}
-                  min={0}
-                  step={0.5}
-                  onChange={(value) => onSettingsChange({ outerMarginMm: value })}
-                />
-                <ToolbarNumber
-                  label="Page gap mm"
-                  value={settings.pageGapMm}
-                  min={0}
-                  step={0.5}
-                  onChange={(value) => onSettingsChange({ pageGapMm: value })}
-                />
-                <ToolbarCheckbox
-                  label="Crop marks"
-                  checked={settings.cropMarks}
-                  onChange={(cropMarks) => onSettingsChange({ cropMarks })}
-                />
-                <ToolbarCheckbox
-                  label="Registration marks"
-                  checked={settings.registrationMarks}
-                  onChange={(registrationMarks) => onSettingsChange({ registrationMarks })}
-                />
-              </div>
-            </details>
+              <ToolbarSelect
+                label="Reading"
+                value={settings.readingDirection}
+                onChange={(value) =>
+                  onSettingsChange({ readingDirection: value as BookletReadingDirection })
+                }
+              >
+                {readingDirectionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {t(option.label)}
+                  </option>
+                ))}
+              </ToolbarSelect>
 
-            <ToolbarCheckbox
-              label="Creep Compensation"
-              checked={settings.creep.enabled}
-              title="Shift inner-sheet artwork progressively toward the saddle-stitch spine."
-              onChange={(enabled) =>
-                onSettingsChange({
-                  creep: getSimpleCreepToggleSettings(settings.creep, enabled, physicalSheetCount)
-                })
-              }
-            />
-          </>
+              {settings.paperSize === 'custom' && (
+                <>
+                  <ToolbarNumber
+                    label={t('Width')}
+                    value={settings.customWidthMm}
+                    onChange={(value) => onSettingsChange({ customWidthMm: value })}
+                  />
+                  <ToolbarNumber
+                    label={t('Height')}
+                    value={settings.customHeightMm}
+                    onChange={(value) => onSettingsChange({ customHeightMm: value })}
+                  />
+                </>
+              )}
+
+              <ToolbarSelect
+                label={t('Scale')}
+                value={settings.scaleMode}
+                onChange={(value) => onSettingsChange({ scaleMode: value as BookletScaleMode })}
+              >
+                {scaleOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {t(option.label)}
+                  </option>
+                ))}
+              </ToolbarSelect>
+            </div>
+          </ToolSettingsTabs>
         )}
         {variant === 'actions' && (
           <>
@@ -263,7 +289,7 @@ export function BookletToolbar({
                     key={mode.value}
                     type="button"
                     size="sm"
-                    variant={viewMode === mode.value ? 'default' : 'ghost'}
+                    variant={viewMode === mode.value ? 'selected' : 'ghost'}
                     aria-pressed={viewMode === mode.value}
                     onClick={() => onViewModeChange(mode.value)}
                   >
@@ -274,20 +300,25 @@ export function BookletToolbar({
               })}
             </div>
 
-            <div className="basis-full border-t border-border/60" aria-hidden="true" />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onAutoAddBlankPages}
-              disabled={blanksNeeded === 0 || isBusy}
-            >
-              Auto blanks
-            </Button>
+            {(blanksNeeded > 0 || viewMode === 'montage') && (
+              <div className="basis-full border-t border-[var(--ui-divider)]" aria-hidden="true" />
+            )}
+            {blanksNeeded > 0 && (
+              <Button
+                type="button"
+                variant={nextAction === 'blanks' ? 'default' : 'outline'}
+                onClick={onAutoAddBlankPages}
+                disabled={blanksNeeded === 0 || isBusy}
+              >
+                {t('Auto blanks')}
+              </Button>
+            )}
+
             {viewMode === 'montage' && (
               <>
                 <Button type="button" variant="outline" onClick={onAddEmptySheet} disabled={isBusy}>
                   <Plus data-icon="inline-start" />
-                  Add Empty Sheet
+                  {t('Add Empty Sheet')}
                 </Button>
                 <Button
                   type="button"
@@ -296,39 +327,11 @@ export function BookletToolbar({
                   disabled={!hasBoardItems || isBusy}
                 >
                   <LayoutGrid data-icon="inline-start" />
-                  Reset layout
+                  {t('Reset layout')}
                 </Button>
               </>
             )}
-            <Button type="button" onClick={onExportPdf} disabled={!canExport || isBusy}>
-              <FileDown data-icon="inline-start" />
-              Export PDF
-            </Button>
-            <PrintButton
-              compact
-              label="Print Booklet"
-              disabled={!canExport}
-              isBusy={isBusy}
-              onPrint={onPrintPdf}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onExportImages('png')}
-              disabled={!canExport || isBusy}
-            >
-              <ImageDown data-icon="inline-start" />
-              PNG Sheets
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onExportImages('jpg')}
-              disabled={!canExport || isBusy}
-            >
-              <ImageDown data-icon="inline-start" />
-              JPG Sheets
-            </Button>
+
             {(importCanCancel || exportCanCancel) && (
               <Button
                 type="button"
@@ -336,7 +339,7 @@ export function BookletToolbar({
                 onClick={importCanCancel ? onCancelImport : onCancelExport}
               >
                 <CircleStop data-icon="inline-start" />
-                Cancel
+                {t('Cancel')}
               </Button>
             )}
           </>
@@ -345,6 +348,17 @@ export function BookletToolbar({
 
       {variant === 'actions' && (
         <>
+          <WorkflowHint className="mt-3">
+            {isBusy
+              ? 'Please wait while your files are processed.'
+              : nextAction === 'import'
+                ? 'Start by importing a PDF or images.'
+                : nextAction === 'blanks'
+                  ? `Add ${blanksNeeded} blank page${blanksNeeded === 1 ? '' : 's'} to complete your booklet.`
+                  : nextAction === 'preview'
+                    ? 'Check the page order, then open Montage Mode to review the print sheets.'
+                    : 'Review the print sheets and paper settings, then export your PDF or print.'}
+          </WorkflowHint>
           <div
             className={
               importProgress.phase === 'idle' && exportProgress.phase === 'idle'
@@ -353,7 +367,9 @@ export function BookletToolbar({
             }
           >
             {importProgress.phase === 'idle' && exportProgress.phase === 'idle' ? (
-              <p className="text-sm text-muted-foreground">Ready for local PDF or image input.</p>
+              <p className="text-sm text-muted-foreground">
+                {t('Ready for local PDF or image input.')}
+              </p>
             ) : (
               <>
                 {importProgress.phase !== 'idle' && <ProgressLine progress={importProgress} />}
@@ -391,9 +407,11 @@ function ToolbarSelect({
   onChange: (value: string) => void
   children: ReactNode
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label className="flex min-w-[126px] flex-col gap-1 text-xs font-medium text-muted-foreground">
-      {label}
+      {t(label)}
       <select
         className="h-9 rounded-[14px] border border-border/70 bg-background px-3 text-[13px] text-foreground"
         value={value}
@@ -418,9 +436,11 @@ function ToolbarNumber({
   step?: number
   onChange: (value: number) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label className="flex w-24 flex-col gap-1 text-xs font-medium text-muted-foreground">
-      {label}
+      {t(label)}
       <input
         className="h-9 rounded-[14px] border border-border/70 bg-background px-3 text-[13px] text-foreground"
         type="number"
@@ -444,6 +464,8 @@ function ToolbarCheckbox({
   title?: string
   onChange: (checked: boolean) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label
       className="flex min-h-9 items-center gap-2 text-[13px] font-medium text-foreground"
@@ -454,7 +476,7 @@ function ToolbarCheckbox({
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
       />
-      {label}
+      {t(label)}
     </label>
   )
 }

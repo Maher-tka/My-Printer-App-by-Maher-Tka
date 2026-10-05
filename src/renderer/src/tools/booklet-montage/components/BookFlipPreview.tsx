@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import {
   Component,
   useCallback,
@@ -98,6 +99,8 @@ function BookFlipPreviewContent({
   settings: SheetSettings
   sources: BookletSource[]
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const bookRef = useRef<FlipBookRef | null>(null)
   const rtlInteractionRef = useRef<HTMLDivElement | null>(null)
   const rtlPointerIdRef = useRef<number | null>(null)
@@ -338,10 +341,10 @@ function BookFlipPreviewContent({
         data-book-flip-preview="empty"
       >
         <div className="max-w-md">
-          <Badge variant="secondary">3D Book Mode</Badge>
-          <h3 className="mt-4 text-lg font-semibold text-slate-950">No book pages yet</h3>
+          <Badge variant="secondary">{t('3D Book Mode')}</Badge>
+          <h3 className="mt-4 text-lg font-semibold text-slate-950">{t('No book pages yet')}</h3>
           <p className="mt-2 text-sm text-slate-600">
-            Add PDF pages, image pages, or blank pages in Sheet Mode to preview the booklet.
+            {t('Add PDF pages, image pages, or blank pages in Sheet Mode to preview the booklet.')}
           </p>
         </div>
       </section>
@@ -361,13 +364,13 @@ function BookFlipPreviewContent({
           <Badge variant={getPerformanceBadgeTone(performanceSettings.preset)}>
             {performanceSettings.label}
           </Badge>
-          <h3 className="text-lg font-semibold text-slate-950">3D Book Preview is paused</h3>
+          <h3 className="text-lg font-semibold text-slate-950">{t('3D Book Preview is paused')}</h3>
           <p className="text-sm leading-6 text-slate-600">
             3D Book Preview may be slower on low-end PCs. This project has {orderedPages.length}{' '}
             pages, so the app will wait before rendering full-page previews.
           </p>
           <Button type="button" onClick={() => setLoad3dRequested(true)}>
-            Load 3D Preview
+            {t('Load 3D Preview')}
           </Button>
         </div>
       </section>
@@ -385,15 +388,16 @@ function BookFlipPreviewContent({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-white px-4 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-slate-950">3D Book Mode</h3>
-            <Badge variant="secondary">Interactive</Badge>
+            <h3 className="font-semibold text-slate-950">{t('3D Book Mode')}</h3>
+            <Badge variant="secondary">{t('Interactive')}</Badge>
             <Badge variant={isRtl ? 'warning' : 'secondary'}>{isRtl ? 'RTL Arabic' : 'LTR'}</Badge>
             <Badge variant={getPerformanceBadgeTone(performanceSettings.preset)}>
               {performanceSettings.label}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-slate-600">
-            Page {Math.min(currentPageIndex + 1, orderedPages.length)} of {orderedPages.length}
+            {t('Page')} {Math.min(currentPageIndex + 1, orderedPages.length)} of{' '}
+            {orderedPages.length}
           </p>
         </div>
 
@@ -409,7 +413,7 @@ function BookFlipPreviewContent({
             disabled={!canGoPrevious}
           >
             <RotateCcw data-icon="inline-start" />
-            Reset to First Page
+            {t('Reset to First Page')}
           </Button>
           <Button
             type="button"
@@ -419,7 +423,7 @@ function BookFlipPreviewContent({
             disabled={!canGoPrevious}
           >
             <ChevronLeft data-icon="inline-start" />
-            Previous Page
+            {t('Previous Page')}
           </Button>
           <Button
             type="button"
@@ -427,7 +431,7 @@ function BookFlipPreviewContent({
             onClick={() => bookRef.current?.pageFlip()?.flipNext(isRtl ? 'top' : 'bottom')}
             disabled={!canGoNext}
           >
-            Next Page
+            {t('Next Page')}
             <ChevronRight data-icon="inline-end" />
           </Button>
         </div>
@@ -438,7 +442,7 @@ function BookFlipPreviewContent({
           {!previewsReady ? (
             <div className="grid h-[560px] w-[760px] place-items-center rounded-lg border border-dashed bg-white/70 text-sm font-medium text-slate-600">
               {previewError
-                ? 'Interactive book preview unavailable. Use Montage View for print accuracy.'
+                ? t('Interactive book preview unavailable. Use Montage View for print accuracy.')
                 : 'Preparing interactive book preview...'}
             </div>
           ) : (
@@ -540,8 +544,8 @@ function BookFlipPreviewContent({
 
           <p className="max-w-xl text-center text-sm text-slate-600">
             Drag a page corner or page edge with the mouse, then release it to flip.
-            {isRtl ? ' RTL Arabic mode is active.' : ''} Montage Mode remains the print-accurate
-            layout.
+            {isRtl ? ' RTL Arabic mode is active.' : ''}{' '}
+            {t('Montage Mode remains the print-accurate layout.')}
           </p>
         </div>
       </div>

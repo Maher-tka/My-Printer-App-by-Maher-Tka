@@ -1,6 +1,7 @@
 export type ExportStatus = 'success' | 'failed' | 'canceled'
 
 export interface ExportContext {
+  toolId?: string
   toolType?: string
   projectId?: string
   projectName?: string

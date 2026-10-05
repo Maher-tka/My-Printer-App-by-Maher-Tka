@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { Circle, Copy, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { CutlineShape, PiecePreset } from '../types'
@@ -13,9 +14,11 @@ export function CutlineToolsPanel({
   onPieceChange,
   onDuplicateShapeAsCutline
 }: CutlineToolsPanelProps): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <section className="rounded-lg border bg-card p-3">
-      <h4 className="text-sm font-semibold">Cutline</h4>
+      <h4 className="text-sm font-semibold">{t('Cutline')}</h4>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <ShapeButton
           piece={piece}
@@ -27,14 +30,14 @@ export function CutlineToolsPanel({
         <ShapeButton
           piece={piece}
           shape="rounded-rectangle"
-          label="Rounded"
+          label={t('Rounded')}
           icon={Square}
           onPieceChange={onPieceChange}
         />
         <ShapeButton
           piece={piece}
           shape="ellipse"
-          label="Ellipse"
+          label={t('Ellipse')}
           icon={Circle}
           onPieceChange={onPieceChange}
         />
@@ -44,7 +47,7 @@ export function CutlineToolsPanel({
           variant="outline"
           onClick={() => onPieceChange(createCutlineFromArtwork(piece))}
         >
-          From Artwork
+          {t('From Artwork')}
         </Button>
         <Button
           type="button"
@@ -53,7 +56,7 @@ export function CutlineToolsPanel({
           onClick={() => onPieceChange(createCutlineFromMask(piece))}
           disabled={!piece.mask.enabled}
         >
-          From Mask
+          {t('From Mask')}
         </Button>
         <Button
           type="button"
@@ -63,7 +66,7 @@ export function CutlineToolsPanel({
           disabled={!piece.mask.enabled && !piece.helperShape}
         >
           <Copy data-icon="inline-start" />
-          From Shape
+          {t('From Shape')}
         </Button>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -78,14 +81,14 @@ export function CutlineToolsPanel({
           onChange={(yCm) => onPieceChange(updateCutlineTransform(piece, { yCm }))}
         />
         <NumberField
-          label="Width"
+          label={t('Width')}
           value={piece.cutline.transform.widthCm}
           onChange={(widthCm) =>
             onPieceChange(updateCutlineTransform(piece, { widthCm: Math.max(widthCm, 0.2) }))
           }
         />
         <NumberField
-          label="Height"
+          label={t('Height')}
           value={piece.cutline.transform.heightCm}
           onChange={(heightCm) =>
             onPieceChange(updateCutlineTransform(piece, { heightCm: Math.max(heightCm, 0.2) }))
@@ -93,7 +96,7 @@ export function CutlineToolsPanel({
         />
         {piece.stickerMakerOffsetMm === undefined ? (
           <NumberField
-            label="Offset mm"
+            label={t('Offset mm')}
             value={piece.cutline.transform.offsetMm}
             onChange={(offsetMm) => onPieceChange(updateCutlineTransform(piece, { offsetMm }))}
           />
@@ -103,13 +106,13 @@ export function CutlineToolsPanel({
           </div>
         )}
         <NumberField
-          label="Rotate"
+          label={t('Rotate')}
           value={piece.cutline.transform.rotation}
           onChange={(rotation) => onPieceChange(updateCutlineTransform(piece, { rotation }))}
         />
       </div>
       <label className="mt-3 flex flex-col gap-1 text-xs text-muted-foreground">
-        Spot name
+        {t('Spot name')}
         <span className="flex h-9 items-center overflow-hidden rounded border bg-background">
           <input
             className="min-w-0 flex-1 bg-transparent px-2 text-sm text-foreground outline-none"
@@ -141,6 +144,8 @@ function ShapeButton({
   icon: typeof Square
   onPieceChange: (piece: PiecePreset) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <Button
       type="button"
@@ -149,7 +154,7 @@ function ShapeButton({
       onClick={() => onPieceChange({ ...piece, cutline: { ...piece.cutline, shape } })}
     >
       <Icon data-icon="inline-start" />
-      {label}
+      {t(label)}
     </Button>
   )
 }
@@ -163,9 +168,11 @@ function NumberField({
   value: number
   onChange: (value: number) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-      {label}
+      {t(label)}
       <input
         className="h-8 rounded border bg-background px-2 text-sm text-foreground"
         type="number"

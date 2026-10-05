@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { ArrowUpRight, CalendarClock, CheckCircle2, Clock3, Layers3 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,6 +12,8 @@ export function JobSummaryCard({
 }: {
   onNavigate: (route: AppRoute) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const { jobs } = useJobStore()
   const [today, setToday] = useState(() => localDateKey(new Date()))
   useEffect(() => {
@@ -50,7 +53,7 @@ export function JobSummaryCard({
     <Card className="overflow-hidden rounded-2xl border-border/70 shadow-none">
       <div className="flex items-center justify-between gap-3 border-b border-border/60 px-5 py-3">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-          Production status
+          {t('Production status')}
         </p>
         <button
           type="button"
@@ -91,7 +94,7 @@ export function JobSummaryCard({
                 aria-hidden="true"
               />
             </div>
-            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className="text-xs text-muted-foreground">{t(label)}</span>
           </button>
         ))}
       </CardContent>

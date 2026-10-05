@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import type { AlignmentCommand, PiecePreset } from '../../types'
 import {
   canMakeClippingMaskFromSelection,
@@ -31,6 +32,8 @@ interface PieceEditorContextMenuProps {
 }
 
 export function PieceEditorContextMenu(props: PieceEditorContextMenuProps): JSX.Element | null {
+  const { t } = useLanguage()
+
   if (!props.state) return null
   const selected = props.piece.objects.filter((object) =>
     props.piece.selectedObjectIds.includes(object.id)
@@ -59,91 +62,99 @@ export function PieceEditorContextMenu(props: PieceEditorContextMenuProps): JSX.
         style={{ left: props.state.x, top: props.state.y }}
         role="menu"
       >
-        <MenuItem label="Copy" onClick={props.onCopy} disabled={selected.length === 0} />
-        <MenuItem label="Paste" onClick={props.onPaste} disabled={!props.hasClipboard} />
+        <MenuItem label={t('Copy')} onClick={props.onCopy} disabled={selected.length === 0} />
+        <MenuItem label={t('Paste')} onClick={props.onPaste} disabled={!props.hasClipboard} />
         <MenuItem
           label="Paste in Place (Ctrl+F)"
           onClick={props.onPasteInPlace}
           disabled={!props.hasClipboard}
         />
-        <MenuItem label="Duplicate" onClick={props.onDuplicate} disabled={selected.length === 0} />
-        <MenuItem label="Delete" onClick={props.onDelete} disabled={!canDeleteSelection} />
-        <Separator />
-        <MenuItem label="Lock" onClick={() => props.onLock(true)} disabled={!canLockSelection} />
         <MenuItem
-          label="Unlock"
+          label={t('Duplicate')}
+          onClick={props.onDuplicate}
+          disabled={selected.length === 0}
+        />
+        <MenuItem label={t('Delete')} onClick={props.onDelete} disabled={!canDeleteSelection} />
+        <Separator />
+        <MenuItem
+          label={t('Lock')}
+          onClick={() => props.onLock(true)}
+          disabled={!canLockSelection}
+        />
+        <MenuItem
+          label={t('Unlock')}
           onClick={() => props.onLock(false)}
           disabled={!canUnlockSelection}
         />
         <MenuItem
-          label="Group / Link"
+          label={t('Group / Link')}
           onClick={() => props.onGroup(true)}
           disabled={!canChangeGrouping || selected.length < 2 || props.piece.groupLinked}
         />
         <MenuItem
-          label="Ungroup / Unlink"
+          label={t('Ungroup / Unlink')}
           onClick={() => props.onGroup(false)}
           disabled={!canChangeGrouping || !props.piece.groupLinked}
         />
         <Separator />
         <MenuItem
-          label="Make Clipping Mask"
+          label={t('Make Clipping Mask')}
           onClick={props.onMakeClippingMask}
           disabled={!canMakeMask}
         />
         <MenuItem
-          label="Release Clipping Mask"
+          label={t('Release Clipping Mask')}
           onClick={props.onReleaseClippingMask}
           disabled={!props.piece.clippingMaskEnabled}
         />
         <MenuItem
-          label="Create Cutline from Mask"
+          label={t('Create Cutline from Mask')}
           onClick={props.onCreateCutlineFromMask}
           disabled={!props.piece.maskObjectId}
         />
         <MenuItem
-          label="Convert to CutContour"
+          label={t('Convert to CutContour')}
           onClick={props.onConvertToCutContour}
           disabled={!hasShape}
         />
         <MenuItem
-          label="Duplicate Shape as Cutline"
+          label={t('Duplicate Shape as Cutline')}
           onClick={props.onDuplicateAsCutline}
           disabled={!hasShape}
         />
         <Separator />
         <MenuItem
-          label="Set as Key Object"
+          label={t('Set as Key Object')}
           onClick={() => props.onSetKeyObject(primary?.id)}
           disabled={!primary || !props.piece.selectedObjectIds.includes(primary.id)}
         />
         <MenuItem
-          label="Align Left"
+          label={t('Align Left')}
           onClick={() => props.onAlign('left')}
           disabled={!props.piece.keyObjectId || selected.length < 2}
         />
         <MenuItem
-          label="Align Center Horizontal"
+          label={t('Align Center Horizontal')}
           onClick={() => props.onAlign('center-horizontal')}
           disabled={!props.piece.keyObjectId || selected.length < 2}
         />
         <MenuItem
-          label="Align Right"
+          label={t('Align Right')}
           onClick={() => props.onAlign('right')}
           disabled={!props.piece.keyObjectId || selected.length < 2}
         />
         <MenuItem
-          label="Align Top"
+          label={t('Align Top')}
           onClick={() => props.onAlign('top')}
           disabled={!props.piece.keyObjectId || selected.length < 2}
         />
         <MenuItem
-          label="Align Center Vertical"
+          label={t('Align Center Vertical')}
           onClick={() => props.onAlign('center-vertical')}
           disabled={!props.piece.keyObjectId || selected.length < 2}
         />
         <MenuItem
-          label="Align Bottom"
+          label={t('Align Bottom')}
           onClick={() => props.onAlign('bottom')}
           disabled={!props.piece.keyObjectId || selected.length < 2}
         />
@@ -161,6 +172,8 @@ function MenuItem({
   onClick: () => void
   disabled?: boolean
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <button
       type="button"
@@ -169,7 +182,7 @@ function MenuItem({
       className="block w-full px-3 py-1.5 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
       onClick={onClick}
     >
-      {label}
+      {t(label)}
     </button>
   )
 }

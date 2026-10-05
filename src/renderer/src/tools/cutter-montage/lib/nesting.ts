@@ -1,4 +1,9 @@
 import type { CutterLayoutResult, CutterSheetSettings, PiecePreset, PlacedPiece } from '../types'
+import {
+  getCutterOrderLimitMessage,
+  MAX_CUTTER_JOB_COPIES,
+  CUTTER_QUANTITY_LIMIT_MESSAGE
+} from './layoutLimits'
 import { getSafeArea } from './cutterLayout'
 import { getPlacedProductionBounds as getPlacedPresetProductionBounds } from './cutlineGenerator'
 import { createPlacedPieceFromPreset, refreshPlacedPieceFromPreset } from './piecePresets'
@@ -17,6 +22,18 @@ export function autoArrangePieces(
   settings: CutterSheetSettings,
   existingPieces: PlacedPiece[] = []
 ): CutterLayoutResult {
+  const limitMessage = getCutterOrderLimitMessage(pieces)
+  if (limitMessage || existingPieces.length > MAX_CUTTER_JOB_COPIES) {
+    const kept = existingPieces.length <= MAX_CUTTER_JOB_COPIES ? existingPieces : []
+    return {
+      placedPieces: kept,
+      placedCount: kept.length,
+      requestedCount: kept.length,
+      usedHeightCm: 0,
+      sheetCount: getProductionSheetCount(kept),
+      warning: limitMessage ?? CUTTER_QUANTITY_LIMIT_MESSAGE
+    }
+  }
   const safeArea = getSafeArea(settings)
   const spacingCm = mmToCm(settings.spacingMm)
   const gridStep = settings.snapToGrid ? settings.gridStepCm : 0.1
@@ -196,7 +213,7 @@ export function getPieceCapacityForTargetLength(
   let rowHeight = 0
   let capacity = 0
 
-  for (let safety = 0; safety < 100_000; safety += 1) {
+  for (let safety = 0; safety <= MAX_CUTTER_JOB_COPIES; safety += 1) {
     let placement = choosePlacement(piece, targetSettings, cursorX, safeArea)
 
     if (!placement) {

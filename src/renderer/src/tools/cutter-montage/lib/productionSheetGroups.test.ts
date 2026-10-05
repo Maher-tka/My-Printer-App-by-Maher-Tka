@@ -95,7 +95,7 @@ async function run(): Promise<void> {
   expectEqual(groups[0]?.heightCm, 100, 'full layout keeps one-meter material length')
   expectEqual(groups[1]?.repeatCount, 1, 'remainder layout prints once')
   expectEqual(groups[1]?.copiesPerSheet, 1, 'remainder carries the final sticker')
-  expectEqual(groups[1]?.heightCm, 70, 'remainder trims to seventy centimeters')
+  expectEqual(groups[1]?.heightCm, 69.5, 'remainder trims without an implicit cut border')
 
   const firstPhysicalSheet = {
     ...project,
@@ -134,15 +134,11 @@ async function run(): Promise<void> {
   const batch = await exportCutterProductionBatch(project, runCutterPreflight(project))
   expectEqual(batch.files.length, 14, 'two unique layouts produce two file sets plus job metadata')
   expect(
-    batch.files.some((file) =>
-      file.fileName.endsWith('01_Mimaki_Marked_Print_Layout_01_PRINT_4_COPIES.pdf')
-    ),
+    batch.files.some((file) => file.fileName.endsWith('01_Mimaki_Marked_Print_Layout_01_x4.pdf')),
     'full-layout print filename carries the four-copy instruction'
   )
   expect(
-    batch.files.some((file) =>
-      file.fileName.endsWith('01_Mimaki_Marked_Print_Layout_02_PRINT_1_COPY.pdf')
-    ),
+    batch.files.some((file) => file.fileName.endsWith('01_Mimaki_Marked_Print_Layout_02_x1.pdf')),
     'remainder print filename carries its one-copy instruction'
   )
   expect(

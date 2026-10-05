@@ -1,11 +1,15 @@
+import { useLanguage } from '@/i18n/useLanguage'
+import { ToolHeader } from '../shared/ToolHeader'
+import { ProjectFileActions } from '@/projects/ProjectFileActions'
 import { StickerLibraryRail } from './components/StickerLibraryRail'
 import { StickerQuantities } from './components/StickerQuantities'
 import { AIStickerMaker } from './components/AIStickerMaker'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, ChevronLeft, ChevronRight, FileDown, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { WorkflowHint } from '@/components/ui/workflow-hint'
+import { Card, CardContent } from '@/components/ui/card'
 import { createProjectPrinterJob } from '@/jobs/projectJob'
 import { useJobStore } from '@/jobs/useJobStore'
 import { getCutterProjectStateKey } from '@/projects/projectDirtyState'
@@ -37,6 +41,7 @@ import { DEFAULT_CUTTER_SHEET } from './lib/cutterLayout'
 import { TARGET_CUTTER_LABEL, TARGET_CUTTER_PROFILE } from './lib/cutterDeviceProfile'
 import { getDefaultCutterExportSettings } from './lib/exportPresets'
 import { resizeFinishedStickerWidth } from './lib/stickerCutterAdapter'
+import { getCutlineInspectorState } from './lib/cutlineValidation'
 import { getProductionSheetLayoutGroups } from './lib/productionSheetGroups'
 import {
   getPlacedSheetIndex,
@@ -70,6 +75,8 @@ export function CutterMontagePage({
   initialImageImport,
   onInitialImageImportConsumed
 }: CutterMontagePageProps): JSX.Element {
+  const { t } = useLanguage()
+
   const cutter = useCutterProject(openedProject?.project)
   const { saveJob } = useJobStore()
   const [projectFilePath, setProjectFilePath] = useState<string | null>(
@@ -84,6 +91,14 @@ export function CutterMontagePage({
   )
   const consumedImageImportIdsRef = useRef(new Set<number>())
   const [step, setStep] = useState<'prepare' | 'cut' | 'quantity' | 'layout'>('prepare')
+  const cutlinesReady = useMemo(
+    () =>
+      cutter.pieces.every((piece) => {
+        const state = getCutlineInspectorState(piece)
+        return state.vectorSafe && !state.issues.some((issue) => issue.severity === 'error')
+      }),
+    [cutter.pieces]
+  )
   const [stickerMakerOpen, setStickerMakerOpen] = useState(false)
   const changeStep = (next: typeof step) => {
     setStep(next)
@@ -387,74 +402,47 @@ export function CutterMontagePage({
   return (
     // Let the page scroll on short displays instead of squeezing the work canvas.
     <div className="workspace-shell cutter-workspace mx-auto flex w-full min-w-0 max-w-none flex-col overflow-hidden lg:h-full lg:min-h-[680px]">
-      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <CardHeader className="shrink-0 flex-row flex-wrap items-center justify-between gap-3 border-b bg-card/80 px-3 py-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label={stickerMakerOpen ? 'Back to Cutter Montage' : 'Back to dashboard'}
-              onClick={() => {
-                if (stickerMakerOpen) {
-                  setStickerMakerOpen(false)
-                } else {
-                  onNavigate('dashboard')
-                }
-              }}
-            >
-              <ArrowLeft />
-            </Button>
-            <div>
-              <CardTitle className="text-base">Cutter workspace</CardTitle>
-              <p className="max-w-56 truncate text-xs text-muted-foreground">{projectName}</p>
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-0 bg-transparent shadow-none">
+        <ToolHeader
+          title={t('Cutter Montage')}
+          projectName={projectName}
+          backLabel={stickerMakerOpen ? t('Cutter Montage') : t('All tools')}
+          onBack={() => (stickerMakerOpen ? setStickerMakerOpen(false) : onNavigate('dashboard'))}
+          print={{
+            disabled: stickerMakerOpen || !cutter.canExport || projectIsBusy,
+            isBusy: cutter.printBusy,
+            onPrint: () => {
+              setProjectMessage(null)
+              void cutter.handlePrintPdf(
+                productionLayouts[previewSheetIndex]?.templateSheetIndex ?? 0
+              )
+            }
+          }}
+          exportPdf={{
+            disabled: stickerMakerOpen || !cutter.canExport || projectIsBusy,
+            isBusy: cutter.fineCutBusy && !cutter.printBusy,
+            onExport: () => {
+              setProjectMessage(null)
+              void cutter.handleExportPdf(
+                productionLayouts[previewSheetIndex]?.templateSheetIndex ?? 0
+              )
+            }
+          }}
+          actions={
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+              <ProjectFileActions
+                filePath={projectFilePath}
+                isBusy={projectIsBusy || cutter.fineCutBusy}
+                isDirty={isDirty}
+                message={null}
+                onNew={() => void startNewProject()}
+                onOpen={() => void openProject()}
+                onSave={() => void saveProject(false)}
+                onSaveAs={() => void saveProject(true)}
+              />
             </div>
-          </div>
-          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={stickerMakerOpen ? 'default' : 'outline'}
-              onClick={() => setStickerMakerOpen((current) => !current)}
-            >
-              AI Sticker Maker
-            </Button>
-            <span
-              className="text-xs text-muted-foreground"
-              title={projectFilePath ?? 'Not saved yet'}
-            >
-              {isDirty ? 'Unsaved' : 'Saved'}
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={projectIsBusy}
-              onClick={() => void openProject()}
-            >
-              Open
-            </Button>
-            <Button size="sm" disabled={projectIsBusy} onClick={() => void saveProject(false)}>
-              Save
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={projectIsBusy}
-              onClick={() => void saveProject(true)}
-            >
-              Save as
-            </Button>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => void startNewProject()}
-              >
-                New Project
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
+          }
+        />
         <CardContent className="flex min-h-0 flex-1 flex-col gap-2 p-2">
           <div className={stickerMakerOpen ? 'flex min-h-0 flex-1' : 'hidden'}>
             <AIStickerMaker
@@ -475,11 +463,28 @@ export function CutterMontagePage({
                 className="grid h-9 w-full shrink-0 grid-cols-4"
                 aria-label="Cutter workflow steps"
               >
-                <TabsTrigger value="prepare">1. Prepare artwork</TabsTrigger>
-                <TabsTrigger value="cut">2. Cut lines</TabsTrigger>
-                <TabsTrigger value="quantity">3. Quantities</TabsTrigger>
-                <TabsTrigger value="layout">4. Layout & export</TabsTrigger>
+                <TabsTrigger value="prepare">{t('1. Prepare artwork')}</TabsTrigger>
+                <TabsTrigger value="cut">{t('2. Cut lines')}</TabsTrigger>
+                <TabsTrigger value="quantity">{t('3. Quantities')}</TabsTrigger>
+                <TabsTrigger value="layout">{t('4. Layout & export')}</TabsTrigger>
               </TabsList>
+              <WorkflowHint className="shrink-0 px-1">
+                {!cutter.pieces.length
+                  ? 'Start by importing artwork using the button on the left.'
+                  : step === 'prepare'
+                    ? 'Review your artwork, then continue to cut lines.'
+                    : step === 'cut'
+                      ? cutlinesReady
+                        ? 'Your cut lines are ready. Continue to quantities.'
+                        : 'Select each design and create or fix its cut line before continuing.'
+                      : step === 'quantity'
+                        ? 'Set the copies you need, then continue to arrange the sheet.'
+                        : !cutter.placedPieces.length
+                          ? 'Arrange copies to create your production layout.'
+                          : !cutter.canExport
+                            ? 'Open Checks to resolve the layout issues before exporting.'
+                            : 'Review the sheet preview, then export your production PDF.'}
+              </WorkflowHint>
               {cutter.error && (
                 <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
                   {cutter.error}
@@ -497,6 +502,7 @@ export function CutterMontagePage({
                     settings={cutter.sheet}
                     warnings={cutter.warnings}
                     hasPieces={cutter.pieces.length > 0}
+                    hasLayout={cutter.placedPieces.length > 0}
                     onModeChange={(mode) => changeStep(mode === 'piece-editor' ? 'cut' : 'layout')}
                     onSettingsChange={cutter.updateSheet}
                     onAutoArrange={cutter.runAutoArrange}
@@ -508,7 +514,13 @@ export function CutterMontagePage({
                   <Button
                     key={item}
                     size="sm"
-                    variant={panel === item ? 'secondary' : 'ghost'}
+                    variant={
+                      item === 'checks' && cutter.placedPieces.length > 0 && !cutter.canExport
+                        ? 'default'
+                        : panel === item
+                          ? 'selected'
+                          : 'ghost'
+                    }
                     aria-expanded={panel === item}
                     aria-controls="cutter-workspace-panel"
                     onClick={() => setPanel(panel === item ? null : item)}
@@ -522,18 +534,7 @@ export function CutterMontagePage({
                     }
                   </Button>
                 ))}
-                {step === 'layout' && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!cutter.canExport}
-                    onClick={() => void cutter.handleExportPdf()}
-                  >
-                    <FileDown />
-                    Export PDF
-                  </Button>
-                )}
+
                 <span
                   className="ml-auto min-w-0 max-w-full truncate text-xs text-muted-foreground"
                   role="status"
@@ -554,6 +555,7 @@ export function CutterMontagePage({
                   onDuplicate={cutter.duplicatePiece}
                   onDelete={cutter.deletePiece}
                   onManage={() => setPanel('designs')}
+                  onOpenStickerMaker={() => setStickerMakerOpen(true)}
                   showProductionControls={step === 'layout'}
                   onQuantity={cutter.updatePieceQuantity}
                   onTargetLength={cutter.updatePieceTargetLength}
@@ -619,7 +621,7 @@ export function CutterMontagePage({
                                   checked={printPreview}
                                   onChange={(e) => setPrintPreview(e.target.checked)}
                                 />
-                                Print preview (hide editing overlays)
+                                {t('Print preview (hide editing overlays)')}
                               </label>
                             )}
                           </>
@@ -629,6 +631,12 @@ export function CutterMontagePage({
                             <ExportCutterPanel
                               fineCutBusy={cutter.fineCutBusy}
                               layoutNumber={previewSheetIndex + 1}
+                              repeatCount={productionLayouts[previewSheetIndex]?.repeatCount ?? 1}
+                              layoutCount={productionLayoutCount}
+                              onExportAllSheetPdfs={() => {
+                                setProjectMessage(null)
+                                void cutter.handleExportAllSheetPdfs()
+                              }}
                               onPrepareFineCut={() =>
                                 void cutter.prepareFineCut(
                                   productionLayouts[previewSheetIndex]?.templateSheetIndex ?? 0
@@ -642,7 +650,12 @@ export function CutterMontagePage({
                               onSheetChange={cutter.updateSheet}
                               onPresetChange={cutter.applyExportPreset}
                               onExportSvg={cutter.handleExportSvg}
-                              onExportPdf={cutter.handleExportPdf}
+                              onExportPdf={() => {
+                                setProjectMessage(null)
+                                void cutter.handleExportPdf(
+                                  productionLayouts[previewSheetIndex]?.templateSheetIndex ?? 0
+                                )
+                              }}
                               onExportEps={cutter.handleExportEps}
                               onBatchExport={cutter.handleBatchExport}
                             />
@@ -744,7 +757,7 @@ export function CutterMontagePage({
 
                               return (
                                 <div
-                                  key={productionLayout.signature}
+                                  key={productionLayout.layoutIndex}
                                   ref={(node) => {
                                     productionSheetRefs.current[productionLayout.layoutIndex] = node
                                   }}
@@ -805,11 +818,12 @@ export function CutterMontagePage({
                     )
                   }
                 >
-                  Previous step
+                  {t('Previous step')}
                 </Button>
                 {step !== 'layout' && (
                   <Button
                     size="sm"
+                    variant={step === 'cut' && !cutlinesReady ? 'outline' : 'default'}
                     disabled={!cutter.pieces.length}
                     onClick={() => {
                       if (step === 'quantity') cutter.runAutoArrange()

@@ -24,11 +24,15 @@ import {
 
 const CM_TO_MM = 10
 
-export async function exportCutterSvg(project: CutterProject): Promise<CutterExportResult> {
+export async function exportCutterSvg(
+  project: CutterProject,
+  reuseArtworkSymbols = false
+): Promise<CutterExportResult> {
   const { sheet, sources, pieces, placedPieces, layers, exportSettings } = project
   const exportSemantics = getCutterExportSemantics(exportSettings)
   const pieceMap = new Map(pieces.map((piece) => [piece.id, piece]))
   const sourceMap = new Map(sources.map((source) => [source.id, source]))
+  const symbolDefinitions = new Map<string, string>()
   const artworkEntries =
     exportSettings.includeArtwork && layers.artwork
       ? await Promise.all(
@@ -66,12 +70,19 @@ export async function exportCutterSvg(project: CutterProject): Promise<CutterExp
               widthCm: artworkRectCm.widthCm,
               heightCm: artworkRectCm.heightCm
             })
+            const symbolId = `source-${safeXmlId(source.id)}`
+            if (reuseArtworkSymbols && !symbolDefinitions.has(source.id)) {
+              symbolDefinitions.set(
+                source.id,
+                `<symbol id="${symbolId}" viewBox="0 0 1 1" preserveAspectRatio="none"><image xlink:href="${href}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" /></symbol>`
+              )
+            }
 
             return {
               definition,
               artwork: [
                 `<g id="artwork-${safeXmlId(placed.id)}" data-piece="${escapeXml(piece.displayName)}"${clipAttribute}>`,
-                `<image xlink:href="${href}" x="${formatNumber(artworkRect.xCm)}" y="${formatNumber(artworkRect.yCm)}" width="${formatNumber(artworkRect.widthCm)}" height="${formatNumber(artworkRect.heightCm)}" preserveAspectRatio="none"${getRotationTransform(artworkRect)} />`,
+                `<${reuseArtworkSymbols ? 'use' : 'image'} xlink:href="${reuseArtworkSymbols ? '#' + symbolId : href}" x="${formatNumber(artworkRect.xCm)}" y="${formatNumber(artworkRect.yCm)}" width="${formatNumber(artworkRect.widthCm)}" height="${formatNumber(artworkRect.heightCm)}" preserveAspectRatio="none"${getRotationTransform(artworkRect)} />`,
                 '</g>'
               ].join('')
             }
@@ -118,6 +129,7 @@ export async function exportCutterSvg(project: CutterProject): Promise<CutterExp
   <title>Cutter Montage ${sheet.widthCm}x${sheet.heightCm}cm</title>
   <desc>${getExportDescription(project, exportSemantics.intent)}</desc>
   <defs>
+${Array.from(symbolDefinitions.values()).join('\n')}
 ${artworkEntries
   .map((entry) => entry.definition)
   .filter(Boolean)
@@ -131,6 +143,7 @@ ${artworkEntries
   .filter(Boolean)
   .join('\n')}
 ${artworkRegistrationMarkup}
+${productionLabelMarkup}
   </g>`
       : ''
   }
@@ -142,7 +155,6 @@ ${registrationLayerMarkup}
       : ''
   }
   ${contourGroupMarkup}
-  ${productionLabelMarkup}
 </svg>`
 
   return {

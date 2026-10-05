@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { X } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -19,6 +20,8 @@ export function PageInspectionDialog({
   scaleMode?: BookletScaleMode
   onClose: () => void
 }): ReactNode {
+  const { t } = useLanguage()
+
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
   const [previewUrl, setPreviewUrl] = useState(page.thumbnailUrl)
   const [previewError, setPreviewError] = useState<string | null>(null)
@@ -104,10 +107,10 @@ export function PageInspectionDialog({
       <div className="mx-auto mb-4 flex w-full max-w-6xl items-center justify-between gap-4 text-white">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-300">
-            Page inspection
+            {t('Page inspection')}
           </p>
           <h3 className="truncate text-lg font-semibold">
-            Page {pageNumber} · {page.displayName}
+            {t('Page')} {pageNumber} · {page.displayName}
           </h3>
           <p className="text-xs text-slate-300">
             {widthMm.toFixed(1)} × {heightMm.toFixed(1)} mm
@@ -143,14 +146,14 @@ export function PageInspectionDialog({
               role="status"
               aria-live="polite"
             >
-              Rendering full-quality preview…
+              {t('Rendering full-quality preview…')}
             </div>
           ) : null}
         </div>
       </div>
       <div className="mt-4 text-center text-xs text-slate-300" aria-live="polite">
         {previewError ? <p className="mb-1 text-amber-300">{previewError}</p> : null}
-        <p>Press Esc or click outside the page to close</p>
+        <p>{t('Press Esc or click outside the page to close')}</p>
       </div>
     </div>,
     document.body
@@ -164,6 +167,8 @@ export function BookletPageArtwork({
   page: BookletPage
   previewUrl?: string
 }): JSX.Element {
+  const { t } = useLanguage()
+
   if (page.sourceType === 'blank') {
     const fillColor = getSolidFillHex(page.colorHex)
     return (
@@ -171,7 +176,7 @@ export function BookletPageArtwork({
         className="grid h-full w-full place-items-center text-sm font-semibold"
         style={{ backgroundColor: fillColor, color: getReadableTextColor(fillColor) }}
       >
-        Blank
+        {t('Blank')}
       </div>
     )
   }
@@ -187,5 +192,7 @@ export function BookletPageArtwork({
     )
   }
 
-  return <span className="text-sm font-semibold text-muted-foreground">Preview unavailable</span>
+  return (
+    <span className="text-sm font-semibold text-muted-foreground">{t('Preview unavailable')}</span>
+  )
 }

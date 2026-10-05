@@ -72,6 +72,41 @@ const batch = await PDFDocument.load(await exportHardcoverBatchPdf(state, studen
 assert.equal(batch.getPageCount(), 3, 'combined batch export has one page per student')
 
 const svg = buildHardcoverSvg(state)
+const multilineState = createDefaultHardcoverProject()
+const multilineTitle = [
+  'LA RECONQUÊTE PORTUAIRE :',
+  'Un nouveau souffle pour le centre-ville de Sousse'
+]
+multilineState.content.spine.shortTitle = multilineTitle.join('\n')
+const multilineSvg = buildHardcoverSvg(multilineState)
+const titleGroup = multilineSvg.match(/<g id="SpineText-title"[^>]*>([\s\S]*?)<\/g>/)?.[1] ?? ''
+assert.equal(
+  (titleGroup.match(/<text\b/g) ?? []).length,
+  2,
+  'preview/SVG export prints two separate title lines'
+)
+assert.ok(
+  titleGroup.indexOf(multilineTitle[0]) < titleGroup.indexOf(multilineTitle[1]),
+  'title and subtitle retain their source order'
+)
+const multilinePdf = await exportHardcoverPdf(multilineState)
+const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs')
+const multilineProxy = await getDocument({ data: multilinePdf.bytes.slice(), useSystemFonts: true })
+  .promise
+try {
+  const text = await (await multilineProxy.getPage(1)).getTextContent()
+  const items = text.items.filter((item) => 'str' in item)
+  const titleItem = items.find((item) => item.str === multilineTitle[0])
+  const subtitleItem = items.find((item) => item.str === multilineTitle[1])
+  assert.ok(titleItem && subtitleItem, 'PDF export retains both complete original lines')
+  assert.notEqual(
+    titleItem.transform[4],
+    subtitleItem.transform[4],
+    'rotated PDF lines occupy separate positions across the spine'
+  )
+} finally {
+  await multilineProxy.destroy()
+}
 assert.match(svg, /width="500mm" height="325mm" viewBox="0 0 500 325"/)
 assert.match(svg, /id="Artwork"/)
 assert.match(svg, /id="SpineText-year"/)

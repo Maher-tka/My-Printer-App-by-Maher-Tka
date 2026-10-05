@@ -43,7 +43,7 @@ export function getProductionSheetHeight(
     })
   )
   return Math.min(
-    configuredHeightCm,
+    settings.autoExpandHeight ? MAX_PRODUCTION_SHEET_HEIGHT_CM : configuredHeightCm,
     Math.max(1, Math.ceil((usedBottom + settings.safeMarginCm) * 2) / 2)
   )
 }
@@ -76,6 +76,20 @@ export function getProductionSheetWidth(
 }
 
 export const getMarkedSheetWidth = getProductionSheetWidth
+
+/** A standalone sheet starts at page zero, including later sheets in a job. */
+export function getSingleProductionSheetProject(
+  project: CutterProject,
+  sheetIndex: number
+): CutterProject {
+  const sheet = getProductionSheetProject(project, sheetIndex)
+  const ids = new Set(sheet.placedPieces.map((placed) => placed.presetId))
+  return {
+    ...sheet,
+    pieces: sheet.pieces.filter((piece) => ids.has(piece.id)),
+    placedPieces: sheet.placedPieces.map((placed) => ({ ...placed, sheetIndex: 0 }))
+  }
+}
 
 export function getProductionSheetProject(
   project: CutterProject,

@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import type { FrontCoverContent } from '../types'
 
 export function FrontCoverEditor({
@@ -7,46 +8,48 @@ export function FrontCoverEditor({
   value: FrontCoverContent
   onChange: (patch: Partial<FrontCoverContent>) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
-    <EditorSection title="Front cover">
+    <EditorSection title={t('Front cover')}>
       <TextField
-        label="Student name"
+        label={t('Student name')}
         value={value.studentName}
         onChange={(studentName) => onChange({ studentName })}
       />
       <TextAreaField
-        label="Project / mémoire title"
+        label={t('Project / mémoire title')}
         value={value.title}
         onChange={(title) => onChange({ title })}
       />
       <TextField
-        label="Degree / diploma"
+        label={t('Degree / diploma')}
         value={value.degree}
         onChange={(degree) => onChange({ degree })}
       />
       <TextField
-        label="University / institute"
+        label={t('University / institute')}
         value={value.university}
         onChange={(university) => onChange({ university })}
       />
       <TextField
-        label="Department"
+        label={t('Department')}
         value={value.department}
         onChange={(department) => onChange({ department })}
       />
       <TextField
-        label="Supervisor"
+        label={t('Supervisor')}
         value={value.supervisor}
         onChange={(supervisor) => onChange({ supervisor })}
       />
       <TextField
-        label="Academic year"
+        label={t('Academic year')}
         value={value.academicYear}
         onChange={(academicYear) => onChange({ academicYear })}
       />
-      <ImageField label="Logo" onChange={(logoDataUrl) => onChange({ logoDataUrl })} />
+      <ImageField label={t('Logo')} onChange={(logoDataUrl) => onChange({ logoDataUrl })} />
       <ImageField
-        label="Background image"
+        label={t('Background image')}
         onChange={(backgroundDataUrl) => onChange({ backgroundDataUrl })}
       />
       <label className="flex items-center gap-2 text-sm">
@@ -55,7 +58,7 @@ export function FrontCoverEditor({
           checked={value.showDecorativeLine}
           onChange={(event) => onChange({ showDecorativeLine: event.target.checked })}
         />
-        Decorative line
+        {t('Decorative line')}
       </label>
     </EditorSection>
   )
@@ -84,9 +87,11 @@ export function TextField({
   value: string
   onChange: (value: string) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-      {label}
+      {t(label)}
       <input
         className="h-9 rounded-[14px] border border-input bg-background px-3 text-[13px] text-foreground"
         value={value}
@@ -104,9 +109,11 @@ export function TextAreaField({
   value: string
   onChange: (value: string) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-      {label}
+      {t(label)}
       <textarea
         className="min-h-20 rounded-[14px] border border-input bg-background px-3 text-[13px] text-foreground"
         value={value}
@@ -122,9 +129,11 @@ function ImageField({
   label: string
   onChange: (dataUrl: string | undefined) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-      {label}
+      {t(label)}
       <input
         className="text-xs"
         type="file"

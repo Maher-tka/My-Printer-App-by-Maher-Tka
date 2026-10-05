@@ -1,20 +1,25 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { LoaderCircle, Printer } from 'lucide-react'
 import { useId } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button, type ButtonProps } from '@/components/ui/button'
 
 export function PrintButton({
   label,
   disabled,
   isBusy,
   onPrint,
-  compact = false
+  compact = false,
+  variant = 'default'
 }: {
   label: string
   disabled?: boolean
   isBusy?: boolean
   onPrint: () => void
   compact?: boolean
+  variant?: ButtonProps['variant']
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const isAvailable = Boolean(window.printerApp?.printPdf)
   const descriptionId = useId()
   const description = isAvailable
@@ -27,10 +32,11 @@ export function PrintButton({
           ? 'inline-flex'
           : 'rounded-[var(--ui-radius-md)] border border-[var(--ui-border)] bg-secondary/70 p-3'
       }
-      title={description}
+      title={t(description)}
     >
       <Button
         type="button"
+        variant={variant}
         onClick={onPrint}
         disabled={disabled || isBusy || !isAvailable}
         aria-busy={isBusy}
@@ -41,10 +47,10 @@ export function PrintButton({
         ) : (
           <Printer data-icon="inline-start" />
         )}
-        {isBusy ? 'Preparing print…' : label}
+        {isBusy ? t('Preparing print…') : t(label)}
       </Button>
       <p id={descriptionId} className={compact ? 'sr-only' : 'mt-2 text-xs text-muted-foreground'}>
-        {description}
+        {t(description)}
       </p>
     </div>
   )

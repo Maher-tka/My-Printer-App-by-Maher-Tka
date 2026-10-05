@@ -267,16 +267,6 @@ function validatePieceCutline(
 
   const offsetMm = cutline.offsetMm ?? piece.cutline.transform.offsetMm
 
-  if (offsetMm < 0.2) {
-    issues.push({
-      id: 'piece-cutline-offset-small',
-      severity: 'info',
-      message: `${piece.displayName} CutContour offset is very small.`,
-      pieceId: piece.id,
-      placedPieceIds
-    })
-  }
-
   if (offsetMm > 10) {
     issues.push({
       id: 'piece-cutline-offset-large',

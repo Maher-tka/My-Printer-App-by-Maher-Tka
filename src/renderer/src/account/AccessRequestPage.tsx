@@ -1,9 +1,12 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { useState, type FormEvent } from 'react'
 import { RefreshCw, LogOut, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/appearance/ThemeToggle'
+import { LanguageSwitcher } from '@/i18n/LanguageSwitcher'
 import { AccessAdminPanel } from './AccessAdminPanel'
 import type { AccountSnapshot, AccessPlan, CloudAccessStatus } from '../../../shared/account-types'
+import { SUBSCRIPTION_TOOLS } from '../../../shared/subscription-tools'
 
 const labels: Record<CloudAccessStatus, string> = {
   none: 'Request workspace access',
@@ -27,6 +30,8 @@ export function AccessRequestPage({
   onSignOut: () => void
   fullPage?: boolean
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const [shopName, setShopName] = useState('')
   const [message, setMessage] = useState('')
   const [plan, setPlan] = useState<AccessPlan>('shop')
@@ -57,18 +62,25 @@ export function AccessRequestPage({
         <div>
           <p className="text-sm text-muted-foreground">My Printer App · {state?.profile?.email}</p>
           <h1 className="mt-1 text-2xl font-semibold">
-            {cloud?.isAdmin ? 'Manage workspace access' : labels[cloud?.status ?? 'unavailable']}
+            {cloud?.isAdmin
+              ? t('Manage workspace access')
+              : t(labels[cloud?.status ?? 'unavailable'])}
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          <ThemeToggle />
+          {fullPage && (
+            <>
+              <ThemeToggle />
+              <LanguageSwitcher />
+            </>
+          )}
           <Button variant="outline" disabled={busy} onClick={() => void onRefresh()}>
             <RefreshCw className="mr-2 size-4" />
-            Refresh
+            {t('Refresh')}
           </Button>
           <Button variant="ghost" onClick={onSignOut}>
             <LogOut className="mr-2 size-4" />
-            Sign out
+            {t('Sign out')}
           </Button>
         </div>
       </header>
@@ -105,11 +117,26 @@ export function AccessRequestPage({
                   : `Ends ${new Date(cloud.grant.ends_at).toLocaleString()}`}
               </p>
               {cloud.grant.reason && <p className="mt-2 text-sm">{cloud.grant.reason}</p>}
+              {cloud.allowedTools && (
+                <div className="mt-4 text-sm">
+                  <h3 className="font-medium">{t('Tools included in your subscription')}</h3>
+                  <p className="mt-2 text-muted-foreground">
+                    {SUBSCRIPTION_TOOLS.filter((tool) => cloud.allowedTools!.includes(tool.id))
+                      .map((tool) => tool.label)
+                      .join(' · ') || 'No tools included. Contact Maher to change access.'}
+                  </p>
+                  <p className="mt-2 text-muted-foreground">
+                    Batch exports: {cloud.batchExports ? 'Included' : 'Excluded'}
+                  </p>
+                </div>
+              )}
             </section>
           )}
           {cloud?.request && (
             <section className="rounded-xl border bg-card p-6">
-              <h2 className="font-semibold">Latest request: {cloud.request.status}</h2>
+              <h2 className="font-semibold">
+                {t('Latest request:')} {cloud.request.status}
+              </h2>
               <p className="mt-2 text-sm text-muted-foreground">
                 {cloud.request.shop_name} · {new Date(cloud.request.created_at).toLocaleString()}
               </p>
@@ -118,7 +145,7 @@ export function AccessRequestPage({
               )}
               {cloud.request.status === 'pending' && (
                 <p className="mt-2 text-sm">
-                  Maher will review your request. This page updates automatically.
+                  {t('Maher will review your request. This page updates automatically.')}
                 </p>
               )}
             </section>
@@ -129,7 +156,7 @@ export function AccessRequestPage({
                 {cloud.grant ? 'Request an extension or a change' : 'Request access or a trial'}
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Tell Maher about your shop and the access you need. No payment is required.
+                {t('Tell Maher about your shop and the access you need. No payment is required.')}
               </p>
               <fieldset
                 disabled={
@@ -138,7 +165,7 @@ export function AccessRequestPage({
                 className="mt-4 grid gap-4"
               >
                 <label className="grid gap-2 text-sm">
-                  Shop name
+                  {t('Shop name')}
                   <input
                     className="h-10 rounded-md border bg-background px-3"
                     value={shopName}
@@ -149,18 +176,18 @@ export function AccessRequestPage({
                   />
                 </label>
                 <label className="grid gap-2 text-sm">
-                  Requested plan
+                  {t('Requested plan')}
                   <select
                     className="h-10 rounded-md border bg-background px-3"
                     value={plan}
                     onChange={(e) => setPlan(e.target.value as AccessPlan)}
                   >
-                    <option value="pro">Pro — production tools</option>
-                    <option value="shop">Shop — tools and batch exports</option>
+                    <option value="pro">Pro</option>
+                    <option value="shop">Shop</option>
                   </select>
                 </label>
                 <label className="grid gap-2 text-sm">
-                  Message
+                  {t('Message')}
                   <textarea
                     className="min-h-24 rounded-md border bg-background p-3"
                     value={message}

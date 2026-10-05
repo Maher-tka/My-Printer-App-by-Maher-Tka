@@ -1,15 +1,8 @@
-import {
-  Copy,
-  LockKeyhole,
-  Maximize2,
-  Minimize2,
-  RotateCw,
-  Trash2,
-  ZoomIn,
-  ZoomOut
-} from 'lucide-react'
+import { useLanguage } from '@/i18n/useLanguage'
+import { Copy, LockKeyhole, Maximize2, Minimize2, RotateCw, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { PreviewZoomControls } from '@/components/ui/preview-zoom-controls'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
 import type {
   AlignmentCommand,
@@ -25,6 +18,8 @@ import { getRegistrationMarksSvgMarkup } from '../lib/registrationMarks'
 import { ArtboardResizeHandle } from './ArtboardResizeHandle'
 import { PlacedPieceItem } from './PlacedPieceItem'
 import { useCanvasFullscreen } from '../hooks/useCanvasFullscreen'
+import { getSheetDesignCounts } from '../lib/orderLayout'
+import { LiveNumberInput } from './LiveNumberInput'
 
 interface MontageArtboardProps {
   settings: CutterSheetSettings
@@ -85,6 +80,8 @@ export function MontageArtboard({
   overlapPieceIds = [],
   onAlignSelected
 }: MontageArtboardProps): JSX.Element {
+  const { t } = useLanguage()
+
   const { preset: performancePreset } = usePerformanceSettings()
   const fullscreen = useCanvasFullscreen<HTMLElement>()
   const [manualScale, setManualScale] = useState<number | null>(null)
@@ -102,6 +99,10 @@ export function MontageArtboard({
     return () => observer.disconnect()
   }, [])
   const pieceMap = useMemo(() => new Map(pieces.map((piece) => [piece.id, piece])), [pieces])
+  const designCounts = useMemo(
+    () => getSheetDesignCounts(pieces, placedPieces),
+    [pieces, placedPieces]
+  )
   const selectedPieces = placedPieces.filter((piece) => selectedPieceIds.includes(piece.id))
   const safeArea = getSafeArea(settings)
   const registrationMarksSvgMarkup = getRegistrationMarksSvgMarkup({
@@ -144,12 +145,12 @@ export function MontageArtboard({
           <div className="flex flex-wrap items-center gap-1">
             <h3 className="text-sm font-semibold">
               {sheetNumber === undefined
-                ? 'Montage Sheet'
+                ? t('Montage Sheet')
                 : `Production Layout ${sheetNumber} of ${sheetCount ?? sheetNumber}`}
             </h3>
             {repeatCount > 1 && (
               <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                Print {repeatCount} copies of this sheet
+                {t('Print')} {repeatCount} copies of this sheet
               </span>
             )}
           </div>
@@ -167,6 +168,45 @@ export function MontageArtboard({
               : `This sheet: ${placedPieces.length}`}{' '}
             · Job total: {totalPlacedCount}
           </div>
+          <details className="relative text-xs">
+            <summary className="cursor-pointer rounded border bg-card px-2 py-1">
+              {t('Stickers per sheet')}
+            </summary>
+            <div className="absolute right-0 top-full z-50 mt-1 max-h-48 min-w-64 overflow-auto rounded border bg-card p-3 shadow-md">
+              <table className="w-full text-left" aria-label="Sticker counts for this sheet">
+                <thead>
+                  <tr>
+                    <th scope="col" className="pr-3">
+                      {t('Sticker')}
+                    </th>
+                    <th scope="col" className="text-right">
+                      {t('Per sheet')}
+                    </th>
+                    {repeatCount > 1 && (
+                      <th scope="col" className="pl-3 text-right">
+                        {t('All')} {repeatCount} sheets
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {designCounts.map((design) => (
+                    <tr key={design.id}>
+                      <th scope="row" className="max-w-48 break-words pr-3 font-normal">
+                        {design.displayName}
+                      </th>
+                      <td className="text-right tabular-nums">{design.count}</td>
+                      {repeatCount > 1 && (
+                        <td className="pl-3 text-right tabular-nums">
+                          {design.count * repeatCount}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
           {(!stackedView || active) && (
             <>
               <Button
@@ -183,60 +223,25 @@ export function MontageArtboard({
                 }
               >
                 {fullscreen.isExpanded ? <Minimize2 /> : <Maximize2 />}
-                {fullscreen.isExpanded ? 'Restore workspace' : 'Expand canvas'}
+                {fullscreen.isExpanded ? t('Restore workspace') : t('Expand canvas')}
               </Button>
-              <div className="flex items-center gap-1 rounded-md border bg-card p-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2"
-                  onClick={() => setManualScale(null)}
-                  title="Fit sheet"
-                  aria-label="Fit sheet"
-                >
-                  <Maximize2 className="size-4" />
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setManualScale(10)}
-                >
-                  100%
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2"
-                  onClick={() =>
-                    setManualScale((current) => clamp((current ?? fitScale) * 0.85, 0.1, 18))
-                  }
-                  title="Zoom out"
-                  aria-label="Zoom out"
-                >
-                  <ZoomOut className="size-4" />
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2"
-                  onClick={() =>
-                    setManualScale((current) => clamp((current ?? fitScale) * 1.18, 0.1, 18))
-                  }
-                  title="Zoom in"
-                  aria-label="Zoom in"
-                >
-                  <ZoomIn className="size-4" />
-                </Button>
-              </div>
+              <PreviewZoomControls
+                zoom={scale / 10}
+                zoomOutDisabled={scale <= 0.1}
+                zoomInDisabled={scale >= 18}
+                onFit={() => setManualScale(null)}
+                onActualSize={() => setManualScale(10)}
+                onZoomOut={() =>
+                  setManualScale((current) => clamp((current ?? fitScale) * 0.85, 0.1, 18))
+                }
+                onZoomIn={() =>
+                  setManualScale((current) => clamp((current ?? fitScale) * 1.18, 0.1, 18))
+                }
+              />
               {selectedPieces.length === 1 && (
                 <details className="relative">
                   <summary className="flex h-8 cursor-pointer items-center rounded-md border bg-card px-2 text-xs">
-                    Size
+                    {t('Size')}
                   </summary>
                   <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-md border bg-card p-3 shadow-md">
                     <p className="mb-2 text-xs text-muted-foreground">Selected copy · cm</p>
@@ -297,15 +302,15 @@ export function MontageArtboard({
                 disabled={selectedPieceIds.length === 0}
                 onClick={() => onDuplicatePieces(selectedPieceIds)}
                 className="size-8 p-0"
-                aria-label="Duplicate"
-                title="Duplicate"
+                aria-label={t('Duplicate')}
+                title={t('Duplicate')}
               >
                 <Copy />
               </Button>
               {selectedPieceIds.length > 1 && (
                 <details className="relative">
                   <summary className="flex h-8 cursor-pointer items-center rounded-md border bg-card px-2 text-xs">
-                    Align
+                    {t('Align')}
                   </summary>
                   <div className="absolute right-0 top-full z-50 mt-1 grid w-48 grid-cols-2 gap-1 rounded-md border bg-card p-2 shadow-md">
                     {(
@@ -328,7 +333,7 @@ export function MontageArtboard({
                         className="h-7 px-2 text-xs"
                         onClick={() => onAlignSelected(command)}
                       >
-                        {label}
+                        {t(label)}
                       </Button>
                     ))}
                   </div>
@@ -341,8 +346,8 @@ export function MontageArtboard({
                 disabled={selectedPieceIds.length !== 1}
                 onClick={() => selectedPieceIds[0] && onRotatePiece(selectedPieceIds[0])}
                 className="size-8 p-0"
-                aria-label="Rotate"
-                title="Rotate"
+                aria-label={t('Rotate')}
+                title={t('Rotate')}
               >
                 <RotateCw />
               </Button>
@@ -353,8 +358,8 @@ export function MontageArtboard({
                 disabled={selectedPieceIds.length !== 1}
                 onClick={() => selectedPieceIds[0] && onToggleLock(selectedPieceIds[0])}
                 className="size-8 p-0"
-                aria-label={selectedPieces[0]?.locked ? 'Unlock' : 'Lock'}
-                title={selectedPieces[0]?.locked ? 'Unlock' : 'Lock'}
+                aria-label={selectedPieces[0]?.locked ? t('Unlock') : t('Lock')}
+                title={selectedPieces[0]?.locked ? t('Unlock') : t('Lock')}
               >
                 <LockKeyhole />
               </Button>
@@ -365,8 +370,8 @@ export function MontageArtboard({
                 disabled={selectedPieceIds.length === 0}
                 onClick={() => onDeletePieces(selectedPieceIds)}
                 className="size-8 p-0"
-                aria-label="Delete"
-                title="Delete"
+                aria-label={t('Delete')}
+                title={t('Delete')}
               >
                 <Trash2 />
               </Button>
@@ -382,6 +387,7 @@ export function MontageArtboard({
       )}
       <div
         ref={viewportRef}
+        dir="ltr"
         className="relative min-h-0 flex-1 overflow-auto rounded-lg border bg-muted/70 p-6"
       >
         <div
@@ -474,7 +480,7 @@ export function MontageArtboard({
                 style={{ left: Math.max((settings.rollWidthCm - settings.widthCm) / 2, 0) * scale }}
               />
               <div className="pointer-events-none absolute left-2 top-2 rounded bg-white/85 px-2 py-1 text-[11px] text-slate-700 shadow-sm">
-                Roll {formatCm(settings.rollWidthCm)}
+                {t('Roll')} {formatCm(settings.rollWidthCm)}
               </div>
             </>
           )}
@@ -555,7 +561,7 @@ export function MontageArtboard({
           })}
           {placedPieces.length === 0 && (
             <div className="absolute inset-0 grid place-items-center p-8 text-center text-sm text-muted-foreground">
-              Add prepared pieces from the library, then auto arrange or drag them manually.
+              {t('Add prepared pieces from the library, then auto arrange or drag them manually.')}
             </div>
           )}
           {allowHeightResize ? (
@@ -614,84 +620,24 @@ function SmallNumber({
   disabled?: boolean
   onChange: (value: number) => number
 }): JSX.Element {
-  const [draft, setDraft] = useState(() => formatSmallNumber(value))
-  const isEditingRef = useRef(false)
-  const skipNextBlurCommitRef = useRef(false)
-
-  useEffect(() => {
-    if (!isEditingRef.current || disabled) setDraft(formatSmallNumber(value))
-  }, [disabled, value])
-
-  function restoreValue(): void {
-    setDraft(formatSmallNumber(value))
-  }
-
-  function commitDraft(): void {
-    const parsed = Number(draft)
-    if (draft.trim() === '' || !Number.isFinite(parsed)) {
-      restoreValue()
-      return
-    }
-
-    if (parsed === value) {
-      restoreValue()
-      return
-    }
-
-    const acceptedValue = onChange(parsed)
-    setDraft(formatSmallNumber(Number.isFinite(acceptedValue) ? acceptedValue : value))
-  }
+  const { t } = useLanguage()
 
   return (
     <label className="flex items-center gap-1 text-xs text-muted-foreground">
-      {label}
-      <input
+      {t(label)}
+      <LiveNumberInput
         className="h-8 w-16 rounded border bg-background px-2 text-sm text-foreground"
-        type="number"
+        value={value}
         min={min}
         max={max}
         step={0.1}
+        precision={2}
         disabled={disabled}
-        value={draft}
-        onFocus={() => {
-          isEditingRef.current = true
-        }}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          isEditingRef.current = false
-          if (disabled) {
-            skipNextBlurCommitRef.current = false
-            restoreValue()
-            return
-          }
-          if (skipNextBlurCommitRef.current) {
-            skipNextBlurCommitRef.current = false
-            return
-          }
-          commitDraft()
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault()
-            commitDraft()
-            skipNextBlurCommitRef.current = true
-            event.currentTarget.blur()
-          } else if (event.key === 'Escape') {
-            event.preventDefault()
-            restoreValue()
-            skipNextBlurCommitRef.current = true
-            event.currentTarget.blur()
-          }
-        }}
+        onValueChange={onChange}
       />
     </label>
   )
 }
-
-function formatSmallNumber(value: number): string {
-  return Number.isFinite(value) ? String(Number(value.toFixed(2))) : '0'
-}
-
 function formatSheetNumberList(sheetNumbers: number[]): string {
   if (sheetNumbers.length === 0) return '—'
 

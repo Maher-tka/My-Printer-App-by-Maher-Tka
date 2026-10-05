@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { Pipette, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,8 @@ export function ColorPickerPopover({
   onChange,
   onClose
 }: ColorPickerPopoverProps): JSX.Element {
+  const { t } = useLanguage()
+
   const normalizedColor = normalizeHex(colorHex) ?? '#FFFFFF'
   const rgb = hexToRgb(normalizedColor) ?? { r: 255, g: 255, b: 255 }
   const cmyk = rgbToCmyk(rgb)
@@ -62,7 +65,7 @@ export function ColorPickerPopover({
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">{title}</p>
-          <p className="text-xs text-slate-500">{description}</p>
+          <p className="text-xs text-slate-500">{t(description)}</p>
         </div>
         <Button
           type="button"
@@ -124,7 +127,7 @@ export function ColorPickerPopover({
             }}
           >
             <Pipette data-icon="inline-start" />
-            Eyedropper
+            {t('Eyedropper')}
           </Button>
           {!eyedropperSupported && (
             <p className="text-xs text-slate-500">Eyedropper not supported on this system</p>
@@ -141,7 +144,7 @@ export function ColorPickerPopover({
         />
       </div>
 
-      <SwatchRow title="Swatches" colors={emptySheetSwatches} onChange={onChange} />
+      <SwatchRow title={t('Swatches')} colors={emptySheetSwatches} onChange={onChange} />
       {recentColors.length > 0 && (
         <SwatchRow title="Recent" colors={recentColors} onChange={onChange} />
       )}
@@ -204,9 +207,11 @@ function NumberField({
   max: number
   onChange: (value: number) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label className="grid gap-1 text-xs font-medium text-slate-600">
-      {label}
+      {t(label)}
       <input
         className="h-8 rounded-md border px-2 text-sm text-slate-950"
         type="number"

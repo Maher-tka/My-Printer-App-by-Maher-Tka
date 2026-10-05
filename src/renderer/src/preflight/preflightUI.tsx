@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -93,6 +94,8 @@ export function PreflightDialog({
   onCancel: () => void
   onConfirm: () => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const actionText = action === 'print' ? 'Print' : 'Export'
 
   return (
@@ -106,7 +109,7 @@ export function PreflightDialog({
         <PreflightSummary report={report} />
         <div className="mt-4 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onCancel}>
-            Cancel and Fix
+            {t('Cancel and Fix')}
           </Button>
           <Button type="button" onClick={onConfirm} disabled={!report.canExport}>
             {report.canExport

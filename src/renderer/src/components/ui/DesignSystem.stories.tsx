@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
+import { useState } from 'react'
 import { AlertTriangle, Check, Info, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,8 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ToolSettingsTabs } from '@/tools/shared/ToolSettingsTabs'
+import { PdfPageSelector } from '@/tools/shared/PdfPageSelector'
 
 const meta = {
   title: 'Design system/Foundations',
@@ -96,4 +99,68 @@ export const FormControls: Story = {
       </CardContent>
     </Card>
   )
+}
+
+export const SettingsDirections: Story = {
+  render: () => (
+    <div className="grid max-w-full gap-6 md:grid-cols-2">
+      {(['ltr', 'rtl'] as const).map((direction) => (
+        <div key={direction} className="w-[320px] max-w-full" dir={direction}>
+          <ToolSettingsTabs
+            direction={direction}
+            label={`${direction.toUpperCase()} settings`}
+            advanced={
+              <label className="grid gap-2 text-[13px]">
+                {direction === 'rtl' ? 'الهامش' : 'Margin'}
+                <Input type="number" defaultValue={5} />
+              </label>
+            }
+          >
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 text-[13px]">
+                <input type="checkbox" defaultChecked className="accent-primary" />
+                {direction === 'rtl' ? 'إطار القص' : 'Cutting rectangle'}
+              </label>
+              <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
+                <input type="checkbox" disabled className="accent-primary" />
+                {direction === 'rtl' ? 'خيار غير متاح' : 'Unavailable option'}
+              </label>
+            </div>
+          </ToolSettingsTabs>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function PageSelectorExample({ disabled = false }: { disabled?: boolean }): JSX.Element {
+  const [selected, setSelected] = useState(2)
+  const [loaded, setLoaded] = useState(4)
+  const previews = Array.from({ length: loaded }, (_, index) => ({
+    pageNumber: index + 1,
+    thumbnailDataUrl:
+      'data:image/svg+xml,' +
+      encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="150"><rect width="240" height="150" fill="white"/><text x="120" y="85" text-anchor="middle" font-size="48">${index + 1}</text></svg>`
+      )
+  }))
+  return (
+    <div className="w-[480px] max-w-full">
+      <PdfPageSelector
+        title="PDF pages"
+        pageCount={12}
+        selectedPageNumber={selected}
+        selectedLabel="Front"
+        previews={previews}
+        disabled={disabled}
+        onSelect={setSelected}
+        onLoadMore={() => setLoaded((count) => Math.min(12, count + 4))}
+      />
+    </div>
+  )
+}
+
+export const DocumentPageSelector: Story = { render: () => <PageSelectorExample /> }
+export const DisabledDocumentPageSelector: Story = {
+  render: () => <PageSelectorExample disabled />
 }

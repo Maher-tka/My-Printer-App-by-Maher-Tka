@@ -1,4 +1,6 @@
-import { CircleStop, FileImage, FileText, RotateCcw } from 'lucide-react'
+import { ActionIcon } from '@/components/ui/action-button'
+import { useLanguage } from '@/i18n/useLanguage'
+import { CircleStop } from 'lucide-react'
 import { useRef } from 'react'
 import { PdfFilePickerInput } from '@/components/file-input/PdfFilePickerInput'
 import { Button } from '@/components/ui/button'
@@ -22,6 +24,8 @@ export function FileImporter({
   onCancelImport,
   onClear
 }: FileImporterProps): JSX.Element {
+  const { t } = useLanguage()
+
   const pdfInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const canCancel =
@@ -34,8 +38,8 @@ export function FileImporter({
     <div className="flex flex-col gap-4 rounded-lg border bg-card p-4">
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" onClick={() => pdfInputRef.current?.click()} disabled={isBusy}>
-          <FileText data-icon="inline-start" />
-          Import PDF
+          <ActionIcon action="import" />
+          {t('Import PDF')}
         </Button>
         <Button
           type="button"
@@ -43,17 +47,17 @@ export function FileImporter({
           onClick={() => imageInputRef.current?.click()}
           disabled={isBusy}
         >
-          <FileImage data-icon="inline-start" />
-          Import JPG/PNG
+          <ActionIcon action="import" />
+          {t('Import JPG/PNG')}
         </Button>
         <Button type="button" variant="ghost" onClick={onClear} disabled={isBusy}>
-          <RotateCcw data-icon="inline-start" />
-          New Project
+          <ActionIcon action="newProject" />
+          {t('New Project')}
         </Button>
         {canCancel && (
           <Button type="button" variant="outline" onClick={onCancelImport}>
             <CircleStop data-icon="inline-start" />
-            Cancel
+            {t('Cancel')}
           </Button>
         )}
       </div>

@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import {
   BriefcaseBusiness,
   CalendarDays,
@@ -34,6 +35,8 @@ export function JobsWorkspaceHeader({
   overdueCount,
   dueTodayCount
 }: JobsWorkspaceHeaderProps): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <Card className="overflow-hidden">
       <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between lg:p-5">
@@ -60,7 +63,7 @@ export function JobsWorkspaceHeader({
             {views.map(({ id, label, icon: Icon }) => (
               <TabsTrigger key={id} value={id} className="h-9 gap-2 px-3">
                 <Icon className="size-4" aria-hidden="true" />
-                {label}
+                {t(label)}
               </TabsTrigger>
             ))}
           </TabsList>

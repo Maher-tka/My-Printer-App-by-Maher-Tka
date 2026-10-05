@@ -1,9 +1,12 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { ArchiveRestore, Download, FolderOpen, LoaderCircle } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { applyRestoredShopData, getShopBackupRendererData } from './shopBackup'
 
 export function BackupRestoreSettings(): JSX.Element {
+  const { t } = useLanguage()
+
   const [message, setMessage] = useState<string | null>(null)
   const [isBusy, setIsBusy] = useState(false)
   const isAvailable = Boolean(window.printerApp?.runtime.createShopBackup)
@@ -70,7 +73,7 @@ export function BackupRestoreSettings(): JSX.Element {
           <ArchiveRestore className="size-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold">Backup & restore</h3>
+          <h3 className="font-semibold">{t('Backup & restore')}</h3>
           <p className="mt-1 text-sm leading-5 text-muted-foreground">
             {isAvailable
               ? 'Daily local backups save jobs, customers, export history, and up to 20 linked projects. Keep a separate copy on another drive for extra protection.'
@@ -86,7 +89,7 @@ export function BackupRestoreSettings(): JSX.Element {
             onClick={() => void createBackup()}
           >
             {isBusy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Download />}
-            Back up now
+            {t('Back up now')}
           </Button>
           <Button
             type="button"
@@ -96,7 +99,7 @@ export function BackupRestoreSettings(): JSX.Element {
             onClick={() => void restoreBackup()}
           >
             <ArchiveRestore />
-            Restore
+            {t('Restore')}
           </Button>
           <Button
             type="button"
@@ -106,7 +109,7 @@ export function BackupRestoreSettings(): JSX.Element {
             onClick={() => void openBackupFolder()}
           >
             <FolderOpen />
-            Backup folder
+            {t('Backup folder')}
           </Button>
         </div>
       </div>

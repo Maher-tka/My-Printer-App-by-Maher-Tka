@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { ArrowRight, ArrowUpRight, CheckCircle2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,8 @@ export function NextActions({
   onOpenJob: (jobId: string) => void
   onOpenJobs: () => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const { jobs } = useJobStore()
   const [today, setToday] = useState(() => localDateKey(new Date()))
   useEffect(() => {
@@ -33,15 +36,15 @@ export function NextActions({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            Keep things moving
+            {t('Keep things moving')}
           </p>
           <h2 id="next-actions-title" className="text-base font-semibold">
-            Your production queue
+            {t('Your production queue')}
           </h2>
           <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
             {overdue
               ? `${overdue} overdue ${overdue === 1 ? 'job needs' : 'jobs need'} your attention.`
-              : 'Your next steps, in delivery order.'}
+              : t('Your next steps, in delivery order.')}
           </p>
         </div>
         <Button
@@ -51,7 +54,7 @@ export function NextActions({
           className="text-primary"
           onClick={onOpenJobs}
         >
-          All jobs <ArrowUpRight className="size-3.5" />
+          {t('All jobs')} <ArrowUpRight className="size-3.5" />
         </Button>
       </div>
       <div className="mt-5 space-y-2">
@@ -94,19 +97,21 @@ export function NextActions({
               <CheckCircle2 className="size-5" aria-hidden="true" />
             </span>
             <p className="text-sm font-medium">
-              {jobs.length ? 'A clear desk. A fresh start.' : 'Good work starts with a plan.'}
+              {jobs.length ? 'A clear desk. A fresh start.' : t('Good work starts with a plan.')}
             </p>
             <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted-foreground">
               {jobs.length
                 ? 'Every tracked job is delivered or canceled. Your next order can start here.'
-                : 'Track your first customer order. We’ll keep deadlines and next steps in view.'}
+                : t(
+                    'Track your first customer order. We’ll keep deadlines and next steps in view.'
+                  )}
             </p>
             <button
               type="button"
               onClick={onOpenJobs}
               className="mt-4 flex items-center gap-2 rounded text-xs font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {jobs.length ? 'Open shop jobs' : 'Add your first job'}{' '}
+              {jobs.length ? 'Open shop jobs' : t('Add your first job')}{' '}
               <ArrowRight className="size-3.5" />
             </button>
           </div>

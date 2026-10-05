@@ -1,5 +1,6 @@
 import type { LicenseFeature, LicenseSnapshot } from '../../../shared/licensing-types'
 import type { PrinterTool } from '@/types/tools'
+import { canUseSubscriptionTool } from '../../../shared/subscription-tools'
 
 export interface ToolAccessState {
   isCheckingLicense: boolean
@@ -28,7 +29,10 @@ export function getToolAccessState(
     }
   }
 
-  if (canUseFeature(licenseState, tool.requiredFeature)) {
+  if (
+    canUseFeature(licenseState, tool.requiredFeature) &&
+    canUseSubscriptionTool(licenseState, tool.id)
+  ) {
     return {
       isCheckingLicense: false,
       isLicenseLocked: false,
@@ -39,7 +43,14 @@ export function getToolAccessState(
   return {
     isCheckingLicense: false,
     isLicenseLocked: true,
-    licenseReason: licenseState?.mode === 'expired' ? 'Trial expired' : 'License required'
+    licenseReason:
+      licenseState?.storageMode === 'supabase'
+        ? licenseState.canUsePaidTools
+          ? 'Tool not included in your subscription'
+          : licenseState.statusLabel
+        : licenseState?.mode === 'expired'
+          ? 'Trial expired'
+          : 'License required'
   }
 }
 

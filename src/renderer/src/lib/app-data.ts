@@ -2,6 +2,17 @@ import type { PrinterTool } from '@/types/tools'
 
 export const printerTools: PrinterTool[] = [
   {
+    id: 'card-montage',
+    route: 'card-montage',
+    title: 'Business Card Montage',
+    shortTitle: 'Card Montage',
+    description:
+      'Repeat AI, PDF, or image business cards on A4 with zero gaps, custom spacing, or auto 8.8 × 5.6 cm sizing',
+    status: 'active',
+    accent: 'blue',
+    requiredFeature: 'paid-tools'
+  },
+  {
     id: 'sequential-number',
     route: 'sequential-number',
     title: 'Sequential Number',

@@ -1,5 +1,6 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { useEffect, useState } from 'react'
-import { Pipette } from 'lucide-react'
+import { Loader2, Pipette, ScanText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { SpineContent, SpineTextLayout } from '../types'
@@ -10,47 +11,63 @@ import {
   parseHexColor,
   rgbChannelsToHex
 } from '../lib/spineBackground'
-import { EditorSection, TextField } from './FrontCoverEditor'
+import { EditorSection, TextAreaField, TextField } from './FrontCoverEditor'
 
 export function SpineEditor({
   value,
   layout,
   automaticSpineColor,
   onChange,
-  onUseFrontTitle
+  onUseFrontTitle,
+  onDetectSpine,
+  detectingSpine = false,
+  detectionMessage
 }: {
   value: SpineContent
   layout: SpineTextLayout
   automaticSpineColor: string
   onChange: (patch: Partial<SpineContent>) => void
   onUseFrontTitle: () => void
+  onDetectSpine?: () => void
+  detectingSpine?: boolean
+  detectionMessage?: string | null
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const customMode = value.spineColorMode === 'custom'
   const storedCustomColor = normalizeHexColor(value.spineBackgroundColor, automaticSpineColor)
   const activeColor = customMode
     ? storedCustomColor
     : normalizeHexColor(automaticSpineColor, DEFAULT_SPINE_BACKGROUND_COLOR)
+  const largestFontSize = Math.max(
+    layout.fontSizePt,
+    ...layout.items.map((item) => item.fontSizePt)
+  )
+  const fontSizeLabel =
+    largestFontSize === layout.fontSizePt
+      ? `${layout.fontSizePt}`
+      : `${layout.fontSizePt}–${largestFontSize}`
 
   return (
     <>
-      <EditorSection title="Spine editor">
+      <EditorSection title={t('Spine editor')}>
         <TextField
-          label="Academic year - top of spine"
+          label={t('Academic year - top of spine')}
           value={value.year}
           onChange={(year) => onChange({ year })}
         />
-        <TextField
-          label="Title / mémoire title - middle of spine"
+        <TextAreaField
+          label={t('Title / mémoire title - middle of spine')}
           value={value.shortTitle}
           onChange={(shortTitle) => onChange({ shortTitle })}
         />
         <TextField
-          label="Student name - bottom of spine"
+          label={t('Student name - bottom of spine')}
           value={value.studentName}
           onChange={(studentName) => onChange({ studentName })}
         />
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-          Text direction
+          {t('Text direction')}
           <select
             className="rounded-md border bg-background px-3 py-2 text-sm"
             value={value.direction}
@@ -58,8 +75,8 @@ export function SpineEditor({
               onChange({ direction: event.target.value as SpineContent['direction'] })
             }
           >
-            <option value="top-to-bottom">Top to bottom</option>
-            <option value="bottom-to-top">Bottom to top</option>
+            <option value="top-to-bottom">{t('Top to bottom')}</option>
+            <option value="bottom-to-top">{t('Bottom to top')}</option>
           </select>
         </label>
         <label className="flex items-center gap-2 text-sm">
@@ -68,17 +85,17 @@ export function SpineEditor({
             checked={value.autoFit}
             onChange={(event) => onChange({ autoFit: event.target.checked })}
           />
-          Auto-fit text to spine
+          {t('Auto-fit text to spine')}
         </label>
         {value.autoFit ? (
           <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
-            Auto Fit is active. The font size will update automatically whenever the spine width or
-            cover measurements change.
+            Auto Fit follows the spine width and book height. Text resizes and stays centered as
+            measurements change, with your title line breaks preserved.
           </p>
         ) : null}
         {!value.autoFit && (
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-            Font size
+            {t('Font size')}
             <input
               className="rounded-md border bg-background px-3 py-2 text-sm"
               type="number"
@@ -94,13 +111,29 @@ export function SpineEditor({
             {layout.fits ? 'Spine text fits' : 'Needs attention'}
           </Badge>
           <Badge variant="secondary">
-            {value.autoFit ? 'Auto size' : 'Manual size'} · {layout.fontSizePt} pt
+            {value.autoFit ? 'Auto size' : 'Manual size'} · {fontSizeLabel} pt
           </Badge>
         </div>
         {layout.warning && <p className="text-xs text-warning-foreground">{layout.warning}</p>}
         <div className="flex flex-wrap gap-2">
+          {onDetectSpine && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={detectingSpine}
+              onClick={onDetectSpine}
+            >
+              {detectingSpine ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <ScanText className="mr-2 h-4 w-4" />
+              )}
+              {detectingSpine ? 'Reading front cover…' : 'Auto-fill from front cover'}
+            </Button>
+          )}
           <Button type="button" size="sm" variant="outline" onClick={onUseFrontTitle}>
-            Use main title
+            {t('Use main title')}
           </Button>
           <Button
             type="button"
@@ -112,9 +145,14 @@ export function SpineEditor({
               })
             }
           >
-            Rotate direction
+            {t('Rotate direction')}
           </Button>
         </div>
+        {detectionMessage && (
+          <p role="status" className="text-xs text-muted-foreground">
+            {detectionMessage}
+          </p>
+        )}
       </EditorSection>
       <SpineBackgroundSection
         activeColor={activeColor}
@@ -140,6 +178,8 @@ function SpineBackgroundSection({
   storedCustomColor: string
   onChange: (patch: Partial<SpineContent>) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const [hexDraft, setHexDraft] = useState(activeColor.toUpperCase())
   const [pickMessage, setPickMessage] = useState<string | null>(null)
   const rgb = hexToRgbChannels(activeColor)
@@ -182,7 +222,7 @@ function SpineBackgroundSection({
   }
 
   return (
-    <EditorSection title="Spine background">
+    <EditorSection title={t('Spine background')}>
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={customMode ? 'secondary' : 'success'}>
           {customMode ? 'Custom color' : 'Automatic matching'}
@@ -205,11 +245,11 @@ function SpineBackgroundSection({
           checked={customMode}
           onChange={(event) => setMode(event.target.checked ? 'custom' : 'auto')}
         />
-        Use custom spine color
+        {t('Use custom spine color')}
       </label>
       <div className="grid grid-cols-1 gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-          Color swatch
+          {t('Color swatch')}
           <input
             className="h-10 w-full rounded-md border bg-background p-1 disabled:opacity-60"
             type="color"
@@ -266,7 +306,7 @@ function SpineBackgroundSection({
           onClick={() => void pickFromDesign()}
         >
           <Pipette />
-          Pick from design
+          {t('Pick from design')}
         </Button>
         {pickMessage && <span className="text-xs text-muted-foreground">{pickMessage}</span>}
       </div>
@@ -285,9 +325,11 @@ function RgbInput({
   disabled: boolean
   onChange: (value: number) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground">
-      {label}
+      {t(label)}
       <input
         className="min-w-0 rounded-md border bg-background px-2 py-2 text-sm text-foreground disabled:opacity-60"
         type="number"

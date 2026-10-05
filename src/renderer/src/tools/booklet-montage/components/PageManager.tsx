@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import {
   DndContext,
   DragOverlay,
@@ -98,7 +99,7 @@ export const PageManager = memo(function PageManager({
 
   return (
     <section
-      className="rounded-[18px] border border-border/70 bg-card p-4"
+      className="rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4"
       data-page-order-panel="true"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -186,7 +187,13 @@ export const PageManager = memo(function PageManager({
           <FilePlus2 data-icon="inline-start" />
           Add Blank Page
         </Button>
-        <Button type="button" size="sm" onClick={onAutoAddBlankPages} disabled={blanksNeeded === 0}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onAutoAddBlankPages}
+          disabled={blanksNeeded === 0}
+        >
           Auto add blank pages
         </Button>
         <Button
@@ -400,6 +407,8 @@ function BlankOrThumbnailPreview({
   page: BookletPage
   onInspect?: () => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const fillColor = getSolidFillHex(page.colorHex)
   const textColor = getReadableTextColor(fillColor)
 
@@ -435,7 +444,7 @@ function BlankOrThumbnailPreview({
           className="grid h-full place-items-center text-sm font-semibold"
           style={page.sourceType === 'blank' ? { color: textColor } : undefined}
         >
-          Blank
+          {t('Blank')}
         </div>
       )}
     </div>

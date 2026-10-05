@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { AlertTriangle, CheckCircle2, Info, OctagonAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { CutterPreflightIssue, CutterPreflightReport } from '../lib/preflight'
@@ -9,6 +10,8 @@ export function PreflightPanel({
   report: CutterPreflightReport
   placedCount: number
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const errors = report.issues.filter((issue) => issue.severity === 'error').length
   const warnings = report.issues.filter((issue) => issue.severity === 'warning').length
   const info = report.issues.filter((issue) => issue.severity === 'info').length
@@ -17,11 +20,10 @@ export function PreflightPanel({
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-semibold">Preflight Check</h3>
-          <p className="text-sm text-muted-foreground">Production safety checks before export.</p>
+          <h3 className="font-semibold">{t('Preflight Check')}</h3>
         </div>
         <Badge variant={report.canExport ? 'success' : 'warning'}>
-          {report.canExport ? 'Ready' : 'Fix issues'}
+          {report.canExport ? t('Ready') : 'Fix issues'}
         </Badge>
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
@@ -37,20 +39,23 @@ export function PreflightPanel({
       </div>
       <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
         <span className="rounded bg-destructive/10 p-2 text-destructive">
-          <b className="block text-base">{errors}</b>errors
+          <b className="block text-base">{errors}</b>
+          {t('errors')}
         </span>
         <span className="rounded bg-warning p-2 text-warning-foreground">
-          <b className="block text-base">{warnings}</b>warnings
+          <b className="block text-base">{warnings}</b>
+          {t('warnings')}
         </span>
         <span className="rounded bg-primary/5 p-2 text-primary">
-          <b className="block text-base">{info}</b>notes
+          <b className="block text-base">{info}</b>
+          {t('notes')}
         </span>
       </div>
       <div className="mt-3 flex flex-col gap-2">
         {report.issues.length === 0 ? (
           <div className="flex items-center gap-2 rounded-md border border-success-foreground/15 bg-success p-2 text-sm text-success-foreground">
             <CheckCircle2 className="size-4" />
-            No obvious production problems detected.
+            {t('No obvious production problems detected.')}
           </div>
         ) : (
           report.issues.map((issue) => (

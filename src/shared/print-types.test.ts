@@ -39,6 +39,23 @@ assert.match(
   'non-PDF export files are blocked'
 )
 assert.equal(normalizePdfPrintName('cover-sheet'), 'cover-sheet.pdf', 'PDF extension is added')
+for (const copies of [1, 3, 999]) {
+  assert.equal(
+    getPrintPdfRequestError({ bytes: validPdfBytes, suggestedName: 'cards.pdf', copies }),
+    null
+  )
+  assert.equal(getPrintPdfFileRequestError({ filePath: 'C:\\Exports\\cards.pdf', copies }), null)
+}
+for (const copies of [0, -1, 1.5, 1000, NaN, Infinity]) {
+  assert.match(
+    getPrintPdfRequestError({ bytes: validPdfBytes, suggestedName: 'cards.pdf', copies }) ?? '',
+    /copies/
+  )
+  assert.match(
+    getPrintPdfFileRequestError({ filePath: 'C:\\Exports\\cards.pdf', copies }) ?? '',
+    /copies/
+  )
+}
 assert.deepEqual(
   createPrintDialogResult(false, 'cancelled'),
   { ok: false, canceled: true, error: 'Print canceled.' },

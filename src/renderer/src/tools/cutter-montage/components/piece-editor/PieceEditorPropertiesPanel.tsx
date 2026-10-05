@@ -1,11 +1,12 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { Copy, LockKeyhole, RotateCcw, UnlockKeyhole } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { LiveNumberInput } from '../LiveNumberInput'
 import { Button } from '@/components/ui/button'
 import {
   CUTTER_PIECE_MAX_DIMENSION_CM,
-  CUTTER_PIECE_MIN_DIMENSION_CM,
-  resizePiecePreset
+  CUTTER_PIECE_MIN_DIMENSION_CM
 } from '../../lib/piecePresets'
+import { getPieceSize, resizePieceToSize } from '../../lib/pieceSize'
 import type { ArtworkTransform, EditorObject, PiecePreset } from '../../types'
 
 interface PieceEditorPropertiesPanelProps {
@@ -35,7 +36,10 @@ export function PieceEditorPropertiesPanel({
   onPieceLockChange,
   onGroupChange
 }: PieceEditorPropertiesPanelProps): JSX.Element {
+  const { t } = useLanguage()
+
   const activeMaskPairLocked = piece.clippingMaskEnabled
+  const pieceSize = getPieceSize(piece)
   const selectedTransformLocked = Boolean(
     selectedObject &&
     (selectedObject.locked ||
@@ -45,47 +49,47 @@ export function PieceEditorPropertiesPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <Panel title="Piece">
+      <Panel title={t('Piece size')}>
         <div className="grid grid-cols-2 gap-2">
           <NumberField
-            label="Width cm"
-            value={piece.widthCm}
+            label={t('Width cm')}
+            value={pieceSize.widthCm}
             step={0.1}
             min={CUTTER_PIECE_MIN_DIMENSION_CM}
             max={CUTTER_PIECE_MAX_DIMENSION_CM}
             onChange={(value) => {
               const normalizedValue = clampPieceDimension(value)
-              const acceptedPiece = resizePiecePreset(
+              const acceptedPiece = resizePieceToSize(
                 piece,
                 normalizedValue,
-                piece.heightCm,
+                pieceSize.heightCm,
                 'width'
               )
-              onPieceSizeChange(normalizedValue, piece.heightCm, 'width')
-              return acceptedPiece.widthCm
+              onPieceSizeChange(normalizedValue, pieceSize.heightCm, 'width')
+              return getPieceSize(acceptedPiece).widthCm
             }}
           />
           <NumberField
-            label="Height cm"
-            value={piece.heightCm}
+            label={t('Height cm')}
+            value={pieceSize.heightCm}
             step={0.1}
             min={CUTTER_PIECE_MIN_DIMENSION_CM}
             max={CUTTER_PIECE_MAX_DIMENSION_CM}
             onChange={(value) => {
               const normalizedValue = clampPieceDimension(value)
-              const acceptedPiece = resizePiecePreset(
+              const acceptedPiece = resizePieceToSize(
                 piece,
-                piece.widthCm,
+                pieceSize.widthCm,
                 normalizedValue,
                 'height'
               )
-              onPieceSizeChange(piece.widthCm, normalizedValue, 'height')
-              return acceptedPiece.heightCm
+              onPieceSizeChange(pieceSize.widthCm, normalizedValue, 'height')
+              return getPieceSize(acceptedPiece).heightCm
             }}
           />
           {!hideQuantity && (
             <NumberField
-              label="Quantity"
+              label={t('Quantity')}
               value={piece.quantity}
               step={1}
               onChange={(value) => {
@@ -98,7 +102,8 @@ export function PieceEditorPropertiesPanel({
         </div>
         {activeMaskPairLocked ? (
           <p className="mt-2 rounded-md bg-sky-50 px-2 py-1.5 text-xs text-sky-800">
-            Mask contents are locked. Piece size resizes the complete sticker.
+            Size is measured from the mask, excluding cropped artwork and the cut margin. Resizing
+            keeps the artwork, mask and cut lines together.
           </p>
         ) : null}
         <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
@@ -107,7 +112,7 @@ export function PieceEditorPropertiesPanel({
             checked={piece.lockAspectRatio}
             onChange={(event) => onAspectLockChange(event.target.checked)}
           />
-          Lock aspect ratio
+          {t('Lock aspect ratio')}
         </label>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button
@@ -118,11 +123,11 @@ export function PieceEditorPropertiesPanel({
             onClick={onReset}
           >
             <RotateCcw data-icon="inline-start" />
-            Reset
+            {t('Reset')}
           </Button>
           <Button type="button" size="sm" variant="outline" onClick={onDuplicatePiece}>
             <Copy data-icon="inline-start" />
-            Duplicate preset
+            {t('Duplicate preset')}
           </Button>
           <Button
             type="button"
@@ -145,7 +150,7 @@ export function PieceEditorPropertiesPanel({
           <Button
             type="button"
             size="sm"
-            variant={piece.groupLinked ? 'default' : 'outline'}
+            variant={piece.groupLinked ? 'selected' : 'outline'}
             disabled={activeMaskPairLocked}
             onClick={() => onGroupChange(!piece.groupLinked)}
           >
@@ -187,7 +192,7 @@ export function PieceEditorPropertiesPanel({
                 }}
               />
               <NumberField
-                label="Width"
+                label={t('Width')}
                 value={selectedObject.transform.widthCm}
                 step={0.1}
                 disabled={selectedTransformLocked}
@@ -198,7 +203,7 @@ export function PieceEditorPropertiesPanel({
                 }}
               />
               <NumberField
-                label="Height"
+                label={t('Height')}
                 value={selectedObject.transform.heightCm}
                 step={0.1}
                 disabled={selectedTransformLocked}
@@ -209,7 +214,7 @@ export function PieceEditorPropertiesPanel({
                 }}
               />
               <NumberField
-                label="Rotation"
+                label={t('Rotation')}
                 value={selectedObject.transform.rotation}
                 step={1}
                 disabled={selectedTransformLocked}
@@ -221,7 +226,9 @@ export function PieceEditorPropertiesPanel({
             </div>
           </>
         ) : (
-          <p className="text-xs text-muted-foreground">Select one object to edit exact geometry.</p>
+          <p className="text-xs text-muted-foreground">
+            {t('Select one object to edit exact geometry.')}
+          </p>
         )}
       </Panel>
     </div>
@@ -260,87 +267,24 @@ function NumberField({
   disabled?: boolean
   onChange: (value: number) => number
 }): JSX.Element {
-  const canonicalValue = formatNumberFieldValue(value)
-  const [draft, setDraft] = useState(canonicalValue)
-  const isEditingRef = useRef(false)
-  const skipNextBlurCommitRef = useRef(false)
-
-  useEffect(() => {
-    if (!isEditingRef.current || disabled) {
-      setDraft(formatNumberFieldValue(value))
-    }
-  }, [disabled, value])
-
-  function restoreCanonicalValue(): void {
-    setDraft(formatNumberFieldValue(value))
-  }
-
-  function commitDraft(): void {
-    const parsed = Number(draft)
-    if (draft.trim() === '' || !Number.isFinite(parsed)) {
-      restoreCanonicalValue()
-      return
-    }
-
-    if (parsed === value) {
-      restoreCanonicalValue()
-      return
-    }
-
-    const acceptedValue = onChange(parsed)
-    setDraft(formatNumberFieldValue(Number.isFinite(acceptedValue) ? acceptedValue : value))
-  }
+  const { t } = useLanguage()
 
   return (
     <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-      {label}
-      <input
+      {t(label)}
+      <LiveNumberInput
         className="h-8 rounded border bg-background px-2 text-sm text-foreground"
-        type="number"
+        value={value}
         step={step}
         min={min}
         max={max}
         disabled={disabled}
-        value={draft}
-        onFocus={() => {
-          isEditingRef.current = true
-        }}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          isEditingRef.current = false
-          if (disabled) {
-            skipNextBlurCommitRef.current = false
-            restoreCanonicalValue()
-            return
-          }
-          if (skipNextBlurCommitRef.current) {
-            skipNextBlurCommitRef.current = false
-            return
-          }
-          commitDraft()
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault()
-            commitDraft()
-            skipNextBlurCommitRef.current = true
-            event.currentTarget.blur()
-          } else if (event.key === 'Escape') {
-            event.preventDefault()
-            restoreCanonicalValue()
-            skipNextBlurCommitRef.current = true
-            event.currentTarget.blur()
-          }
-        }}
+        integer={label === 'Quantity'}
+        onValueChange={onChange}
       />
     </label>
   )
 }
-
-function formatNumberFieldValue(value: number): string {
-  return Number.isFinite(value) ? String(Number(value.toFixed(3))) : '0'
-}
-
 function clampPieceDimension(value: number): number {
   return Math.min(Math.max(value, CUTTER_PIECE_MIN_DIMENSION_CM), CUTTER_PIECE_MAX_DIMENSION_CM)
 }

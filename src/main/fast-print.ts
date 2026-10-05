@@ -98,7 +98,7 @@ export async function runFastPrintCommand(): Promise<void> {
       // Remove earlier per-user registrations so there is exactly one Explorer entry.
       await powershell('fast-print-menu.ps1', ['-Action', 'Remove'])
     } else if (args.includes('--fast-print-batch')) {
-      await assertOnlineProductionAccess()
+      await assertOnlineProductionAccess('paid-tools', 'fast-print')
       const manifestPath = args[args.indexOf('--fast-print-batch') + 1]
       if (!manifestPath) throw new Error('The Explorer batch selection is missing.')
       const manifest = resolve(manifestPath)
@@ -118,7 +118,7 @@ export async function runFastPrintCommand(): Promise<void> {
       }
       await showFastPrintMenu(files)
     } else if (args.includes('--fast-print-menu')) {
-      await assertOnlineProductionAccess()
+      await assertOnlineProductionAccess('paid-tools', 'fast-print')
       const separator = process.argv.indexOf('--')
       const files = separator < 0 ? [] : process.argv.slice(separator + 1)
       await showFastPrintMenu(normalizeFastPrintSelection(files.map((path) => resolve(path))))
@@ -145,7 +145,7 @@ export async function runFastPrintCommand(): Promise<void> {
         })
       }
     } else {
-      await assertOnlineProductionAccess()
+      await assertOnlineProductionAccess('paid-tools', 'fast-print')
       const index = args.indexOf('--fast-print')
       const token = args[index + 1]
       if (!token || token.length > 4096)
@@ -374,7 +374,7 @@ async function runJob(filePaths: string[], preset: FastPrintPreset): Promise<voi
     }
   })
   ipcMain.handle('fast-print:submit', async (event) => {
-    await assertOnlineProductionAccess()
+    await assertOnlineProductionAccess('paid-tools', 'fast-print')
     authorize(event)
     if (submitted || acceptingSheet || !sheets.length)
       throw new Error('No complete print job is ready.')

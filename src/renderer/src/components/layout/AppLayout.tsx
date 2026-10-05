@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 import { CommandCenter } from '@/components/command-center/CommandCenter'
@@ -30,13 +31,15 @@ export function AppLayout({
   onOpenJob,
   isDeveloperMode = false
 }: AppLayoutProps): JSX.Element {
+  const { t, language } = useLanguage()
+
   const [commandCenterOpen, setCommandCenterOpen] = useState(false)
 
   const mainRef = useRef<HTMLElement>(null)
   useEffect(() => {
-    document.title = pageMeta.title + ' — My Printer App'
+    document.title = t(pageMeta.title) + ' — My Printer App'
     mainRef.current?.scrollTo({ top: 0 })
-  }, [activeRoute, pageMeta.title])
+  }, [activeRoute, pageMeta.title, language])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -63,7 +66,7 @@ export function AppLayout({
           }}
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[110] focus:rounded-lg focus:bg-card focus:p-3 focus:text-foreground focus:shadow-lg"
         >
-          Skip to workspace
+          {t('Skip to workspace')}
         </a>
         <Sidebar activeRoute={activeRoute} onNavigate={onNavigate} />
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -81,7 +84,7 @@ export function AppLayout({
             id="main-content"
             ref={mainRef}
             tabIndex={-1}
-            aria-label={pageMeta.title}
+            aria-label={t(pageMeta.title)}
             className={`app-canvas min-h-0 min-w-0 flex-1 overflow-auto ${activeRoute === 'cutter-montage' ? 'p-2 lg:p-3' : 'px-4 py-4 lg:px-6 lg:py-5'}`}
           >
             <div

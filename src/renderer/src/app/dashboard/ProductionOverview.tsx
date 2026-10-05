@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { ArrowUpRight, CalendarClock, CheckCheck, Layers3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getDeadlineState, statusLabel } from '@/jobs/jobWorkflow'
@@ -20,6 +21,8 @@ export function ProductionSummaries({
   today: string
   onOpenJobs: () => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const due = jobs.filter((job) => getDeadlineState(job, today) === 'today').length
   const overdue = jobs.filter((job) => getDeadlineState(job, today) === 'overdue').length
   const ready = jobs.filter((job) => job.status === 'ready-to-print').length
@@ -32,7 +35,7 @@ export function ProductionSummaries({
         aria-label={`${due} jobs due today; ${overdue} overdue. Open Shop Jobs`}
       >
         <span className="dashboard-summary-label">
-          Due today <CalendarClock aria-hidden="true" />
+          {t('Due today')} <CalendarClock aria-hidden="true" />
         </span>
         <span className="dashboard-summary-value">{due}</span>
         <span
@@ -41,8 +44,8 @@ export function ProductionSummaries({
           {overdue
             ? `${overdue} overdue · follow up`
             : due
-              ? 'Keep deliveries on track'
-              : 'No deadlines today'}
+              ? t('Keep deliveries on track')
+              : t('No deadlines today')}
         </span>
       </button>
       <button
@@ -52,11 +55,11 @@ export function ProductionSummaries({
         aria-label={`${ready} jobs ready to print. Open Shop Jobs`}
       >
         <span className="dashboard-summary-label">
-          Ready to print <CheckCheck aria-hidden="true" />
+          {t('Ready to print')} <CheckCheck aria-hidden="true" />
         </span>
         <span className="dashboard-summary-value">{ready}</span>
         <span className="dashboard-summary-note">
-          {ready ? 'Review files before printing' : 'Your next run starts here'}
+          {ready ? t('Review files before printing') : t('Your next run starts here')}
         </span>
       </button>
     </div>
@@ -72,6 +75,8 @@ export function ActiveProduction({
   onOpenJobs: () => void
   onOpenJob: (id: string) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const active = jobs.filter((job) => job.status !== 'delivered' && job.status !== 'canceled')
   const distribution = stages
     .map((status) => ({ status, count: active.filter((job) => job.status === status).length }))
@@ -83,12 +88,12 @@ export function ActiveProduction({
       className="dashboard-surface dashboard-active"
     >
       <div className="dashboard-card-heading">
-        <h2 id="active-production-title">Active production</h2>
+        <h2 id="active-production-title">{t('Active production')}</h2>
         <button
           type="button"
           onClick={onOpenJobs}
           className="dashboard-round-link"
-          aria-label="Open production jobs"
+          aria-label={t('Open production jobs')}
         >
           <ArrowUpRight aria-hidden="true" />
         </button>
@@ -99,7 +104,7 @@ export function ActiveProduction({
             <span>{active.length}</span>
             <p>
               active {active.length === 1 ? 'job' : 'jobs'}
-              <small>From preparation to collection</small>
+              <small>{t('From preparation to collection')}</small>
             </p>
           </div>
           {distribution.length > 1 && (
@@ -125,7 +130,7 @@ export function ActiveProduction({
             {distribution.map(({ status, count }) => (
               <span key={status}>
                 <i aria-hidden="true" />
-                {statusLabel(status)}
+                {t(statusLabel(status))}
                 <b>{count}</b>
               </span>
             ))}
@@ -139,15 +144,15 @@ export function ActiveProduction({
               <span className="dashboard-running-dot" aria-hidden="true" />
               <span>
                 <strong>{inPrint.jobTitle}</strong>
-                <small>Printing · inspect the first finished sheet</small>
+                <small>{t('Printing · inspect the first finished sheet')}</small>
               </span>
               <ArrowUpRight aria-hidden="true" />
             </button>
           ) : (
             <p className="dashboard-card-description">
               {distribution.some(({ status }) => status === 'waiting-customer-approval')
-                ? 'Customer approval comes before the next print run.'
-                : 'Open a job to review its artwork, deadline, and next step.'}
+                ? t('Customer approval comes before the next print run.')
+                : t('Open a job to review its artwork, deadline, and next step.')}
             </p>
           )}
         </>
@@ -156,10 +161,10 @@ export function ActiveProduction({
           <span className="dashboard-empty-mark">
             <Layers3 aria-hidden="true" />
           </span>
-          <h3>A clear view of your work.</h3>
-          <p>Track customer orders and see their real production stage here.</p>
+          <h3>{t('A clear view of your work.')}</h3>
+          <p>{t('Track customer orders and see their real production stage here.')}</p>
           <Button type="button" variant="ghost" onClick={onOpenJobs}>
-            Open Shop Jobs <ArrowUpRight aria-hidden="true" />
+            {t('Open Shop Jobs')} <ArrowUpRight aria-hidden="true" />
           </Button>
         </div>
       )}

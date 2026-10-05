@@ -1,25 +1,23 @@
-# Cutter layered PDF workflow
+# Cutter PDF export
 
-Select **Layered Print + Cut PDF** in Production Export, then Export Layered PDF.
-Job folders also contain `06_Layered_PrintCut_Layout_...pdf` for each unique layout.
+Select **Illustrator Print + Cut PDF** and click **Export Illustrator PDF**. The export saves the displayed vinyl-sheet layout as one PDF page and one Illustrator artboard. Switch layouts to export another sheet. Repeated sheets use the repeat count shown in the workspace; the PDF still contains one page.
 
-The PDF has three optional-content layers: Artwork, CutContour, and FC RegisterMark Layer1.
-Artwork and marks are visible and printable. CutContour is hidden by default and has PDF print usage OFF, including when made visible for inspection. The print-only preset still omits all cut paths.
+Use **Export all sheet PDFs separately** to save one PDF per unique layout in a new folder. Identical sheets are folded into one file. The filename is the operator's print indicator: `sheet_01_x6.pdf` means print six copies; `sheet_02_x3.pdf` means print three. Every PDF remains one page / one artboard. A small operator note in the export panel and `PRINT_INSTRUCTIONS.txt` in the folder explain the counts and 100% / Actual size printing. Batch export closes each verified document before preparing the next to avoid accumulating open Illustrator documents.
 
-Creating a clipping mask preserves the artwork transform. New contours duplicated from helper/mask shapes use a 0.25 pt stroke and zero offset; explicit contour offsets remain editable. Grid snapping starts off. Hidden contours remain in production bounds and in PDF/SVG/EPS exports; use the object export flag to exclude a contour. EPS now preserves multiple contours and custom/rounded paths without scaling the stroke width. The editor, montage and PDF share ellipse, rounded rectangle and custom path geometry.
+The native file contains three top-level layers:
 
-## Compatibility limits
+- Artwork: visible and printable, with the sticker clipping masks.
+- CutContour: vector cutting paths, hidden and non-printing. Enable its eye in Illustrator to inspect or select them.
+- FC RegisterMark Layer1: exactly four corner registration marks and one direction arrow, visible and printable.
 
-This is a standards-based layered PDF, not a native Illustrator document with proprietary Illustrator editing data. Illustrator may flatten or omit PDF optional-content structure when opening it. Native Illustrator layer preservation and FineCut register-mark recognition have NOT been verified. Keep the matching cut-only SVG/EPS files as a handoff option and validate on the activated work-PC installation before production. Imported PDF/SVG artwork still uses the existing raster artwork export pipeline; cut paths and clipping paths are vectors.
+Windows and an installed, activated Adobe Illustrator are required. The save uses Preserve Illustrator Editing Capabilities and Acrobat layers. Before reporting success it reopens the PDF and verifies one artboard, all three layers, cut-path count and location, exactly four corner marks, one arrow, and physical sheet dimensions. Artwork sources are embedded once using symbols to keep files small. Oversized exports are rejected before encoding. A destination already open in Illustrator is protected from overwriting.
 
-Direct cutter output is currently a simulation/scaffold. No official SDK adapter or hardware connection was implemented. Mimaki's public MDL SDK portal requires registration/login and describes printer control; its CG-130AR coverage cannot be inferred from the site's navigation. FineCut separately refers to a Mimaki Register marks SDK. Obtain the official register-mark/cutter-control SDK and documentation covering CG-130AR before implementing transport.
+Print-only and customer-preview exports also save only the displayed sheet. Print-only intentionally excludes cutting paths. The ordinary Acrobat layered PDFs in the Mimaki job folder are viewer layers; use Export Illustrator PDF or the separate selected-layout Illustrator/FineCut preparation action for native Illustrator layers. Each PDF in the job folder is a single-page sheet.
 
-Official references checked 2026-09-19:
-
-- https://mimaki.com/download/sdk/
-- https://mimaki.com/product/software/cutting/fine-cut9-ai/software.html?software=444530
-- https://helpx.adobe.com/illustrator/using/pdf-options.html
+Native exports do not issue cutting commands. FineCut activation, mark detection and physical printer/cutter compatibility require the workshop test. Standalone device transport remains a scaffold.
 
 ## Verification
 
-`npm run test:cutter` includes layeredPdf.test.ts: three layers, hidden/nonprinting cut layer, retained hidden editor contours, CutContour separation, 0.25 pt stroke, physical rotated-path coordinates, and print-only omission. `npm run build` passes. The print and visible-cut PNG proofs in tmp/pdfs/layered-cutter were rendered with Poppler and visually inspected, including rotated artwork clipping.
+`npm run test:cutter` checks registration geometry, PDF optional-content layers, source/cut geometry, sheet grouping, selected-sheet page indexing, Illustrator job validation, four corners plus one arrow, repeat metadata and export size limits. Native PDF reopening was also tested in installed Illustrator 30.8.2 with the user's saved mixed-sticker project. Poppler page renders were inspected for positions and clipping.
+
+[Adobe PDF options](https://helpx.adobe.com/illustrator/using/pdf-options.html) explains Preserve Illustrator Editing Capabilities and Acrobat layers.

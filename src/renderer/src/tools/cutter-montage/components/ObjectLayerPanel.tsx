@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { useState } from 'react'
 import {
   ArrowDown,
@@ -38,6 +39,8 @@ export function ObjectLayerPanel({
   onRenameObject,
   onReorderObject
 }: ObjectLayerPanelProps): JSX.Element {
+  const { t } = useLanguage()
+
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftName, setDraftName] = useState('')
   const [dragId, setDragId] = useState<string | null>(null)
@@ -59,7 +62,7 @@ export function ObjectLayerPanel({
   return (
     <section className="flex min-h-0 flex-col" aria-label="Layers and objects">
       <div className="flex items-center justify-between border-b px-3 py-2">
-        <h4 className="text-sm font-semibold">Layers</h4>
+        <h4 className="text-sm font-semibold">{t('Layers')}</h4>
         <span className="text-[11px] text-muted-foreground">
           {piece.objects.length} objects · top first
         </span>
@@ -196,7 +199,7 @@ export function ObjectLayerPanel({
         })}
         {piece.objects.length === 0 ? (
           <p className="p-3 text-xs text-muted-foreground">
-            Import artwork or draw a shape to begin.
+            {t('Import artwork or draw a shape to begin.')}
           </p>
         ) : null}
       </div>
@@ -249,7 +252,7 @@ export function ObjectLayerPanel({
         </LayerButton>
       </div>
       <p className="border-t px-3 py-3 text-[11px] leading-relaxed text-muted-foreground">
-        Shift-click to select more. Drag the grip to change stacking order.
+        {t('Shift-click to select more. Drag the grip to change stacking order.')}
       </p>
       <p className="border-t px-3 py-3 text-[11px] leading-relaxed text-muted-foreground">
         Print artwork and cutlines stay separate. Registration marks are generated at the sheet
@@ -270,6 +273,8 @@ function LayerButton({
   onClick: () => void
   children: React.ReactNode
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <Button
       type="button"
@@ -278,8 +283,8 @@ function LayerButton({
       className="size-8 shrink-0 [&_svg]:size-3.5"
       disabled={disabled}
       onClick={onClick}
-      aria-label={label}
-      title={label}
+      aria-label={t(label)}
+      title={t(label)}
     >
       {children}
     </Button>

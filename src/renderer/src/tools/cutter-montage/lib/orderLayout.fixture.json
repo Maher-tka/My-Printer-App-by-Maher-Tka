@@ -1,0 +1,314 @@
+{
+  "pieces": [
+    {
+      "id": "piece-musjyklx-4d5rf0",
+      "sourceId": "source-musjyklx-7sl7ce",
+      "sourceKind": "image",
+      "sourceFileName": "Round-Sticker-Mockup.jpg",
+      "originalFileName": "Round-Sticker-Mockup.jpg",
+      "displayName": "Round-Sticker-Mockup",
+      "naturalWidthPx": 2000,
+      "naturalHeightPx": 1333,
+      "widthCm": 12,
+      "heightCm": 7.997999999999999,
+      "quantity": 800,
+      "rotationAllowed": true,
+      "locked": false,
+      "mask": {
+        "enabled": true,
+        "shape": "ellipse",
+        "transform": {
+          "xCm": 6.376885037473233,
+          "yCm": 1.7126338329764454,
+          "widthCm": 4.726869379014989,
+          "heightCm": 4.7044733981222215,
+          "rotation": 0
+        }
+      },
+      "cutline": {
+        "shape": "ellipse",
+        "transform": {
+          "xCm": 6.376885037473233,
+          "yCm": 1.7126338329764454,
+          "widthCm": 4.726869379014989,
+          "heightCm": 4.7044733981222215,
+          "rotation": 0,
+          "offsetMm": 1
+        },
+        "strokeName": "CutContour",
+        "strokeColor": "#ff00ff",
+        "strokeWidthPt": 0.25
+      },
+      "artworkCutlineGrouped": false,
+      "objectVisibility": {
+        "artwork": true,
+        "mask": true,
+        "cutline": true,
+        "helper": true
+      },
+      "objectLocks": {
+        "artwork": true,
+        "mask": true,
+        "cutline": false,
+        "helper": false
+      },
+      "objects": [
+        {
+          "id": "artwork-piece-musjyklx-4d5rf0",
+          "type": "artwork",
+          "shapeType": "image",
+          "role": "artwork",
+          "name": "Artwork",
+          "visible": true,
+          "locked": true,
+          "transform": {
+            "xCm": 0,
+            "yCm": 0,
+            "widthCm": 12,
+            "heightCm": 7.997999999999999,
+            "rotation": 0
+          },
+          "sourceId": "source-musjyklx-7sl7ce",
+          "exportEnabled": true
+        },
+        {
+          "id": "helper-musjyoki-aivwi7",
+          "type": "mask",
+          "role": "clipping-mask",
+          "shapeType": "ellipse",
+          "name": "Clipping Mask",
+          "visible": true,
+          "locked": true,
+          "transform": {
+            "xCm": 6.376885037473233,
+            "yCm": 1.7126338329764454,
+            "widthCm": 4.726869379014989,
+            "heightCm": 4.7044733981222215,
+            "rotation": 0
+          },
+          "fillColor": "transparent",
+          "strokeColor": "#8b5cf6",
+          "strokeWidthPt": 0.75,
+          "exportEnabled": false
+        },
+        {
+          "id": "cutline-piece-musjyklx-4d5rf0-musk74mg-cchr5t",
+          "type": "cutline",
+          "shapeType": "ellipse",
+          "role": "cutline",
+          "name": "CutContour",
+          "visible": true,
+          "locked": false,
+          "transform": {
+            "xCm": 6.376885037473233,
+            "yCm": 1.7126338329764454,
+            "widthCm": 4.726869379014989,
+            "heightCm": 4.7044733981222215,
+            "rotation": 0
+          },
+          "fillColor": "none",
+          "strokeColor": "#ff00ff",
+          "strokeWidthPt": 0.25,
+          "strokeName": "CutContour",
+          "offsetMm": 1,
+          "exportEnabled": true
+        }
+      ],
+      "objectModelInitialized": true,
+      "artworkObjectId": "artwork-piece-musjyklx-4d5rf0",
+      "maskObjectId": "helper-musjyoki-aivwi7",
+      "cutlineObjectId": "cutline-piece-musjyklx-4d5rf0-musk74mg-cchr5t",
+      "helperObjectIds": [],
+      "selectedObjectIds": ["cutline-piece-musjyklx-4d5rf0-musk74mg-cchr5t"],
+      "groupLinked": false,
+      "lockAspectRatio": true,
+      "clippingMaskEnabled": true,
+      "maskWorkflowVersion": 3,
+      "artworkLockBeforeMask": false,
+      "orderMode": "copies",
+      "targetLengthCm": 50,
+      "artwork": {
+        "sourceId": "source-musjyklx-7sl7ce",
+        "sourceFileName": "Round-Sticker-Mockup.jpg",
+        "transform": {
+          "xCm": 0,
+          "yCm": 0,
+          "widthCm": 12,
+          "heightCm": 7.997999999999999,
+          "rotation": 0
+        }
+      }
+    },
+    {
+      "id": "piece-musk6hbo-wto34b",
+      "sourceId": "source-musk6hbo-3u1be9",
+      "sourceKind": "image",
+      "sourceFileName": "Round-Sticker-Mockup.jpg",
+      "originalFileName": "Round-Sticker-Mockup.jpg",
+      "displayName": "Round-Sticker-Mockup copy 2",
+      "naturalWidthPx": 2000,
+      "naturalHeightPx": 1333,
+      "widthCm": 18,
+      "heightCm": 11.997,
+      "quantity": 1,
+      "rotationAllowed": true,
+      "locked": false,
+      "mask": {
+        "enabled": true,
+        "shape": "ellipse",
+        "transform": {
+          "xCm": 1.3960641729122054,
+          "yCm": 2.556105995717344,
+          "widthCm": 7.0903040685224825,
+          "heightCm": 7.141683083511777,
+          "rotation": 0
+        }
+      },
+      "cutline": {
+        "shape": "ellipse",
+        "transform": {
+          "xCm": 1.3960641729122054,
+          "yCm": 2.556105995717344,
+          "widthCm": 7.0903040685224825,
+          "heightCm": 7.141683083511777,
+          "rotation": 0,
+          "offsetMm": 1
+        },
+        "strokeName": "CutContour",
+        "strokeColor": "#ff00ff",
+        "strokeWidthPt": 0.25
+      },
+      "artworkCutlineGrouped": false,
+      "objectVisibility": {
+        "artwork": true,
+        "mask": true,
+        "cutline": true,
+        "helper": true
+      },
+      "objectLocks": {
+        "artwork": true,
+        "mask": true,
+        "cutline": false,
+        "helper": false
+      },
+      "objects": [
+        {
+          "id": "artwork-piece-musk6hbo-wto34b",
+          "type": "artwork",
+          "shapeType": "image",
+          "role": "artwork",
+          "name": "Artwork",
+          "visible": true,
+          "locked": true,
+          "transform": {
+            "xCm": 0,
+            "yCm": 0,
+            "widthCm": 18,
+            "heightCm": 11.997,
+            "rotation": 0
+          },
+          "sourceId": "source-musk6hbo-3u1be9",
+          "exportEnabled": true
+        },
+        {
+          "id": "helper-musk6ocz-ieh8nh",
+          "type": "mask",
+          "role": "clipping-mask",
+          "shapeType": "ellipse",
+          "name": "Clipping Mask",
+          "visible": true,
+          "locked": true,
+          "transform": {
+            "xCm": 1.3960641729122054,
+            "yCm": 2.556105995717344,
+            "widthCm": 7.0903040685224825,
+            "heightCm": 7.141683083511777,
+            "rotation": 0
+          },
+          "fillColor": "transparent",
+          "strokeColor": "#8b5cf6",
+          "strokeWidthPt": 0.75,
+          "exportEnabled": false
+        },
+        {
+          "id": "cutline-piece-musk6hbo-wto34b-musk6zof-zwvg59",
+          "type": "cutline",
+          "shapeType": "ellipse",
+          "role": "cutline",
+          "name": "CutContour",
+          "visible": true,
+          "locked": false,
+          "transform": {
+            "xCm": 1.3960641729122054,
+            "yCm": 2.556105995717344,
+            "widthCm": 7.0903040685224825,
+            "heightCm": 7.141683083511777,
+            "rotation": 0
+          },
+          "fillColor": "none",
+          "strokeColor": "#ff00ff",
+          "strokeWidthPt": 0.25,
+          "strokeName": "CutContour",
+          "offsetMm": 1,
+          "exportEnabled": true
+        }
+      ],
+      "objectModelInitialized": true,
+      "artworkObjectId": "artwork-piece-musk6hbo-wto34b",
+      "maskObjectId": "helper-musk6ocz-ieh8nh",
+      "cutlineObjectId": "cutline-piece-musk6hbo-wto34b-musk6zof-zwvg59",
+      "helperObjectIds": [],
+      "selectedObjectIds": ["cutline-piece-musk6hbo-wto34b-musk6zof-zwvg59"],
+      "groupLinked": false,
+      "lockAspectRatio": true,
+      "clippingMaskEnabled": true,
+      "maskWorkflowVersion": 3,
+      "artworkLockBeforeMask": false,
+      "artwork": {
+        "sourceId": "source-musk6hbo-3u1be9",
+        "sourceFileName": "Round-Sticker-Mockup.jpg",
+        "transform": {
+          "xCm": 0,
+          "yCm": 0,
+          "widthCm": 18,
+          "heightCm": 11.997,
+          "rotation": 0
+        }
+      }
+    }
+  ],
+  "sheet": {
+    "widthCm": 96,
+    "heightCm": 50.5,
+    "rollWidthCm": 103,
+    "unit": "cm",
+    "safeMarginCm": 1.5,
+    "spacingMm": 3,
+    "snapToGrid": true,
+    "gridStepCm": 0.5,
+    "allowRotation": true,
+    "preserveManualPositions": false,
+    "showGrid": true,
+    "showSafeArea": true,
+    "showRollGuides": true,
+    "registrationMarks": {
+      "profileVersion": 1,
+      "enabled": true,
+      "type": "mimaki",
+      "sizeMm": 10,
+      "marginMm": 0,
+      "color": "#000000",
+      "includeIn": "artwork"
+    },
+    "productionLabel": {
+      "enabled": false,
+      "position": "bottom-left",
+      "size": "small",
+      "placement": "margin"
+    },
+    "preferSameDesignGrouping": true,
+    "fillDirection": "left-to-right",
+    "sortStrategy": "largest-first",
+    "lengthMode": "fixed"
+  }
+}

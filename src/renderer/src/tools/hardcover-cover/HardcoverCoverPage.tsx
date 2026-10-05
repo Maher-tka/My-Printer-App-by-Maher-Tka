@@ -1,12 +1,12 @@
+import { useLanguage } from '@/i18n/useLanguage'
+import { ToolHeader } from '../shared/ToolHeader'
 import {
-  ArrowLeft,
   CheckCircle2,
   ClipboardCheck,
-  Download,
+  FileDown,
   FileText,
   Ruler,
   Settings2,
-  Trash2,
   UserRound
 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ActionButton } from '@/components/ui/action-button'
 import { createPrintedJob } from '@/jobs/printHistory'
 import { useJobStore } from '@/jobs/useJobStore'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
@@ -51,6 +52,8 @@ import { EditorSection, TextAreaField, TextField } from './components/FrontCover
 import { HardcoverToolbar } from './components/HardcoverToolbar'
 import { SpineEditor } from './components/SpineEditor'
 import { createDefaultHardcoverProject, useHardcoverProject } from './hooks/useHardcoverProject'
+import { useHardcoverPdfDrop } from './hooks/useHardcoverPdfDrop'
+import type { HardcoverPdfCoverTarget } from './types'
 import { exportHardcoverImage } from './lib/hardcoverExportImages'
 import { exportHardcoverSvg } from './lib/hardcoverExportSvg'
 import { resolveAutomaticSpineBackgroundColor } from './lib/spineBackground'
@@ -70,32 +73,27 @@ type HardcoverWorkflowStep = 'source' | 'measurements' | 'spine' | 'export'
 const WORKFLOW_STEPS: Array<{
   id: HardcoverWorkflowStep
   label: string
-  description: string
   icon: typeof FileText
 }> = [
   {
     id: 'source',
     label: 'Source PDF',
-    description: 'Choose front and optional back pages.',
     icon: FileText
   },
   {
     id: 'measurements',
     label: 'Book Measurements',
-    description: 'Set board, spine, wrap, and direction.',
     icon: Ruler
   },
   {
     id: 'spine',
     label: 'Spine Text',
-    description: 'Year, title, and student name.',
     icon: Settings2
   },
   {
     id: 'export',
     label: 'Export',
-    description: 'Preflight and save production files.',
-    icon: Download
+    icon: FileDown
   }
 ]
 
@@ -106,6 +104,8 @@ export function HardcoverCoverPage({
   onProjectSessionChange,
   onConfirmUnsavedChanges
 }: HardcoverCoverPageProps): JSX.Element {
+  const { t } = useLanguage()
+
   const hardcover = useHardcoverProject(openedProject?.project.payload)
   const { settings: performanceSettings } = usePerformanceSettings()
   const { jobs, saveJob } = useJobStore()
@@ -117,6 +117,8 @@ export function HardcoverCoverPage({
     getHardcoverProjectStateKey(hardcover.state)
   )
   const [isBusy, setIsBusy] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
+  const settingsColumnRef = useRef<HTMLElement>(null)
   const savedProjectStateRef = useRef(structuredClone(hardcover.state))
   const [message, setMessage] = useState<string | null>(
     openedProject ? `Opened ${openedProject.project.metadata.jobName}` : null
@@ -129,6 +131,10 @@ export function HardcoverCoverPage({
     run: () => void
     action: 'export' | 'print'
   } | null>(null)
+  const pdfDrop = useHardcoverPdfDrop(
+    hardcover.importSourcePdf,
+    isBusy || discardDialogOpen || Boolean(pendingExport)
+  )
   const stateKey = useMemo(() => getHardcoverProjectStateKey(hardcover.state), [hardcover.state])
   const isDirty = stateKey !== savedStateKey
   const projectName =
@@ -267,6 +273,7 @@ export function HardcoverCoverPage({
   const startNew = async (): Promise<void> => {
     if (!(await onConfirmUnsavedChanges('new-project'))) return
     const freshState = createDefaultHardcoverProject()
+    hardcover.resetSpineAutoFill()
     hardcover.setState(freshState)
     savedProjectStateRef.current = structuredClone(freshState)
     setProjectFilePath(null)
@@ -277,6 +284,7 @@ export function HardcoverCoverPage({
 
   const discardChanges = (): void => {
     const restoredState = structuredClone(savedProjectStateRef.current)
+    hardcover.resetSpineAutoFill()
     hardcover.setState(restoredState)
     setSavedStateKey(getHardcoverProjectStateKey(restoredState))
     setMessage(projectFilePath ? 'Discarded unsaved changes.' : 'Discarded the current draft.')
@@ -342,6 +350,7 @@ export function HardcoverCoverPage({
 
   const printCoverSheet = async (): Promise<void> => {
     setIsBusy(true)
+    setIsPrinting(true)
     setMessage('Preparing cover sheet PDF for printing...')
     try {
       const { exportHardcoverPdf } = await import('./lib/hardcoverExportPdf')
@@ -374,6 +383,7 @@ export function HardcoverCoverPage({
       setMessage(getErrorMessage(error))
     } finally {
       setIsBusy(false)
+      setIsPrinting(false)
     }
   }
 
@@ -383,11 +393,17 @@ export function HardcoverCoverPage({
     sourcePdf: hardcover.state.sourcePdf,
     productionPreset: hardcover.state.productionPreset,
     onChange: hardcover.updateSetup,
-    onImportPdf: hardcover.importSourcePdf,
-    onSelectPdfFrontPage: hardcover.selectSourcePdfFrontPage,
-    onSelectPdfBackPage: hardcover.selectSourcePdfBackPage,
-    onTogglePdfBackCover: hardcover.setSourcePdfBackCoverEnabled,
-    onLoadPdfPagePreviews: hardcover.loadSourcePdfPagePreviews,
+    onImportPdf: pdfDrop.importPdfFile,
+    onDropPdfFiles: pdfDrop.dropPdfFiles,
+    importingPdf: pdfDrop.importingPdf,
+    onSelectPdfFrontPage: (page: number) =>
+      pdfDrop.runSourceOperation(() => hardcover.selectSourcePdfFrontPage(page)),
+    onSelectPdfBackPage: (page: number) =>
+      pdfDrop.runSourceOperation(() => hardcover.selectSourcePdfBackPage(page)),
+    onTogglePdfBackCover: (enabled: boolean) =>
+      pdfDrop.runSourceOperation(() => hardcover.setSourcePdfBackCoverEnabled(enabled)),
+    onLoadPdfPagePreviews: (start: number, count?: number, target?: HardcoverPdfCoverTarget) =>
+      pdfDrop.runSourceOperation(() => hardcover.loadSourcePdfPagePreviews(start, count, target)),
     onChangePdfFitMode: hardcover.updateSourcePdfFitMode,
     onSavePreset: hardcover.saveProductionPreset,
     onUpdatePreset: hardcover.updateProductionPreset,
@@ -417,6 +433,10 @@ export function HardcoverCoverPage({
     hardcoverPreflight.canExport
   ])
 
+  useEffect(() => {
+    settingsColumnRef.current?.scrollTo({ top: 0 })
+  }, [activeStep])
+
   const renderWorkflowStep = (): JSX.Element => {
     switch (activeStep) {
       case 'source':
@@ -431,16 +451,23 @@ export function HardcoverCoverPage({
               layout={hardcover.spineLayout}
               automaticSpineColor={automaticSpineColor}
               onChange={hardcover.updateSpine}
+              onDetectSpine={hardcover.detectSpine}
+              detectingSpine={hardcover.detectingSpine}
+              detectionMessage={hardcover.spineDetectionMessage}
               onUseFrontTitle={() =>
                 hardcover.updateSpine({ shortTitle: hardcover.state.content.front.title })
               }
             />
             <section className="rounded-lg border bg-card p-4">
-              <h3 className="font-semibold">Spine placement</h3>
+              <h3 className="font-semibold">{t('Spine placement')}</h3>
               <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-3">
-                <span className="rounded-md border bg-muted/30 p-3">Top: academic year</span>
-                <span className="rounded-md border bg-muted/30 p-3">Middle: mémoire title</span>
-                <span className="rounded-md border bg-muted/30 p-3">Bottom: student name</span>
+                <span className="rounded-md border bg-muted/30 p-3">{t('Top: academic year')}</span>
+                <span className="rounded-md border bg-muted/30 p-3">
+                  {t('Middle: mémoire title')}
+                </span>
+                <span className="rounded-md border bg-muted/30 p-3">
+                  {t('Bottom: student name')}
+                </span>
               </div>
             </section>
           </div>
@@ -454,8 +481,6 @@ export function HardcoverCoverPage({
               sourcePdf={hardcover.state.sourcePdf}
               isBusy={isBusy}
               onChange={hardcover.updateExportSettings}
-              onPdf={() => requestHardcoverAction(() => void runExport('pdf'))}
-              onPrint={() => requestHardcoverAction(() => void printCoverSheet(), 'print')}
               onSvg={() => requestHardcoverAction(() => void runExport('svg'))}
               onImage={() => requestHardcoverAction(() => void runExport('image'))}
             />
@@ -474,75 +499,74 @@ export function HardcoverCoverPage({
 
   return (
     <div className="workspace-shell hardcover-workspace mx-auto flex w-full max-w-[1880px] flex-col gap-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Button variant="ghost" className="w-fit" onClick={() => onNavigate('dashboard')}>
-          <ArrowLeft />
-          Back to Dashboard
-        </Button>
-        <div className="flex flex-col items-start gap-2 sm:items-end">
-          <ProjectFileActions
-            filePath={projectFilePath}
-            isBusy={isBusy}
-            isDirty={isDirty}
-            message={message}
-            onOpen={() => void openProject()}
-            onSave={() => void saveProject(false)}
-            onSaveAs={() => void saveProject(true)}
-          />
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" size="sm" variant="ghost" onClick={() => void startNew()}>
-              New Project
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              disabled={!isDirty || isBusy}
-              onClick={() => setDiscardDialogOpen(true)}
-            >
-              <Trash2 aria-hidden="true" />
-              Discard Changes
-            </Button>
+      <ToolHeader
+        title={t('Hardcover Cover')}
+        onBack={() => onNavigate('dashboard')}
+        print={{
+          disabled: isBusy || pdfDrop.importingPdf,
+          isBusy: isPrinting,
+          onPrint: () => requestHardcoverAction(() => void printCoverSheet(), 'print')
+        }}
+        exportPdf={{
+          disabled: isBusy || pdfDrop.importingPdf,
+          onExport: () => requestHardcoverAction(() => void runExport('pdf'))
+        }}
+        actions={
+          <div className="flex flex-col items-end gap-2">
+            <ProjectFileActions
+              filePath={projectFilePath}
+              isBusy={isBusy || pdfDrop.importingPdf}
+              isDirty={isDirty}
+              message={message}
+              onOpen={() => void openProject()}
+              onSave={() => void saveProject(false)}
+              onSaveAs={() => void saveProject(true)}
+              onNew={() => void startNew()}
+              additionalActions={
+                <ActionButton
+                  action="reset"
+                  iconOnly
+                  variant="ghost"
+                  aria-label={t('Discard Changes')}
+                  title={t('Discard Changes')}
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  disabled={!isDirty || isBusy || pdfDrop.importingPdf}
+                  onClick={() => setDiscardDialogOpen(true)}
+                />
+              }
+            />
           </div>
-        </div>
-      </div>
+        }
+      />
 
-      <section className="min-w-0 max-w-full rounded-[18px] border border-border/70 bg-card p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-semibold tracking-normal text-foreground sm:text-2xl">
-                Hardcover Binding Cover Sheet
-              </h2>
-              <Badge variant="success">Production workflow</Badge>
-              <Badge variant="secondary">{performanceSettings.label}</Badge>
-            </div>
-            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              Upload the mémoire PDF, pick the cover pages, set the physical book measurements, and
-              export the same sheet shown in the preview.
-            </p>
-          </div>
-          <div className="grid min-w-0 grid-cols-3 gap-2 text-xs text-muted-foreground sm:min-w-[360px]">
-            <div className="rounded-md border bg-muted/30 p-2">
-              <span className="block font-medium text-foreground">
-                {hardcover.state.sourcePdf ? 'PDF ready' : 'No PDF'}
-              </span>
-              Source
-            </div>
-            <div className="rounded-md border bg-muted/30 p-2">
-              <span className="block font-medium text-foreground">{hardcoverPreflight.status}</span>
-              Preflight
-            </div>
-            <div className="rounded-md border bg-muted/30 p-2">
-              <span className="block font-medium text-foreground">
-                {hardcover.state.content.spine.year || 'Year'}
-              </span>
-              Spine top
-            </div>
-          </div>
-        </div>
-      </section>
+      <div
+        className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-xs text-muted-foreground"
+        aria-label="Cover production status"
+      >
+        <span>
+          {t('Source:')}{' '}
+          <strong className="font-medium text-foreground">
+            {hardcover.state.sourcePdf ? t('PDF ready') : t('No PDF')}
+          </strong>
+        </span>
+        <span>
+          {t('Preflight:')}{' '}
+          <Badge variant={hardcoverPreflight.status === 'passed' ? 'success' : 'warning'}>
+            {hardcoverPreflight.status}
+          </Badge>
+        </span>
+        <span>
+          {t('Spine year:')}{' '}
+          <strong className="font-medium text-foreground">
+            {hardcover.state.content.spine.year || t('Not set')}
+          </strong>
+        </span>
+        {pdfDrop.pdfDropMessage && (
+          <p role="status" className="basis-full">
+            {pdfDrop.pdfDropMessage}
+          </p>
+        )}
+      </div>
 
       <WorkflowStepNav
         activeStep={activeStep}
@@ -552,6 +576,7 @@ export function HardcoverCoverPage({
 
       <div className="grid w-full min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <aside
+          ref={settingsColumnRef}
           aria-label="Hardcover properties"
           className="min-w-0 lg:order-2 lg:sticky lg:top-4 lg:max-h-[calc(100vh-160px)] lg:overflow-y-auto"
           data-hardcover-settings-column
@@ -626,7 +651,7 @@ export function HardcoverCoverPage({
                 variant="outline"
                 onClick={() => setShowLowEndMockup(true)}
               >
-                Load mockup
+                {t('Load mockup')}
               </Button>
             </div>
           )}
@@ -649,21 +674,21 @@ export function HardcoverCoverPage({
       <AlertDialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+            <AlertDialogTitle>{t('Discard unsaved changes?')}</AlertDialogTitle>
             <AlertDialogDescription>
               {projectFilePath
                 ? 'The hardcover project will return to its last saved state.'
                 : 'The current draft will return to the clean starting state.'}{' '}
-              This action cannot be undone.
+              {t('This action cannot be undone.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogCancel>{t('Keep editing')}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={discardChanges}
             >
-              Discard changes
+              {t('Discard changes')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -681,8 +706,9 @@ function WorkflowStepNav({
   completedSteps: ReadonlySet<HardcoverWorkflowStep>
   onStepChange: (step: HardcoverWorkflowStep) => void
 }): JSX.Element {
+  const { t } = useLanguage()
   return (
-    <nav className="min-w-0 max-w-full rounded-[18px] border border-border/70 bg-card p-2">
+    <nav className="min-w-0 max-w-full rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-2">
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {WORKFLOW_STEPS.map((step, index) => {
           const Icon = step.icon
@@ -711,11 +737,8 @@ function WorkflowStepNav({
                 </span>
                 <span className="min-w-0">
                   <span className="flex items-center gap-2 text-sm font-semibold">
-                    {index + 1}. {step.label}
+                    {index + 1}. {t(step.label)}
                     {complete && <CheckCircle2 className="size-4 text-success" />}
-                  </span>
-                  <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
-                    {step.description}
                   </span>
                 </span>
               </span>
@@ -738,6 +761,8 @@ function PreviewSummary({
   checklist: Array<{ label: string; passed: boolean }>
   sourcePdf: HardcoverProjectPayload['sourcePdf']
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const passedItems = checklist.filter((item) => item.passed).length
   const reportVariant =
     report.status === 'passed'
@@ -751,7 +776,7 @@ function PreviewSummary({
       <div className="rounded-md bg-muted/40 p-3">
         <div className="flex items-center gap-2 font-medium">
           <FileText className="size-4" />
-          PDF pages
+          {t('PDF pages')}
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
           {sourcePdf
@@ -760,12 +785,12 @@ function PreviewSummary({
                   ? `, back ${sourcePdf.backPageNumber}`
                   : ', back off'
               }`
-            : 'Upload a source PDF'}
+            : t('Upload a source PDF')}
         </p>
       </div>
       <div className="rounded-md bg-muted/40 p-3">
         <div className="flex items-center justify-between gap-2 font-medium">
-          Preflight
+          {t('Preflight')}
           <Badge variant={reportVariant}>{report.status}</Badge>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -780,7 +805,7 @@ function PreviewSummary({
       <div className="rounded-md bg-muted/40 p-3">
         <div className="flex items-center gap-2 font-medium">
           <ClipboardCheck className="size-4" />
-          Checklist
+          {t('Checklist')}
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
           {passedItems} of {checklist.length} item(s) ready.
@@ -801,6 +826,8 @@ function JobAndQuote({
   onJobChange: (patch: Partial<HardcoverProjectPayload['job']>) => void
   onQuoteChange: (patch: Partial<HardcoverProjectPayload['job']['quote']>) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <EditorSection title="Shop job + quick quote">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -809,22 +836,22 @@ function JobAndQuote({
       </div>
       <div className="grid grid-cols-2 gap-3">
         <TextField
-          label="Customer name"
+          label={t('Customer name')}
           value={state.job.customerName}
           onChange={(customerName) => onJobChange({ customerName })}
         />
         <TextField
-          label="Phone"
+          label={t('Phone')}
           value={state.job.phoneNumber}
           onChange={(phoneNumber) => onJobChange({ phoneNumber })}
         />
         <TextField
-          label="Job title"
+          label={t('Job title')}
           value={state.job.jobTitle}
           onChange={(jobTitle) => onJobChange({ jobTitle })}
         />
         <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-          Status
+          {t('Status')}
           <select
             className="rounded-md border bg-background px-3 py-2 text-sm"
             value={state.job.status}
@@ -841,37 +868,37 @@ function JobAndQuote({
         </label>
       </div>
       <TextAreaField
-        label="Notes"
+        label={t('Notes')}
         value={state.job.notes}
         onChange={(notes) => onJobChange({ notes })}
       />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <QuoteInput
-          label="Quantity"
+          label={t('Quantity')}
           value={state.job.quote.quantity}
           step={1}
           onChange={(quantity) => onQuoteChange({ quantity })}
         />
         <QuoteInput
-          label="Total"
+          label={t('Total')}
           value={state.job.quote.totalPrice ?? quote.finalPrice}
           onChange={(totalPrice) => onQuoteChange({ totalPrice })}
         />
         <QuoteInput
-          label="Deposit"
+          label={t('Deposit')}
           value={state.job.quote.depositPaid}
           onChange={(depositPaid) => onQuoteChange({ depositPaid })}
         />
       </div>
       <div className="grid grid-cols-3 gap-2 rounded-lg bg-muted p-3 text-sm">
         <span>
-          Total <b>{quote.finalPrice.toFixed(2)}</b>
+          {t('Total')} <b>{quote.finalPrice.toFixed(2)}</b>
         </span>
         <span>
-          Deposit <b>{quote.depositPaid.toFixed(2)}</b>
+          {t('Deposit')} <b>{quote.depositPaid.toFixed(2)}</b>
         </span>
         <span>
-          Remaining <b>{quote.remaining.toFixed(2)}</b>
+          {t('Remaining')} <b>{quote.remaining.toFixed(2)}</b>
         </span>
       </div>
     </EditorSection>
@@ -889,9 +916,11 @@ function QuoteInput({
   step?: number
   onChange: (value: number) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-      {label}
+      {t(label)}
       <input
         className="rounded-lg border bg-background px-3 py-2 text-sm"
         type="number"

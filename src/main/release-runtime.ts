@@ -1,4 +1,5 @@
 import { prepareFineCutJob } from './finecut-handoff.js'
+import { exportIllustratorPdf, exportIllustratorPdfBatch } from './illustrator-pdf-export.js'
 import { assertOnlineProductionAccess } from './online-account.js'
 import { writeJsonAtomically } from './atomic-json.js'
 import {
@@ -57,8 +58,16 @@ const recentErrors: AppHealthSnapshot['recentErrors'] = []
 const reportedAutosaveIssues = new Set<string>()
 
 export function registerReleaseRuntimeHandlers(): void {
+  ipcMain.handle('runtime:export-illustrator-pdf-batch', async (event, request: unknown) => {
+    await assertOnlineProductionAccess('batch-exports', 'cutter-montage')
+    return exportIllustratorPdfBatch(request, BrowserWindow.fromWebContents(event.sender))
+  })
+  ipcMain.handle('runtime:export-illustrator-pdf', async (event, request: unknown) => {
+    await assertOnlineProductionAccess('paid-tools', 'cutter-montage')
+    return exportIllustratorPdf(request, BrowserWindow.fromWebContents(event.sender))
+  })
   ipcMain.handle('runtime:prepare-finecut-job', async (_event, request: unknown) => {
-    await assertOnlineProductionAccess()
+    await assertOnlineProductionAccess('paid-tools', 'cutter-montage')
     return prepareFineCutJob(request)
   })
   ipcMain.handle('runtime:get-health', getAppHealthSnapshot)
@@ -70,7 +79,9 @@ export function registerReleaseRuntimeHandlers(): void {
   ipcMain.handle('runtime:list-exports', readExportHistory)
   ipcMain.handle('runtime:open-path', async (_event, filePath: string) => shell.openPath(filePath))
   ipcMain.handle('runtime:open-in-illustrator', async (_event, filePath: string) =>
-    assertOnlineProductionAccess().then(() => openInIllustrator(filePath))
+    assertOnlineProductionAccess('paid-tools', 'cutter-montage').then(() =>
+      openInIllustrator(filePath)
+    )
   )
   ipcMain.handle('runtime:open-parent-folder', (_event, filePath: string) => {
     shell.showItemInFolder(filePath)

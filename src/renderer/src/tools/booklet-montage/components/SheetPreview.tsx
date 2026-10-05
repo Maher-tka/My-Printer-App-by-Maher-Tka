@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { ArrowLeft, Palette, Trash2, ZoomIn } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { memo, useMemo, useState } from 'react'
@@ -213,11 +214,13 @@ function DetailedPreviewShell({
   children: ReactNode
   onClose: () => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div className="flex flex-col gap-3">
       <Button type="button" variant="outline" className="w-fit" onClick={onClose}>
         <ArrowLeft data-icon="inline-start" />
-        Back to Montage Board
+        {t('Back to Montage Board')}
       </Button>
       {children}
     </div>
@@ -342,6 +345,8 @@ function DetailedSidePreview({
   settings: SheetSettings
   sourceMap: ReadonlyMap<string, BookletSource>
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const rawPaperSize = getPrintSizeMm(settings)
   const paperSize = {
     widthMm: Math.max(rawPaperSize.widthMm, 1),
@@ -381,25 +386,25 @@ function DetailedSidePreview({
         {settings.creep.enabled && settings.creep.showOverlay ? (
           <div
             className="pointer-events-none absolute left-1/2 top-0 z-20 h-full border-l-2 border-dashed border-sky-500"
-            title="Saddle-stitch spine"
+            title={t('Saddle-stitch spine')}
           />
         ) : null}
       </div>
       <div className="flex flex-col gap-3 rounded-md border bg-card p-4">
         <div>
-          <p className="text-sm text-muted-foreground">Selected sheet</p>
+          <p className="text-sm text-muted-foreground">{t('Selected sheet')}</p>
           <h3 className="text-lg font-semibold">
-            Sheet {side.sheetNumber} {side.side === 'front' ? 'Front' : 'Back'}
+            {t('Sheet')} {side.sheetNumber} {side.side === 'front' ? t('Front') : t('Back')}
           </h3>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <InfoBlock label="Left page" value={side.left.pageNumber} />
-          <InfoBlock label="Right page" value={side.right.pageNumber} />
+          <InfoBlock label={t('Left page')} value={side.left.pageNumber} />
+          <InfoBlock label={t('Right page')} value={side.right.pageNumber} />
           <InfoBlock
-            label="Physical sheet"
+            label={t('Physical sheet')}
             value={`${side.sheetNumber} / ${side.physicalSheetCount}`}
           />
-          <InfoBlock label="Creep compensation" value={`${creepAmountMm.toFixed(2)} mm`} />
+          <InfoBlock label={t('Creep compensation')} value={`${creepAmountMm.toFixed(2)} mm`} />
         </div>
       </div>
     </div>
@@ -423,6 +428,8 @@ function DetailedEmptySheetPreview({
   onColorChange: (colorHex: string) => void
   onDelete: () => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div className="grid min-h-[560px] grid-cols-1 gap-4 rounded-lg border bg-slate-100/70 p-4 xl:grid-cols-[minmax(0,1fr)_260px]">
       <div
@@ -434,16 +441,16 @@ function DetailedEmptySheetPreview({
       />
       <div className="relative flex flex-col gap-3 rounded-md border bg-card p-4">
         <div>
-          <p className="text-sm text-muted-foreground">Selected sheet</p>
-          <h3 className="text-lg font-semibold">{item.label}</h3>
+          <p className="text-sm text-muted-foreground">{t('Selected sheet')}</p>
+          <h3 className="text-lg font-semibold">{t(item.label)}</h3>
         </div>
         <div className="rounded-md border bg-muted/30 p-3">
-          <p className="text-xs text-muted-foreground">Background color</p>
+          <p className="text-xs text-muted-foreground">{t('Background color')}</p>
           <p className="mt-1 text-lg font-semibold">{item.colorHex}</p>
         </div>
         <Button type="button" variant="outline" onClick={onColorOpen}>
           <Palette data-icon="inline-start" />
-          Color
+          {t('Color')}
         </Button>
         <Button
           type="button"
@@ -452,7 +459,7 @@ function DetailedEmptySheetPreview({
           onClick={onDelete}
         >
           <Trash2 data-icon="inline-start" />
-          Delete this empty sheet
+          {t('Delete this empty sheet')}
         </Button>
         {colorPickerOpen && (
           <ColorPickerPopover
@@ -468,9 +475,11 @@ function DetailedEmptySheetPreview({
 }
 
 function InfoBlock({ label, value }: { label: string; value: number | string }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div className="rounded-md border bg-muted/30 p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-xs text-muted-foreground">{t(label)}</p>
       <p className="mt-1 text-lg font-semibold">{value}</p>
     </div>
   )
@@ -495,6 +504,8 @@ function PreviewSlot({
   showCreepOverlay?: boolean
   large?: boolean
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const page = slot.page
   const [inspectionOpen, setInspectionOpen] = useState(false)
   const style = {
@@ -545,7 +556,7 @@ function PreviewSlot({
         <div
           className={`absolute left-2 top-2 rounded bg-white/90 px-2 py-1 font-bold shadow-sm ${large ? 'text-sm' : 'text-xs'}`}
         >
-          Page {slot.pageNumber}
+          {t('Page')} {slot.pageNumber}
         </div>
         <div className="absolute bottom-2 right-2 grid size-7 place-items-center rounded-full bg-slate-950/75 text-white opacity-0 shadow transition-opacity group-hover/page:opacity-100 group-focus/page:opacity-100">
           <ZoomIn className="size-4" aria-hidden="true" />

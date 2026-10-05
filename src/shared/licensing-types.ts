@@ -1,3 +1,5 @@
+import type { SubscriptionToolId } from './subscription-tools.js'
+
 export type LicenseFeature = 'paid-tools' | 'batch-exports'
 
 export type LicensePlan = 'trial' | 'pro' | 'shop'
@@ -31,6 +33,7 @@ export interface LicenseSnapshot {
   statusLabel: string
   features: LicenseFeature[]
   canUsePaidTools: boolean
+  allowedTools?: SubscriptionToolId[]
   trial: LicenseTrialStatus
   activation?: LicenseActivationStatus
   checkedAt: string

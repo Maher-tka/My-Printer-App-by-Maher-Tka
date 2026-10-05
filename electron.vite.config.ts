@@ -10,6 +10,14 @@ const PDF_JS_DECODER_ASSET_NAMES = new Set([
   'qcms_bg.wasm'
 ])
 
+// Tesseract selects these sibling scripts by filename at runtime. They are only
+// loaded for scanned front covers; keep them local in development and releases.
+const OCR_CORE_ASSET_NAMES = new Set([
+  'tesseract-core-lstm.wasm.js',
+  'tesseract-core-simd-lstm.wasm.js',
+  'tesseract-core-relaxedsimd-lstm.wasm.js'
+])
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const accountKey = env.PRINTER_SUPABASE_PUBLISHABLE_KEY ?? ''
@@ -64,9 +72,14 @@ export default defineConfig(({ mode }) => {
             'fast-print': resolve('src/renderer/fast-print.html')
           },
           output: {
+            manualChunks: (id) => {
+              if (id.replace(/\\/g, '/').endsWith('/hardcover-cover/lib/spineDetection.ts'))
+                return 'cover-text-detection'
+            },
             assetFileNames: (assetInfo) => {
               const assetName = assetInfo.name?.split('/').pop() ?? ''
-              return PDF_JS_DECODER_ASSET_NAMES.has(assetName)
+              return PDF_JS_DECODER_ASSET_NAMES.has(assetName) ||
+                OCR_CORE_ASSET_NAMES.has(assetName)
                 ? 'assets/[name][extname]'
                 : 'assets/[name]-[hash][extname]'
             }

@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { useEffect, useRef, useState } from 'react'
 import type { NumberPosition, SequentialProject } from './types'
 import { formatSequenceNumber, positionLabel } from './lib/layout'
@@ -16,6 +17,8 @@ export function NumberDesignEditor({
   onChange: (positions: NumberPosition[]) => void
   disabled: boolean
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const svg = useRef<SVGSVGElement>(null)
   const drag = useRef<{
     id: string
@@ -64,10 +67,10 @@ export function NumberDesignEditor({
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <label className="flex items-center gap-1">
           <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
-          Snap to 1 mm
+          {t('Snap to 1 mm')}
         </label>
         <label>
-          Zoom{' '}
+          {t('Zoom')}{' '}
           <select
             aria-label="Design zoom"
             value={zoom}

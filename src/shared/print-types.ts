@@ -5,13 +5,16 @@ export interface PrintPdfRequest {
   suggestedName: string
   jobTitle?: string
   silent?: boolean
+  copies?: number
 }
 
 export interface PrintPdfFileRequest {
+  toolId?: string
   filePath: string
   suggestedName?: string
   jobTitle?: string
   silent?: boolean
+  copies?: number
 }
 
 export interface PrintPdfResult {
@@ -29,6 +32,11 @@ export function getPrintPdfRequestError(request: Partial<PrintPdfRequest> | null
   if (!request.suggestedName?.trim()) return 'PDF print request needs a file name.'
   if (!request.bytes) return 'PDF print request is missing PDF bytes.'
   if (!isPdfByteSource(request.bytes)) return 'Print requires a valid PDF file.'
+  if (
+    request.copies !== undefined &&
+    (!Number.isInteger(request.copies) || request.copies < 1 || request.copies > 999)
+  )
+    return 'Print copies must be a whole number from 1 to 999.'
   return null
 }
 
@@ -40,6 +48,11 @@ export function getPrintPdfFileRequestError(
   if (!request.filePath.trim().toLowerCase().endsWith('.pdf')) {
     return 'Only exported PDF files can be printed from the app.'
   }
+  if (
+    request.copies !== undefined &&
+    (!Number.isInteger(request.copies) || request.copies < 1 || request.copies > 999)
+  )
+    return 'Print copies must be a whole number from 1 to 999.'
   return null
 }
 

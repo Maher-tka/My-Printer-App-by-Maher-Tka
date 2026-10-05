@@ -1,5 +1,7 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import type { PiecePreset } from '../types'
 import { PieceOrderControls } from './PieceOrderControls'
+import { getPieceSize } from '../lib/pieceSize'
 export function StickerQuantities({
   pieces,
   onQuantity,
@@ -11,22 +13,20 @@ export function StickerQuantities({
   onTargetLength: (id: string, lengthCm: number) => boolean
   onEdit: (id: string) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--ui-radius-lg)] border bg-card/80">
       <div className="shrink-0 border-b p-4">
-        <h2 className="font-semibold">Order by copies or metres</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Choose Copies or By metre for each design. For example, 0.5 m fills a 50 cm vertical
-          section across the usable roll width, with cutter margins reserved.
-        </p>
+        <h2 className="font-semibold">{t('Order by copies or metres')}</h2>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-secondary text-left text-xs text-muted-foreground">
             <tr>
-              <th className="p-3">Sticker</th>
-              <th className="p-3">Cut line</th>
-              <th className="p-3">Quantity / metres</th>
+              <th className="p-3">{t('Sticker')}</th>
+              <th className="p-3">{t('Cut line')}</th>
+              <th className="p-3">{t('Quantity / metres')}</th>
             </tr>
           </thead>
           <tbody>
@@ -45,13 +45,14 @@ export function StickerQuantities({
                     <span>
                       {piece.displayName}
                       <small className="block text-muted-foreground">
-                        {piece.widthCm.toFixed(1)} x {piece.heightCm.toFixed(1)} cm
+                        {getPieceSize(piece).widthCm.toFixed(1)} x{' '}
+                        {getPieceSize(piece).heightCm.toFixed(1)} cm
                       </small>
                     </span>
                   </button>
                 </td>
                 <td className="p-3 text-xs">
-                  {piece.cutlineObjectId ? 'Ready' : 'Needs cut line'}
+                  {piece.cutlineObjectId ? t('Ready') : 'Needs cut line'}
                 </td>
                 <td className="p-3">
                   <PieceOrderControls
@@ -66,7 +67,7 @@ export function StickerQuantities({
         </table>
         {!pieces.length && (
           <p className="p-6 text-sm text-muted-foreground">
-            Import a sticker from the library first.
+            {t('Import a sticker from the library first.')}
           </p>
         )}
       </div>

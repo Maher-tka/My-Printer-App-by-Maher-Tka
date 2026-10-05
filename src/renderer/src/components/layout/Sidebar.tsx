@@ -1,5 +1,7 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import {
   BookOpen,
+  CreditCard,
   BriefcaseBusiness,
   History,
   Hash,
@@ -31,6 +33,7 @@ interface NavItem {
 
 const productionItems: NavItem[] = [
   { route: 'dashboard', label: 'Dashboard', icon: Home },
+  { route: 'card-montage', label: 'Card Montage', icon: CreditCard },
   { route: 'booklet-montage', label: 'Booklet Montage', icon: BookOpen },
   { route: 'hardcover-cover', label: 'Hardcover Cover', icon: SquareStack },
   { route: 'cutter-montage', label: 'Cutter Montage', icon: PenLine },
@@ -43,6 +46,8 @@ const operationsItems: NavItem[] = [
 const settingsRoutes = new Set<AppRoute>(['settings', 'license', 'app-health', 'quality-lab'])
 
 export function Sidebar({ activeRoute, onNavigate }: SidebarProps): JSX.Element {
+  const { t, direction } = useLanguage()
+
   const [expanded, setExpanded] = useState(false)
   const renderItem = (item: NavItem, active = activeRoute === item.route): JSX.Element => {
     const Icon = item.icon
@@ -52,7 +57,7 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps): JSX.Element 
           <button
             type="button"
             onClick={() => onNavigate(item.route)}
-            aria-label={item.label}
+            aria-label={t(item.label)}
             aria-current={active ? 'page' : undefined}
             className={cn(
               'sidebar-navigation-button group flex min-h-11 items-center gap-3 rounded-full px-3 text-left text-[13px] transition-colors ui-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -63,12 +68,12 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps): JSX.Element 
             )}
           >
             <Icon className="size-5 shrink-0" aria-hidden="true" />
-            {expanded && <span className="truncate font-medium">{item.label}</span>}
+            {expanded && <span className="truncate font-medium">{t(item.label)}</span>}
           </button>
         </TooltipTrigger>
         {!expanded && (
-          <TooltipContent side="right" sideOffset={12}>
-            {item.label}
+          <TooltipContent side={direction === 'rtl' ? 'left' : 'right'} sideOffset={12}>
+            {t(item.label)}
           </TooltipContent>
         )}
       </Tooltip>
@@ -77,7 +82,7 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps): JSX.Element 
   return (
     <TooltipProvider delayDuration={250}>
       <aside
-        aria-label="Workspace navigation"
+        aria-label={t('Workspace navigation')}
         className={cn(
           'floating-navigation relative z-20 flex shrink-0 flex-col text-sidebar-foreground',
           expanded
@@ -105,7 +110,7 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps): JSX.Element 
           )}
         </div>
         <nav
-          aria-label="Main navigation"
+          aria-label={t('Main navigation')}
           className="floating-navigation-items flex min-h-0 w-full flex-1 flex-col items-center gap-5 overflow-y-auto py-5"
         >
           <div className={cn('flex flex-col gap-2', expanded && 'w-full')}>
@@ -128,7 +133,7 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps): JSX.Element 
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
+                aria-label={expanded ? t('Collapse navigation') : t('Expand navigation')}
                 aria-expanded={expanded}
                 onClick={() => setExpanded((value) => !value)}
                 className={cn(
@@ -141,10 +146,14 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps): JSX.Element 
                 ) : (
                   <PanelLeftOpen className="size-5" aria-hidden="true" />
                 )}
-                {expanded && <span className="text-xs">Collapse navigation</span>}
+                {expanded && <span className="text-xs">{t('Collapse navigation')}</span>}
               </button>
             </TooltipTrigger>
-            {!expanded && <TooltipContent side="right">Expand navigation</TooltipContent>}
+            {!expanded && (
+              <TooltipContent side={direction === 'rtl' ? 'left' : 'right'}>
+                {t('Expand navigation')}
+              </TooltipContent>
+            )}
           </Tooltip>
         </div>
       </aside>

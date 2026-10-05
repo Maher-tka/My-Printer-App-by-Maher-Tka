@@ -1,6 +1,7 @@
-import { Eye, Grid3X3, Printer, ZoomIn, ZoomOut } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { useLanguage } from '@/i18n/useLanguage'
+import { Eye, Grid3X3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { PreviewZoomControls } from '@/components/ui/preview-zoom-controls'
 import type { CoverViewMode } from '../types'
 
 interface HardcoverToolbarProps {
@@ -18,83 +19,66 @@ interface HardcoverToolbarProps {
 }
 
 export function HardcoverToolbar(props: HardcoverToolbarProps): JSX.Element {
+  const { t } = useLanguage()
+
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-[18px] border border-border/70 bg-card p-3">
+    <div
+      className="flex flex-wrap items-center gap-2 rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-3"
+      role="toolbar"
+      aria-label="Cover preview tools"
+    >
       <ModeButton
         active={props.viewMode === 'layout'}
         onClick={() => props.onViewModeChange('layout')}
         icon={<Grid3X3 />}
-        label="Layout"
+        label={t('Layout')}
       />
       <ModeButton
         active={props.viewMode === 'clean'}
         onClick={() => props.onViewModeChange('clean')}
         icon={<Eye />}
-        label="Clean Preview"
+        label={t('Clean Preview')}
       />
       <ModeButton
         active={props.viewMode === 'print'}
         onClick={() => props.onViewModeChange('print')}
-        icon={<Printer />}
-        label="Print Preview"
+        icon={<Eye />}
+        label={t('Print Preview')}
       />
-      <span className="mx-1 h-7 w-px bg-border" />
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={() => props.onZoomChange(Math.max(0.5, props.zoom - 0.1))}
-        disabled={props.zoom <= 0.5}
-        aria-label="Zoom out"
-        title="Zoom out"
-      >
-        <ZoomOut />
-      </Button>
-      <Badge variant="secondary">{Math.round(props.zoom * 100)}%</Badge>
-      <Button type="button" size="sm" variant="outline" onClick={props.onFitToScreen}>
-        Fit
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={() => props.onZoomChange(Math.min(2, props.zoom + 0.1))}
-        disabled={props.zoom >= 2}
-        aria-label="Zoom in"
-        title="Zoom in"
-      >
-        <ZoomIn />
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant={props.showGuides ? 'default' : 'outline'}
-        onClick={props.onToggleGuides}
-        aria-pressed={props.showGuides}
-        title="Show or hide binding and fold guides"
-      >
-        Guides
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant={props.showSafeZones ? 'default' : 'outline'}
-        onClick={props.onToggleSafeZones}
-        aria-pressed={props.showSafeZones}
-        title="Show the area where text and important artwork stay safe"
-      >
-        Safe zones
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant={props.snapToGuides ? 'default' : 'outline'}
-        onClick={props.onToggleSnap}
-        aria-pressed={props.snapToGuides}
-        title="Align artwork to nearby guides while dragging"
-      >
-        Snap
-      </Button>
+      <span className="mx-1 h-7 w-px bg-border" aria-hidden="true" />
+      <PreviewZoomControls
+        zoom={props.zoom}
+        zoomOutDisabled={props.zoom <= 0.5}
+        zoomInDisabled={props.zoom >= 2}
+        onZoomOut={() => props.onZoomChange(Math.max(0.5, props.zoom - 0.1))}
+        onZoomIn={() => props.onZoomChange(Math.min(2, props.zoom + 0.1))}
+        onFit={props.onFitToScreen}
+      />
+      <details className="relative ml-auto">
+        <summary className="flex h-8 cursor-pointer items-center rounded-[var(--ui-radius-md)] border border-[var(--ui-border)] px-3 text-[13px] text-muted-foreground hover:bg-accent">
+          {t('View options')}
+        </summary>
+        <div className="absolute right-0 top-full z-50 mt-2 grid w-48 gap-1 rounded-[var(--ui-radius-md)] border border-[var(--ui-border)] bg-popover p-2 shadow-elevated">
+          <PreviewToggle
+            active={props.showGuides}
+            onClick={props.onToggleGuides}
+            label={t('Guides')}
+            title={t('Show or hide binding and fold guides')}
+          />
+          <PreviewToggle
+            active={props.showSafeZones}
+            onClick={props.onToggleSafeZones}
+            label={t('Safe zones')}
+            title={t('Show the area where text and important artwork stay safe')}
+          />
+          <PreviewToggle
+            active={props.snapToGuides}
+            onClick={props.onToggleSnap}
+            label={t('Snap')}
+            title={t('Align artwork to nearby guides while dragging')}
+          />{' '}
+        </div>
+      </details>
     </div>
   )
 }
@@ -110,16 +94,43 @@ function ModeButton({
   icon: React.ReactNode
   label: string
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <Button
       type="button"
       size="sm"
-      variant={active ? 'default' : 'outline'}
+      variant={active ? 'selected' : 'ghost'}
+      className={active ? undefined : 'border border-transparent'}
       onClick={onClick}
       aria-pressed={active}
     >
       {icon}
-      {label}
+      {t(label)}
     </Button>
+  )
+}
+
+function PreviewToggle({
+  active,
+  onClick,
+  label,
+  title
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  title: string
+}): JSX.Element {
+  const { t } = useLanguage()
+
+  return (
+    <label
+      className="flex cursor-pointer items-center gap-2 rounded-[var(--ui-radius-sm)] px-2 py-2 text-[13px] hover:bg-accent"
+      title={title}
+    >
+      <input type="checkbox" checked={active} onChange={onClick} className="accent-primary" />
+      {t(label)}
+    </label>
   )
 }

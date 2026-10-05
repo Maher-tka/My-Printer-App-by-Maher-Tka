@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { SUBSCRIPTION_TOOLS } from '../../../shared/subscription-tools'
 import { ACCESS_MAX_AGE_MS, ACCESS_REFRESH_MS } from '../../../shared/cloud-access'
 import type { LicenseActivationResult, LicenseSnapshot } from '../../../shared/licensing-types'
 
@@ -160,6 +161,7 @@ function createDeveloperLicenseSnapshot(snapshot: LicenseSnapshot | null): Licen
     statusLabel: 'Developer Test Mode',
     features: ['paid-tools', 'batch-exports'],
     canUsePaidTools: true,
+    allowedTools: SUBSCRIPTION_TOOLS.map((tool) => tool.id),
     checkedAt: now,
     clockWarning: undefined,
     integrityWarning: undefined

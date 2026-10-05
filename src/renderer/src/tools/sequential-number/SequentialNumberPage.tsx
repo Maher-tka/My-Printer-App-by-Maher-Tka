@@ -1,19 +1,13 @@
+import { ActionIcon } from '@/components/ui/action-button'
+import { useLanguage } from '@/i18n/useLanguage'
 import { NumberColorInput } from './NumberColorInput'
 import { NumberDesignEditor } from './NumberDesignEditor'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import {
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  Hash,
-  Layers,
-  Plus,
-  RotateCw,
-  Trash2,
-  Upload
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight, Layers, Plus, RotateCw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ToolHeader } from '../shared/ToolHeader'
+import { ToolSettingsTabs } from '../shared/ToolSettingsTabs'
+import { getPrintResultMessage, printPdf } from '@/print/printPdf'
 import { ProjectFileActions } from '@/projects/ProjectFileActions'
 import type { AppRoute } from '@/types/navigation'
 import type {
@@ -47,9 +41,11 @@ interface Props {
 const inputClass =
   'h-9 w-full rounded-[14px] border border-input bg-background px-3 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 function Field({ label, children }: { label: string; children: ReactNode }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label className="grid min-w-0 gap-1.5 text-xs font-medium text-muted-foreground">
-      {label}
+      {t(label)}
       {children}
     </label>
   )
@@ -69,8 +65,10 @@ function Numeric({
   max?: number
   step?: number
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
-    <Field label={label}>
+    <Field label={t(label)}>
       <input
         className={inputClass}
         type="number"
@@ -88,16 +86,18 @@ function Card({
   title,
   children
 }: {
-  step: string
+  step?: string
   title: string
   children: ReactNode
 }): JSX.Element {
   return (
-    <section className="rounded-[18px] border border-border/70 bg-card p-4">
+    <section className="rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4">
       <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold">
-        <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-xs text-primary">
-          {step}
-        </span>
+        {step && (
+          <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-xs text-primary">
+            {step}
+          </span>
+        )}
         {title}
       </h2>
       <div className="space-y-4">{children}</div>
@@ -114,6 +114,8 @@ export function SequentialNumberPage({
   onProjectSessionChange,
   onConfirmUnsavedChanges
 }: Props): JSX.Element {
+  const { t } = useLanguage()
+
   const [project, setProject] = useState<SequentialProject>(
     () => openedProject?.project.payload ?? createDefaultSequentialProject()
   )
@@ -124,6 +126,7 @@ export function SequentialNumberPage({
   const [savedKey, setSavedKey] = useState(() => JSON.stringify(project))
   const [busy, setBusy] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [printing, setPrinting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [sheetIndex, setSheetIndex] = useState(0)
   const [side, setSide] = useState<'front' | 'back'>('front')
@@ -289,9 +292,11 @@ export function SequentialNumberPage({
       if (operation === operationRef.current) setBusy(false)
     }
   }
-  const runExport = async (): Promise<void> => {
+  const runExport = async (action: 'export' | 'print' = 'export'): Promise<void> => {
+    if (busy || errors.length) return
     setBusy(true)
     setExporting(true)
+    setPrinting(action === 'print')
     setMessage('Creating numbered PDF…')
     const controller = new AbortController()
     abortRef.current = controller
@@ -302,6 +307,16 @@ export function SequentialNumberPage({
       })
       if (controller.signal.aborted) throw new Error('Export canceled.')
       const name = `${project.name.trim() || 'Sequential Number'}.pdf`
+      if (action === 'print') {
+        const result = await printPdf({
+          bytes,
+          suggestedName: name,
+          jobTitle: project.name,
+          silent: false
+        })
+        setMessage(getPrintResultMessage(result, name))
+        return
+      }
       if (window.printerApp?.saveFile) {
         const result = await window.printerApp.saveFile({
           suggestedName: name,
@@ -327,10 +342,17 @@ export function SequentialNumberPage({
         `Exported ${layout.pdfPageCount} PDF pages for ${settings.quantity} numbered items.`
       )
     } catch (error) {
-      setMessage(controller.signal.aborted ? 'Export canceled.' : errorText(error))
+      setMessage(
+        controller.signal.aborted
+          ? action === 'print'
+            ? 'Print preparation canceled.'
+            : 'Export canceled.'
+          : errorText(error)
+      )
     } finally {
       setBusy(false)
       setExporting(false)
+      setPrinting(false)
       abortRef.current = null
     }
   }
@@ -341,17 +363,17 @@ export function SequentialNumberPage({
         <label
           className={`flex cursor-pointer items-center gap-3 rounded-xl border border-dashed p-4 hover:bg-muted/40 ${busy ? 'pointer-events-none opacity-60' : ''}`}
         >
-          <Upload className="size-5 shrink-0 text-primary" />
+          <ActionIcon action="import" className="size-5 shrink-0 text-primary" />
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium">
-              {artwork?.name ?? `Upload ${target} design`}
+              {artwork?.name ?? `Import ${target} design`}
             </span>
             <span className="text-xs text-muted-foreground">
               PDF, PNG or JPEG · click to {artwork ? 'replace' : 'browse'}
             </span>
           </span>
           <input
-            aria-label={`Upload ${target} design`}
+            aria-label={`Import ${target} design`}
             className="sr-only"
             type="file"
             accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"
@@ -373,7 +395,7 @@ export function SequentialNumberPage({
             >
               {Array.from({ length: artwork.pageCount }, (_, i) => (
                 <option key={i + 1} value={i + 1}>
-                  Page {i + 1} of {artwork.pageCount}
+                  {t('Page')} {i + 1} of {artwork.pageCount}
                 </option>
               ))}
             </select>
@@ -384,340 +406,375 @@ export function SequentialNumberPage({
   }
   return (
     <div className="workspace-shell sequential-workspace mx-auto max-w-[1880px] space-y-4">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Button variant="ghost" size="sm" onClick={() => onNavigate('dashboard')}>
-            <ArrowLeft className="mr-2 size-4" />
-            All tools
-          </Button>
-          <h1 className="mt-2 flex items-center gap-3 text-2xl font-semibold tracking-tight">
-            <span className="rounded-xl bg-primary/10 p-2 text-primary">
-              <Hash className="size-6" />
-            </span>
-            Sequential Number
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Number tickets, invoices, vouchers and forms. Ready to print, cut and collect.
-          </p>
-        </div>
-        <ProjectFileActions
-          filePath={filePath}
-          isBusy={busy}
-          isDirty={dirty}
-          message={message}
-          onOpen={() => {
-            void onOpenProject()
-              .then((result) => {
-                if (!result.ok && !result.canceled)
-                  setMessage(result.error || 'Could not open project.')
-              })
-              .catch((error) => setMessage(errorText(error)))
-          }}
-          onSave={() => void save()}
-          onSaveAs={() => void save(true)}
-        />
-      </header>
+      <ToolHeader
+        title={t('Sequential Number')}
+        onBack={() => onNavigate('dashboard')}
+        print={{
+          disabled: busy || errors.length > 0,
+          isBusy: printing,
+          onPrint: () => void runExport('print')
+        }}
+        exportPdf={{
+          disabled: busy || errors.length > 0,
+          isBusy: exporting && !printing,
+          onExport: () => void runExport()
+        }}
+        actions={
+          <ProjectFileActions
+            filePath={filePath}
+            isBusy={busy}
+            isDirty={dirty}
+            message={null}
+            onOpen={() => {
+              void onOpenProject()
+                .then((result) => {
+                  if (!result.ok && !result.canceled)
+                    setMessage(result.error || 'Could not open project.')
+                })
+                .catch((error) => setMessage(errorText(error)))
+            }}
+            onSave={() => void save()}
+            onSaveAs={() => void save(true)}
+            onNew={async () => {
+              if (!(await onConfirmUnsavedChanges('new-project'))) return
+              const fresh = createDefaultSequentialProject()
+              setProject(fresh)
+              setSavedKey(JSON.stringify(fresh))
+              setFilePath(null)
+              setMetadata(createSequentialProjectFile(fresh).metadata)
+              setSelectedPosition(fresh.positions[0]?.id ?? '')
+              setSheetIndex(0)
+              setSide('front')
+              setMessage('Started a new numbering project.')
+            }}
+          />
+        }
+      />
+      {message && (
+        <p role="status" aria-live="polite" className="rounded-lg border bg-card p-3 text-sm">
+          {message}
+        </p>
+      )}
       <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)]">
         <fieldset
           disabled={busy}
           aria-label="Numbering setup"
           className="min-w-0 space-y-4 disabled:opacity-70 lg:sticky lg:top-4 lg:max-h-[calc(100vh-180px)] lg:overflow-y-auto"
         >
-          <Card step="1" title="Your design">
-            <Field label="Project name">
-              <input
-                className={inputClass}
-                value={project.name}
-                onChange={(e) => setProject((p) => ({ ...p, name: e.target.value }))}
-                placeholder="e.g. Summer raffle"
-              />
-            </Field>
-            {artworkPicker('front')}
-            <Field label="Back side">
-              <select
-                className={inputClass}
-                value={settings.backMode}
-                onChange={(e) => {
-                  patchSettings({ backMode: e.target.value as SequentialSettings['backMode'] })
-                  setSide('front')
-                }}
-              >
-                <option value="none">Single-sided · no back page</option>
-                <option value="blank">Double-sided · blank back</option>
-                <option value="artwork">Double-sided · back design</option>
-              </select>
-            </Field>
-            {settings.backMode === 'artwork' && (
+          <ToolSettingsTabs
+            label={t('Numbering settings')}
+            advanced={
               <>
-                {artworkPicker('back')}
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={settings.numberBack}
-                    onChange={(e) => patchSettings({ numberBack: e.target.checked })}
-                  />
-                  Repeat the same number on the back
-                </label>
+                <Card title="Margins &amp; cutting marks">
+                  <div className="grid grid-cols-2 gap-3">
+                    {' '}
+                    <Numeric
+                      label={t('Sheet margin (mm)')}
+                      value={settings.marginMm}
+                      step={0.1}
+                      onChange={(v) => patchSettings({ marginMm: v })}
+                    />
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={settings.cropMarks}
+                        onChange={(e) => patchSettings({ cropMarks: e.target.checked })}
+                      />
+                      Corner crop marks (outside tickets)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={settings.gutterCutLines ?? false}
+                        onChange={(e) => patchSettings({ gutterCutLines: e.target.checked })}
+                      />
+                      Cutting lines on first page only (0.25 pt)
+                    </label>
+                    {settings.gutterCutLines && (
+                      <Field label="Cutting-line color">
+                        <NumberColorInput
+                          className={`${inputClass} p-1`}
+                          value={settings.cuttingLineColor ?? '#000000'}
+                          onCommit={(color) => patchSettings({ cuttingLineColor: color })}
+                        />
+                        <span>
+                          First PDF page only. Lines stay in the center of the gaps. Minimum gap:
+                          0.1 mm.
+                        </span>
+                      </Field>
+                    )}
+                  </div>
+                </Card>
+                <Card title={t('Number formatting')}>
+                  <div className="grid grid-cols-2 gap-3">
+                    {' '}
+                    <Numeric
+                      label={t('Increase by')}
+                      value={settings.increment}
+                      min={1}
+                      onChange={(v) => patchSettings({ increment: v })}
+                    />
+                    <Numeric
+                      label={t('Digits (pad with leading zeros)')}
+                      value={settings.digits}
+                      min={1}
+                      max={12}
+                      onChange={(v) => patchSettings({ digits: v })}
+                    />
+                    <Field label={t('Fixed text before number')}>
+                      <input
+                        className={inputClass}
+                        value={settings.prefix}
+                        onChange={(e) => patchSettings({ prefix: e.target.value })}
+                        placeholder="INV-"
+                      />
+                    </Field>
+                    <Field label={t('Fixed text after number')}>
+                      <input
+                        className={inputClass}
+                        value={settings.suffix}
+                        onChange={(e) => patchSettings({ suffix: e.target.value })}
+                        placeholder={t('Optional')}
+                      />
+                    </Field>
+                  </div>
+                </Card>
               </>
-            )}
-            {settings.backMode !== 'none' && (
-              <Field label="Printer duplex setting">
+            }
+          >
+            <Card step="1" title="Your design">
+              <Field label={t('Project name')}>
+                <input
+                  className={inputClass}
+                  value={project.name}
+                  onChange={(e) => setProject((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="e.g. Summer raffle"
+                />
+              </Field>
+              {artworkPicker('front')}
+              <Field label={t('Back side')}>
                 <select
                   className={inputClass}
-                  value={settings.duplexFlip}
-                  onChange={(e) =>
-                    patchSettings({
-                      duplexFlip: e.target.value as SequentialSettings['duplexFlip']
-                    })
-                  }
+                  value={settings.backMode}
+                  onChange={(e) => {
+                    patchSettings({ backMode: e.target.value as SequentialSettings['backMode'] })
+                    setSide('front')
+                  }}
                 >
-                  <option value="long-edge">Flip on long edge</option>
-                  <option value="short-edge">Flip on short edge</option>
+                  <option value="none">{t('Single-sided · no back page')}</option>
+                  <option value="blank">{t('Double-sided · blank back')}</option>
+                  <option value="artwork">{t('Double-sided · back design')}</option>
                 </select>
               </Field>
-            )}
-          </Card>
-          <Card step="2" title="Sheet & finished item">
-            <div className="flex gap-2">
-              {(['a4', 'a3', 'custom'] as const).map((preset) => (
-                <Button
-                  key={preset}
-                  type="button"
-                  className="flex-1"
-                  variant={settings.sheetPreset === preset ? 'default' : 'outline'}
-                  onClick={() =>
-                    patchSettings({
-                      sheetPreset: preset,
-                      ...(preset === 'a4'
-                        ? { sheetWidthMm: 210, sheetHeightMm: 297 }
-                        : preset === 'a3'
-                          ? { sheetWidthMm: 297, sheetHeightMm: 420 }
-                          : {})
-                    })
-                  }
-                >
-                  {preset === 'custom' ? 'Custom' : preset.toUpperCase()}
-                </Button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Numeric
-                label="Sheet width (mm)"
-                value={settings.sheetWidthMm}
-                min={1}
-                onChange={(v) => patchSettings({ sheetPreset: 'custom', sheetWidthMm: v })}
-              />
-              <Numeric
-                label="Sheet height (mm)"
-                value={settings.sheetHeightMm}
-                min={1}
-                onChange={(v) => patchSettings({ sheetPreset: 'custom', sheetHeightMm: v })}
-              />
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                patchSettings({
-                  sheetWidthMm: settings.sheetHeightMm,
-                  sheetHeightMm: settings.sheetWidthMm
-                })
-              }
-            >
-              <RotateCw className="mr-2 size-4" />
-              Rotate sheet
-            </Button>
-            <div className="grid grid-cols-2 gap-3">
-              <Numeric
-                label="Item width (mm)"
-                value={settings.ticketWidthMm}
-                min={1}
-                step={0.1}
-                onChange={(v) => patchSettings({ ticketWidthMm: v })}
-              />
-              <Numeric
-                label="Item height (mm)"
-                value={settings.ticketHeightMm}
-                min={1}
-                step={0.1}
-                onChange={(v) => patchSettings({ ticketHeightMm: v })}
-              />
-              <Numeric
-                label="Sheet margin (mm)"
-                value={settings.marginMm}
-                step={0.1}
-                onChange={(v) => patchSettings({ marginMm: v })}
-              />
-              <Numeric
-                label="Gap between items (mm)"
-                value={settings.gapMm}
-                step={0.1}
-                onChange={(v) => patchSettings({ gapMm: v })}
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={settings.cropMarks}
-                onChange={(e) => patchSettings({ cropMarks: e.target.checked })}
-              />
-              Corner crop marks (outside tickets)
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={settings.gutterCutLines ?? false}
-                onChange={(e) => patchSettings({ gutterCutLines: e.target.checked })}
-              />
-              Cutting lines on first page only (0.25 pt)
-            </label>
-            {settings.gutterCutLines && (
-              <Field label="Cutting-line color">
-                <NumberColorInput
-                  className={`${inputClass} p-1`}
-                  value={settings.cuttingLineColor ?? '#000000'}
-                  onCommit={(color) => patchSettings({ cuttingLineColor: color })}
-                />
-                <span>
-                  First PDF page only. Lines stay in the center of the gaps. Minimum gap: 0.1 mm.
-                </span>
-              </Field>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Artwork fits inside the finished item size without stretching. Image sizes start at
-              300 DPI; confirm the finished dimensions.
-            </p>
-          </Card>
-          <Card step="3" title="Number sequence">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Start number (zeros allowed)">
-                <input
-                  className={inputClass}
-                  inputMode="numeric"
-                  value={String(settings.startNumber).padStart(settings.digits, '0')}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    if (/^\d{0,12}$/.test(value))
+              {settings.backMode === 'artwork' && (
+                <>
+                  {artworkPicker('back')}
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={settings.numberBack}
+                      onChange={(e) => patchSettings({ numberBack: e.target.checked })}
+                    />
+                    {t('Repeat the same number on the back')}
+                  </label>
+                </>
+              )}
+              {settings.backMode !== 'none' && (
+                <Field label={t('Printer duplex setting')}>
+                  <select
+                    className={inputClass}
+                    value={settings.duplexFlip}
+                    onChange={(e) =>
                       patchSettings({
-                        startNumber: Number(value),
-                        digits: Math.max(1, value.length)
+                        duplexFlip: e.target.value as SequentialSettings['duplexFlip']
                       })
-                  }}
+                    }
+                  >
+                    <option value="long-edge">{t('Flip on long edge')}</option>
+                    <option value="short-edge">{t('Flip on short edge')}</option>
+                  </select>
+                </Field>
+              )}
+            </Card>
+            <Card step="2" title={t('Sheet & finished item')}>
+              <div className="flex gap-2">
+                {(['a4', 'a3', 'custom'] as const).map((preset) => (
+                  <Button
+                    key={preset}
+                    type="button"
+                    className="flex-1"
+                    variant={settings.sheetPreset === preset ? 'selected' : 'outline'}
+                    onClick={() =>
+                      patchSettings({
+                        sheetPreset: preset,
+                        ...(preset === 'a4'
+                          ? { sheetWidthMm: 210, sheetHeightMm: 297 }
+                          : preset === 'a3'
+                            ? { sheetWidthMm: 297, sheetHeightMm: 420 }
+                            : {})
+                      })
+                    }
+                  >
+                    {preset === 'custom' ? 'Custom' : preset.toUpperCase()}
+                  </Button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Numeric
+                  label={t('Sheet width (mm)')}
+                  value={settings.sheetWidthMm}
+                  min={1}
+                  onChange={(v) => patchSettings({ sheetPreset: 'custom', sheetWidthMm: v })}
                 />
-              </Field>
-              <Numeric
-                label="Quantity of items"
-                value={settings.quantity}
-                min={1}
-                onChange={(v) => patchSettings({ quantity: v })}
-              />
-              <Numeric
-                label="Increase by"
-                value={settings.increment}
-                min={1}
-                onChange={(v) => patchSettings({ increment: v })}
-              />
-              <Numeric
-                label="Digits (pad with leading zeros)"
-                value={settings.digits}
-                min={1}
-                max={12}
-                onChange={(v) => patchSettings({ digits: v })}
-              />
-              <Field label="Fixed text before number">
-                <input
-                  className={inputClass}
-                  value={settings.prefix}
-                  onChange={(e) => patchSettings({ prefix: e.target.value })}
-                  placeholder="INV-"
+                <Numeric
+                  label={t('Sheet height (mm)')}
+                  value={settings.sheetHeightMm}
+                  min={1}
+                  onChange={(v) => patchSettings({ sheetPreset: 'custom', sheetHeightMm: v })}
                 />
-              </Field>
-              <Field label="Fixed text after number">
-                <input
-                  className={inputClass}
-                  value={settings.suffix}
-                  onChange={(e) => patchSettings({ suffix: e.target.value })}
-                  placeholder="Optional"
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  patchSettings({
+                    sheetWidthMm: settings.sheetHeightMm,
+                    sheetHeightMm: settings.sheetWidthMm
+                  })
+                }
+              >
+                <RotateCw className="size-4" />
+                {t('Rotate sheet')}
+              </Button>
+              <div className="grid grid-cols-2 gap-3">
+                <Numeric
+                  label={t('Item width (mm)')}
+                  value={settings.ticketWidthMm}
+                  min={1}
+                  step={0.1}
+                  onChange={(v) => patchSettings({ ticketWidthMm: v })}
                 />
-              </Field>
-            </div>
-            <div className="rounded-lg bg-muted/50 p-3 text-sm tabular-nums">
-              {formatSequenceNumber(settings, 0)}{' '}
-              <span className="px-2 text-muted-foreground">→</span>{' '}
-              {formatSequenceNumber(settings, Math.max(0, settings.quantity - 1))}
-            </div>
-          </Card>
-          <Card step="4" title="Choose how you will collect the numbers">
-            <div className="grid gap-2">
-              {(
-                [
-                  {
-                    id: 'sheet',
-                    title: 'Across each sheet',
-                    subtitle: 'Read left to right, then the next row.',
-                    numbers: [1, 2, 3, 4]
-                  },
-                  {
-                    id: 'stack',
-                    title: 'Cut & stack',
-                    subtitle: 'Next number on the next physical sheet.',
-                    numbers: [1, 4, 7, 10]
-                  }
-                ] as const
-              ).map((choice) => (
-                <button
-                  key={choice.id}
-                  type="button"
-                  disabled={busy}
-                  aria-pressed={settings.order === choice.id}
-                  className={`rounded-[14px] border p-3 text-left transition-colors ${settings.order === choice.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
-                  onClick={() => patchSettings({ order: choice.id })}
-                >
-                  <div className="mb-2 flex items-center gap-2">
-                    <div
-                      aria-hidden="true"
-                      className="grid w-16 shrink-0 grid-cols-2 gap-1 rounded-md border bg-background p-1.5"
-                    >
-                      {choice.numbers.map((n) => (
-                        <span
-                          key={n}
-                          className="rounded border bg-muted/50 text-center text-xs leading-6"
-                        >
-                          {n}
-                        </span>
-                      ))}
+                <Numeric
+                  label={t('Item height (mm)')}
+                  value={settings.ticketHeightMm}
+                  min={1}
+                  step={0.1}
+                  onChange={(v) => patchSettings({ ticketHeightMm: v })}
+                />
+                <Numeric
+                  label={t('Gap between items (mm)')}
+                  value={settings.gapMm}
+                  step={0.1}
+                  onChange={(v) => patchSettings({ gapMm: v })}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Artwork fits inside the finished item size without stretching. Image sizes start at
+                300 DPI; confirm the finished dimensions.
+              </p>
+            </Card>
+            <Card step="3" title={t('Number sequence')}>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={t('Start number (zeros allowed)')}>
+                  <input
+                    className={inputClass}
+                    inputMode="numeric"
+                    value={String(settings.startNumber).padStart(settings.digits, '0')}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (/^\d{0,12}$/.test(value))
+                        patchSettings({
+                          startNumber: Number(value),
+                          digits: Math.max(1, value.length)
+                        })
+                    }}
+                  />
+                </Field>
+                <Numeric
+                  label={t('Quantity of items')}
+                  value={settings.quantity}
+                  min={1}
+                  onChange={(v) => patchSettings({ quantity: v })}
+                />
+              </div>
+              <div className="rounded-lg bg-muted/50 p-3 text-sm tabular-nums">
+                {formatSequenceNumber(settings, 0)}{' '}
+                <span className="px-2 text-muted-foreground">→</span>{' '}
+                {formatSequenceNumber(settings, Math.max(0, settings.quantity - 1))}
+              </div>
+            </Card>
+            <Card step="4" title={t('Choose how you will collect the numbers')}>
+              <div className="grid gap-2">
+                {(
+                  [
+                    {
+                      id: 'sheet',
+                      title: 'Across each sheet',
+                      subtitle: 'Read left to right, then the next row.',
+                      numbers: [1, 2, 3, 4]
+                    },
+                    {
+                      id: 'stack',
+                      title: 'Cut & stack',
+                      subtitle: 'Next number on the next physical sheet.',
+                      numbers: [1, 4, 7, 10]
+                    }
+                  ] as const
+                ).map((choice) => (
+                  <button
+                    key={choice.id}
+                    type="button"
+                    disabled={busy}
+                    aria-pressed={settings.order === choice.id}
+                    className={`rounded-[14px] border p-3 text-left transition-colors ${settings.order === choice.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
+                    onClick={() => patchSettings({ order: choice.id })}
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <div
+                        aria-hidden="true"
+                        className="grid w-16 shrink-0 grid-cols-2 gap-1 rounded-md border bg-background p-1.5"
+                      >
+                        {choice.numbers.map((n) => (
+                          <span
+                            key={n}
+                            className="rounded border bg-muted/50 text-center text-xs leading-6"
+                          >
+                            {n}
+                          </span>
+                        ))}
+                      </div>
+                      <span className="font-semibold">{choice.title}</span>
                     </div>
-                    <span className="font-semibold">{choice.title}</span>
-                  </div>
-                  <p className="text-xs leading-5 text-muted-foreground">{choice.subtitle}</p>
-                </button>
-              ))}
-            </div>
-            <p className="rounded-lg bg-muted/50 p-3 text-xs leading-5">
-              {settings.order === 'stack'
-                ? 'Keep physical sheets in ascending order, with sheet 1 on top. Cut the stack, then collect piles from left to right, top to bottom. Each pile continues where the previous one ends.'
-                : 'Numbers continue across the front of each sheet, from left to right and top to bottom.'}
-              {settings.backMode !== 'none' &&
-                ' Back pages never consume a number: PDF pages 1–2 are sheet 1 front/back, pages 3–4 are sheet 2 front/back.'}
-            </p>
-          </Card>
+                    <p className="text-xs leading-5 text-muted-foreground">{choice.subtitle}</p>
+                  </button>
+                ))}
+              </div>
+              <p className="rounded-lg bg-muted/50 p-3 text-xs leading-5">
+                {settings.order === 'stack'
+                  ? 'Keep physical sheets in ascending order, with sheet 1 on top. Cut the stack, then collect piles from left to right, top to bottom. Each pile continues where the previous one ends.'
+                  : 'Numbers continue across the front of each sheet, from left to right and top to bottom.'}
+                {settings.backMode !== 'none' &&
+                  ' Back pages never consume a number: PDF pages 1–2 are sheet 1 front/back, pages 3–4 are sheet 2 front/back.'}
+              </p>
+            </Card>
+          </ToolSettingsTabs>
         </fieldset>
         <div className="min-w-0 space-y-4">
           <div
-            className="flex items-center gap-2 rounded-[18px] border border-border/70 bg-card p-2"
+            className="flex items-center gap-2 rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-2"
             aria-label="Numbering workspace views"
           >
             <Button
               type="button"
-              variant={workspaceTab === 'sheet' ? 'default' : 'ghost'}
+              variant={workspaceTab === 'sheet' ? 'selected' : 'ghost'}
               aria-pressed={workspaceTab === 'sheet'}
               onClick={() => setWorkspaceTab('sheet')}
             >
-              Sheet preview
+              {t('Sheet preview')}
             </Button>
             <Button
               type="button"
-              variant={workspaceTab === 'design' ? 'default' : 'ghost'}
+              variant={workspaceTab === 'design' ? 'selected' : 'ghost'}
               aria-pressed={workspaceTab === 'design'}
               onClick={() => setWorkspaceTab('design')}
             >
@@ -726,7 +783,7 @@ export function SequentialNumberPage({
           </div>
 
           {workspaceTab === 'design' && (
-            <Card step="5" title="Place numbers and fixed text">
+            <Card step="5" title={t('Place numbers and fixed text')}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="max-w-md text-xs leading-5 text-muted-foreground">
                   Select and drag a number or fixed label. Use X/Y for exact positioning. Fixed text
@@ -755,8 +812,8 @@ export function SequentialNumberPage({
                     setSelectedPosition(id)
                   }}
                 >
-                  <Plus className="mr-2 size-4" />
-                  Add number
+                  <Plus className="size-4" />
+                  {t('Add number')}
                 </Button>
               </div>
               <Button
@@ -784,7 +841,7 @@ export function SequentialNumberPage({
                   setSelectedPosition(id)
                 }}
               >
-                Add fixed text
+                {t('Add fixed text')}
               </Button>
               <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
                 <NumberDesignEditor
@@ -796,7 +853,7 @@ export function SequentialNumberPage({
                   onChange={(positions) => setProject((p) => ({ ...p, positions }))}
                 />
                 <fieldset disabled={busy} className="space-y-3">
-                  <Field label="Number position">
+                  <Field label={t('Number position')}>
                     <select
                       className={inputClass}
                       value={selectedPosition}
@@ -814,7 +871,7 @@ export function SequentialNumberPage({
                     .map((pos) => (
                       <div key={pos.id} className="space-y-3">
                         {pos.kind === 'text' && (
-                          <Field label="Fixed text (same on every item)">
+                          <Field label={t('Fixed text (same on every item)')}>
                             <input
                               className={inputClass}
                               maxLength={200}
@@ -840,14 +897,14 @@ export function SequentialNumberPage({
                             onChange={(v) => patchPosition(pos.id, { yMm: v })}
                           />
                           <Numeric
-                            label="Font size (pt)"
+                            label={t('Font size (pt)')}
                             value={pos.fontSizePt}
                             min={4}
                             max={200}
                             step={0.5}
                             onChange={(v) => patchPosition(pos.id, { fontSizePt: v })}
                           />
-                          <Field label="Color">
+                          <Field label={t('Color')}>
                             <NumberColorInput
                               className={`${inputClass} p-1`}
                               value={pos.color}
@@ -855,7 +912,7 @@ export function SequentialNumberPage({
                             />
                           </Field>
                         </div>
-                        <Field label="Text alignment">
+                        <Field label={t('Text alignment')}>
                           <select
                             className={inputClass}
                             value={pos.align}
@@ -865,9 +922,9 @@ export function SequentialNumberPage({
                               })
                             }
                           >
-                            <option value="left">Left</option>
-                            <option value="center">Center</option>
-                            <option value="right">Right</option>
+                            <option value="left">{t('Left')}</option>
+                            <option value="center">{t('Center')}</option>
+                            <option value="right">{t('Right')}</option>
                           </select>
                         </Field>
                         <Button
@@ -884,8 +941,8 @@ export function SequentialNumberPage({
                             )
                           }}
                         >
-                          <Trash2 className="mr-2 size-4" />
-                          Remove position
+                          <Trash2 className="size-4" />
+                          {t('Remove position')}
                         </Button>
                       </div>
                     ))}
@@ -894,16 +951,16 @@ export function SequentialNumberPage({
             </Card>
           )}
           {workspaceTab === 'sheet' && (
-            <section className="overflow-hidden rounded-[18px] border border-border/70 bg-card">
+            <section className="overflow-hidden rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)]">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
                 <div>
                   <h2 className="flex items-center gap-2 font-semibold">
                     <Layers className="size-4" />
-                    Sheet preview
+                    {t('Sheet preview')}
                   </h2>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {layout.capacity} items per sheet · {layout.sheetCount} physical sheets ·{' '}
-                    {layout.pdfPageCount} PDF pages
+                    {layout.pdfPageCount} {t('PDF pages')}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -917,7 +974,7 @@ export function SequentialNumberPage({
                     <ChevronLeft className="size-4" />
                   </Button>
                   <span className="text-xs tabular-nums">
-                    Sheet {layout.sheetCount ? safeSheet + 1 : 0} / {layout.sheetCount}
+                    {t('Sheet')} {layout.sheetCount ? safeSheet + 1 : 0} / {layout.sheetCount}
                   </span>
                   <Button
                     variant="outline"
@@ -934,23 +991,23 @@ export function SequentialNumberPage({
                 <div className="flex gap-2">
                   <Button
                     size="sm"
-                    variant={side === 'front' ? 'default' : 'outline'}
+                    variant={side === 'front' ? 'selected' : 'outline'}
                     onClick={() => setSide('front')}
                   >
-                    Front
+                    {t('Front')}
                   </Button>
                   {settings.backMode !== 'none' && (
                     <Button
                       size="sm"
-                      variant={side === 'back' ? 'default' : 'outline'}
+                      variant={side === 'back' ? 'selected' : 'outline'}
                       onClick={() => setSide('back')}
                     >
-                      Back
+                      {t('Back')}
                     </Button>
                   )}
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  PDF page{' '}
+                  {t('PDF page')}{' '}
                   {safeSheet * (settings.backMode === 'none' ? 1 : 2) + (side === 'back' ? 2 : 1)}
                 </span>
               </div>
@@ -1039,20 +1096,15 @@ export function SequentialNumberPage({
                 Gray outlines show item positions in this preview. Empty slots remain unprinted.
               </p>
               <div className="space-y-3 border-t p-5">
-                {message && (
-                  <p role="status" className="rounded-lg bg-muted/50 p-3 text-sm">
-                    {message}
-                  </p>
-                )}
                 {errors.length > 0 && (
-                  <ul className="space-y-1 rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                  <ul className="space-y-1 rounded-[var(--ui-radius-md)] bg-warning p-3 text-xs text-warning-foreground">
                     {errors.map((error, i) => (
                       <li key={i}>{error}</li>
                     ))}
                   </ul>
                 )}
                 {layout.warnings.length > 0 && (
-                  <ul className="space-y-1 text-xs text-amber-700">
+                  <ul className="space-y-1 text-xs text-warning-foreground">
                     {layout.warnings.map((warning, i) => (
                       <li key={i}>{warning}</li>
                     ))}
@@ -1060,41 +1112,18 @@ export function SequentialNumberPage({
                 )}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground">
-                    Print at actual size (100%).
+                    {t('Print at actual size (100%).')}
                     {settings.backMode !== 'none' && ` Use duplex ${settings.duplexFlip} printing.`}
                   </p>
-                  {exporting ? (
+                  {exporting && (
                     <Button variant="outline" onClick={() => abortRef.current?.abort()}>
-                      Cancel export
-                    </Button>
-                  ) : (
-                    <Button disabled={busy || errors.length > 0} onClick={() => void runExport()}>
-                      <Download className="mr-2 size-4" />
-                      Export numbered PDF
+                      {t('Cancel PDF preparation')}
                     </Button>
                   )}
                 </div>
               </div>
             </section>
           )}
-          <Button
-            variant="ghost"
-            disabled={busy}
-            onClick={async () => {
-              if (!(await onConfirmUnsavedChanges('new-project'))) return
-              const fresh = createDefaultSequentialProject()
-              setProject(fresh)
-              setSavedKey(JSON.stringify(fresh))
-              setFilePath(null)
-              setMetadata(createSequentialProjectFile(fresh).metadata)
-              setSelectedPosition(fresh.positions[0]?.id ?? '')
-              setSheetIndex(0)
-              setSide('front')
-              setMessage('Started a new numbering project.')
-            }}
-          >
-            Start new project
-          </Button>
         </div>
       </div>
     </div>

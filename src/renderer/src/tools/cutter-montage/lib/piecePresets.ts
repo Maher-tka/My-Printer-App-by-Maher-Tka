@@ -34,7 +34,7 @@ export function createPiecePresetFromSource(
     widthCm,
     heightCm,
     rotation: 0,
-    offsetMm: 1
+    offsetMm: 0
   }
   const pieceId = createCutterId('piece')
   const artworkObjectId = `artwork-${pieceId}`

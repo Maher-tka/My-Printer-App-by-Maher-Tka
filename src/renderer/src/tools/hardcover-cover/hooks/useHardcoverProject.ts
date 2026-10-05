@@ -24,6 +24,7 @@ import {
 import { DEFAULT_SPINE_BACKGROUND_COLOR, normalizeHexColor } from '../lib/spineBackground'
 import { normalizePdfPagePosition } from '../lib/pdfPosition'
 import { calculateSpineTextLayout, syncSpineAutoFitFontSize } from '../lib/spineTextLayout'
+import { useSpineAutoFill } from './useSpineAutoFill'
 import {
   consumeHardcoverPdfImportTarget,
   hasHardcoverPdfSourceBytes,
@@ -73,6 +74,10 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
   updateSetup: (patch: Partial<CoverSetup>) => void
   updateFront: (patch: Partial<FrontCoverContent>) => void
   updateSpine: (patch: Partial<SpineContent>) => void
+  detectingSpine: boolean
+  spineDetectionMessage: string | null
+  detectSpine: () => void
+  resetSpineAutoFill: () => void
   updateBack: (patch: Partial<BackCoverContent>) => void
   updateExportSettings: (patch: Partial<HardcoverExportSettings>) => void
   importSourcePdf: (file: File) => Promise<void>
@@ -115,6 +120,8 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     return { ...initial, customTemplates: mergeTemplates(initial.customTemplates, storedTemplates) }
   })
   const sourceRuntimeRef = useRef<HardcoverPdfSource | undefined>(undefined)
+  const sourceMountedRef = useRef(true)
+  const spineDetection = useSpineAutoFill(state, setState, getCurrentAcademicYear())
   const sourceReady = useMemo(
     () => (state.sourcePdf ? hasHardcoverPdfSourceBytes(state.sourcePdf) : false),
     [state.sourcePdf]
@@ -124,7 +131,13 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     sourceRuntimeRef.current = state.sourcePdf
   }, [state.sourcePdf])
 
-  useEffect(() => () => releaseHardcoverPdfSourceRuntime(sourceRuntimeRef.current), [])
+  useEffect(() => {
+    sourceMountedRef.current = true
+    return () => {
+      sourceMountedRef.current = false
+      releaseHardcoverPdfSourceRuntime(sourceRuntimeRef.current)
+    }
+  }, [])
 
   const dimensions = useMemo(() => calculateCoverDimensions(state.setup), [state.setup])
   const spineLayout = useMemo(
@@ -284,8 +297,11 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     [patchState]
   )
   const updateSpine = useCallback(
-    (patch: Partial<SpineContent>) => updateContent('spine', patch),
-    [updateContent]
+    (patch: Partial<SpineContent>) => {
+      spineDetection.markSpineEdited(patch)
+      updateContent('spine', patch)
+    },
+    [spineDetection.markSpineEdited, updateContent]
   )
   const updateBack = useCallback(
     (patch: Partial<BackCoverContent>) => updateContent('back', patch),
@@ -305,6 +321,10 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
 
       if (target === 'single') {
         const sourcePdf = await importHardcoverPdfSource(file)
+        if (!sourceMountedRef.current) {
+          releaseHardcoverPdfSourceRuntime(sourcePdf)
+          return
+        }
         patchState((current) => {
           releaseHardcoverPdfSourceRuntime(current.sourcePdf)
           return { ...current, sourcePdf }
@@ -313,6 +333,10 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
       }
 
       const coverSource = await importHardcoverPdfCoverSource(file)
+      if (!sourceMountedRef.current) {
+        releaseHardcoverPdfCoverSourceRuntime(coverSource)
+        return
+      }
       patchState((current) => {
         const previousCover =
           target === 'front' ? current.sourcePdf?.frontSource : current.sourcePdf?.backSource
@@ -553,9 +577,10 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     [patchState]
   )
   const clearProject = useCallback((): void => {
+    spineDetection.resetSpineDetection()
     releaseHardcoverPdfSourceRuntime(sourceRuntimeRef.current)
     setState(createDefaultHardcoverProject())
-  }, [])
+  }, [spineDetection.resetSpineDetection])
 
   return {
     state,
@@ -568,6 +593,10 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     updateSetup,
     updateFront,
     updateSpine,
+    detectingSpine: spineDetection.detectingSpine,
+    spineDetectionMessage: spineDetection.spineDetectionMessage,
+    detectSpine: spineDetection.detectSpine,
+    resetSpineAutoFill: spineDetection.resetSpineDetection,
     updateBack,
     updateExportSettings,
     importSourcePdf,

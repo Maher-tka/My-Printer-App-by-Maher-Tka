@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import {
   Activity,
   ArrowLeft,
@@ -15,6 +16,7 @@ import { BackupRestoreSettings } from '@/backup/BackupRestoreSettings'
 import { AppearanceSettings } from '@/appearance/AppearanceSettings'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Select,
@@ -43,6 +45,8 @@ export function SettingsPage({
   isDeveloperMode,
   onNavigate
 }: SettingsPageProps): JSX.Element {
+  const { t } = useLanguage()
+
   const { settings, preset, setPreset } = usePerformanceSettings()
 
   return (
@@ -54,7 +58,7 @@ export function SettingsPage({
         type="button"
       >
         <ArrowLeft data-icon="inline-start" />
-        Back to Dashboard
+        {t('Back to Dashboard')}
       </Button>
 
       <Card className="overflow-hidden">
@@ -63,80 +67,99 @@ export function SettingsPage({
             <Settings className="size-5" aria-hidden="true" />
           </div>
           <div className="flex flex-col gap-1">
-            <CardTitle className="text-lg">Settings</CardTitle>
-            <CardDescription>Workspace preferences and app management.</CardDescription>
+            <CardTitle className="text-lg">{t('Settings')}</CardTitle>
+            <CardDescription>{t('Workspace preferences and app management.')}</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-6 pt-6">
-          <AppearanceSettings />
-          <section>
-            <p className="mb-2 text-xs font-medium text-muted-foreground">General</p>
-            <div className="rounded-xl border bg-card p-4">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 items-start gap-3">
-                  <SettingsIcon icon={Gauge} />
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold">Performance mode</h3>
-                      <Badge variant="secondary">{settings.label}</Badge>
+          <Tabs defaultValue="general">
+            <TabsList className="grid w-full grid-cols-2" aria-label={t('App settings')}>
+              <TabsTrigger value="general">{t('General')}</TabsTrigger>
+              <TabsTrigger value="advanced">{t('Advanced')}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="general" className="mt-5 space-y-6">
+              <AppearanceSettings />
+
+              <section>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">
+                  {t('App management')}
+                </p>
+                <div className="overflow-hidden rounded-xl border bg-card">
+                  <UpdatesSettings />
+                  <SettingsDestination
+                    icon={KeyRound}
+                    title={t('Access & Subscription')}
+                    description={getLicenseSummary(licenseState)}
+                    badge={
+                      <Badge variant={getLicenseTone(licenseState)}>
+                        {licenseState?.statusLabel ?? t('Checking')}
+                      </Badge>
+                    }
+                    onClick={() => onNavigate('license')}
+                  />
+                </div>
+              </section>
+            </TabsContent>
+            <TabsContent value="advanced" className="mt-5 space-y-6">
+              <p className="text-sm text-muted-foreground">
+                {t(
+                  'Performance, backups and diagnostics. These settings usually only need changing once.'
+                )}
+              </p>
+              <section>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">{t('Performance')}</p>
+                <div className="rounded-xl border bg-card p-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <SettingsIcon icon={Gauge} />
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold">{t('Performance mode')}</h3>
+                          <Badge variant="secondary">{t(settings.label)}</Badge>
+                        </div>
+                        <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                          {t(settings.description)}
+                        </p>
+                      </div>
                     </div>
-                    <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                      {settings.description}
-                    </p>
+                    <Select
+                      value={preset}
+                      onValueChange={(value) => setPreset(value as PerformancePresetId)}
+                    >
+                      <SelectTrigger className="min-w-48" aria-label={t('Performance mode')}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(PERFORMANCE_PRESETS).map((option) => (
+                          <SelectItem key={option.preset} value={option.preset}>
+                            {t(option.label)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
-                <Select
-                  value={preset}
-                  onValueChange={(value) => setPreset(value as PerformancePresetId)}
-                >
-                  <SelectTrigger className="min-w-48" aria-label="Performance mode">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.values(PERFORMANCE_PRESETS).map((option) => (
-                      <SelectItem key={option.preset} value={option.preset}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </section>
-
-          <section>
-            <p className="mb-2 text-xs font-medium text-muted-foreground">App management</p>
-            <div className="overflow-hidden rounded-xl border bg-card">
-              <BackupRestoreSettings />
-              <UpdatesSettings />
-              <SettingsDestination
-                icon={KeyRound}
-                title="Access & Subscription"
-                description={getLicenseSummary(licenseState)}
-                badge={
-                  <Badge variant={getLicenseTone(licenseState)}>
-                    {licenseState?.statusLabel ?? 'Checking'}
-                  </Badge>
-                }
-                onClick={() => onNavigate('license')}
-              />
-              <SettingsDestination
-                icon={Activity}
-                title="App Health"
-                description="Storage, diagnostics, cache, recovery, and app information."
-                onClick={() => onNavigate('app-health')}
-              />
-              {isDeveloperMode ? (
+              </section>
+              <section className="overflow-hidden rounded-xl border bg-card">
+                <BackupRestoreSettings />
                 <SettingsDestination
-                  icon={FlaskConical}
-                  title="Quality Lab"
-                  description="Development-only fixtures and release checks."
-                  badge={<Badge variant="warning">Developer</Badge>}
-                  onClick={() => onNavigate('quality-lab')}
+                  icon={Activity}
+                  title={t('App Health')}
+                  description={t('Storage, diagnostics, cache, recovery, and app information.')}
+                  onClick={() => onNavigate('app-health')}
                 />
-              ) : null}
-            </div>
-          </section>
+                {isDeveloperMode ? (
+                  <SettingsDestination
+                    icon={FlaskConical}
+                    title={t('Quality Lab')}
+                    description={t('Development-only fixtures and release checks.')}
+                    badge={<Badge variant="warning">{t('Developer')}</Badge>}
+                    onClick={() => onNavigate('quality-lab')}
+                  />
+                ) : null}
+              </section>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>
@@ -144,6 +167,8 @@ export function SettingsPage({
 }
 
 function UpdatesSettings(): JSX.Element {
+  const { t } = useLanguage()
+
   const { state, isChecking, checkForUpdates, installUpdate } = useAppUpdates()
   const isDownloaded = state.status === 'downloaded'
 
@@ -152,7 +177,7 @@ function UpdatesSettings(): JSX.Element {
       <SettingsIcon icon={Download} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-semibold text-foreground">App updates</h3>
+          <h3 className="font-semibold text-foreground">{t('App updates')}</h3>
           <Badge variant={updateBadgeVariant(state)}>{updateBadgeLabel(state)}</Badge>
         </div>
         <p className="mt-1 text-sm leading-5 text-muted-foreground">{state.message}</p>
@@ -160,7 +185,7 @@ function UpdatesSettings(): JSX.Element {
           <div
             className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
             role="progressbar"
-            aria-label="Update download progress"
+            aria-label={t('Update download progress')}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={state.downloadPercent ?? 0}
@@ -174,7 +199,7 @@ function UpdatesSettings(): JSX.Element {
       </div>
       {isDownloaded ? (
         <Button type="button" size="sm" onClick={() => void installUpdate()}>
-          Restart to update
+          {t('Restart to update')}
         </Button>
       ) : (
         <Button
@@ -185,7 +210,7 @@ function UpdatesSettings(): JSX.Element {
           onClick={() => void checkForUpdates()}
         >
           <RefreshCw className={isChecking ? 'animate-spin' : undefined} aria-hidden="true" />
-          {isChecking ? 'Checking…' : 'Check now'}
+          {isChecking ? t('Checking…') : t('Check now')}
         </Button>
       )}
     </div>
@@ -242,6 +267,8 @@ function SettingsDestination({
   badge?: ReactNode
   onClick: () => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <button
       type="button"
@@ -254,7 +281,7 @@ function SettingsDestination({
           <span className="font-semibold text-foreground">{title}</span>
           {badge}
         </span>
-        <span className="mt-1 block text-sm leading-5 text-muted-foreground">{description}</span>
+        <span className="mt-1 block text-sm leading-5 text-muted-foreground">{t(description)}</span>
       </span>
       <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
     </button>

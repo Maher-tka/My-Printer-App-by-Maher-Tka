@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +20,8 @@ export function JobCalendar({
   onMonthChange: (month: Date) => void
   onEdit: (job: PrinterJob) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   const [expandedDays, setExpandedDays] = useState<Set<string>>(() => new Set())
   const monthKey = `${month.getFullYear()}-${month.getMonth()}`
   const days = useMemo(() => getCalendarDays(month), [monthKey])
@@ -65,7 +68,7 @@ export function JobCalendar({
             className="text-xs text-primary hover:underline"
             onClick={() => onMonthChange(new Date())}
           >
-            Return to today
+            {t('Return to today')}
           </button>
         </div>
         <Button

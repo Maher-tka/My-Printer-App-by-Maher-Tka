@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { assertWithinCanvasBudget } from '../../../performance/memoryBudget'
@@ -52,6 +53,8 @@ export function ArtworkBackgroundTools({
   piece,
   onApply
 }: ArtworkBackgroundToolsProps): JSX.Element {
+  const { t } = useLanguage()
+
   const [color, setColor] = useState('#ffffff')
   const [tolerance, setTolerance] = useState(10)
   const [busy, setBusy] = useState(false)
@@ -143,23 +146,23 @@ export function ArtworkBackgroundTools({
 
   return (
     <section className="rounded-lg border bg-card p-3" aria-busy={busy}>
-      <h4 className="text-sm font-semibold">Background</h4>
+      <h4 className="text-sm font-semibold">{t('Background')}</h4>
       <p className="mt-1 text-xs text-muted-foreground">
         Remove a solid color from the edges, or add color behind transparent artwork.
       </p>
       <fieldset disabled={busy} className="mt-3 space-y-3">
         <label className="flex items-center justify-between gap-2 text-xs">
-          Background color
+          {t('Background color')}
           <input
             type="color"
-            aria-label="Background color"
+            aria-label={t('Background color')}
             value={color}
             onChange={(event) => setColor(event.target.value)}
             className="h-8 w-12 cursor-pointer rounded border"
           />
         </label>
         <label className="block text-xs">
-          Removal tolerance: {tolerance}%
+          {t('Removal tolerance:')} {tolerance}%
           <input
             type="range"
             aria-label="Background removal tolerance"
@@ -178,7 +181,7 @@ export function ArtworkBackgroundTools({
             disabled={busy}
             onClick={() => void apply('remove')}
           >
-            Remove solid background
+            {t('Remove solid background')}
           </Button>
           <Button
             type="button"
@@ -187,7 +190,7 @@ export function ArtworkBackgroundTools({
             disabled={busy}
             onClick={() => void apply('add')}
           >
-            Add background color
+            {t('Add background color')}
           </Button>
         </div>
       </fieldset>
@@ -198,7 +201,7 @@ export function ArtworkBackgroundTools({
       )}
       {busy && (
         <p className="mt-2 text-xs" role="status">
-          Updating artwork…
+          {t('Updating artwork…')}
         </p>
       )}
       {error && (

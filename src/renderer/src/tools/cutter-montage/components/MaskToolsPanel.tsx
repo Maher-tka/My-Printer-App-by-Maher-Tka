@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { Circle, Pentagon, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { MaskShape, PiecePreset } from '../types'
@@ -14,9 +15,11 @@ export function MaskToolsPanel({
   onPieceChange,
   onCreateCutlineFromMask
 }: MaskToolsPanelProps): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <section className="rounded-lg border bg-card p-3">
-      <h4 className="text-sm font-semibold">Mask / Crop</h4>
+      <h4 className="text-sm font-semibold">{t('Mask / Crop')}</h4>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <MaskButton
           piece={piece}
@@ -28,21 +31,21 @@ export function MaskToolsPanel({
         <MaskButton
           piece={piece}
           shape="square"
-          label="Square"
+          label={t('Square')}
           icon={Square}
           onPieceChange={onPieceChange}
         />
         <MaskButton
           piece={piece}
           shape="rounded-rectangle"
-          label="Rounded"
+          label={t('Rounded')}
           icon={Square}
           onPieceChange={onPieceChange}
         />
         <MaskButton
           piece={piece}
           shape="ellipse"
-          label="Circle"
+          label={t('Circle')}
           icon={Circle}
           onPieceChange={onPieceChange}
         />
@@ -80,7 +83,7 @@ export function MaskToolsPanel({
           }
         />
         <NumberField
-          label="Rotate"
+          label={t('Rotate')}
           value={piece.mask.transform.rotation}
           onChange={(rotation) => onPieceChange(updateMaskTransform(piece, { rotation }))}
         />
@@ -92,7 +95,7 @@ export function MaskToolsPanel({
           onClick={onCreateCutlineFromMask}
           disabled={!piece.mask.enabled}
         >
-          Create Cutline from Mask
+          {t('Create Cutline from Mask')}
         </Button>
         <Button
           type="button"
@@ -122,6 +125,8 @@ function MaskButton({
   icon: typeof Square
   onPieceChange: (piece: PiecePreset) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <Button
       type="button"
@@ -130,7 +135,7 @@ function MaskButton({
       onClick={() => onPieceChange(createMaskForPiece(piece, shape))}
     >
       <Icon data-icon="inline-start" />
-      {label}
+      {t(label)}
     </Button>
   )
 }
@@ -144,9 +149,11 @@ function NumberField({
   value: number
   onChange: (value: number) => void
 }): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-      {label}
+      {t(label)}
       <input
         className="h-8 rounded border bg-background px-2 text-sm text-foreground"
         type="number"

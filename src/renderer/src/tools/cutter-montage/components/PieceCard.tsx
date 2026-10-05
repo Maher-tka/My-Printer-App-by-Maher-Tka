@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { AlertTriangle, Copy, Edit3, FileText, Image, Plus, Scissors, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { PiecePreset } from '../types'
@@ -33,6 +34,8 @@ export function PieceCard({
   onRotationAllowedChange,
   onRename
 }: PieceCardProps): JSX.Element {
+  const { t } = useLanguage()
+
   const orderMode = piece.orderMode ?? 'copies'
   const targetLengthCm = piece.targetLengthCm ?? 100
   const hasPresetTargetLength = PRODUCTION_SHEET_LENGTH_PRESETS_CM.some(
@@ -65,7 +68,7 @@ export function PieceCard({
             <input
               className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-sm font-semibold"
               value={piece.displayName}
-              aria-label="Piece name"
+              aria-label={t('Piece name')}
               onChange={(event) => onRename(piece.id, event.target.value)}
             />
             <Button
@@ -96,16 +99,16 @@ export function PieceCard({
             {!piece.cutlineObjectId && (
               <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-amber-950">
                 <AlertTriangle className="size-3" />
-                No cutline
+                {t('No cutline')}
               </span>
             )}
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
             <label className="grid gap-1">
-              Order by
+              {t('Order by')}
               <select
                 className="h-8 min-w-0 rounded border bg-background px-2 text-sm text-foreground"
-                aria-label="Order by"
+                aria-label={t('Order by')}
                 value={orderMode}
                 onChange={(event) => {
                   if (event.target.value === 'target-length') {
@@ -115,13 +118,13 @@ export function PieceCard({
                   }
                 }}
               >
-                <option value="copies">Copies</option>
-                <option value="target-length">Material length</option>
+                <option value="copies">{t('Copies')}</option>
+                <option value="target-length">{t('Material length')}</option>
               </select>
             </label>
             {orderMode === 'target-length' ? (
               <label className="grid gap-1">
-                Target sheet
+                {t('Target sheet')}
                 <select
                   className="h-8 min-w-0 rounded border bg-background px-2 text-sm text-foreground"
                   aria-label="Target sheet length"
@@ -143,10 +146,10 @@ export function PieceCard({
               </label>
             ) : (
               <label className="grid gap-1">
-                Quantity
+                {t('Quantity')}
                 <input
                   className="h-8 min-w-0 rounded border bg-background px-2 text-sm text-foreground"
-                  aria-label="Quantity"
+                  aria-label={t('Quantity')}
                   type="number"
                   min={1}
                   step={1}
@@ -169,26 +172,26 @@ export function PieceCard({
               checked={piece.rotationAllowed}
               onChange={(event) => onRotationAllowedChange(piece.id, event.target.checked)}
             />
-            Allow rotation
+            {t('Allow rotation')}
           </label>
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <Button type="button" size="sm" variant="outline" onClick={() => onEdit(piece.id)}>
           <Edit3 data-icon="inline-start" />
-          Edit
+          {t('Edit')}
         </Button>
         <Button type="button" size="sm" onClick={() => onAddToSheet(piece.id)}>
           <Plus data-icon="inline-start" />
-          Add
+          {t('Add')}
         </Button>
         <Button type="button" size="sm" variant="outline" onClick={() => onDuplicate(piece.id)}>
           <Copy data-icon="inline-start" />
-          Duplicate
+          {t('Duplicate')}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => onDelete(piece.id)}>
           <Trash2 data-icon="inline-start" />
-          Delete
+          {t('Delete')}
         </Button>
       </div>
     </article>

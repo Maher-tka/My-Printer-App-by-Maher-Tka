@@ -1,0 +1,36 @@
+/* UI follows the selected language; production geometry remains in its own coordinates. */
+html[lang='ar'] body {
+  font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+  letter-spacing: normal;
+}
+
+html[dir='rtl'] .text-left {
+  text-align: start;
+}
+
+html[dir='rtl'] .text-right {
+  text-align: end;
+}
+
+html[dir='rtl'] .dashboard-recent-row,
+html[dir='rtl'] .dashboard-production-choice,
+html[dir='rtl'] .dashboard-action-copy {
+  text-align: start;
+}
+
+/* Numbers, paths and colour codes should not reverse in Arabic controls. */
+input[type='number'],
+input[type='email'],
+input[type='url'],
+input[type='color'],
+[data-production-canvas],
+canvas,
+svg[viewBox] {
+  direction: ltr;
+}
+
+html[dir='rtl'] .app-canvas svg.lucide-arrow-left,
+html[dir='rtl'] .app-canvas svg.lucide-arrow-right,
+html[dir='rtl'] header svg.lucide-chevron-right {
+  transform: scaleX(-1);
+}

@@ -11,6 +11,17 @@ export interface TaskSuggestion {
 
 export const productionTasks: TaskSuggestion[] = [
   {
+    route: 'card-montage',
+    title: 'Montage business cards',
+    description: 'Repeat a PDF or image card design on A4 with the spacing you need.',
+    keywords: 'business card cards carte cartes visite montage a4 بطاقة بطاقات زيارة',
+    steps: [
+      'Import the business card PDF or image.',
+      'Choose zero spacing, custom spacing, or auto 8.8 × 5.6 cm with adjustable horizontal and 1 mm vertical spacing.',
+      'Review the A4 sheet and export or print at actual size.'
+    ]
+  },
+  {
     route: 'booklet-montage',
     title: 'Make a booklet',
     description: 'Arrange PDF pages into sheets for folding and binding.',

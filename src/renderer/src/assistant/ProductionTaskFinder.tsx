@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { ArrowRight, Search, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -6,6 +7,8 @@ import { findProductionTasks } from './taskMatching'
 import type { AppRoute } from '@/types/navigation'
 
 export function TaskFinder({ onNavigate }: { onNavigate: (route: AppRoute) => void }): JSX.Element {
+  const { t } = useLanguage()
+
   const [query, setQuery] = useState('')
   const suggestions = query.trim() ? findProductionTasks(query) : []
   return (
@@ -15,14 +18,11 @@ export function TaskFinder({ onNavigate }: { onNavigate: (route: AppRoute) => vo
     >
       <div className="mb-2 flex items-center gap-2 text-primary">
         <Sparkles className="size-3.5" aria-hidden="true" />
-        <span className="text-xs font-medium">Task guide</span>
+        <span className="text-xs font-medium">{t('Task guide')}</span>
       </div>
       <h2 id="task-finder-title" className="text-base font-semibold">
-        Find the right tool
+        {t('Find the right tool')}
       </h2>
-      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-        Tell us what you’re making. Find your tools and a clear place to start.
-      </p>
       <div className="relative mt-4">
         <Search
           className="pointer-events-none absolute left-3 top-2.5 size-4 text-primary/60"
@@ -32,7 +32,7 @@ export function TaskFinder({ onNavigate }: { onNavigate: (route: AppRoute) => vo
           aria-label="Describe your print task"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="What would you like to make?"
+          placeholder={t('What would you like to make?')}
           className="pl-9"
         />
       </div>
@@ -58,7 +58,7 @@ export function TaskFinder({ onNavigate }: { onNavigate: (route: AppRoute) => vo
             onClick={() => setQuery('')}
             className="px-2 text-xs font-medium text-primary underline underline-offset-4"
           >
-            Clear
+            {t('Clear')}
           </button>
         )}
       </div>
@@ -73,9 +73,6 @@ export function TaskFinder({ onNavigate }: { onNavigate: (route: AppRoute) => vo
               className="flex flex-col rounded-xl border border-primary/15 bg-card p-4"
             >
               <h3 className="text-sm font-semibold">{task.title}</h3>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                {task.description}
-              </p>
               {query.trim() && (
                 <ol className="mb-2 mt-3 list-inside list-decimal space-y-1 text-xs leading-5 text-muted-foreground">
                   {task.steps.map((step) => (
@@ -89,7 +86,7 @@ export function TaskFinder({ onNavigate }: { onNavigate: (route: AppRoute) => vo
                 className="mt-auto w-fit px-0 pt-3 text-primary hover:bg-transparent"
                 onClick={() => onNavigate(task.route)}
               >
-                Open workspace <ArrowRight className="size-4" aria-hidden="true" />
+                {t('Open workspace')} <ArrowRight className="size-4" aria-hidden="true" />
               </Button>
             </article>
           ))}

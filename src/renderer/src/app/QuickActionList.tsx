@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/useLanguage'
 import { ChevronRight, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AppRoute } from '@/types/navigation'
@@ -23,6 +24,8 @@ const actionTones = [
 ]
 
 export function QuickActionList({ actions, onNavigate }: QuickActionListProps): JSX.Element {
+  const { t } = useLanguage()
+
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-1">
       {actions.map((action, index) => {
@@ -50,10 +53,7 @@ export function QuickActionList({ actions, onNavigate }: QuickActionListProps): 
               <Icon className="size-5" aria-hidden="true" />
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="text-sm font-semibold">{action.label}</span>
-              <span className="line-clamp-1 text-xs text-muted-foreground">
-                {action.description}
-              </span>
+              <span className="text-sm font-semibold">{t(action.label)}</span>
             </div>
             <ChevronRight
               className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
