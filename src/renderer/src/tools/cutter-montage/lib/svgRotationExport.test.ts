@@ -123,6 +123,50 @@ async function run(): Promise<void> {
     '270-degree CutContour path rotates after normalized translation and scaling'
   )
 
+  const referencedSvg = await (await exportCutterSvg(project, true)).blob.text()
+  assert(!referencedSvg.includes('<symbol'), 'Illustrator export avoids symbol viewport offsets')
+  assert(
+    (referencedSvg.match(/data:image\/png;base64/g) ?? []).length === 1,
+    'repeated artwork is embedded once'
+  )
+  for (const transform of [
+    'rotate(90 110 220) translate(90 210) scale(40 20)',
+    'rotate(270 310 420) translate(290 410) scale(40 20)'
+  ]) {
+    assertIncludes(
+      referencedSvg,
+      `<use xlink:href="#source-rotation-source" transform="${transform}" />`,
+      'reused artwork rotates around the same sheet center as directly embedded artwork'
+    )
+  }
+  for (const placed of [placed90, placed270]) {
+    assert(
+      getPathElementById(referencedSvg, `CutContour-${placed.id}-cutline-path`) ===
+        getPathElementById(svg, `CutContour-${placed.id}-cutline-path`),
+      'artwork reuse preserves the exact cutting geometry'
+    )
+  }
+
+  const variedPlacements = [
+    createPlacedPieceFromPreset(piece, -1, -0.5),
+    createPlacedPieceFromPreset(piece, 5, 2, 180),
+    { ...createPlacedPieceFromPreset(piece, 10, 5, 90), widthCm: 4, heightCm: 8 }
+  ]
+  const variedSvg = await (
+    await exportCutterSvg({ ...project, placedPieces: variedPlacements }, true)
+  ).blob.text()
+  for (const transform of [
+    'translate(-10 -5) scale(40 20)',
+    'rotate(180 70 30) translate(50 20) scale(40 20)',
+    'rotate(90 120 90) translate(80 70) scale(80 40)'
+  ]) {
+    assertIncludes(
+      variedSvg,
+      `<use xlink:href="#source-rotation-source" transform="${transform}" />`,
+      'negative montage origins, half turns and scaled copies keep their intended coordinates'
+    )
+  }
+
   console.log('SVG rotation export tests passed.')
 }
 
