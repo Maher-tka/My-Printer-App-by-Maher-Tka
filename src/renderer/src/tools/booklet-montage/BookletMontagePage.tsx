@@ -30,6 +30,7 @@ import type { UnsavedChangesAction } from '../../../../shared/project-types'
 import { BookFlipPreview } from './components/BookFlipPreview'
 import { BookletToolbar } from './components/BookletToolbar'
 import { PageManager } from './components/PageManager'
+import { BookletPagePreview } from './components/BookletPagePreview'
 import { SheetPreview } from './components/SheetPreview'
 import { useBookletMontage } from './hooks/useBookletMontage'
 import { getPrintSizeMm, validatePrintSettings } from './lib/printSizes'
@@ -394,6 +395,18 @@ export function BookletMontagePage({
               onSave={() => void saveProject(false)}
               onSaveAs={() => void saveProject(true)}
               onNew={() => void startNewProject()}
+              onClear={() => {
+                montage.clearProject()
+                setSelectedPageId(null)
+                setSelectedItemId(null)
+                setProjectMessage(null)
+              }}
+              clearDisabled={
+                isPrinting ||
+                (montage.pages.length === 0 &&
+                  montage.sources.length === 0 &&
+                  boardItemIds.length === 0)
+              }
             />
           }
         />
@@ -413,7 +426,6 @@ export function BookletMontagePage({
             onCancelImport={montage.cancelImport}
             onCancelExport={montage.cancelExport}
             onSettingsChange={montage.updateSettings}
-            onAutoAddBlankPages={montage.autoAddBlankPages}
             onAddEmptySheet={montage.addEmptySheet}
             onResetSheetLayout={montage.resetSheetLayout}
             onExportImages={(format) =>
@@ -422,30 +434,7 @@ export function BookletMontagePage({
             onViewModeChange={setViewMode}
           />
 
-          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[240px_minmax(0,1fr)_240px] 2xl:grid-cols-[280px_minmax(0,1fr)_280px]">
-            <aside
-              aria-label="Document pages"
-              className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-180px)] lg:overflow-y-auto"
-            >
-              <PageManager
-                compact
-                pages={montage.pages}
-                sources={montage.sources}
-                scaleMode={montage.settings.scaleMode}
-                selectedPageId={selectedPageId}
-                blanksNeeded={montage.blanksNeeded}
-                pageCountIsValid={montage.pageCountIsValid}
-                recentColors={montage.sheetBoardState.recentColors}
-                onSelectPage={setSelectedPageId}
-                onAddBlankPage={montage.addBlankPage}
-                onAutoAddBlankPages={montage.autoAddBlankPages}
-                onReorderPages={montage.reorderPages}
-                onResetOrder={montage.resetPageOrder}
-                onDeletePage={montage.deletePage}
-                onDeleteSource={montage.deleteSource}
-                onBlankPageColorChange={montage.setBlankPageColor}
-              />
-            </aside>
+          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_240px] 2xl:grid-cols-[minmax(0,1fr)_280px]">
             <section className="min-w-0" aria-label="Booklet canvas">
               <div className="flex min-w-0 flex-col gap-4">
                 {montage.error && (
@@ -469,42 +458,27 @@ export function BookletMontagePage({
                 {viewMode === 'sheet' && (
                   <>
                     <ModeHeading title={t('Sheet Mode')} />
-                    <div className="flex min-h-[360px] items-center justify-center rounded-[18px] border border-border/60 bg-muted/30 p-6">
+                    <div className="flex h-[clamp(240px,calc(100vh-460px),540px)] min-w-0 items-center justify-center rounded-[var(--ui-radius-lg)] border border-border/60 bg-muted/30 p-4">
                       {montage.pages.length ? (
                         (() => {
                           const page =
                             montage.pages.find((item) => item.id === selectedPageId) ??
                             montage.pages[0]
                           return (
-                            <figure className="flex max-w-full flex-col items-center gap-4">
-                              {page.thumbnailUrl ? (
-                                <img
-                                  src={page.thumbnailUrl}
-                                  alt={page.displayName || page.label}
-                                  className="max-h-[60vh] max-w-full rounded-sm bg-white shadow-sm"
-                                />
-                              ) : (
-                                <div
-                                  className="grid h-80 w-56 place-items-center border bg-white text-sm text-muted-foreground"
-                                  style={{ backgroundColor: page.colorHex }}
-                                >
-                                  {t('Blank page')}
-                                </div>
-                              )}
-                              <figcaption className="text-xs text-muted-foreground">
-                                {page.displayName || page.label} · {page.widthMm.toFixed(1)} ×{' '}
-                                {page.heightMm.toFixed(1)} mm
-                              </figcaption>
-                            </figure>
+                            <BookletPagePreview
+                              key={page.id}
+                              page={page}
+                              pageNumber={montage.pages.indexOf(page) + 1}
+                              source={montage.sources.find((source) => source.id === page.sourceId)}
+                              scaleMode={montage.settings.scaleMode}
+                            />
                           )
                         })()
                       ) : (
                         <div className="max-w-xs text-center">
                           <h3 className="text-base font-semibold">{t('No document loaded')}</h3>
                           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                            {t(
-                              'Import a PDF or images with the toolbar above. Your pages appear on the left, ready to arrange.'
-                            )}
+                            {t('Import a PDF or images using the toolbar above.')}
                           </p>
                         </div>
                       )}
@@ -543,6 +517,23 @@ export function BookletMontagePage({
                     />
                   </>
                 )}
+                <PageManager
+                  isBusy={projectIsBusy || importIsBusy || exportIsBusy || isPrinting}
+                  pages={montage.pages}
+                  sources={montage.sources}
+                  scaleMode={montage.settings.scaleMode}
+                  selectedPageId={selectedPageId}
+                  blanksNeeded={montage.blanksNeeded}
+                  pageCountIsValid={montage.pageCountIsValid}
+                  recentColors={montage.sheetBoardState.recentColors}
+                  onSelectPage={setSelectedPageId}
+                  onAddBlankPage={montage.addBlankPage}
+                  onAutoAddBlankPages={montage.autoAddBlankPages}
+                  onReorderPages={montage.reorderPages}
+                  onResetOrder={montage.resetPageOrder}
+                  onDeletePage={montage.deletePage}
+                  onBlankPageColorChange={montage.setBlankPageColor}
+                />
               </div>
             </section>
             <aside
@@ -565,7 +556,6 @@ export function BookletMontagePage({
                 onCancelImport={montage.cancelImport}
                 onCancelExport={montage.cancelExport}
                 onSettingsChange={montage.updateSettings}
-                onAutoAddBlankPages={montage.autoAddBlankPages}
                 onAddEmptySheet={montage.addEmptySheet}
                 onResetSheetLayout={montage.resetSheetLayout}
                 onExportImages={(format) =>

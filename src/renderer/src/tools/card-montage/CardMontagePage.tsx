@@ -1,7 +1,7 @@
 import { useLanguage } from '@/i18n/useLanguage'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { ActionButton } from '@/components/ui/action-button'
+import { ClearButton } from '@/components/ui/clear-button'
 import { ToolHeader } from '../shared/ToolHeader'
 import { ToolSettingsTabs } from '../shared/ToolSettingsTabs'
 import { getPrintResultMessage, printPdf } from '@/print/printPdf'
@@ -241,7 +241,7 @@ export function CardMontagePage({
     onDraftChange({
       artwork: null,
       back: null,
-      settings: { ...settings, includeBack: false, exportAllPdfPages: false }
+      settings
     })
     setPreviewSide('front')
     setPreviewResetKey((key) => key + 1)
@@ -314,15 +314,10 @@ export function CardMontagePage({
           onExport: () => void exportPdf()
         }}
         actions={
-          <ActionButton
-            action="reset"
-            size="sm"
-            variant="ghost"
+          <ClearButton
             disabled={Boolean(busy) || (!artwork && !draft.back && !message && !error)}
-            onClick={clear}
-          >
-            {t('Clear')}
-          </ActionButton>
+            onClear={clear}
+          />
         }
       />
       <CardPrintDialog

@@ -366,6 +366,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
     setImportProgress(idleImportProgress)
     setExportProgress(idleExportProgress)
     setError(null)
+    void clearPagePreviewCache()
   }, [])
 
   const updateSettings = useCallback((nextSettings: Partial<SheetSettings>): void => {

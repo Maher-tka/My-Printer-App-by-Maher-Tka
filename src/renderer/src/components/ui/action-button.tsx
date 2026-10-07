@@ -28,6 +28,7 @@ const actions = {
   saveAs: { icon: Save, label: 'Save as' },
   newProject: { icon: FilePlus2, label: 'New project' },
   reset: { icon: RotateCcw, label: 'Reset' },
+  clear: { icon: Trash2, label: 'Clear' },
   undo: { icon: Undo2, label: 'Undo' },
   delete: { icon: Trash2, label: 'Delete' },
   duplicate: { icon: Copy, label: 'Duplicate' },

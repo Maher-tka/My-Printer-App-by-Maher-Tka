@@ -1,5 +1,35 @@
 // App-owned English copy is the stable key. Missing translations fall back to English.
 export const messages: Record<string, { fr: string; ar: string }> = {
+  'Expand pages': { fr: 'Développer les pages', ar: 'توسيع الصفحات' },
+  'Collapse pages': { fr: 'Réduire les pages', ar: 'طي الصفحات' },
+  'Booklet pages': { fr: 'Pages du livret', ar: 'صفحات الكتيب' },
+  'Page actions': { fr: 'Actions des pages', ar: 'إجراءات الصفحات' },
+  'Selected page': { fr: 'Page sélectionnée', ar: 'الصفحة المحددة' },
+  'No pages loaded': { fr: 'Aucune page chargée', ar: 'لا توجد صفحات محملة' },
+  'Select page': { fr: 'Sélectionner la page', ar: 'تحديد الصفحة' },
+  'Reorder page': { fr: 'Réordonner la page', ar: 'إعادة ترتيب الصفحة' },
+  'Delete page': { fr: 'Supprimer la page', ar: 'حذف الصفحة' },
+  'Change page color': { fr: 'Changer la couleur de la page', ar: 'تغيير لون الصفحة' },
+  'Add blank page': { fr: 'Ajouter une page vierge', ar: 'إضافة صفحة فارغة' },
+  'Reset to original order': { fr: 'Rétablir l’ordre initial', ar: 'استعادة الترتيب الأصلي' },
+  'Remove blanks and reset': {
+    fr: 'Retirer les pages vierges et rétablir',
+    ar: 'إزالة الصفحات الفارغة واستعادة الترتيب'
+  },
+  'Loading page…': { fr: 'Chargement de la page…', ar: 'جارٍ تحميل الصفحة…' },
+  'Double-click to inspect page': {
+    fr: 'Double-cliquez pour inspecter la page',
+    ar: 'انقر مرتين لفحص الصفحة'
+  },
+  'Import a PDF or images using the toolbar above.': {
+    fr: 'Importez un PDF ou des images avec la barre d’outils ci-dessus.',
+    ar: 'استورد PDF أو صورًا باستخدام شريط الأدوات أعلاه.'
+  },
+  'Clear workspace?': { fr: 'Vider l’espace de travail ?', ar: 'إفراغ مساحة العمل؟' },
+  'Remove the current artwork, pages, and canvas items? Tool settings and saved files are kept.': {
+    fr: 'Supprimer les visuels, pages et éléments actuels du plan de travail ? Les réglages et les fichiers enregistrés sont conservés.',
+    ar: 'هل تريد إزالة التصاميم والصفحات وعناصر مساحة العمل الحالية؟ يتم الاحتفاظ بإعدادات الأداة والملفات المحفوظة.'
+  },
   'Checking for updates…': { fr: 'Recherche de mises à jour…', ar: 'جارٍ البحث عن تحديثات…' },
   'Installing update…': { fr: 'Installation de la mise à jour…', ar: 'جارٍ تثبيت التحديث…' },
   'Downloading update…': { fr: 'Téléchargement de la mise à jour…', ar: 'جارٍ تنزيل التحديث…' },

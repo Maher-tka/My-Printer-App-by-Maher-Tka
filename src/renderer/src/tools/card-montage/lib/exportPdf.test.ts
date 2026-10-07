@@ -4,12 +4,17 @@ import { readFile } from 'node:fs/promises'
 import fontkit from '@pdf-lib/fontkit'
 import {
   PDFDocument,
+  PDFArray,
   PDFDict,
   PDFName,
   PDFRawStream,
+  PDFStream,
+  PDFBool,
+  PDFNumber,
   decodePDFRawStream,
   degrees,
   rgb,
+  BlendMode,
   StandardFonts
 } from 'pdf-lib'
 import { DEFAULT_CARD_SETTINGS, type CardArtwork } from '../types'
@@ -23,6 +28,113 @@ const pt = (mm: number) => (mm * 72) / 25.4
 const close = (actual: number, expected: number) =>
   assert.ok(Math.abs(actual - expected) < 1e-5, `${actual} != ${expected}`)
 const settings = { ...DEFAULT_CARD_SETTINGS, cutMarks: false }
+
+// Page transparency groups are outside Resources. Dropping them during
+// imposition changes the blending context used by PDF viewers and printers.
+const transparencySource = await PDFDocument.create()
+const profileBytes = new Uint8Array([10, 20, 30, 40])
+const profile = transparencySource.context.register(
+  transparencySource.context.flateStream(profileBytes, { N: 4, Alternate: 'DeviceCMYK' })
+)
+for (const [index, colorSpace] of ['DeviceRGB', 'CardBlend', ['ICCBased', profile]].entries()) {
+  const page = transparencySource.addPage([240, 150])
+  page.drawRectangle({
+    x: 0,
+    y: 0,
+    width: 240,
+    height: 150,
+    color: rgb(0.2, 0.4, 0.8),
+    opacity: 0.7,
+    blendMode: BlendMode.Multiply
+  })
+  page.node
+    .Resources()!
+    .set(
+      PDFName.of('ColorSpace'),
+      transparencySource.context.obj({ CardBlend: ['ICCBased', profile] })
+    )
+  const group = transparencySource.context.obj({
+    Type: 'Group',
+    S: 'Transparency',
+    CS: colorSpace,
+    I: true,
+    K: index === 1
+  })
+  page.node.set(
+    PDFName.of('Group'),
+    index === 0 ? group : transparencySource.context.register(group)
+  )
+}
+const transparencyArtwork: CardArtwork = {
+  name: 'transparent-card.pdf',
+  kind: 'pdf',
+  bytesBase64: Buffer.from(await transparencySource.save()).toString('base64'),
+  pageNumber: 1,
+  pageCount: 3,
+  widthMm: 85,
+  heightMm: 55,
+  previewDataUrl: ''
+}
+for (const route of ['export', 'all-pages', 'print-front', 'print-back', 'print-both'] as const) {
+  const draft = {
+    artwork: transparencyArtwork,
+    back: { ...transparencyArtwork, pageNumber: 2 },
+    settings
+  }
+  const bytes =
+    route === 'export'
+      ? await exportCardMontagePdf(transparencyArtwork, settings)
+      : route === 'all-pages'
+        ? await exportCardMontagePdf(transparencyArtwork, { ...settings, exportAllPdfPages: true })
+        : await createCardPrintPdf(
+            draft,
+            route === 'print-front' ? 'front' : route === 'print-back' ? 'back' : 'both'
+          )
+  const output = await PDFDocument.load(bytes)
+  const expectedIndices =
+    route === 'print-back'
+      ? [1]
+      : route === 'all-pages'
+        ? [0, 1, 2]
+        : route === 'print-both'
+          ? [0, 1]
+          : [0]
+  assert.equal(output.getPageCount(), expectedIndices.length)
+  for (const [pageIndex, sourceIndex] of expectedIndices.entries()) {
+    const xObjects = output
+      .getPage(pageIndex)
+      .node.Resources()!
+      .lookup(PDFName.of('XObject'), PDFDict)
+    const form = output.context.lookup(xObjects.values()[0], PDFStream)
+    const group = form.dict.lookupMaybe(PDFName.of('Group'), PDFDict)
+    assert.ok(group, `${route}: source transparency group must survive montage`)
+    assert.equal(group.lookup(PDFName.of('S'), PDFName).toString(), '/Transparency')
+    if (sourceIndex === 2) {
+      const blendSpace = group.lookup(PDFName.of('CS'), PDFArray)
+      assert.equal(blendSpace.lookup(0, PDFName).toString(), '/ICCBased')
+      const blendProfile = blendSpace.lookup(1, PDFRawStream)
+      assert.deepEqual(decodePDFRawStream(blendProfile).decode(), profileBytes)
+      assert.equal(blendProfile.dict.lookup(PDFName.of('N'), PDFNumber).asNumber(), 4)
+    } else {
+      assert.equal(
+        group.lookup(PDFName.of('CS'), PDFName).toString(),
+        sourceIndex === 0 ? '/DeviceRGB' : '/CardBlend'
+      )
+    }
+    assert.equal(group.lookup(PDFName.of('I'), PDFBool).asBoolean(), true)
+    assert.equal(group.lookup(PDFName.of('K'), PDFBool).asBoolean(), sourceIndex === 1)
+    const resources = form.dict.lookup(PDFName.of('Resources'), PDFDict)
+    const spaces = resources.lookup(PDFName.of('ColorSpace'), PDFDict)
+    const space = spaces.lookup(PDFName.of('CardBlend'), PDFArray)
+    const preservedProfile = space.lookup(1, PDFRawStream)
+    assert.equal(preservedProfile.dict.lookup(PDFName.of('N'), PDFNumber).asNumber(), 4)
+    assert.deepEqual(decodePDFRawStream(preservedProfile).decode(), profileBytes)
+    const graphicsStates = resources.lookup(PDFName.of('ExtGState'), PDFDict)
+    const state = graphicsStates.lookup(graphicsStates.keys()[0], PDFDict)
+    assert.equal(state.lookup(PDFName.of('ca'), PDFNumber).asNumber(), 0.7)
+    assert.equal(state.lookup(PDFName.of('BM'), PDFName).toString(), '/Multiply')
+  }
+}
 function fontProgramHashes(doc: PDFDocument): string[] {
   const hashes = new Set<string>()
   for (const [, object] of doc.context.enumerateIndirectObjects()) {

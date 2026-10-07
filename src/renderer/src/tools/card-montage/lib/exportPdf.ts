@@ -1,4 +1,13 @@
-import { PDFDocument, degrees, rgb, type PDFEmbeddedPage, type PDFImage } from 'pdf-lib'
+import {
+  PDFDocument,
+  PDFName,
+  PDFObjectCopier,
+  PDFStream,
+  degrees,
+  rgb,
+  type PDFEmbeddedPage,
+  type PDFImage
+} from 'pdf-lib'
 import type { CardArtwork, CardMontageSettings } from '../types'
 import { getCardLayout } from './layout'
 import { assertCardFontsEmbedded } from './pdfFonts'
@@ -32,6 +41,7 @@ export async function exportCardMontagePdf(
   for (const { artwork: sideArtwork, side } of sides) {
     if (sideArtwork.kind === 'pdf') {
       const source = await PDFDocument.load(sideArtwork.bytesBase64)
+      const copier = PDFObjectCopier.for(source.context, doc.context)
       if (
         !Number.isInteger(sideArtwork.pageNumber) ||
         sideArtwork.pageNumber < 1 ||
@@ -66,6 +76,14 @@ export async function exportCardMontagePdf(
                 top: media.y + media.height
               }
         )
+        // pdf-lib copies page resources but omits the page-level transparency
+        // group from the Form XObject. Preserve its blending space, isolation,
+        // knockout flags and referenced profiles without flattening the artwork.
+        const group = sourcePage.node.get(PDFName.of('Group'))
+        if (group) {
+          await asset.embed()
+          doc.context.lookup(asset.ref, PDFStream).dict.set(PDFName.of('Group'), copier.copy(group))
+        }
         assets.push({ asset, rotation, kind: 'pdf', side })
       }
     } else if (sideArtwork.kind === 'png')

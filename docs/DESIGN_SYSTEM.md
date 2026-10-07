@@ -23,6 +23,7 @@ This document defines the intended design. Historical screenshots and audit docu
 | Dark appearance                                                | [dark-surfaces.css](../src/renderer/src/appearance/dark-surfaces.css)                                                                                           |
 | Button appearance and sizes                                    | [Button](../src/renderer/src/components/ui/button.tsx)                                                                                                          |
 | Common command labels, icons, busy states                      | [ActionButton and ActionIcon](../src/renderer/src/components/ui/action-button.tsx)                                                                              |
+| Clear current tool content                                     | [ClearButton](../src/renderer/src/components/ui/clear-button.tsx)                                                                                               |
 | Workspace heading and output placement                         | [ToolHeader](../src/renderer/src/tools/shared/ToolHeader.tsx)                                                                                                   |
 | Project file actions and save status                           | [ProjectFileActions](../src/renderer/src/projects/ProjectFileActions.tsx)                                                                                       |
 | Printing availability and progress                             | [PrintButton](../src/renderer/src/print/PrintButton.tsx)                                                                                                        |
@@ -79,6 +80,18 @@ The main action can change with workflow state. For example, Import PDF is prima
 | Dialog footer    | Cancel followed by the confirming action. Use a destructive confirming action only for a destructive operation.                                   |
 
 Do not duplicate an export, import, or print command inside a panel if the same command is already visible in that workspace. A genuinely different operation must have a distinct label, scope, and placement. Use the shared RTL behavior instead of independently reversing each row.
+
+### Clear workspace
+
+- Every production tool uses the shared `ClearButton`, labeled **Clear** with the
+  shared trash icon, once in `ToolHeader` actions. Project tools place it after
+  Save as through `ProjectFileActions`. Do not add another Clear in source panels.
+- Clear removes current artwork, pages, and canvas items while retaining tool
+  settings and saved files. It clears selections and releases imported resources;
+  it does not save, delete a project file, or start a new project.
+- Use the shared confirmation dialog with Cancel first and a destructive Clear
+  confirmation. Disable Clear while busy or when there is no content to clear.
+  Preserve keyboard focus after Cancel, Escape, and confirmation.
 
 ### Interaction states
 

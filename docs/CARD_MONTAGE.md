@@ -85,6 +85,12 @@ images, and embedded font programs. Text does not need to be outlined when its
 font data is embedded. The font status panel identifies embedded fonts on the
 selected side or all sides when exporting the whole file.
 
+Export and printing also preserve the selected PDF page's transparency group,
+including its blending color space, isolation and knockout flags, and referenced
+ICC profile streams. These page-level settings must be copied onto the embedded
+card form because the PDF library does not include them automatically. Original
+object opacity and blend modes remain intact; artwork is not flattened.
+
 Native-only AI without a PDF representation is rejected with an explanation.
 PDF/AI font resources without embedded font programs stop export and printing
 instead of silently substituting a font. Type 3 glyph programs are also supported.
@@ -102,3 +108,18 @@ summary are saved under `output/pdf/card-source-test/`.
 
 Run `npm run test:card` to check the three layouts, sheet bounds, cutting marks,
 physical PDF sizes, page selection, crop boxes, PDF rotation, and image placement.
+
+## PDF color investigation - 2026-10-07
+
+Regression coverage verifies transparency groups, named and inline ICC blending
+spaces, profile bytes, original opacity and blend modes across single-page export,
+all-pages export, and front/back/both printing. The new regression failed before
+the export fix and passes afterward. Card tests, TypeScript, changed-file
+formatting and diff whitespace checks passed.
+
+Synthetic CMYK cards with Normal, Multiply and Screen blending were rendered with
+Poppler and the app's PDF.js preview renderer. Standard non-knockout source and
+montage color samples match within each renderer; the rendered A4 montage was
+visually inspected. These fixtures did not reproduce the reported fading. The
+workshop PC is offline, so the original PDF, its preview, and physical printed
+output remain pending. No preview styling or window layout was changed.

@@ -36,7 +36,6 @@ export interface BookletToolbarProps {
   onCancelImport: () => void
   onCancelExport: () => void
   onSettingsChange: (settings: Partial<SheetSettings>) => void
-  onAutoAddBlankPages: () => void
   onAddEmptySheet: () => void
   onResetSheetLayout: () => void
   onExportImages: (format: 'png' | 'jpg') => void
@@ -76,7 +75,6 @@ export function BookletToolbar({
   onCancelImport,
   onCancelExport,
   onSettingsChange,
-  onAutoAddBlankPages,
   onAddEmptySheet,
   onResetSheetLayout,
   onExportImages,
@@ -300,18 +298,8 @@ export function BookletToolbar({
               })}
             </div>
 
-            {(blanksNeeded > 0 || viewMode === 'montage') && (
+            {viewMode === 'montage' && (
               <div className="basis-full border-t border-[var(--ui-divider)]" aria-hidden="true" />
-            )}
-            {blanksNeeded > 0 && (
-              <Button
-                type="button"
-                variant={nextAction === 'blanks' ? 'default' : 'outline'}
-                onClick={onAutoAddBlankPages}
-                disabled={blanksNeeded === 0 || isBusy}
-              >
-                {t('Auto blanks')}
-              </Button>
             )}
 
             {viewMode === 'montage' && (
@@ -348,17 +336,15 @@ export function BookletToolbar({
 
       {variant === 'actions' && (
         <>
-          <WorkflowHint className="mt-3">
-            {isBusy
-              ? 'Please wait while your files are processed.'
-              : nextAction === 'import'
-                ? 'Start by importing a PDF or images.'
-                : nextAction === 'blanks'
-                  ? `Add ${blanksNeeded} blank page${blanksNeeded === 1 ? '' : 's'} to complete your booklet.`
-                  : nextAction === 'preview'
-                    ? 'Check the page order, then open Montage Mode to review the print sheets.'
-                    : 'Review the print sheets and paper settings, then export your PDF or print.'}
-          </WorkflowHint>
+          {(isBusy || (nextAction !== 'import' && nextAction !== 'blanks')) && (
+            <WorkflowHint className="mt-3">
+              {isBusy
+                ? 'Please wait while your files are processed.'
+                : nextAction === 'preview'
+                  ? 'Check the page order, then open Montage Mode to review the print sheets.'
+                  : 'Review the print sheets and paper settings, then export your PDF or print.'}
+            </WorkflowHint>
+          )}
           <div
             className={
               importProgress.phase === 'idle' && exportProgress.phase === 'idle'

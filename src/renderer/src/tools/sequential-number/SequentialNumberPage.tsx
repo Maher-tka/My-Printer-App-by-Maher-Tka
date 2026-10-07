@@ -435,6 +435,15 @@ export function SequentialNumberPage({
             }}
             onSave={() => void save()}
             onSaveAs={() => void save(true)}
+            onClear={() => {
+              operationRef.current++
+              setProject((current) => ({ ...current, front: null, back: null, positions: [] }))
+              setSelectedPosition('')
+              setSheetIndex(0)
+              setSide('front')
+              setMessage(null)
+            }}
+            clearDisabled={!project.front && !project.back && project.positions.length === 0}
             onNew={async () => {
               if (!(await onConfirmUnsavedChanges('new-project'))) return
               const fresh = createDefaultSequentialProject()

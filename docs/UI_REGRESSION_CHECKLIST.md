@@ -135,6 +135,128 @@ Screenshots: `output/playwright/release-0.2.6/`.
 
 Screenshots: `output/playwright/cutter-wheel/`.
 
+## Hardcover space cleanup — 2026-10-05
+
+- Removed the customer mockup panel, including its low-end placeholder and Load
+  mockup button, the Auto Fit explanatory box, and the Spine placement card.
+  The main cover canvas, Auto Fit checkbox, spine fields, validation, project
+  controls, and output actions retain their existing behavior and shared patterns.
+  No replacement cards, subtitles, or commands were added.
+- Inspected Source PDF and Spine text at 1366×768 English/light, 1920×1080
+  French/dark, and 1600×900 Arabic/light with low-end mode. No horizontal page
+  overflow was found. Keyboard Enter switches steps; Space toggles Auto Fit and
+  reveals/hides the manual font size field correctly.
+- TypeScript, changed-file formatting, diff whitespace, and the full Hardcover
+  regression suite passed. Hardware printing/cutting remains pending; no job sent.
+
+Screenshots: `output/playwright/hardcover-declutter/`.
+
+- Follow-up: removed the PDF pages / Preflight / Checklist summary strip below
+  the cover preview and its unused component. Source controls and export preflight
+  checks remain available in their existing contexts. Repeated the Source PDF and
+  Spine text layout/keyboard checks at the same three sizes, themes, and languages;
+  TypeScript, formatting, and diff whitespace checks passed.
+
+## Booklet empty import hint removed — 2026-10-05
+
+- Removed the initial “Start by importing a PDF or images” arrow hint. Import
+  buttons, busy/progress status, blank-page guidance, and loaded-document behavior
+  retain their existing controls and shared styles. No replacement prose added.
+- Inspected the empty state at 1366×768 English/light, 1920×1080 French/dark, and
+  1600×900 Arabic/light with low-end mode. The hint is absent, both import buttons
+  accept keyboard focus, and no horizontal page overflow was found.
+- TypeScript, changed-file formatting, and diff whitespace checks passed.
+
+Screenshots: `output/playwright/booklet-cleanup/`.
+
+## Booklet blank-page warning — 2026-10-05
+
+- Removed the duplicate “Add N blank pages” arrow hint. The existing page-count
+  warning now uses the shared destructive border, background, and text colors,
+  medium-weight text, and alert semantics. No extra command or message was added.
+- Inspected a two-page booklet at 1366×768 English/light, 1920×1080 French/dark,
+  and 1600×900 Arabic/light with low-end mode. The warning is red, the duplicate
+  hint is absent, and there is no horizontal page overflow. Keyboard Enter on
+  Auto add blank pages produces four pages and removes the warning.
+- TypeScript, changed-file formatting, diff whitespace, and the booklet regression
+  suite passed. No hardware print job was sent.
+
+Screenshots: `output/playwright/booklet-warning/`.
+
+## Universal Clear — 2026-10-05
+
+- Replaced Booklet's imported-file deletion panel with one shared Clear button
+  in the tool header. Booklet, Card Montage, Cutter, Hardcover, and Sequential
+  Number use the same icon, label, size, outline trigger, and confirmation dialog.
+  Clear appears after Save as in project file actions; Card uses its existing
+  header action area. Expanded the shared file-action width so long French labels
+  fit on one row when space allows.
+- Clear removes current sources, pages, designs, placements, and content while
+  keeping settings and saved project paths. It releases import resources and
+  resets selections. Existing New project behavior is preserved. Cancel and Escape
+  retain current work. Empty/busy tools disable Clear; default cover text and number
+  positions count as content. Confirmation uses the shared destructive button.
+- Actual browser checks passed for all five tools: cancel, Escape, clear, empty
+  disabling, and settings preservation (A3 paper, 7 cm cards, quantity 25, 5 cm
+  Cutter margin, and 3 cm spine). Card and Sequential reimport checks passed.
+- Inspected populated tools and confirmation dialogs at 1366×768 English/light,
+  1920×1080 French/dark, and 1366×768 Arabic/light with low-end mode. No horizontal
+  page overflow was found. Dialogs return focus to an enabled header control,
+  including when Clear becomes disabled after confirmation.
+- Added enabled, empty/busy, and interactive confirmation Storybook examples;
+  documented the shared pattern in DESIGN_SYSTEM.md. New dialog copy has French
+  and Arabic translations.
+- TypeScript, formatting, diff whitespace, Booklet/Cutter/Hardcover/Card/Sequential
+  regression suites, i18n tests, and the Storybook build passed. Native desktop
+  save/reopen after Clear and hardware print/cut acceptance remain pending;
+  browser checks do not claim native verification. No print/cut job was sent.
+
+Screenshots: `output/playwright/universal-clear/`.
+
+## Booklet deferred thumbnail notice removed — 2026-10-05
+
+- ProgressLine omits the routine deferred-thumbnail notice, including notices
+  already held in import state. Other import warnings retain their messages;
+  thumbnail limits, page import, and on-demand preview behavior are unchanged.
+- Imported a 34-page PDF at 1366×768 English/light, 1920×1080 French/dark, and
+  1600×900 Arabic/light with low-end mode. All pages remain available, the notice
+  is absent, the real page-count warning remains visible, and there is no page
+  width overflow. Keyboard Enter opens page 34 inspection and renders its preview.
+- TypeScript, formatting, diff whitespace, and booklet regression tests passed.
+
+Screenshots: `output/playwright/deferred-notice/`.
+
+## Booklet carousel and expanded pages — 2026-10-07
+
+- Replaced the left page column with a carousel under the canvas in Sheet,
+  Montage, and 3D Book modes. Removed repeated filenames and type captions from
+  thumbnails. Whole-page images use contain sizing and a small inset so page
+  edges remain visible. Expand pages shows all page cards in a grid; Collapse
+  pages and Escape return to the strip. Deferred thumbnails load on visibility.
+- Preserved selection, Previous/Next, number jumps, wheel scrolling, arrow/Home/End
+  navigation, pointer and keyboard reordering, reset order, deletion, blank colors,
+  and double-click/modified Enter inspection. Auto blanks has one home in this
+  area. Menus and deletion retain usable keyboard focus.
+- The canvas loads selected/deferred pages at preview quality. Shared source PDF
+  loading is independent of a single page's cancellation; clearing the cache
+  invalidates and destroys stale requests without erasing newer ones. Added
+  regression coverage for shared loads, stale cleanup, clear, and failed-load retry.
+- Browser checks passed with a 34-page PDF at 1366×768 English/light,
+  1920×1080 French/dark, and 1600×900 Arabic/light with low-end mode. Checked the
+  compact strip and expanded grid, deferred thumbnails, full-page fit, pointer
+  reordering in the grid, keyboard navigation, collapse, and rapid page changes.
+  No horizontal page overflow was found.
+- Verified blank color updates reach the canvas, Auto blanks completes 34 pages
+  to 36, and inspection opens the selected page. Added interactive, empty, and
+  importing Storybook examples. New copy uses French and Arabic translations.
+- Full local 0.2.9 release checks passed: formatting, TypeScript, all production
+  test suites, Storybook, and the production build. Full release checks and Windows
+  packaging validation are recorded with the published 0.2.9 release. Native
+  save/reopen after these changes and physical printer/cutter acceptance remain
+  pending; no hardware print/cut job was sent.
+
+Screenshots: `output/playwright/carousel/`.
+
 ## Card Montage EPS import — 2026-10-05
 
 - Existing front/back file pickers and drop areas now accept EPS alongside AI,

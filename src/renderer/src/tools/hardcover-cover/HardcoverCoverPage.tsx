@@ -1,15 +1,7 @@
 import { useLanguage } from '@/i18n/useLanguage'
 import { ToolHeader } from '../shared/ToolHeader'
-import {
-  CheckCircle2,
-  ClipboardCheck,
-  FileDown,
-  FileText,
-  Ruler,
-  Settings2,
-  UserRound
-} from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { CheckCircle2, FileDown, FileText, Ruler, Settings2, UserRound } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,11 +13,9 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { ActionButton } from '@/components/ui/action-button'
 import { createPrintedJob } from '@/jobs/printHistory'
 import { useJobStore } from '@/jobs/useJobStore'
-import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
 import { getPrintResultMessage, printPdf } from '@/print/printPdf'
 import { runHardcoverPreflight } from '@/preflight/hardcoverPreflight'
 import { PreflightDialog } from '@/preflight/preflightUI'
@@ -66,8 +56,6 @@ interface HardcoverCoverPageProps {
   onConfirmUnsavedChanges: (action: UnsavedChangesAction) => Promise<boolean>
 }
 
-const LazyCoverMockupPreview = lazy(() => import('./components/CoverMockupPreview'))
-
 type HardcoverWorkflowStep = 'source' | 'measurements' | 'spine' | 'export'
 
 const WORKFLOW_STEPS: Array<{
@@ -107,7 +95,6 @@ export function HardcoverCoverPage({
   const { t } = useLanguage()
 
   const hardcover = useHardcoverProject(openedProject?.project.payload)
-  const { settings: performanceSettings } = usePerformanceSettings()
   const { jobs, saveJob } = useJobStore()
   const [projectFilePath, setProjectFilePath] = useState(openedProject?.filePath ?? null)
   const [projectMetadata, setProjectMetadata] = useState<ProjectMetadata | null>(
@@ -123,7 +110,6 @@ export function HardcoverCoverPage({
   const [message, setMessage] = useState<string | null>(
     openedProject ? `Opened ${openedProject.project.metadata.jobName}` : null
   )
-  const [showLowEndMockup, setShowLowEndMockup] = useState(false)
   const [activeStep, setActiveStep] = useState<HardcoverWorkflowStep>('source')
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false)
   const [pendingExport, setPendingExport] = useState<{
@@ -458,18 +444,6 @@ export function HardcoverCoverPage({
                 hardcover.updateSpine({ shortTitle: hardcover.state.content.front.title })
               }
             />
-            <section className="rounded-lg border bg-card p-4">
-              <h3 className="font-semibold">{t('Spine placement')}</h3>
-              <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-3">
-                <span className="rounded-md border bg-muted/30 p-3">{t('Top: academic year')}</span>
-                <span className="rounded-md border bg-muted/30 p-3">
-                  {t('Middle: mémoire title')}
-                </span>
-                <span className="rounded-md border bg-muted/30 p-3">
-                  {t('Bottom: student name')}
-                </span>
-              </div>
-            </section>
           </div>
         )
       case 'export':
@@ -522,6 +496,36 @@ export function HardcoverCoverPage({
               onSave={() => void saveProject(false)}
               onSaveAs={() => void saveProject(true)}
               onNew={() => void startNew()}
+              onClear={() => {
+                hardcover.clearProject(true)
+                setActiveStep('source')
+                setMessage(null)
+              }}
+              clearDisabled={
+                isPrinting ||
+                hardcover.detectingSpine ||
+                (!hardcover.state.sourcePdf &&
+                  hardcover.state.batchStudents.length === 0 &&
+                  ![
+                    hardcover.state.content.front.studentName,
+                    hardcover.state.content.front.title,
+                    hardcover.state.content.front.degree,
+                    hardcover.state.content.front.university,
+                    hardcover.state.content.front.department,
+                    hardcover.state.content.front.supervisor,
+                    hardcover.state.content.front.academicYear,
+                    hardcover.state.content.front.logoDataUrl,
+                    hardcover.state.content.front.backgroundDataUrl,
+                    hardcover.state.content.spine.studentName,
+                    hardcover.state.content.spine.shortTitle,
+                    hardcover.state.content.spine.year,
+                    hardcover.state.content.spine.universityInitials,
+                    hardcover.state.content.back.summary,
+                    hardcover.state.content.back.contactInfo,
+                    hardcover.state.content.back.qrText,
+                    hardcover.state.content.back.logoDataUrl
+                  ].some(Boolean))
+              }
               additionalActions={
                 <ActionButton
                   action="reset"
@@ -617,44 +621,6 @@ export function HardcoverCoverPage({
             state={hardcover.state}
             onSourcePdfPositionChange={hardcover.updateSourcePdfPosition}
           />
-          <PreviewSummary
-            report={hardcoverPreflight}
-            warnings={hardcover.warnings}
-            checklist={hardcover.checklist}
-            sourcePdf={hardcover.state.sourcePdf}
-          />
-          {performanceSettings.preset !== 'low-end' || showLowEndMockup ? (
-            <Suspense
-              fallback={
-                <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
-                  Loading customer mockup...
-                </div>
-              }
-            >
-              <LazyCoverMockupPreview
-                state={hardcover.state}
-                onModeChange={(mockupMode) =>
-                  hardcover.setState((current) => ({ ...current, mockupMode }))
-                }
-              />
-            </Suspense>
-          ) : (
-            <div className="rounded-lg border bg-card p-4">
-              <p className="font-medium">Customer mockup paused in Low-end PC mode</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Load it only when a customer preview is needed.
-              </p>
-              <Button
-                className="mt-3"
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setShowLowEndMockup(true)}
-              >
-                {t('Load mockup')}
-              </Button>
-            </div>
-          )}
         </section>
       </div>
 
@@ -747,71 +713,6 @@ function WorkflowStepNav({
         })}
       </div>
     </nav>
-  )
-}
-
-function PreviewSummary({
-  report,
-  warnings,
-  checklist,
-  sourcePdf
-}: {
-  report: PreflightReport
-  warnings: string[]
-  checklist: Array<{ label: string; passed: boolean }>
-  sourcePdf: HardcoverProjectPayload['sourcePdf']
-}): JSX.Element {
-  const { t } = useLanguage()
-
-  const passedItems = checklist.filter((item) => item.passed).length
-  const reportVariant =
-    report.status === 'passed'
-      ? 'success'
-      : report.status === 'warnings'
-        ? 'warning'
-        : 'destructive'
-
-  return (
-    <section className="grid min-w-0 max-w-full gap-2 overflow-hidden rounded-lg border bg-card p-3 text-sm sm:grid-cols-3">
-      <div className="rounded-md bg-muted/40 p-3">
-        <div className="flex items-center gap-2 font-medium">
-          <FileText className="size-4" />
-          {t('PDF pages')}
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {sourcePdf
-            ? `Front ${sourcePdf.frontPageNumber}${
-                sourcePdf.backCoverEnabled && sourcePdf.backPageNumber
-                  ? `, back ${sourcePdf.backPageNumber}`
-                  : ', back off'
-              }`
-            : t('Upload a source PDF')}
-        </p>
-      </div>
-      <div className="rounded-md bg-muted/40 p-3">
-        <div className="flex items-center justify-between gap-2 font-medium">
-          {t('Preflight')}
-          <Badge variant={reportVariant}>{report.status}</Badge>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {report.issues.length === 0
-            ? 'No preflight issues.'
-            : `${report.issues.length} preflight issue${report.issues.length === 1 ? '' : 's'}.`}
-          {warnings.length > 0
-            ? ` ${warnings.length} layout notice${warnings.length === 1 ? '' : 's'}.`
-            : ''}
-        </p>
-      </div>
-      <div className="rounded-md bg-muted/40 p-3">
-        <div className="flex items-center gap-2 font-medium">
-          <ClipboardCheck className="size-4" />
-          {t('Checklist')}
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {passedItems} of {checklist.length} item(s) ready.
-        </p>
-      </div>
-    </section>
   )
 }
 

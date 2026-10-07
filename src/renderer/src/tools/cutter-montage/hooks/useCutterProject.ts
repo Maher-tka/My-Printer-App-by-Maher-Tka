@@ -212,7 +212,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
   setExportSettings: (patch: Partial<CutterExportSettings>) => void
   applyExportPreset: (presetId: CutterExportPresetId) => void
   markPieceSaved: () => void
-  clearProject: () => void
+  clearProject: (keepSettings?: boolean) => void
 } {
   const [fineCutBusy, setFineCutBusy] = useState(false)
   const [printBusy, setPrintBusy] = useState(false)
@@ -1701,7 +1701,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     setStatus('Piece preset saved. Add it to the sheet or auto arrange the library.')
   }, [activePieceId])
 
-  const clearProject = useCallback((): void => {
+  const clearProject = useCallback((keepSettings = false): void => {
     fileImportOperationsRef.current.cancel()
     pdfImportOperationsRef.current.cancel()
     releasePdfImportSession(pdfImportSessionRef.current)
@@ -1714,8 +1714,12 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     }
 
     setMode('piece-editor')
-    sheetRef.current = DEFAULT_CUTTER_SHEET
-    setSheet(DEFAULT_CUTTER_SHEET)
+    if (!keepSettings) {
+      sheetRef.current = DEFAULT_CUTTER_SHEET
+      setSheet(DEFAULT_CUTTER_SHEET)
+      setLayers(defaultLayers)
+      setExportSettings(getDefaultCutterExportSettings())
+    }
     setSources([])
     setPieces([])
     setPlacedPieces([])
@@ -1725,11 +1729,9 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     autoArrangeUndoSnapshotRef.current = null
     hasProductionLayoutRef.current = false
     lastOrderLayoutSignatureRef.current = null
-    setLayers(defaultLayers)
-    setExportSettings(getDefaultCutterExportSettings())
     setActivePieceId(null)
     setSelectedPlacedIds([])
-    setStatus('Started a new cutter project. Import artwork to begin.')
+    setStatus(keepSettings ? '' : 'Started a new cutter project. Import artwork to begin.')
     setError(null)
   }, [])
 

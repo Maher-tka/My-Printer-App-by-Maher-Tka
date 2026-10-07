@@ -15,6 +15,15 @@ export function ProgressLine({
       : 0
   const isVisible = progress.phase !== 'idle'
   const isActive = !['idle', 'done', 'canceled', 'error'].includes(progress.phase)
+  const warning =
+    'warning' in progress
+      ? progress.warning
+          ?.replace(
+            /Only \d+ of \d+ page thumbnails are generated during import; remaining pages render on demand\./g,
+            ''
+          )
+          .trim()
+      : undefined
 
   if (!isVisible) {
     return <p className="text-sm text-muted-foreground">{idleMessage}</p>
@@ -47,9 +56,9 @@ export function ProgressLine({
           />
         </div>
       )}
-      {'warning' in progress && progress.warning && (
+      {warning && (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-          {progress.warning}
+          {warning}
         </p>
       )}
     </div>

@@ -436,6 +436,20 @@ export function CutterMontagePage({
                 isDirty={isDirty}
                 message={null}
                 onNew={() => void startNewProject()}
+                onClear={() => {
+                  cutter.clearProject(true)
+                  setStep('prepare')
+                  setPanel(null)
+                  setProjectMessage(null)
+                }}
+                clearDisabled={
+                  stickerMakerOpen ||
+                  cutter.isPdfImportBusy ||
+                  cutter.printBusy ||
+                  (cutter.sources.length === 0 &&
+                    cutter.pieces.length === 0 &&
+                    cutter.placedPieces.length === 0)
+                }
                 onOpen={() => void openProject()}
                 onSave={() => void saveProject(false)}
                 onSaveAs={() => void saveProject(true)}

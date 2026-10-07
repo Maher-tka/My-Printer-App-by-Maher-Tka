@@ -10,6 +10,7 @@ import {
 import { getReadableTextColor, getSolidFillHex } from './colorUtils'
 import { getPrintSizeMm } from './printSizes'
 import { previewRenderQueue } from './renderQueue'
+import { SharedPreviewDocumentCache } from './sharedPreviewDocumentCache'
 
 export type PagePreviewQuality = 'thumbnail' | 'medium' | 'fullPage3d'
 
@@ -41,8 +42,7 @@ const PREVIEW_MAX_HEIGHT: Record<PagePreviewQuality, number> = {
 
 const previewUrlByKey = new Map<string, string>()
 const previewKeyByUrl = new Map<string, string>()
-const pdfDocumentBySourceId = new Map<string, PDFDocumentProxy>()
-const pendingPdfDocumentBySourceId = new Map<string, Promise<PDFDocumentProxy>>()
+const previewDocuments = new SharedPreviewDocumentCache<PDFDocumentProxy>()
 
 export async function renderPagePreview(
   page: BookletPage,
@@ -231,13 +231,7 @@ export async function clearPagePreviewCache(): Promise<void> {
 
   previewUrlByKey.clear()
   previewKeyByUrl.clear()
-  pendingPdfDocumentBySourceId.clear()
-
-  for (const pdf of pdfDocumentBySourceId.values()) {
-    await pdf.destroy()
-  }
-
-  pdfDocumentBySourceId.clear()
+  await previewDocuments.clear()
 }
 
 export function getSinglePageAspectRatio(settings: SheetSettings, firstPage?: BookletPage): number {
@@ -427,33 +421,13 @@ async function getPreviewPdfDocument(
   source: BookletSource,
   signal?: AbortSignal
 ): Promise<PDFDocumentProxy> {
-  const cached = pdfDocumentBySourceId.get(source.id)
-
-  if (cached) {
-    return cached
-  }
-
-  const pending = pendingPdfDocumentBySourceId.get(source.id)
-
-  if (pending) {
-    return pending
-  }
-
-  const promise = import('./pdfWorker')
-    .then(({ loadPdfDocument }) => loadPdfDocument(source.bytes, signal))
-    .then((pdf) => {
-      pendingPdfDocumentBySourceId.delete(source.id)
-      pdfDocumentBySourceId.set(source.id, pdf)
-      return pdf
-    })
-    .catch((error) => {
-      pendingPdfDocumentBySourceId.delete(source.id)
-      throw error
-    })
-
-  pendingPdfDocumentBySourceId.set(source.id, promise)
-
-  return promise
+  assertNotCanceled(signal)
+  const document = await previewDocuments.get(source.id, async () => {
+    const { loadPdfDocument } = await import('./pdfWorker')
+    return loadPdfDocument(source.bytes)
+  })
+  assertNotCanceled(signal)
+  return document
 }
 
 function canvasToPreviewBlob(

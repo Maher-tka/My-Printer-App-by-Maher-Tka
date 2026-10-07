@@ -87,12 +87,6 @@ export function SpineEditor({
           />
           {t('Auto-fit text to spine')}
         </label>
-        {value.autoFit ? (
-          <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
-            Auto Fit follows the spine width and book height. Text resizes and stays centered as
-            measurements change, with your title line breaks preserved.
-          </p>
-        ) : null}
         {!value.autoFit && (
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             {t('Font size')}

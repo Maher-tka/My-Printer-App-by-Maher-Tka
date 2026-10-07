@@ -110,7 +110,7 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
   updateBatchStudent: (id: string, patch: Partial<BatchStudent>) => void
   removeBatchStudent: (id: string) => void
   importBatchCsv: (csv: string) => number
-  clearProject: () => void
+  clearProject: (keepSettings?: boolean) => void
 } {
   const [state, setState] = useState<HardcoverProjectState>(() => {
     const initial = initialProject
@@ -576,11 +576,51 @@ export function useHardcoverProject(initialProject?: HardcoverProjectPayload): {
     },
     [patchState]
   )
-  const clearProject = useCallback((): void => {
-    spineDetection.resetSpineDetection()
-    releaseHardcoverPdfSourceRuntime(sourceRuntimeRef.current)
-    setState(createDefaultHardcoverProject())
-  }, [spineDetection.resetSpineDetection])
+  const clearProject = useCallback(
+    (keepSettings = false): void => {
+      spineDetection.resetSpineDetection()
+      releaseHardcoverPdfSourceRuntime(sourceRuntimeRef.current)
+      sourceRuntimeRef.current = undefined
+      if (!keepSettings) {
+        setState(createDefaultHardcoverProject())
+        return
+      }
+      setState((current) => ({
+        ...current,
+        sourcePdf: undefined,
+        batchStudents: [],
+        content: {
+          front: {
+            ...current.content.front,
+            studentName: '',
+            title: '',
+            degree: '',
+            university: '',
+            department: '',
+            supervisor: '',
+            academicYear: '',
+            logoDataUrl: undefined,
+            backgroundDataUrl: undefined
+          },
+          spine: {
+            ...current.content.spine,
+            studentName: '',
+            shortTitle: '',
+            year: '',
+            universityInitials: ''
+          },
+          back: {
+            ...current.content.back,
+            summary: '',
+            contactInfo: '',
+            qrText: '',
+            logoDataUrl: undefined
+          }
+        }
+      }))
+    },
+    [spineDetection.resetSpineDetection]
+  )
 
   return {
     state,
