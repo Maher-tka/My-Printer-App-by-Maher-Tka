@@ -1487,7 +1487,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
           }
           if (!result.ok) throw new Error(result.error ?? 'Illustrator PDF export failed.')
           setStatus(
-            `Saved verified Illustrator PDF: ${result.filePath}. Artwork and marks visible; CutContour hidden and non-printing.`
+            `Saved verified Illustrator CS6-compatible PDF: ${result.filePath}. Artwork and marks visible; CutContour hidden and non-printing.`
           )
           return
         }
@@ -1506,6 +1506,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
         })
       } catch (exportError) {
         setError(getErrorMessage(exportError))
+        setStatus('PDF export stopped.')
       } finally {
         fineCutPending.current = false
         setFineCutBusy(false)
@@ -1564,6 +1565,8 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
 
   const handleExportAllSheetPdfs = useCallback(async (): Promise<void> => {
     if (fineCutPending.current) return
+    let completedCount = 0
+    let completedFolder: string | undefined
     try {
       setError(null)
       if (!confirmPreflight(preflight)) return
@@ -1583,6 +1586,8 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
       const result = await window.printerApp.runtime.exportIllustratorPdfBatch(
         await createIllustratorPdfBatch(project)
       )
+      completedCount = result.filePaths?.length ?? 0
+      completedFolder = result.folderPath
       if (result.canceled) {
         setStatus('Export canceled.')
         return
@@ -1593,6 +1598,11 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
       )
     } catch (error) {
       setError(getErrorMessage(error))
+      setStatus(
+        completedFolder
+          ? `Saved ${completedCount} PDF(s) before export stopped. Folder: ${completedFolder}`
+          : 'PDF export stopped.'
+      )
     } finally {
       fineCutPending.current = false
       setFineCutBusy(false)

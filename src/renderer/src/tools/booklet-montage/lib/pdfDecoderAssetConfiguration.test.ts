@@ -26,7 +26,8 @@ for (const asset of decoderAssets) {
 
 assert.match(workerSource, /WasmFactory:\s*PdfJsWasmFactory/)
 assert.match(workerSource, /wasmUrl:\s*PDF_JS_WASM_BASE_URL/)
-assert.match(workerSource, /useWorkerFetch:\s*false/)
+assert.match(workerSource, /colorManaged\s*=\s*false/)
+assert.match(workerSource, /useWorkerFetch:\s*colorManaged/)
 assert.match(workerSource, /useWasm:\s*true/)
 assert.doesNotMatch(workerSource, /node_modules[\\/].*pdfjs-dist[\\/]wasm/)
 

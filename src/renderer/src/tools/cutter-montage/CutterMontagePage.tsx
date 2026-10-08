@@ -500,8 +500,11 @@ export function CutterMontagePage({
                             : 'Review the sheet preview, then export your production PDF.'}
               </WorkflowHint>
               {cutter.error && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
-                  {cutter.error}
+                <div
+                  role="alert"
+                  className="min-w-0 break-words rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive"
+                >
+                  {t(cutter.error)}
                 </div>
               )}
 
@@ -554,7 +557,7 @@ export function CutterMontagePage({
                   role="status"
                   aria-live="polite"
                 >
-                  {projectMessage ?? cutter.status}
+                  {t(projectMessage ?? cutter.status)}
                 </span>
               </div>
               <TabsContent

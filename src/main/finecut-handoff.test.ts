@@ -45,6 +45,7 @@ const groups: any[] = ['Artwork', 'CutContour', 'RegistrationMarks'].map((name) 
   return group
 })
 const saves: any[] = []
+const copies: any[] = []
 const spots: any[] = []
 Object.assign(spots, {
   getByName(name: string) {
@@ -80,6 +81,11 @@ const result = runInNewContext(
     app,
     File: function (this: any, path: string) {
       this.path = path
+      this.copy = (destination: string) => {
+        copies.push({ source: path, destination })
+        return true
+      }
+      this.remove = () => true
     },
     ElementPlacement: { PLACEATEND: 1 },
     ColorModel: { SPOT: 1 },
@@ -88,6 +94,7 @@ const result = runInNewContext(
     IllustratorSaveOptions: function () {},
     PDFSaveOptions: function () {},
     PDFCompatibility: { ACROBAT6: 6 },
+    Compatibility: { ILLUSTRATOR16: 16 },
     UserInteractionLevel: { DONTDISPLAYALERTS: 0 }
   }
 )
@@ -103,7 +110,11 @@ assert.deepEqual(
 )
 assert.equal(saves.length, 2)
 assert.ok(saves.every((save) => !save.cutVisible && !save.cutPrintable))
-assert.equal(saves[1].options.preserveEditability, true)
+assert.equal(saves[0].options.preserveEditability, true)
+assert.equal(saves[0].options.acrobatLayers, true)
+assert.equal(saves[1].options.compatibility, 16)
+assert.equal(saves[1].options.pdfCompatible, true)
+assert.deepEqual(copies, [{ source: 'output.ai', destination: 'output.pdf' }])
 assert.equal(groups[1].pageItems[0].strokeWidth, 0.25)
 assert.equal(groups[2].pageItems[0].filled, true)
 assert.equal(app.userInteractionLevel, 'normal')

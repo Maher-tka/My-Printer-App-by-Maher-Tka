@@ -1,5 +1,49 @@
 // App-owned English copy is the stable key. Missing translations fall back to English.
 export const messages: Record<string, { fr: string; ar: string }> = {
+  'The destination PDF is already open in Illustrator. Close it or choose another filename.': {
+    fr: 'Le PDF de destination est déjà ouvert dans Illustrator. Fermez-le ou choisissez un autre nom de fichier.',
+    ar: 'ملف PDF المقصود مفتوح بالفعل في Illustrator. أغلقه أو اختر اسم ملف آخر.'
+  },
+  'Illustrator could not verify the saved PDF. Export it again before using it for production.': {
+    fr: 'Illustrator n’a pas pu vérifier le PDF enregistré. Réexportez-le avant de l’utiliser en production.',
+    ar: 'تعذر على Illustrator التحقق من ملف PDF المحفوظ. أعد تصديره قبل استخدامه في الإنتاج.'
+  },
+  'Open Adobe Illustrator, close its startup dialogs, then export again.': {
+    fr: 'Ouvrez Adobe Illustrator, fermez les fenêtres de démarrage, puis relancez l’export.',
+    ar: 'افتح Adobe Illustrator وأغلق نوافذ بدء التشغيل، ثم أعد التصدير.'
+  },
+  'Illustrator is waiting for a dialog. Switch to Illustrator, close the FineCut/Coat setup or other open dialog, then export again.':
+    {
+      fr: 'Illustrator attend une réponse dans une fenêtre. Passez dans Illustrator, fermez la configuration FineCut/Coat ou toute autre fenêtre ouverte, puis relancez l’export.',
+      ar: 'ينتظر Illustrator نافذة حوار. انتقل إلى Illustrator وأغلق إعداد FineCut/Coat أو أي نافذة حوار مفتوحة، ثم أعد التصدير.'
+    },
+  'Illustrator is busy with another operation. Wait for it to finish, then export again.': {
+    fr: 'Illustrator exécute une autre opération. Attendez la fin, puis relancez l’export.',
+    ar: 'Illustrator مشغول بعملية أخرى. انتظر حتى تنتهي، ثم أعد التصدير.'
+  },
+  'Illustrator did not finish this export in time. Check Illustrator and its FineCut/Coat dialogs before trying again.':
+    {
+      fr: 'Illustrator n’a pas terminé l’export à temps. Vérifiez Illustrator et les fenêtres FineCut/Coat avant de réessayer.',
+      ar: 'لم يكمل Illustrator التصدير في الوقت المحدد. تحقق من Illustrator ونوافذ FineCut/Coat قبل إعادة المحاولة.'
+    },
+  'The Illustrator automation connection is unavailable. Open Illustrator once, then retry.': {
+    fr: 'La connexion d’automatisation Illustrator est indisponible. Ouvrez Illustrator, puis réessayez.',
+    ar: 'اتصال أتمتة Illustrator غير متاح. افتح Illustrator مرة واحدة، ثم أعد المحاولة.'
+  },
+  'Illustrator could not export this sheet. Check its open dialogs and try again. Export diagnostics were kept in the cutting job folder.':
+    {
+      fr: 'Illustrator n’a pas pu exporter cette feuille. Vérifiez ses fenêtres ouvertes et réessayez. Les diagnostics sont conservés dans le dossier du travail de découpe.',
+      ar: 'تعذر على Illustrator تصدير هذه الورقة. تحقق من نوافذ الحوار المفتوحة وأعد المحاولة. تم حفظ تشخيص التصدير في مجلد مهمة القص.'
+    },
+  'The PDF could not be saved to this folder. Choose a writable local folder and try again.': {
+    fr: 'Le PDF n’a pas pu être enregistré dans ce dossier. Choisissez un dossier local accessible en écriture et réessayez.',
+    ar: 'تعذر حفظ PDF في هذا المجلد. اختر مجلدًا محليًا يسمح بالكتابة وأعد المحاولة.'
+  },
+  'There is not enough free space to save the PDF. Free some disk space or choose another drive.': {
+    fr: 'L’espace disponible est insuffisant pour enregistrer le PDF. Libérez de l’espace ou choisissez un autre disque.',
+    ar: 'لا توجد مساحة خالية كافية لحفظ PDF. حرر بعض المساحة أو اختر قرصًا آخر.'
+  },
+  'PDF export stopped.': { fr: 'L’export PDF s’est arrêté.', ar: 'توقف تصدير PDF.' },
   'Move contour left': { fr: 'Déplacer le contour à gauche', ar: 'تحريك خط القص لليسار' },
   'Move contour right': { fr: 'Déplacer le contour à droite', ar: 'تحريك خط القص لليمين' },
   'Move contour up': { fr: 'Déplacer le contour vers le haut', ar: 'تحريك خط القص للأعلى' },

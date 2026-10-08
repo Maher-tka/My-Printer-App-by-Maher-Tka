@@ -34,8 +34,11 @@ export function createIllustratorCutScript(
  }
  paint(cutGroup,'cut');paint(marksGroup,'marks');
  art.printable=true;marks.printable=true;cut.printable=false;cut.visible=false;art.locked=true;marks.locked=true;
- var ai=new IllustratorSaveOptions();ai.pdfCompatible=true;doc.saveAs(new File(${JSON.stringify(aiPath)}),ai);
- var pdf=new PDFSaveOptions();pdf.preserveEditability=true;pdf.acrobatLayers=true;pdf.compatibility=PDFCompatibility.ACROBAT6;doc.saveAs(new File(${JSON.stringify(pdfPath)}),pdf);
+ var printSource=new File(${JSON.stringify(pdfPath + '.print-source.pdf')}),legacy=new File(${JSON.stringify(aiPath)});
+ var pdf=new PDFSaveOptions();pdf.preserveEditability=true;pdf.acrobatLayers=true;pdf.compatibility=PDFCompatibility.ACROBAT6;doc.saveAs(printSource,pdf);
+ var ai=new IllustratorSaveOptions();ai.compatibility=Compatibility.ILLUSTRATOR16;ai.pdfCompatible=true;ai.compressed=true;ai.embedLinkedFiles=true;doc.saveAs(legacy,ai);
+ if(!legacy.copy(${JSON.stringify(pdfPath)}))throw new Error('Could not save the CS6-compatible print PDF.');
+ try{printSource.remove();}catch(ignore){}
  cut.visible=true;doc.activeLayer=cut;doc.selection=null;cutGroup.selected=true;app.redraw();
  return 'Prepared native layers; select FineCut Plot and detect marks on the work PC. No device job was sent.';
  } finally {app.userInteractionLevel=previousInteraction;}

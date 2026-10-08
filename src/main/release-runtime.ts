@@ -65,11 +65,20 @@ export function registerReleaseRuntimeHandlers(): void {
   })
   ipcMain.handle('runtime:export-illustrator-pdf-batch', async (event, request: unknown) => {
     await assertOnlineProductionAccess('batch-exports', 'cutter-montage')
-    return exportIllustratorPdfBatch(request, BrowserWindow.fromWebContents(event.sender))
+    const result = await exportIllustratorPdfBatch(
+      request,
+      BrowserWindow.fromWebContents(event.sender)
+    )
+    if (!result.ok && !result.canceled && result.error)
+      recordAppError('illustrator-pdf-export', new Error(result.error))
+    return result
   })
   ipcMain.handle('runtime:export-illustrator-pdf', async (event, request: unknown) => {
     await assertOnlineProductionAccess('paid-tools', 'cutter-montage')
-    return exportIllustratorPdf(request, BrowserWindow.fromWebContents(event.sender))
+    const result = await exportIllustratorPdf(request, BrowserWindow.fromWebContents(event.sender))
+    if (!result.ok && !result.canceled && result.error)
+      recordAppError('illustrator-pdf-export', new Error(result.error))
+    return result
   })
   ipcMain.handle('runtime:prepare-finecut-job', async (_event, request: unknown) => {
     await assertOnlineProductionAccess('paid-tools', 'cutter-montage')

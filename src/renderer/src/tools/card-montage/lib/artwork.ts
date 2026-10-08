@@ -6,6 +6,7 @@ import {
 } from '../../sequential-number/lib/artwork'
 import type { CardArtwork } from '../types'
 import { inspectCardPageFonts } from './pdfFonts'
+import { loadCardJpegArtwork } from './jpegArtwork'
 import { getPerformanceSettingsSnapshot } from '../../../performance/performanceSettings'
 import {
   assertEpsImportRequest,
@@ -65,6 +66,7 @@ export async function loadCardArtwork(file: File): Promise<CardArtwork> {
   const prepared = await prepareCardArtworkFile(file)
   const header = new Uint8Array(await prepared.slice(0, 1024).arrayBuffer())
   assertCardFileSupported(header, prepared.name)
+  if (header[0] === 0xff && header[1] === 0xd8) return loadCardJpegArtwork(prepared)
   const artwork = await addPdfInfo(await loadNumberArtwork(prepared))
   return artwork.kind === 'pdf' && artwork.pageCount > 1
     ? loadCardPagePreviews(artwork, 1)

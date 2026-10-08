@@ -12,6 +12,8 @@ import type { CardArtwork, CardMontageSettings } from '../types'
 import { getCardLayout } from './layout'
 import { assertCardFontsEmbedded } from './pdfFonts'
 import { CARD_CROP_LINE_WIDTH_PT } from './cropMarks'
+import { createCardJpegPdf } from './jpegArtwork'
+import { artworkBytes } from '../../sequential-number/lib/artwork'
 
 const pt = (mm: number) => (mm * 72) / 25.4
 
@@ -93,14 +95,17 @@ export async function exportCardMontagePdf(
         kind: 'image',
         side
       })
-    else if (sideArtwork.kind === 'jpeg')
+    else if (sideArtwork.kind === 'jpeg') {
+      const [asset] = await doc.embedPdf(
+        await createCardJpegPdf(artworkBytes(sideArtwork.bytesBase64))
+      )
       assets.push({
-        asset: await doc.embedJpg(sideArtwork.bytesBase64),
+        asset,
         rotation: 0,
-        kind: 'image',
+        kind: 'pdf',
         side
       })
-    else throw new Error('Choose a PDF, PNG or JPEG design.')
+    } else throw new Error('Choose a PDF, PNG or JPEG design.')
   }
   for (const { asset, rotation, kind, side } of assets) {
     const layout = getCardLayout(settings, side)

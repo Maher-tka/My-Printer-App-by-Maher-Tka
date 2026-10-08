@@ -1,5 +1,6 @@
 import { app } from 'electron'
-import { mkdir, writeFile, stat } from 'node:fs/promises'
+import { mkdir, writeFile, stat, readFile } from 'node:fs/promises'
+import { verifyCs6IllustratorPdf } from './illustrator-pdf-compatibility.js'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
@@ -52,6 +53,7 @@ export async function prepareFineCutJob(request: unknown): Promise<FineCutHandof
     )
     await stat(aiPath)
     await stat(pdfPath)
+    await verifyCs6IllustratorPdf(await readFile(pdfPath))
     return { ok: true, sentToDevice: false, aiPath, pdfPath, folderPath }
   } catch (error) {
     if (folderPath)

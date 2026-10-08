@@ -12,6 +12,8 @@ When the user says to push an update, they mean publish a new stable app release
 
 Keep all application source code and development work on the main PC. Use the connected workshop PC only to inspect, install/update, and verify released builds. Do not clone or develop the application source on the workshop PC.
 
+The user gives standing permission to control the workshop PC for these checks and to message its Codex chats to coordinate inspection, installation/update, and verification. Do not ask for that permission again. Preserve saved projects, original artwork, source files, and settings.
+
 The workshop PC is in a testing phase. Until the user says otherwise, unsaved in-app test work there is disposable: updates and restarts may close the app and discard that work without a save prerequisite or another confirmation. This preference applies only to unsaved work on the workshop PC; preserve saved projects, source files, and settings.
 
 # Design system for future updates

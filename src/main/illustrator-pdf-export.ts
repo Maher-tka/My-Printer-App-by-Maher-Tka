@@ -1,9 +1,15 @@
 import { app, BrowserWindow, dialog } from 'electron'
-import { mkdir, writeFile, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, writeFile, stat, readFile } from 'node:fs/promises'
+import { verifyCs6IllustratorPdf } from './illustrator-pdf-compatibility.js'
+import { dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
+import {
+  getIllustratorExportErrorMessage,
+  isIllustratorExportTimeout,
+  isIllustratorJobUnfinished,
+  ILLUSTRATOR_EXPORT_MESSAGES,
+  runIllustratorPdfScript
+} from './illustrator-export-runner.js'
 import {
   validateIllustratorPdfExport,
   validateIllustratorPdfBatch,
@@ -17,8 +23,20 @@ import {
   type IllustratorPdfLayoutFile
 } from './illustrator-pdf-script.js'
 
-const execute = promisify(execFile)
 let pending = false
+let unfinishedJob: string | undefined
+async function hasUnfinishedJob(): Promise<boolean> {
+  if (!unfinishedJob) return false
+  if (
+    await isIllustratorJobUnfinished(
+      unfinishedJob,
+      join(dirname(unfinishedJob), 'run-export.ps1.process')
+    )
+  )
+    return true
+  unfinishedJob = undefined
+  return false
+}
 export async function exportIllustratorPdf(
   request: unknown,
   owner: BrowserWindow | null
@@ -35,10 +53,12 @@ export async function exportIllustratorPdf(
         'Select one vinyl sheet with artwork, cutting paths, four corner marks and one direction arrow.'
     }
   if (pending) return { ok: false, error: 'An Illustrator PDF export is already running.' }
+  if (await hasUnfinishedJob()) return { ok: false, error: ILLUSTRATOR_EXPORT_MESSAGES.busy }
+  if (pending) return { ok: false, error: 'An Illustrator PDF export is already running.' }
   pending = true
   try {
     const options = {
-      title: 'Export editable Illustrator Print + Cut PDF',
+      title: 'Export Illustrator CS6-compatible Print + Cut PDF',
       defaultPath: getCutterSheetPdfFileName(
         request.layoutNumber ?? 1,
         request.layouts[0].repeatCount
@@ -54,7 +74,7 @@ export async function exportIllustratorPdf(
   } catch (error) {
     return {
       ok: false,
-      error: `Illustrator PDF export failed. Check that Illustrator is installed, activated and has no blocking dialogs. ${error instanceof Error ? error.message : String(error)}`
+      error: getIllustratorExportErrorMessage(error)
     }
   } finally {
     pending = false
@@ -73,12 +93,14 @@ export async function exportIllustratorPdfBatch(
       error: 'Invalid PDF sheet batch. Export up to 100 unique sheets at a time.'
     }
   if (pending) return { ok: false, error: 'An Illustrator PDF export is already running.' }
+  if (await hasUnfinishedJob()) return { ok: false, error: ILLUSTRATOR_EXPORT_MESSAGES.busy }
+  if (pending) return { ok: false, error: 'An Illustrator PDF export is already running.' }
   pending = true
   let folderPath: string | undefined
   const filePaths: string[] = []
   try {
     const options = {
-      title: 'Choose folder for separate vinyl-sheet PDFs',
+      title: 'Choose folder for separate CS6-compatible vinyl-sheet PDFs',
       properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>
     }
     const chosen = owner
@@ -91,6 +113,7 @@ export async function exportIllustratorPdfBatch(
       'VINYL SHEET PRINT PLAN',
       '',
       'Each PDF is one page / one artboard.',
+      'Editable Artwork, CutContour and registration layers are saved in Illustrator CS6 format.',
       'x6 means print that PDF 6 times. Print at 100% / Actual size.',
       'Four corner marks and one direction arrow per printed sheet. Cut each printed sheet once.',
       ''
@@ -110,7 +133,7 @@ export async function exportIllustratorPdfBatch(
       ok: false,
       folderPath,
       filePaths,
-      error: `Saved ${filePaths.length} PDF(s). Illustrator export stopped: ${error instanceof Error ? error.message : String(error)}`
+      error: getIllustratorExportErrorMessage(error)
     }
   } finally {
     pending = false
@@ -131,22 +154,44 @@ async function saveVerifiedSheet(
     { svgPath, widthMm: layout.widthMm, heightMm: layout.heightMm, repeatCount: layout.repeatCount }
   ]
   const scriptPath = join(folder, 'export-pdf.jsx')
+  const statusPath = join(folder, 'export-status.txt')
   await writeFile(
     scriptPath,
-    createIllustratorPdfScript(files, destination, request.layoutNumber ?? 1, keepOpen),
+    createIllustratorPdfScript(files, destination, request.layoutNumber ?? 1, keepOpen, statusPath),
     'utf8'
   )
-  const literal = scriptPath.replace(/'/g, "''")
-  const ps = `$ErrorActionPreference='Stop';$illustrator=New-Object -ComObject Illustrator.Application;$result=$illustrator.DoJavaScriptFile('${literal}');Write-Output $result`
-  await execute(
-    'powershell.exe',
-    [
-      '-NoProfile',
-      '-NonInteractive',
-      '-EncodedCommand',
-      Buffer.from(ps, 'utf16le').toString('base64')
-    ],
-    { windowsHide: true, timeout: 180000, maxBuffer: 1024 * 1024 }
-  )
-  if (!(await stat(destination)).size) throw new Error('Illustrator wrote an empty PDF.')
+  try {
+    await runIllustratorPdfScript(scriptPath, join(folder, 'run-export.ps1'))
+    if (!(await stat(destination)).size) throw new Error('Illustrator wrote an empty PDF.')
+    await verifyCs6IllustratorPdf(await readFile(destination))
+  } catch (error) {
+    if (isIllustratorExportTimeout(error) && (await isIllustratorJobUnfinished(statusPath)))
+      unfinishedJob = statusPath
+    const failure = error as Error & {
+      stderr?: string
+      stdout?: string
+      code?: unknown
+      signal?: unknown
+      killed?: boolean
+    }
+    await writeFile(
+      join(folder, 'export-error.json'),
+      JSON.stringify(
+        {
+          time: new Date().toISOString(),
+          destination,
+          message: failure.message,
+          stderr: failure.stderr,
+          stdout: failure.stdout,
+          code: failure.code,
+          signal: failure.signal,
+          killed: failure.killed
+        },
+        null,
+        2
+      ),
+      'utf8'
+    ).catch(() => undefined)
+    throw error
+  }
 }

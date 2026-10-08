@@ -77,6 +77,13 @@ their full imported resolution. The current card and settings remain available
 when navigating to another tool during the same app session. Card Montage does
 not currently save `.mpjob` projects.
 
+JPEG input retains its original compressed bytes, color channels and embedded ICC
+profile through preview, export and printing. CMYK designs are not converted to
+RGB during import. The preview uses the bundled ICC color engine, and JPEG EXIF
+rotation and mirroring are applied consistently without re-encoding the image.
+After upgrading from a version that converted the JPEG on import, reimport the
+original JPG; its lost print colors cannot be restored from an older RGB export.
+
 ## Illustrator and font preservation
 
 PDF-compatible AI is read directly from its saved PDF representation; Illustrator
@@ -123,3 +130,25 @@ montage color samples match within each renderer; the rendered A4 montage was
 visually inspected. These fixtures did not reproduce the reported fading. The
 workshop PC is offline, so the original PDF, its preview, and physical printed
 output remain pending. No preview styling or window layout was changed.
+
+## CMYK JPEG color correction - 2026-10-08
+
+Workshop inspection confirmed that the reported source is a 6496x4098 CMYK/YCCK
+JPEG with U.S. Web Coated (SWOP) v2 ICC data. The exported image was untagged RGB;
+there was no opacity setting or white overlay. A source dark-blue patch measured
+RGB (7, 24, 49) under color management versus (52, 61, 76) in the old export.
+
+An anonymous fixture using the same profile and CMYK patch reproduced the old
+import at (51, 61, 75). The corrected preview, built Electron renderer using
+file URLs, and exported PDF produce approximately (5, 24, 49). The UI-exported
+PDF retains identical JPEG bytes and a four-channel ICCBased image color space.
+No customer artwork or third-party ICC profile was added to the repository.
+
+Card regression tests cover profile chunk ordering, invalid/incomplete profiles,
+all eight EXIF orientations, mirrored designs, and front/back/both printing.
+Browser checks cover actual RGB/CMYK/grayscale images, all eight orientations,
+and a 26-megapixel source matching the workshop dimensions. TypeScript, Card and
+Booklet regressions, formatting, and the production build passed. Screen checks
+and pending installed-build/physical-print validation are recorded in
+`UI_REGRESSION_CHECKLIST.md`. Publication and installation of this correction
+remain pending.

@@ -461,3 +461,64 @@ shared buttons and tokens, keeps controls in one location, preserves production
 geometry, and introduces no heading subtitles. The existing navigation label
 clipping and installed/hardware checks remain pending as recorded above.
 Windows packaging and publication are verified by the tag-triggered workflow.
+
+## Card Montage CMYK JPEG colors - 2026-10-08
+
+- Fixed the confirmed image-import color conversion: JPEG bytes, original
+  channels and ICC profiles now remain intact. The preview opts into PDF.js ICC
+  processing using the existing bundled WASM assets; default PDF loading remains
+  unchanged. No interface controls, tokens, layout or heading copy changed.
+- Inspected anonymous SWOP CMYK artwork at 1366x768 English/light, 1920x1080
+  French/dark, and 1366x768 Arabic/dark with low-end mode. Reimporting in each
+  configuration retained the dark-blue patch at RGB (5, 24, 49), with no artwork
+  filters or reduced opacity. No horizontal page overflow; existing panels scroll.
+  Export PDF receives visible keyboard focus. Screenshots inspected:
+  `output/playwright/card-jpeg-*`.
+- Actual browser import checks passed for RGB with an Adobe RGB profile,
+  grayscale, CMYK with SWOP, and all eight EXIF rotation/mirroring orientations.
+  A 6496x4098 anonymous CMYK fixture imported in about 2.5 seconds locally with
+  a 1200x758 preview and unchanged source bytes. The ordinary UI Export PDF action
+  saved a PDF whose embedded JPEG bytes match the original and whose ICCBased
+  image retains four CMYK channels; no soft mask or fading overlay was introduced.
+- The built Electron renderer loaded local-file worker/WASM assets and rendered
+  the same corrected colors. Poppler rendering of the exported PDF also retained
+  the dark-blue patch; the rendered A4 sheet was visually inspected.
+- Card and Booklet tests, TypeScript, formatting and production build passed.
+  The customer's actual files were inspected on the workshop PC. Retesting that
+  original JPG with a newly installed stable correction and physical printing
+  remain pending; no hardware print job was sent. Reimport the original JPG after
+  updating, because older RGB exports no longer contain its CMYK data.
+
+## Cutter CS6 editing compatibility - 2026-10-08
+
+- Native single-sheet, separate-sheet batch and Illustrator/FineCut files now
+  save version-16 editing data through the CS6 Illustrator serializer. The
+  exported file remains a real one-page PDF 1.5 with three PDF layers. Native
+  reopening checks all three Illustrator layers, hidden/non-printing CutContour,
+  cut count/position, registration marks, direction arrow and sheet dimensions;
+  binary validation rejects modern editing data and missing PDF layers.
+- Tested the actual Illustrator 30.8.2 export on a retained 40-sticker layout at
+  925×115 mm. The saved file contains the CS6 editing header and reopens with
+  three native layers, 40 cutting paths, four corner marks and one arrow. The
+  printed page rendered with PDF.js at 1312×163 pixels is identical to the prior
+  export (zero changed channels); the PNG was inspected. New temporary PDF/AI
+  staging files were removed after successful verification.
+- Cutter suites, typecheck and changed-file formatting passed. New regressions
+  cover the save sequence, embedded legacy format, three layer names, hidden
+  contour, failed publishing, single-page output and temporary-file cleanup.
+- No new controls, button variants or heading subtitles were introduced. The
+  prior export failure banner was checked at 1366×768 English/light,
+  1920×1080 French/dark and 1366×768 Arabic/dark with low-end mode. Readable
+  translated messages, keyboard retry and cleared busy state passed with no
+  banner/page overflow. Existing project and production measurements are retained.
+- Actual opening in Illustrator CS6 on the user's other PC, verification of the
+  original 145-copy workshop sheet and physical print/cut checks remain pending.
+  The user resolved the intermittent export by retrying and requested moving on
+  to CS6 compatibility; further workshop export-stall investigation was stopped.
+
+Artifacts: `output/playwright/cs6-compatible-print.png`,
+`output/playwright/export-error-*`, and `output/pdf/cutter-cs6-three-layer-test.pdf`.
+
+Local v0.2.12 release checks passed: repository formatting, TypeScript, all
+automated suites, Storybook and the production build. Actual Illustrator CS6
+opening and physical printer/cutter validation remain pending as noted above.

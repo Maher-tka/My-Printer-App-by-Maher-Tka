@@ -78,7 +78,8 @@ export type { PDFDocumentProxy, PDFPageProxy }
 
 export async function loadPdfDocument(
   bytes: Uint8Array,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  colorManaged = false
 ): Promise<PDFDocumentProxy> {
   assertNotCanceled(signal)
 
@@ -87,7 +88,9 @@ export async function loadPdfDocument(
     stopAtErrors: false,
     wasmUrl: PDF_JS_WASM_BASE_URL,
     WasmFactory: PdfJsWasmFactory,
-    useWorkerFetch: false,
+    // PDF.js disables its ICC engine when worker fetch is disabled. Opt in
+    // for color-managed artwork using the same locally bundled WASM files.
+    useWorkerFetch: colorManaged,
     useWasm: true
   })
   const destroyLoadingTask = async (): Promise<void> => {
