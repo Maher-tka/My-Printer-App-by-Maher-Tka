@@ -22,9 +22,14 @@ import { MaskedArtwork } from '../MaskedArtwork'
 import { isSelectableLayerObject } from '../../lib/editorLayers'
 import { getNormalizedShapePath } from '../../lib/shapeGeometry'
 import { getCutlinePreviewTransform } from '../../lib/cutlineAdjustment'
+import { getCutViewMask } from '../../lib/pieceEditorView'
+import type { ProductionBounds } from '../../lib/cutlineGenerator'
 import { PieceEditorTransformBox, type TransformHandle } from './PieceEditorTransformBox'
 
 interface PieceEditorCanvasProps {
+  focusSticker?: boolean
+  viewBounds?: ProductionBounds
+  fitVersion?: number
   showTransparency?: boolean
   piece: PiecePreset
   scale: number
@@ -73,8 +78,11 @@ interface MarqueeState {
 }
 
 export const PieceEditorCanvas = memo(function PieceEditorCanvas({
-  showTransparency = false,
   piece,
+  focusSticker = false,
+  viewBounds = { xCm: 0, yCm: 0, widthCm: piece.widthCm, heightCm: piece.heightCm },
+  fitVersion = 0,
+  showTransparency = false,
   scale,
   zoom,
   onZoomChange,
@@ -129,6 +137,14 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
       ),
     [piece]
   )
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    viewport.scrollLeft = 0
+    viewport.scrollTop = 0
+    zoomAnchorRef.current = null
+  }, [fitVersion])
 
   useLayoutEffect(() => {
     zoomRef.current = zoom
@@ -236,6 +252,7 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
     window.addEventListener('keyup', onKeyUp, true)
     window.addEventListener('blur', onWindowBlur)
     return () => {
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
       window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('keyup', onKeyUp, true)
       window.removeEventListener('blur', onWindowBlur)
@@ -248,7 +265,7 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
       dir="ltr"
       tabIndex={0}
       aria-label="Piece editor canvas"
-      className={`flex min-h-0 min-w-0 flex-1 items-start justify-start overflow-auto rounded-lg border bg-slate-100 p-6 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${isPanning ? 'cursor-grabbing' : tool === 'pan' ? 'cursor-grab' : ''}`}
+      className={`flex min-h-0 min-w-0 flex-1 items-start justify-start overflow-auto rounded-lg border bg-muted/40 ${focusSticker ? 'p-2' : 'p-6'} outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${isPanning ? 'cursor-grabbing' : tool === 'pan' ? 'cursor-grab' : ''}`}
       style={{
         overflowAnchor: 'none',
         backgroundImage: showGrid
@@ -263,87 +280,99 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
       onPointerCancel={cancelPointerInteraction}
     >
       <div
-        ref={artboardRef}
-        className="relative m-auto shrink-0 bg-white shadow-md"
+        className={`relative m-auto shrink-0 ${focusSticker ? 'overflow-hidden' : ''}`}
         style={{
-          width: piece.widthCm * scale,
-          height: piece.heightCm * scale,
-          ...(showTransparency
-            ? {
-                backgroundImage: 'conic-gradient(#e2e8f0 25%, white 0 50%, #e2e8f0 0 75%, white 0)',
-                backgroundSize: '16px 16px'
-              }
-            : {})
+          width: viewBounds.widthCm * scale + (focusSticker ? 80 : 0),
+          height: viewBounds.heightCm * scale + (focusSticker ? 80 : 0)
         }}
-        onContextMenu={(event) => {
-          event.preventDefault()
-          onContextMenuOpen(event.clientX, event.clientY)
-        }}
-        onPointerDown={beginMarquee}
-        onPointerMove={moveMarquee}
-        onPointerUp={endMarquee}
-        onPointerCancel={cancelPointerInteraction}
       >
-        <div className="pointer-events-none absolute inset-0 isolate">
-          {piece.objects.map((object) => (
-            <CanvasObject
-              key={object.id}
-              object={object}
-              piece={piece}
-              scale={scale}
-              selected={piece.selectedObjectIds.includes(object.id)}
-              isKey={piece.keyObjectId === object.id}
-              onPointerDown={(event) => beginMove(event, object)}
-              onPointerMove={moveTransform}
-              onPointerUp={endTransform}
+        <div
+          ref={artboardRef}
+          className={focusSticker ? 'absolute' : 'relative bg-white shadow-md'}
+          style={{
+            left: focusSticker ? 40 - viewBounds.xCm * scale : undefined,
+            top: focusSticker ? 40 - viewBounds.yCm * scale : undefined,
+            width: piece.widthCm * scale,
+            height: piece.heightCm * scale,
+            ...(showTransparency
+              ? {
+                  backgroundImage:
+                    'conic-gradient(#e2e8f0 25%, white 0 50%, #e2e8f0 0 75%, white 0)',
+                  backgroundSize: '16px 16px'
+                }
+              : {})
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            onContextMenuOpen(event.clientX, event.clientY)
+          }}
+          onPointerDown={beginMarquee}
+          onPointerMove={moveMarquee}
+          onPointerUp={endMarquee}
+          onPointerCancel={cancelPointerInteraction}
+        >
+          <div className="pointer-events-none absolute inset-0 isolate">
+            {piece.objects.map((object) => (
+              <CanvasObject
+                key={object.id}
+                object={object}
+                focusSticker={focusSticker}
+                piece={piece}
+                scale={scale}
+                selected={piece.selectedObjectIds.includes(object.id)}
+                isKey={piece.keyObjectId === object.id}
+                onPointerDown={(event) => beginMove(event, object)}
+                onPointerMove={moveTransform}
+                onPointerUp={endTransform}
+              />
+            ))}
+          </div>
+
+          {draftShape ? (
+            <ShapePreview shape={draftShape.shape} transform={draftShape.transform} scale={scale} />
+          ) : null}
+          {draftPenPoints ? <PenPathPreview points={draftPenPoints} scale={scale} /> : null}
+          {marquee ? (
+            <div
+              className="pointer-events-none absolute z-50 border border-primary bg-primary/10"
+              style={{
+                left: marquee.x,
+                top: marquee.y,
+                width: marquee.width,
+                height: marquee.height
+              }}
             />
-          ))}
+          ) : null}
+
+          {tool === 'select' ? (
+            <PieceEditorTransformBox
+              objects={selectedObjects}
+              scale={scale}
+              onMovePointerDown={beginSelectionMove}
+              onMovePointerMove={moveTransform}
+              onMovePointerUp={endTransform}
+              onHandlePointerDown={beginHandleTransform}
+              onHandlePointerMove={moveTransform}
+              onHandlePointerUp={endTransform}
+            />
+          ) : null}
+
+          {tool === 'line' ? (
+            <div
+              className="absolute inset-0 z-30 touch-none cursor-crosshair"
+              onPointerDown={beginPenDraw}
+              onPointerMove={movePenDraw}
+              onPointerUp={endPenDraw}
+            />
+          ) : isShapeTool(tool) ? (
+            <div
+              className="absolute inset-0 z-30 touch-none cursor-crosshair"
+              onPointerDown={beginShapeDraw}
+              onPointerMove={moveShapeDraw}
+              onPointerUp={endShapeDraw}
+            />
+          ) : null}
         </div>
-
-        {draftShape ? (
-          <ShapePreview shape={draftShape.shape} transform={draftShape.transform} scale={scale} />
-        ) : null}
-        {draftPenPoints ? <PenPathPreview points={draftPenPoints} scale={scale} /> : null}
-        {marquee ? (
-          <div
-            className="pointer-events-none absolute z-50 border border-primary bg-primary/10"
-            style={{
-              left: marquee.x,
-              top: marquee.y,
-              width: marquee.width,
-              height: marquee.height
-            }}
-          />
-        ) : null}
-
-        {tool === 'select' ? (
-          <PieceEditorTransformBox
-            objects={selectedObjects}
-            scale={scale}
-            onMovePointerDown={beginSelectionMove}
-            onMovePointerMove={moveTransform}
-            onMovePointerUp={endTransform}
-            onHandlePointerDown={beginHandleTransform}
-            onHandlePointerMove={moveTransform}
-            onHandlePointerUp={endTransform}
-          />
-        ) : null}
-
-        {tool === 'line' ? (
-          <div
-            className="absolute inset-0 z-30 touch-none cursor-crosshair"
-            onPointerDown={beginPenDraw}
-            onPointerMove={movePenDraw}
-            onPointerUp={endPenDraw}
-          />
-        ) : isShapeTool(tool) ? (
-          <div
-            className="absolute inset-0 z-30 touch-none cursor-crosshair"
-            onPointerDown={beginShapeDraw}
-            onPointerMove={moveShapeDraw}
-            onPointerUp={endShapeDraw}
-          />
-        ) : null}
       </div>
     </div>
   )
@@ -826,6 +855,7 @@ export const PieceEditorCanvas = memo(function PieceEditorCanvas({
 
 const CanvasObject = memo(function CanvasObject({
   object,
+  focusSticker,
   piece,
   scale,
   selected,
@@ -835,6 +865,7 @@ const CanvasObject = memo(function CanvasObject({
   onPointerUp
 }: {
   object: EditorObject
+  focusSticker: boolean
   piece: PiecePreset
   scale: number
   selected: boolean
@@ -844,6 +875,7 @@ const CanvasObject = memo(function CanvasObject({
   onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void
 }): JSX.Element | null {
   if (!object.visible) return null
+  if (focusSticker && object.role === 'clipping-mask') return null
   const transform = getCutlinePreviewTransform(object, piece)
   const commonStyle = {
     left: transform.xCm * scale,
@@ -865,10 +897,12 @@ const CanvasObject = memo(function CanvasObject({
   const handlers = { onPointerDown, onPointerMove, onPointerUp }
   const activeMask = piece.clippingMaskEnabled ?? piece.mask.enabled
   if (object.shapeType === 'image') {
-    if (object.role === 'artwork' && activeMask) {
-      const mask = piece.objects.find(
-        (item) => item.id === piece.maskObjectId || item.role === 'clipping-mask'
-      )
+    if (object.role === 'artwork' && (activeMask || focusSticker)) {
+      const mask = focusSticker
+        ? getCutViewMask(piece)
+        : piece.objects.find(
+            (item) => item.id === piece.maskObjectId || item.role === 'clipping-mask'
+          )
       if (mask)
         return (
           <MaskedArtwork

@@ -29,8 +29,9 @@ svg[viewBox] {
   direction: ltr;
 }
 
-html[dir='rtl'] .app-canvas svg.lucide-arrow-left,
-html[dir='rtl'] .app-canvas svg.lucide-arrow-right,
+/* Physical artwork directions keep their meaning in every language. */
+html[dir='rtl'] .app-canvas svg.lucide-arrow-left:not([data-physical-direction]),
+html[dir='rtl'] .app-canvas svg.lucide-arrow-right:not([data-physical-direction]),
 html[dir='rtl'] header svg.lucide-chevron-right {
   transform: scaleX(-1);
 }

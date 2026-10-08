@@ -6,6 +6,8 @@ import {
   createCutlineFromMaskBounds
 } from '../lib/cutlineValidation'
 import { CutlineInspector } from './CutlineInspector'
+import { CutlinePrecisionPanel } from './CutlinePrecisionPanel'
+import { getPieceEditorViewBounds } from '../lib/pieceEditorView'
 import { reorderLayerObject, renameLayerObject, setMaskEditing } from '../lib/editorLayers'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Maximize2, Minimize2, Redo2, Save, Undo2 } from 'lucide-react'
@@ -92,27 +94,50 @@ function ActivePieceEditor({
   const fullscreen = useCanvasFullscreen<HTMLElement>()
   useEffect(() => setInspector('mask'), [stage])
   const editorState = usePieceEditorState()
+  const [fitVersion, setFitVersion] = useState(0)
+  useEffect(() => {
+    editorState.setZoom(1)
+    setFitVersion((value) => value + 1)
+    workspaceHost.current?.scrollTo({ top: 0, left: 0 })
+  }, [stage, piece.id, editorState.setZoom])
   const history = usePieceEditorHistory(piece, onPieceChange)
   const clipboard = usePieceEditorClipboard()
   const transforms = usePieceEditorTransforms()
   const selection = usePieceEditorSelection(piece, onPieceChange)
   const canvasHost = useRef<HTMLDivElement>(null)
+  const workspaceHost = useRef<HTMLDivElement>(null)
+  const [workspaceHeight, setWorkspaceHeight] = useState(400)
   const [canvasSize, setCanvasSize] = useState({ width: 600, height: 400 })
+  // Keep the camera steady during pointer edits. Refitting is explicit, or
+  // happens when entering a step, changing designs, or creating a boundary.
+  const viewBounds = useMemo(
+    () => getPieceEditorViewBounds(piece, stage === 'cut'),
+    [
+      piece.id,
+      stage,
+      fitVersion,
+      piece.maskObjectId,
+      piece.cutlineObjectId,
+      piece.clippingMaskEnabled
+    ]
+  )
   useEffect(() => {
     const element = canvasHost.current
     if (!element) return
-    const observer = new ResizeObserver(() =>
+    const observer = new ResizeObserver(() => {
       setCanvasSize({ width: element.clientWidth, height: element.clientHeight })
-    )
+      if (workspaceHost.current) setWorkspaceHeight(workspaceHost.current.clientHeight)
+    })
     observer.observe(element)
+    if (workspaceHost.current) observer.observe(workspaceHost.current)
     return () => observer.disconnect()
   }, [])
   const scale =
     Math.max(
       0.1,
       Math.min(
-        (canvasSize.width - 80) / Math.max(piece.widthCm, 0.1),
-        (canvasSize.height - 80) / Math.max(piece.heightCm, 0.1)
+        (canvasSize.width - (stage === 'cut' ? 98 : 80)) / Math.max(viewBounds.widthCm, 0.1),
+        (canvasSize.height - (stage === 'cut' ? 98 : 80)) / Math.max(viewBounds.heightCm, 0.1)
       )
     ) * editorState.zoom
   const selectedObjects = useMemo(
@@ -150,7 +175,10 @@ function ActivePieceEditor({
       className={`h-full min-h-0 min-w-0 gap-3 overflow-hidden outline-none ${fullscreen.isExpanded ? 'flex flex-col bg-card p-3' : `grid grid-cols-1 ${inspectorHidden ? '' : 'lg:grid-cols-[minmax(0,1fr)_260px]'}`}`}
       aria-label="Artwork editing workspace"
     >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div
+        ref={workspaceHost}
+        className={`flex min-h-0 min-w-0 flex-1 flex-col ${stage === 'cut' && !fullscreen.isExpanded ? 'overflow-y-auto pe-1 [scrollbar-gutter:stable]' : ''}`}
+      >
         <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2 px-1">
           <div>
             <h3 className="text-sm font-semibold">
@@ -215,13 +243,28 @@ function ActivePieceEditor({
           onToolChange={editorState.setTool}
           onZoomIn={() => editorState.setZoom((value) => Math.min(value + 0.15, 2.5))}
           onZoomOut={() => editorState.setZoom((value) => Math.max(value - 0.15, 0.45))}
-          onFit={() => editorState.setZoom(1)}
+          onFit={() => {
+            editorState.setZoom(1)
+            setFitVersion((value) => value + 1)
+          }}
           onShowGridChange={editorState.setShowGrid}
           onSnapToGridChange={editorState.setSnapToGrid}
           onSmartGuidesChange={editorState.setSmartGuides}
         />
-        <div ref={canvasHost} className="flex min-h-64 min-w-0 flex-1 lg:min-h-0">
+        <div
+          ref={canvasHost}
+          className={`flex min-w-0 ${stage === 'cut' && !fullscreen.isExpanded ? 'shrink-0' : 'min-h-64 flex-1 lg:min-h-0'}`}
+          style={
+            stage === 'cut' && !fullscreen.isExpanded
+              ? { height: Math.max(208, workspaceHeight - 144) }
+              : undefined
+          }
+        >
           <PieceEditorCanvas
+            key={`${piece.id}-${stage}`}
+            focusSticker={stage === 'cut'}
+            viewBounds={viewBounds}
+            fitVersion={fitVersion}
             showTransparency={stage === 'prepare'}
             piece={piece}
             scale={scale}
@@ -244,6 +287,15 @@ function ActivePieceEditor({
           <summary className="cursor-pointer py-1">{t('Keyboard shortcuts')}</summary>
           <PieceEditorShortcuts tool={editorState.tool} />
         </details>
+        {stage === 'cut' && !fullscreen.isExpanded && (
+          <div className="mt-4 shrink-0 pb-3">
+            <CutlinePrecisionPanel
+              layout="workspace"
+              piece={piece}
+              onPieceChange={(next) => history.commit(next)}
+            />
+          </div>
+        )}
       </div>
 
       <aside
@@ -374,9 +426,6 @@ function ActivePieceEditor({
               <div className="space-y-3">
                 <section className="space-y-2 rounded-lg border p-3">
                   <h4 className="text-sm font-semibold">{t('Create cut line')}</h4>
-                  <p className="text-xs text-muted-foreground">
-                    {t('Use the prepared mask, artwork bounds, or draw a shape on the canvas.')}
-                  </p>
                   <Button
                     className="w-full"
                     size="sm"
@@ -408,7 +457,12 @@ function ActivePieceEditor({
                     {t('Use selected shape')}
                   </Button>
                 </section>
-                <CutlineInspector piece={piece} onPieceChange={(next) => history.commit(next)} />
+                <CutlineInspector
+                  showPrecision={false}
+                  showCreationActions={false}
+                  piece={piece}
+                  onPieceChange={(next) => history.commit(next)}
+                />
               </div>
             )}
           </TabsContent>
@@ -417,11 +471,12 @@ function ActivePieceEditor({
               hideQuantity
               piece={piece}
               selectedObject={selectedObject}
-              onPieceSizeChange={(widthCm, heightCm, source) =>
+              onPieceSizeChange={(widthCm, heightCm, source) => {
                 history.commit((currentPiece) =>
                   resizePieceToSize(currentPiece, widthCm, heightCm, source)
                 )
-              }
+                setFitVersion((value) => value + 1)
+              }}
               onQuantityChange={(quantity) =>
                 history.commit((currentPiece) => ({
                   ...currentPiece,

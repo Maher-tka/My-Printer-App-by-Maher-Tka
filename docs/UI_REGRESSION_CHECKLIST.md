@@ -388,3 +388,76 @@ Fixtures/screenshots: `output/playwright/card-two-artboards*` and
 
 Local v0.2.8 release checks passed: repository formatting, TypeScript, all automated
 suites, Storybook and the production build.
+
+## Cutter finished sticker sizing — 2026-10-07
+
+- Width/Height measure the active clipping mask, or the cutting line when no mask
+  is active. Uncut artwork keeps its source-frame sizing. Resizing scales the
+  artwork crop, mask, contours and helpers together, including locked objects.
+  Physical size limits apply to the sticker; hidden source artwork can extend
+  beyond those limits without reducing the requested sticker size.
+- Cutter and sticker regression suites, TypeScript, changed-file formatting and
+  diff whitespace checks passed. Tests cover an 18×12 cm photo with a 5×5 cm round
+  cut, masked and contour-only resizing, aspect ratio, rotation, minimum/maximum
+  sizes, repeated resizing, invalid input and missing mask references.
+- Checked the real editor through a simulated project-storage bridge at
+  1366×768 English/light, 1920×1080 French/dark, and 1366×768 Arabic/dark with
+  low-end mode, using loaded artwork and an empty workspace. Keyboard editing,
+  Undo/Redo and the existing primary/supporting actions work. Existing controls,
+  tokens, layout and labels are reused without new controls or subtitles.
+  The 5×5 cm mask becomes 40×40 cm, matches the contour, preserves the crop and
+  transfers to the arranged copy even though its source frame becomes 144×96 cm.
+  No horizontal page overflow; inspected screenshots confirm the size fields
+  and canvas remain visible. The existing Arabic AI Sticker Maker rail button
+  has a long clipped label; that unrelated layout issue remains pending.
+- Verification with the customer's original artwork/project and an installed
+  release remains pending. Physical print/cut checks remain pending.
+
+Screenshots and browser checks: `output/playwright/cutter-size-*`.
+
+## Cutter focused cut view and precision workspace — 2026-10-07
+
+- Step 2 fits and centers the finished sticker instead of the complete source
+  frame. The view includes the mask and cutting margin; contour-only artwork is
+  clipped for this preview. Returning to step 2 resets zoom and scroll. Fit view
+  clears panning. Source dimensions, object coordinates and export geometry are
+  retained; pointer drawing still uses the original source coordinates. The
+  camera stays steady during edits, and hidden source-frame overflow is removed.
+- Cut edge precision now has one visible home beneath the main preview in
+  step 2. Its larger close-up offers top/right/bottom/left views and 6/12/24 mm
+  spans, with actual physical dimensions displayed. Offset, trim, matching and
+  directional controls are below it. Shared buttons, spacing, surfaces and theme
+  tokens are reused; controls wrap and the workspace scrolls on smaller screens.
+  Duplicate cutline creation actions were removed from the step 2 inspector.
+  No explanatory heading subtitles were added. The inspector success state now
+  uses semantic tokens for readable light/dark contrast.
+- Browser checks used a simulated project-storage bridge with a 5×5 cm sticker
+  on an 18×12 cm source: 1366×768 English/light, 1600×900 French/dark,
+  1920×1080 English/dark, and 1366×768 Arabic/dark in low-end mode. The sticker is
+  centered with no canvas or page overflow at Fit. Empty states, keyboard focus,
+  drawing coordinates, Undo, trim, nudge and exact mask matching were exercised.
+  Precision edits change the contour alone and preserve mask/artwork geometry.
+  Pan/Fit and returning from the precision section to step 2 reset correctly.
+  Locked contours disable editing while retaining close-up inspection; missing
+  contours show creation actions, and creating one reveals the precision section.
+  Contour-only previews leave the saved clipping-mask setting unchanged.
+  New precision controls and feedback are translated into French and Arabic;
+  directional nudge buttons preserve physical artwork directions in RTL.
+- Cutter regressions, focused view geometry tests, TypeScript, translation checks
+  and changed-file formatting passed. Added Storybook examples for the workspace,
+  compact sidebar, locked contour and custom-path warning states. Storybook built
+  successfully; existing dependency directive/chunk-size warnings remain.
+- The existing Arabic AI Sticker Maker rail label clipping remains outside this
+  change. The customer's original project, installed-release behavior and
+  physical print/cut verification remain pending.
+
+Screenshots and browser checks: `output/playwright/cutter-focus-*`.
+
+Local v0.2.11 release checks passed: repository formatting, TypeScript, all
+automated suites, Storybook, and the production build. Release review inspected
+the recorded 1366×768 English/light and Arabic/dark screenshots, 1600×900
+French/dark, and 1920×1080 English/dark. The changed precision workspace reuses
+shared buttons and tokens, keeps controls in one location, preserves production
+geometry, and introduces no heading subtitles. The existing navigation label
+clipping and installed/hardware checks remain pending as recorded above.
+Windows packaging and publication are verified by the tag-triggered workflow.

@@ -1,18 +1,31 @@
-import type { ArtworkTransform, PiecePreset } from '../types'
+import type { ArtworkTransform, EditorObject, PiecePreset } from '../types'
 import { synchronizePieceEditorModel } from './editorObjects'
 import { resizePiecePreset } from './piecePresets'
 
-/** Sticker dimensions exclude the source image outside an active clipping mask. */
+/** Measure the finished sticker, excluding cropped source artwork and cut margin. */
 export function getPieceSize(piece: PiecePreset): { widthCm: number; heightCm: number } {
-  const mask = piece.clippingMaskEnabled
-    ? piece.objects.find((object) => object.id === piece.maskObjectId)
-    : undefined
-  return mask
-    ? { widthCm: mask.transform.widthCm, heightCm: mask.transform.heightCm }
+  const boundary = getStickerBoundary(piece)
+  return boundary
+    ? { widthCm: boundary.transform.widthCm, heightCm: boundary.transform.heightCm }
     : { widthCm: piece.widthCm, heightCm: piece.heightCm }
 }
 
-/** Resize in the mask's axes while preserving the artwork crop and layer relationships. */
+function getStickerBoundary(piece: PiecePreset): EditorObject | undefined {
+  const objects = piece.objects ?? []
+  const mask =
+    (piece.clippingMaskEnabled ?? piece.mask.enabled)
+      ? (objects.find(
+          (object) => object.role === 'clipping-mask' && object.id === piece.maskObjectId
+        ) ?? objects.find((object) => object.role === 'clipping-mask'))
+      : undefined
+  return (
+    mask ??
+    objects.find((object) => object.role === 'cutline' && object.id === piece.cutlineObjectId) ??
+    objects.find((object) => object.role === 'cutline' && object.exportEnabled !== false)
+  )
+}
+
+/** Resize in the sticker's axes while preserving the crop and layer relationships. */
 export function resizePieceToSize(
   piece: PiecePreset,
   widthCm: number,
@@ -20,27 +33,17 @@ export function resizePieceToSize(
   source: 'width' | 'height'
 ): PiecePreset {
   const normalized = synchronizePieceEditorModel(piece)
-  const mask = normalized.clippingMaskEnabled
-    ? normalized.objects.find((object) => object.id === normalized.maskObjectId)
-    : undefined
-  if (!mask) return resizePiecePreset(normalized, widthCm, heightCm, source)
-  const size = getPieceSize(normalized)
-  const scaleX = widthCm / size.widthCm
-  const scaleY = heightCm / size.heightCm
-  const angle = mask.transform.rotation
-  const inMaskAxes = {
+  const boundary = getStickerBoundary(normalized)
+  if (!boundary) return resizePiecePreset(normalized, widthCm, heightCm, source)
+  const angle = boundary.transform.rotation
+  const inStickerAxes = {
     ...normalized,
     objects: normalized.objects.map((object) => ({
       ...object,
       transform: rotateTransform(object.transform, -angle)
     }))
   }
-  const resized = resizePiecePreset(
-    inMaskAxes,
-    normalized.widthCm * scaleX,
-    normalized.heightCm * scaleY,
-    source
-  )
+  const resized = resizePiecePreset(inStickerAxes, widthCm, heightCm, source, boundary.transform)
   const actualScaleX = resized.widthCm / normalized.widthCm
   const actualScaleY = resized.heightCm / normalized.heightCm
   // The source frame remains a coordinate frame; its dimensions are not the sticker size.

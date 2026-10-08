@@ -1,4 +1,8 @@
-import { releaseClippingMask, synchronizePieceEditorModel } from './editorObjects'
+import {
+  makeClippingMaskAndCutlineFromSelection,
+  releaseClippingMask,
+  synchronizePieceEditorModel
+} from './editorObjects'
 import { getPieceSize, resizePieceToSize } from './pieceSize'
 import { createCutlineFromArtworkBounds } from './cutlineValidation'
 import {
@@ -353,14 +357,117 @@ function run(): void {
   const released = releaseClippingMask(smallerSticker)
   expectEqual(
     getPieceSize(released),
-    { widthCm: released.widthCm, heightCm: released.heightCm },
-    'released mask restores frame sizing'
+    {
+      widthCm: released.cutline.transform.widthCm,
+      heightCm: released.cutline.transform.heightCm
+    },
+    'releasing the mask still measures the finished cutting line'
   )
   expectEqual(
     getPieceSize(resizePieceToSize(released, 8, 4, 'width')),
     { widthCm: 8, heightCm: 4 },
-    'unmasked sizing keeps existing behavior'
+    'cutline-only sizing uses the finished contour'
   )
+
+  const enlarged = resizePieceToSize(cropped, 96, 3, 'width')
+  expectEqual(
+    getPieceSize(enlarged),
+    { widthCm: 96, heightCm: 72 },
+    'maximum sticker size is independent of the cropped source frame'
+  )
+  expectClose(enlarged.widthCm, 240, 'cropped source frame can extend beyond sticker limits')
+  const restored = resizePieceToSize(enlarged, 4, 72, 'width')
+  expectEqual(
+    getPieceSize(restored),
+    getPieceSize(cropped),
+    'repeated resizing restores exact size'
+  )
+  expectRepresentableTransform(cropped, restored, 1, 1, 'repeated resize preserves the crop')
+  const minimumSticker = resizePieceToSize(cropped, 0, 3, 'width')
+  expectClose(getPieceSize(minimumSticker).heightCm, 0.5, 'minimum applies to the sticker height')
+  expectClose(getPieceSize(minimumSticker).widthCm, 2 / 3, 'minimum preserves sticker aspect ratio')
+  const tinyMask = withObjectTransform(cropped, cropped.maskObjectId!, {
+    xCm: 2,
+    yCm: 1,
+    widthCm: 0.2,
+    heightCm: 0.1,
+    rotation: 0
+  })
+  expectEqual(
+    getPieceSize(resizePieceToSize(tinyMask, 2, 0.1, 'width')),
+    { widthCm: 2, heightCm: 1 },
+    'small drawn masks scale from their actual dimensions'
+  )
+  expectEqual(
+    getPieceSize(resizePieceToSize(cropped, Number.NaN, 3, 'width')),
+    getPieceSize(cropped),
+    'invalid input preserves the sticker size'
+  )
+  expectEqual(
+    getPieceSize({ ...cropped, maskObjectId: undefined }),
+    getPieceSize(cropped),
+    'mask role supplies dimensions when a saved reference is missing'
+  )
+
+  // Reproduce a round sticker cut from an 18 x 12 cm photograph.
+  const photo = createPiecePresetFromSource(
+    {
+      id: 'photo-source',
+      sourceKind: 'image',
+      fileName: 'photo.jpg',
+      displayName: 'photo',
+      mimeType: 'image/jpeg',
+      bytes: new Uint8Array(),
+      previewUrl: 'blob:photo',
+      naturalWidthPx: 1440,
+      naturalHeightPx: 960
+    },
+    []
+  )
+  expectEqual(getPieceSize(photo), { widthCm: 18, heightCm: 12 }, 'uncut artwork uses source size')
+  const roundCut: EditorObject = {
+    ...getObject(piece, piece.cutlineObjectId!),
+    id: 'photo-cut',
+    shapeType: 'ellipse',
+    pathData: undefined,
+    offsetMm: 0,
+    transform: { xCm: 6.5, yCm: 3.5, widthCm: 5, heightCm: 5, rotation: 0 }
+  }
+  const cutPhoto = synchronizePieceEditorModel({
+    ...photo,
+    objects: [...photo.objects, roundCut],
+    cutlineObjectId: roundCut.id
+  })
+  expectEqual(getPieceSize(cutPhoto), { widthCm: 5, heightCm: 5 }, 'cut photo measures the circle')
+  const resizedCutPhoto = resizePieceToSize(cutPhoto, 10, 5, 'width')
+  expectEqual(
+    getPieceSize(resizedCutPhoto),
+    { widthCm: 10, heightCm: 10 },
+    'cutline-only resize uses circle aspect instead of photo aspect'
+  )
+  expectRepresentableTransform(
+    cutPhoto,
+    resizedCutPhoto,
+    2,
+    2,
+    'cut photo and contour stay aligned'
+  )
+  const maskedPhoto = makeClippingMaskAndCutlineFromSelection(cutPhoto, [
+    photo.artworkObjectId!,
+    roundCut.id
+  ])
+  const resizedPhoto = resizePieceToSize(maskedPhoto, 40, 5, 'width')
+  expectEqual(
+    getPieceSize(resizedPhoto),
+    { widthCm: 40, heightCm: 40 },
+    'finished round sticker reaches requested size even when photo frame exceeds 96 cm'
+  )
+  expectTransform(
+    resizedPhoto.mask.transform,
+    getObject(resizedPhoto, resizedPhoto.cutlineObjectId!).transform,
+    'finished mask and cutting line have identical geometry'
+  )
+  expectRepresentableTransform(maskedPhoto, resizedPhoto, 8, 8, 'finished photo crop stays aligned')
 
   console.log('Piece resize tests passed.')
 }

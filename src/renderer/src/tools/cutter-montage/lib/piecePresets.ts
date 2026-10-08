@@ -260,16 +260,35 @@ export function syncPieceBounds(
  *
  * Object locks intentionally do not participate here: they prevent individual
  * edits, while this operation transforms the piece's complete object model.
+ * A size reference applies physical limits to the sticker rather than its
+ * source coordinate frame, which can extend outside the clipping mask.
  */
 export function resizePiecePreset(
   piece: PiecePreset,
   requestedWidthCm: number,
   requestedHeightCm: number,
-  sourceAxis: 'width' | 'height'
+  sourceAxis: 'width' | 'height',
+  sizeReference?: Pick<ArtworkTransform, 'widthCm' | 'heightCm'>
 ): PiecePreset {
   const synchronizedPiece = synchronizePieceEditorModel(piece)
-  const currentWidthCm = getUsableCurrentDimension(synchronizedPiece.widthCm)
-  const currentHeightCm = getUsableCurrentDimension(synchronizedPiece.heightCm)
+  const frameWidthCm = sizeReference
+    ? synchronizedPiece.widthCm
+    : getUsableCurrentDimension(synchronizedPiece.widthCm)
+  const frameHeightCm = sizeReference
+    ? synchronizedPiece.heightCm
+    : getUsableCurrentDimension(synchronizedPiece.heightCm)
+  const currentWidthCm = sizeReference?.widthCm ?? frameWidthCm
+  const currentHeightCm = sizeReference?.heightCm ?? frameHeightCm
+  const fallback = (): PiecePreset =>
+    createResizeFallback(synchronizedPiece, frameWidthCm, frameHeightCm)
+  if (
+    !isUsableScale(currentWidthCm) ||
+    !isUsableScale(currentHeightCm) ||
+    !isUsableScale(frameWidthCm) ||
+    !isUsableScale(frameHeightCm)
+  ) {
+    return fallback()
+  }
   const requestedWidth = getRequestedDimension(requestedWidthCm, currentWidthCm)
   const requestedHeight = getRequestedDimension(requestedHeightCm, currentHeightCm)
   const aspectRatio = currentWidthCm / currentHeightCm
@@ -277,7 +296,7 @@ export function resizePiecePreset(
   let heightCm = requestedHeight
 
   if (synchronizedPiece.lockAspectRatio && !isUsableScale(aspectRatio)) {
-    return createResizeFallback(synchronizedPiece, currentWidthCm, currentHeightCm)
+    return fallback()
   }
 
   if (synchronizedPiece.lockAspectRatio) {
@@ -292,13 +311,20 @@ export function resizePiecePreset(
   }
 
   if (!isUsableDimension(widthCm) || !isUsableDimension(heightCm)) {
-    return createResizeFallback(synchronizedPiece, currentWidthCm, currentHeightCm)
+    return fallback()
   }
 
   const widthScale = widthCm / currentWidthCm
   const heightScale = heightCm / currentHeightCm
-  if (!isUsableScale(widthScale) || !isUsableScale(heightScale)) {
-    return createResizeFallback(synchronizedPiece, currentWidthCm, currentHeightCm)
+  const resizedFrameWidthCm = frameWidthCm * widthScale
+  const resizedFrameHeightCm = frameHeightCm * heightScale
+  if (
+    !isUsableScale(widthScale) ||
+    !isUsableScale(heightScale) ||
+    !isUsableScale(resizedFrameWidthCm) ||
+    !isUsableScale(resizedFrameHeightCm)
+  ) {
+    return fallback()
   }
 
   const resizedObjects = synchronizedPiece.objects.map((object) => {
@@ -307,13 +333,13 @@ export function resizePiecePreset(
   })
 
   if (resizedObjects.some((object) => !object)) {
-    return createResizeFallback(synchronizedPiece, currentWidthCm, currentHeightCm)
+    return fallback()
   }
 
   return synchronizePieceEditorModel({
     ...synchronizedPiece,
-    widthCm,
-    heightCm,
+    widthCm: resizedFrameWidthCm,
+    heightCm: resizedFrameHeightCm,
     objects: resizedObjects.filter((object): object is NonNullable<typeof object> =>
       Boolean(object)
     )

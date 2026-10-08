@@ -678,6 +678,8 @@ export function CutterMontagePage({
                         {panel === 'checks' && (
                           <>
                             <CutlineInspector
+                              showPrecision={step !== 'cut'}
+                              showCreationActions={step !== 'cut'}
                               piece={cutter.activePiece}
                               onPieceChange={cutter.updatePiece}
                             />

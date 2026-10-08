@@ -12,10 +12,14 @@ import {
 
 export function CutlineInspector({
   piece,
-  onPieceChange
+  onPieceChange,
+  showPrecision = true,
+  showCreationActions = true
 }: {
   piece: PiecePreset | null
   onPieceChange: (piece: PiecePreset) => void
+  showPrecision?: boolean
+  showCreationActions?: boolean
 }): JSX.Element {
   const { t } = useLanguage()
 
@@ -34,7 +38,7 @@ export function CutlineInspector({
 
   return (
     <section className="space-y-3">
-      <CutlinePrecisionPanel piece={piece} onPieceChange={onPieceChange} />
+      {showPrecision && <CutlinePrecisionPanel piece={piece} onPieceChange={onPieceChange} />}
       <div className="flex items-center justify-between gap-3">
         <h3 className="font-semibold">{t('Cutline Inspector')}</h3>
         <Scissors className="size-4 text-muted-foreground" />
@@ -48,7 +52,7 @@ export function CutlineInspector({
       <div
         className={`mt-3 flex items-center gap-2 rounded-md border p-2 text-xs ${
           state.vectorSafe
-            ? 'border-emerald-300 bg-emerald-50 text-success-foreground'
+            ? 'border-success-foreground/20 bg-success text-success-foreground'
             : 'border-destructive/30 bg-destructive/10 text-destructive'
         }`}
       >
@@ -72,23 +76,27 @@ export function CutlineInspector({
           <Wrench data-icon="inline-start" />
           Fix stroke to CutContour
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => onPieceChange(createCutlineFromArtworkBounds(piece))}
-        >
-          {t('Create from artwork bounds')}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={!piece.mask.enabled && !piece.maskObjectId}
-          onClick={() => onPieceChange(createCutlineFromMaskBounds(piece))}
-        >
-          {t('Create from mask')}
-        </Button>
+        {showCreationActions && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onPieceChange(createCutlineFromArtworkBounds(piece))}
+          >
+            {t('Create from artwork bounds')}
+          </Button>
+        )}
+        {showCreationActions && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!piece.mask.enabled && !piece.maskObjectId}
+            onClick={() => onPieceChange(createCutlineFromMaskBounds(piece))}
+          >
+            {t('Create from mask')}
+          </Button>
+        )}
       </div>
     </section>
   )

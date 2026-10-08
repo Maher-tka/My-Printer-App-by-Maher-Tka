@@ -1,5 +1,49 @@
 // App-owned English copy is the stable key. Missing translations fall back to English.
 export const messages: Record<string, { fr: string; ar: string }> = {
+  'Move contour left': { fr: 'Déplacer le contour à gauche', ar: 'تحريك خط القص لليسار' },
+  'Move contour right': { fr: 'Déplacer le contour à droite', ar: 'تحريك خط القص لليمين' },
+  'Move contour up': { fr: 'Déplacer le contour vers le haut', ar: 'تحريك خط القص للأعلى' },
+  'Move contour down': { fr: 'Déplacer le contour vers le bas', ar: 'تحريك خط القص للأسفل' },
+  'Edge close-up location': { fr: 'Bord à examiner', ar: 'موضع معاينة الحافة' },
+  'Close-up width mm': { fr: 'Largeur du détail en mm', ar: 'عرض المعاينة بالملم' },
+  'Cut edge close-up': { fr: 'Détail du bord de découpe', ar: 'معاينة مكبرة لحافة القص' },
+  'Contour adjustment step': { fr: 'Pas de réglage du contour', ar: 'خطوة تعديل خط القص' },
+  'Move cut contour only': { fr: 'Déplacer uniquement le contour', ar: 'تحريك خط القص فقط' },
+  'Trim 0.2 mm': { fr: 'Rogner de 0,2 mm', ar: 'قص للداخل بمقدار 0.2 ملم' },
+  'Match mask · no gap': {
+    fr: 'Aligner sur le masque · sans écart',
+    ar: 'مطابقة القناع · بدون فراغ'
+  },
+  'Checkerboard shows unprinted area': {
+    fr: 'Le damier indique la zone non imprimée',
+    ar: 'المربعات توضح المساحة غير المطبوعة'
+  },
+  '{value} mm outward on each side adds a border.': {
+    fr: '{value} mm vers l’extérieur de chaque côté ajoute une bordure.',
+    ar: 'إضافة {value} ملم للخارج من كل جانب تنشئ هامشًا.'
+  },
+  '{value} mm inward on each side trims inside the edge.': {
+    fr: '{value} mm vers l’intérieur de chaque côté rogne le bord.',
+    ar: 'قص {value} ملم للداخل من كل جانب يزيل هامش الحافة.'
+  },
+  'Zero adds no extra border to this contour.': {
+    fr: 'Zéro n’ajoute aucune bordure à ce contour.',
+    ar: 'القيمة صفر لا تضيف أي هامش إلى خط القص.'
+  },
+  'Custom paths are resized at their bounds; this is not a uniform path offset.': {
+    fr: 'Les tracés personnalisés sont redimensionnés selon leurs limites ; le décalage n’est pas uniforme le long du tracé.',
+    ar: 'تتغير أحجام المسارات المخصصة حسب حدودها؛ هذه ليست إزاحة موحدة على طول المسار.'
+  },
+  'Magenta is the cut line. White space inside the image needs a tighter mask in Prepare artwork. Use an inward trim or artwork bleed to cover small cutting shifts.':
+    {
+      fr: 'Le magenta indique le contour de découpe. Pour supprimer le blanc à l’intérieur de l’image, resserrez le masque dans Préparer le visuel. Un rognage vers l’intérieur ou un fond perdu compense les petits décalages de coupe.',
+      ar: 'اللون الأرجواني هو خط القص. تتطلب المساحة البيضاء داخل الصورة قناعًا أضيق في إعداد التصميم. استخدم القص للداخل أو امتداد الطباعة لتغطية الانزياحات الصغيرة في القص.'
+    },
+  'The Sticker Maker border is already built into this path. Zero adjustment keeps that border; change it in Sticker Maker to retrace the edge.':
+    {
+      fr: 'La bordure du Créateur de stickers est déjà intégrée au tracé. Le réglage zéro la conserve ; modifiez-la dans le Créateur de stickers pour recalculer le bord.',
+      ar: 'هامش صانع الملصقات مدمج بالفعل في هذا المسار. التعديل صفر يحافظ عليه؛ غيّره في صانع الملصقات لإعادة رسم الحافة.'
+    },
   'Expand pages': { fr: 'Développer les pages', ar: 'توسيع الصفحات' },
   'Collapse pages': { fr: 'Réduire les pages', ar: 'طي الصفحات' },
   'Booklet pages': { fr: 'Pages du livret', ar: 'صفحات الكتيب' },
