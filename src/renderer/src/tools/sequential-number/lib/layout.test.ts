@@ -1,6 +1,6 @@
 import { getGutterCutLines, GUTTER_LINE_WIDTH_MM } from './layout'
 import { isSequentialProject } from '../../../../../shared/sequential-validation'
-import { moveNumberPosition } from './positioning'
+import { createRepeatedNumberPosition, moveNumberPosition } from './positioning'
 import assert from 'node:assert/strict'
 import {
   createDefaultSequentialProject,
@@ -102,6 +102,53 @@ assert.equal(formatSequenceNumber({ ...settings, startNumber: 133, digits: 7 }, 
 assert.equal(formatSequenceNumber({ ...settings, startNumber: 9999999, digits: 7 }, 1), '10000000')
 
 const origin = createDefaultSequentialProject().positions[0]
+const repeatProject = createDefaultSequentialProject()
+repeatProject.positions[0] = { ...origin, fontSizePt: 18, color: '#cc0000', align: 'center' }
+const repeated = createRepeatedNumberPosition(repeatProject, origin.id, 'second-number')
+assert.equal(repeated.id, 'second-number')
+assert.equal(repeated.fontSizePt, 18)
+assert.equal(repeated.color, '#cc0000')
+assert.equal(repeated.align, 'center')
+assert.notEqual(repeated.yMm, origin.yMm, 'a repeated number starts at a separate spot')
+assert.equal(repeatProject.positions.length, 1, 'creating a repeat preserves the original')
+repeatProject.positions.push(repeated)
+assert.equal(isSequentialProject(JSON.parse(JSON.stringify(repeatProject))), true)
+const selectedRepeat = createRepeatedNumberPosition(
+  { ...repeatProject, positions: [origin, { ...repeated, color: '#0000ff' }] },
+  repeated.id,
+  'third-number'
+)
+assert.equal(selectedRepeat.color, '#0000ff', 'copy the selected number formatting')
+const fixedOnly = {
+  ...repeatProject,
+  positions: [
+    { ...origin, id: 'fixed-label', kind: 'text' as const, text: 'Ticket', color: '#00ff00' }
+  ]
+}
+assert.equal(
+  createRepeatedNumberPosition(fixedOnly, 'fixed-label', 'new-number').kind,
+  'number',
+  'adding a number with fixed text selected creates a sequence position'
+)
+assert.equal(
+  createRepeatedNumberPosition(
+    { ...repeatProject, positions: [...repeatProject.positions, ...fixedOnly.positions] },
+    'fixed-label',
+    'fallback'
+  ).color,
+  '#cc0000',
+  'fall back to the first number when fixed text is selected'
+)
+const nearBottom = createRepeatedNumberPosition(
+  { ...repeatProject, positions: [{ ...origin, yMm: 45 }] },
+  origin.id,
+  'above'
+)
+assert.ok(nearBottom.yMm < 45 && nearBottom.yMm >= 0, 'place repeats above near the bottom edge')
+assert.equal(
+  createRepeatedNumberPosition({ ...repeatProject, positions: [] }, '', 'first').kind,
+  'number'
+)
 assert.deepEqual(moveNumberPosition(origin, 2.75, 1.125, 90, 50, false, false), {
   ...origin,
   xMm: 12.75,

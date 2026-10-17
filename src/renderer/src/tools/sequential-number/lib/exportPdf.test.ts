@@ -4,6 +4,7 @@ import { PDFDocument, PDFRawStream, StandardFonts, degrees, rgb } from 'pdf-lib'
 import type { NumberArtwork } from '../types'
 import { createDefaultSequentialProject } from './layout'
 import { exportSequentialPdf } from './exportPdf'
+import { createRepeatedNumberPosition } from './positioning'
 const source = await PDFDocument.create()
 const sourcePage = source.addPage([300, 200])
 sourcePage.drawRectangle({ x: 20, y: 20, width: 100, height: 100, color: rgb(1, 0, 0) })
@@ -30,7 +31,7 @@ project.settings = {
   backMode: 'artwork',
   numberBack: true
 }
-project.positions.push({ ...project.positions[0], id: 'stub', yMm: 30 })
+project.positions.push(createRepeatedNumberPosition(project, project.positions[0].id, 'stub'))
 const progress: number[] = []
 const bytes = await exportSequentialPdf(project, { onProgress: (done) => progress.push(done) })
 const doc = await PDFDocument.load(bytes)
@@ -67,6 +68,30 @@ const simplex = await PDFDocument.load(
   await exportSequentialPdf({ ...project, settings: { ...project.settings, backMode: 'none' } })
 )
 assert.equal(simplex.getPageCount(), 3)
+const acrossSheet = await PDFDocument.load(
+  await exportSequentialPdf({
+    ...project,
+    settings: {
+      ...project.settings,
+      backMode: 'none',
+      order: 'sheet',
+      startNumber: 8,
+      increment: 3,
+      prefix: 'T-',
+      suffix: '/26'
+    }
+  })
+)
+for (let page = 0; page < acrossSheet.getPageCount(); page++) {
+  for (let index = page * 4; index < Math.min(10, (page + 1) * 4); index++) {
+    const label = `T-${String(8 + index * 3).padStart(4, '0')}/26`
+    assert.equal(
+      contents(acrossSheet, page).split(encoded(label)).length - 1,
+      2,
+      'each occupied ticket has two matching numbers, including prefix, suffix and increment'
+    )
+  }
+}
 await assert.rejects(exportSequentialPdf({ ...project, front: null }), /front design/)
 await assert.rejects(
   exportSequentialPdf({ ...project, positions: [{ ...project.positions[0], xMm: -1 }] }),

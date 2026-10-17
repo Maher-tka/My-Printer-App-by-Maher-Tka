@@ -29,6 +29,7 @@ import {
 } from './lib/layout'
 import { loadNumberArtwork, changeNumberArtworkPage } from './lib/artwork'
 import { createSequentialProjectFile } from './lib/project'
+import { createRepeatedNumberPosition } from './lib/positioning'
 import { exportSequentialPdf } from './lib/exportPdf'
 
 interface Props {
@@ -787,18 +788,40 @@ export function SequentialNumberPage({
               aria-pressed={workspaceTab === 'design'}
               onClick={() => setWorkspaceTab('design')}
             >
-              Numbers &amp; fixed text
+              {t('Numbers & fixed text')}
             </Button>
           </div>
 
           {workspaceTab === 'design' && (
             <Card step="5" title={t('Place numbers and fixed text')}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="max-w-md text-xs leading-5 text-muted-foreground">
-                  Select and drag a number or fixed label. Use X/Y for exact positioning. Fixed text
-                  stays the same on every ticket.
-                </p>
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || project.positions.length >= 20}
+                  title={t('All number positions on a ticket use the same sequence number.')}
+                  onClick={() => {
+                    const id = crypto.randomUUID()
+                    setProject((p) => ({
+                      ...p,
+                      positions: [
+                        ...p.positions,
+                        createRepeatedNumberPosition(p, selectedPosition, id)
+                      ]
+                    }))
+                    setSelectedPosition(id)
+                  }}
+                >
+                  <Plus className="size-4" />
+                  {t(
+                    project.positions.some((pos) => pos.kind !== 'text')
+                      ? 'Add same number'
+                      : 'Add number'
+                  )}
+                </Button>
+                <Button
+                  type="button"
                   variant="outline"
                   size="sm"
                   disabled={busy || project.positions.length >= 20}
@@ -810,8 +833,10 @@ export function SequentialNumberPage({
                         ...p.positions,
                         {
                           id,
+                          kind: 'text',
+                          text: 'Fixed text',
                           xMm: Math.min(10, settings.ticketWidthMm / 2),
-                          yMm: Math.min(10, settings.ticketHeightMm / 2),
+                          yMm: Math.min(20, settings.ticketHeightMm / 2),
                           fontSizePt: 12,
                           color: '#000000',
                           align: 'left'
@@ -821,37 +846,9 @@ export function SequentialNumberPage({
                     setSelectedPosition(id)
                   }}
                 >
-                  <Plus className="size-4" />
-                  {t('Add number')}
+                  {t('Add fixed text')}
                 </Button>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy || project.positions.length >= 20}
-                onClick={() => {
-                  const id = crypto.randomUUID()
-                  setProject((p) => ({
-                    ...p,
-                    positions: [
-                      ...p.positions,
-                      {
-                        id,
-                        kind: 'text',
-                        text: 'Fixed text',
-                        xMm: Math.min(10, settings.ticketWidthMm / 2),
-                        yMm: Math.min(20, settings.ticketHeightMm / 2),
-                        fontSizePt: 12,
-                        color: '#000000',
-                        align: 'left'
-                      }
-                    ]
-                  }))
-                  setSelectedPosition(id)
-                }}
-              >
-                {t('Add fixed text')}
-              </Button>
               <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
                 <NumberDesignEditor
                   key={project.front?.name ?? 'blank'}
@@ -870,7 +867,7 @@ export function SequentialNumberPage({
                     >
                       {project.positions.map((pos, i) => (
                         <option key={pos.id} value={pos.id}>
-                          {pos.kind === 'text' ? 'Fixed text' : 'Number'} {i + 1}
+                          {t(pos.kind === 'text' ? 'Fixed text' : 'Number')} {i + 1}
                         </option>
                       ))}
                     </select>

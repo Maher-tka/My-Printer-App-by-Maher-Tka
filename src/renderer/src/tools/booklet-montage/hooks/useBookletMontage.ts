@@ -26,6 +26,7 @@ import {
 } from '../lib/bookletImposition'
 import { downloadBlob } from '../lib/download'
 import {
+  assertNotCanceled,
   createCanceledError,
   isCanceledError,
   releasePageThumbnail,
@@ -443,6 +444,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
   )
 
   const exportPdf = useCallback(async (): Promise<void> => {
+    if (exportAbortControllerRef.current) return
     const exportPageCount = sheets.length * 2 + emptySheetsForExport.length
     const readinessError = getExportReadinessError(
       pages.length,
@@ -457,7 +459,6 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
     }
 
     setError(null)
-    exportAbortControllerRef.current?.abort()
     const abortController = new AbortController()
     exportAbortControllerRef.current = abortController
     setExportProgress({
@@ -469,6 +470,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
 
     try {
       const blob = await createBookletPdfBlob(abortController)
+      assertNotCanceled(abortController.signal)
       setExportProgress({
         phase: 'saving-file',
         current: exportPageCount,
@@ -477,14 +479,16 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
       })
 
       if (window.printerApp?.saveFile) {
+        const bytes = await blobToUint8Array(blob)
+        assertNotCanceled(abortController.signal)
         const result = await window.printerApp.saveFile({
           suggestedName: 'booklet-montage.pdf',
-          bytes: await blobToUint8Array(blob),
+          bytes,
           filters: [{ name: 'PDF', extensions: ['pdf'] }]
         })
 
         if (result.canceled) {
-          throw new Error('File save canceled.')
+          throw createCanceledError('File save canceled.')
         }
 
         if (!result.ok) {
@@ -508,7 +512,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
         total: 0,
         message: canceled ? 'Export canceled.' : getErrorMessage(exportError)
       })
-      setError(canceled ? 'Export canceled.' : getErrorMessage(exportError))
+      setError(canceled ? null : getErrorMessage(exportError))
     } finally {
       if (exportAbortControllerRef.current === abortController) {
         exportAbortControllerRef.current = null
@@ -525,6 +529,8 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
 
   const printPdf = useCallback(
     async (jobTitle: string): Promise<PrintPdfResult> => {
+      if (exportAbortControllerRef.current)
+        return { ok: false, error: 'An export is already running.' }
       const exportPageCount = sheets.length * 2 + emptySheetsForExport.length
       const readinessError = getExportReadinessError(
         pages.length,
@@ -539,7 +545,6 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
       }
 
       setError(null)
-      exportAbortControllerRef.current?.abort()
       const abortController = new AbortController()
       exportAbortControllerRef.current = abortController
       setExportProgress({
@@ -551,6 +556,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
 
       try {
         const blob = await createBookletPdfBlob(abortController)
+        assertNotCanceled(abortController.signal)
         setExportProgress({
           phase: 'saving-file',
           current: exportPageCount,
@@ -558,8 +564,10 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
           message: 'Opening printer dialog'
         })
 
+        const bytes = await blobToUint8Array(blob)
+        assertNotCanceled(abortController.signal)
         const result = await sendPdfToPrint({
-          bytes: await blobToUint8Array(blob),
+          bytes,
           suggestedName: 'booklet-montage.pdf',
           jobTitle,
           silent: false
@@ -610,6 +618,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
 
   const exportImages = useCallback(
     async (format: ExportImageFormat): Promise<void> => {
+      if (exportAbortControllerRef.current) return
       const exportPageCount = sheets.length * 2 + emptySheetsForExport.length
       const readinessError = getExportReadinessError(
         pages.length,
@@ -624,7 +633,6 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
       }
 
       setError(null)
-      exportAbortControllerRef.current?.abort()
       const abortController = new AbortController()
       exportAbortControllerRef.current = abortController
       setExportProgress({
@@ -644,7 +652,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
           const folder = await desktopApi.selectOutputFolder()
 
           if (folder.canceled) {
-            throw new Error('File save canceled.')
+            throw createCanceledError('File save canceled.')
           }
 
           if (!folder.ok || !folder.folderPath) {
@@ -653,6 +661,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
 
           outputFolder = folder.folderPath
         }
+        assertNotCanceled(abortController.signal)
 
         const { exportBookletImages, getBookletImageExportFolderName } =
           await import('../lib/exportImages')
@@ -677,10 +686,12 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
             })
 
             if (outputFolder && writeFilesToFolder) {
+              const bytes = await blobToUint8Array(image.blob)
+              assertNotCanceled(abortController.signal)
               const result = await writeFilesToFolder(outputFolder, [
                 {
                   fileName: outputFileName,
-                  bytes: await blobToUint8Array(image.blob)
+                  bytes
                 }
               ])
 
@@ -695,6 +706,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
             await waitForDownloadTick()
           }
         })
+        assertNotCanceled(abortController.signal)
 
         setExportProgress({
           phase: 'done',
@@ -710,7 +722,7 @@ export function useBookletMontage(initialProject?: PrinterProjectFile<BookletPro
           total: 0,
           message: canceled ? 'Export canceled.' : getErrorMessage(exportError)
         })
-        setError(canceled ? 'Export canceled.' : getErrorMessage(exportError))
+        setError(canceled ? null : getErrorMessage(exportError))
       } finally {
         if (exportAbortControllerRef.current === abortController) {
           exportAbortControllerRef.current = null

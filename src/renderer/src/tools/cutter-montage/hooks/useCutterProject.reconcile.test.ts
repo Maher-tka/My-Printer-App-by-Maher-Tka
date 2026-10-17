@@ -354,11 +354,11 @@ function run(): void {
         (placedPiece) => getPlacedSheetIndex(placedPiece) === sheetIndex
       ).length
   )
-  expectEqual(shorterStack.sheetCount, 6, 'making the first sheet shorter adds overflow sheets')
+  expectEqual(shorterStack.sheetCount, 5, 'making the first sheet shorter adds overflow sheets')
   expectEqual(
     shorterCounts.join(','),
-    '24,24,24,24,24,5',
-    'shortening the first sheet pushes all remaining copies through the sheets below'
+    '31,31,31,31,1',
+    'shorter sheets use a rotated final row before pushing remaining copies to the next sheet'
   )
 
   const unselectedPreset = {

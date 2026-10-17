@@ -44,7 +44,20 @@ export async function exportBookletPdf(
     message: 'Preparing pages for PDF export'
   })
 
-  const assets = await preparePdfRenderAssets(pdf, sheets, sources, signal)
+  const assets = await preparePdfRenderAssets(
+    pdf,
+    sheets,
+    sources,
+    signal,
+    (name, current, total) => {
+      onProgress({
+        phase: 'preparing-pages',
+        current: 0,
+        total: totalPages,
+        message: `Preparing artwork ${current} of ${total}: ${name}`
+      })
+    }
+  )
   let renderedPages = 0
 
   for (const side of sides) {
@@ -69,7 +82,7 @@ export async function exportBookletPdf(
       message: `Rendered page ${renderedPages} of ${totalPages}`
     })
 
-    await yieldToUi()
+    await yieldToUi(0, signal)
   }
 
   for (const emptySheet of emptySheets) {
@@ -96,7 +109,7 @@ export async function exportBookletPdf(
       message: `Rendered page ${renderedPages} of ${totalPages}`
     })
 
-    await yieldToUi()
+    await yieldToUi(0, signal)
   }
 
   assertNotCanceled(signal)
@@ -111,6 +124,7 @@ export async function exportBookletPdf(
     useObjectStreams: settings.exportQuality === 'standard',
     addDefaultPage: false
   })
+  assertNotCanceled(signal)
 
   return new Blob([bytesToArrayBuffer(bytes)], { type: 'application/pdf' })
 }

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { createOutputAutosave } from './output-autosave.js'
 import type {
   AccountMutationResult,
   AccountSnapshot,
@@ -21,20 +22,26 @@ import type {
 } from '../shared/release-types.js'
 import type { AppUpdateActionResult, AppUpdateSnapshot } from '../shared/update-types.js'
 
-let activeProjectState: {
+interface ActiveProjectState {
   project: unknown
   isDirty: boolean
   filePath?: string | null
   preflight?: Pick<ExportContext, 'warningsCount' | 'preflightStatus'>
-} | null = null
+}
+let activeProjectState: ActiveProjectState | null = null
 let activeToolId: string | undefined
+
+const autosaveOutputSnapshot = createOutputAutosave<ActiveProjectState>((state) =>
+  ipcRenderer.invoke('runtime:write-autosave', {
+    project: state.project,
+    originalFilePath: state.filePath
+  })
+)
 
 async function autosaveActiveProject(): Promise<void> {
   if (!activeProjectState?.isDirty) return
-  await ipcRenderer.invoke('runtime:write-autosave', {
-    project: activeProjectState.project,
-    originalFilePath: activeProjectState.filePath
-  })
+  // Streaming booklet images must not serialize the entire project for every sheet.
+  await autosaveOutputSnapshot(activeProjectState)
 }
 
 function getActiveExportContext(): ExportContext | undefined {

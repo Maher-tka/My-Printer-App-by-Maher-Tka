@@ -1,7 +1,7 @@
 import { DEFAULT_CUTTER_SHEET, getSafeArea } from './cutterLayout'
 import { getPlacedArtworkRect, getPlacedProductionBounds } from './cutlineGenerator'
 import { getPlacedMaskRect } from './maskUtils'
-import { autoArrangePieces } from './nesting'
+import { autoArrangePieces, getPieceCapacityForTargetLength } from './nesting'
 import {
   createPiecePresetFromSource,
   createPlacedPieceFromPreset,
@@ -12,6 +12,7 @@ import type { PieceSourceFile, PiecePreset } from '../types'
 import { synchronizePieceEditorModel } from './editorObjects'
 
 function run(): void {
+  checkCompactMixedOrientationLayouts()
   const paddedPiece = createPiecePresetFromSource(createSource(), [])
   const tightArtwork = {
     xCm: 2,
@@ -435,6 +436,127 @@ function run(): void {
   )
 
   console.log('Cutter nesting tests passed.')
+}
+
+function checkCompactMixedOrientationLayouts(): void {
+  const settings = { ...DEFAULT_CUTTER_SHEET, spacingMm: 5 }
+  const large = createRectanglePiece(35, 20, 9)
+  const layout = autoArrangePieces([large], settings)
+  expectEqual(layout.placedCount, 9, 'all large stickers are placed')
+  expectEqual(layout.sheetCount, 1, 'sideways copies do not force a second sheet')
+  const tallSideCopy = layout.placedPieces.find((placed) => placed.rotation === 90)
+  expect(Boolean(tallSideCopy), 'large-sticker fixture includes a tall side copy')
+  const tallBounds = tallSideCopy!.productionBoundsCm!
+  expect(
+    layout.placedPieces.some((placed) => {
+      const bounds = placed.productionBoundsCm!
+      return (
+        placed.rotation === 0 &&
+        bounds.yCm > tallBounds.yCm &&
+        bounds.yCm < tallBounds.yCm + tallBounds.heightCm
+      )
+    }),
+    'shorter lanes continue alongside the tall copy without a sticker-sized gap'
+  )
+  assertSafeSpacing(layout, settings)
+
+  const capacity = getPieceCapacityForTargetLength(large, settings, settings.heightCm)
+  expect(capacity >= 10, 'material-length capacity includes the recovered lane space')
+  const full = autoArrangePieces([{ ...large, quantity: capacity }], settings)
+  expectEqual(full.sheetCount, 1, 'material-length estimate matches actual compact arrangement')
+  assertSafeSpacing(full, settings)
+
+  const overflow = autoArrangePieces([{ ...large, quantity: 20 }], settings)
+  expectEqual(overflow.placedCount, 20, 'overflow keeps every requested large sticker')
+  expectEqual(overflow.sheetCount, 2, 'compact lanes fill both production sheets')
+  assertSafeSpacing(overflow, settings)
+
+  const small = createRectanglePiece(14, 14, 1)
+  const mixed = autoArrangePieces([{ ...large, quantity: 11 }, small], settings)
+  expectEqual(mixed.placedCount, 12, 'mixed designs retain their quantities')
+  expectEqual(
+    mixed.placedPieces.at(-1)!.sheetIndex,
+    0,
+    'later small designs fill holes on earlier sheets'
+  )
+  assertSafeSpacing(mixed, settings)
+
+  const locked = { ...createPlacedPieceFromPreset(large, 60, 30, 90), locked: true }
+  for (const preserveManualPositions of [false, true]) {
+    const retained = { ...locked, locked: !preserveManualPositions }
+    const kept = autoArrangePieces([large, small], { ...settings, preserveManualPositions }, [
+      retained
+    ])
+    expectEqual(kept.placedCount, 10, 'retained copy counts toward the requested quantity')
+    expectEqual(kept.placedPieces[0].id, retained.id, 'retained copy keeps its identity')
+    expectEqual(kept.placedPieces[0].xCm, 60, 'retained copy keeps its X position')
+    expectEqual(kept.placedPieces[0].yCm, 30, 'retained copy keeps its Y position')
+    expectEqual(kept.placedPieces[0].rotation, 90, 'retained copy keeps its rotation')
+    assertSafeSpacing(kept, settings)
+  }
+
+  const noRotation = autoArrangePieces([large], { ...settings, allowRotation: false })
+  expect(
+    noRotation.placedPieces.every((placed) => placed.rotation === 0),
+    'sheet rotation restriction is respected'
+  )
+  const fixedOrientation = autoArrangePieces([{ ...large, rotationAllowed: false }], settings)
+  expect(
+    fixedOrientation.placedPieces.every((placed) => placed.rotation === 0),
+    'design rotation restriction is respected'
+  )
+  assertSafeSpacing(noRotation, settings)
+  assertSafeSpacing(fixedOrientation, settings)
+
+  const shortSheet = { ...settings, widthCm: 60, heightCm: 25, safeMarginCm: 0 }
+  const portrait = createRectanglePiece(20, 35, 1)
+  const turned = autoArrangePieces([portrait], shortSheet)
+  expectEqual(
+    turned.placedCount,
+    1,
+    'rotation can rescue a piece that is too tall in its normal orientation'
+  )
+  expectEqual(turned.placedPieces[0].rotation, 90, 'short sheets use the fitting orientation')
+  assertSafeSpacing(turned, shortSheet)
+  const oversize = autoArrangePieces([createRectanglePiece(70, 70, 1)], shortSheet)
+  expectEqual(oversize.placedCount, 0, 'oversize artwork is rejected')
+  expect(Boolean(oversize.warning), 'oversize artwork reports a warning')
+}
+
+function createRectanglePiece(widthCm: number, heightCm: number, quantity: number): PiecePreset {
+  return {
+    ...syncPieceBounds(createPiecePresetFromSource(createSource(), []), widthCm, heightCm),
+    quantity
+  }
+}
+
+function assertSafeSpacing(
+  layout: ReturnType<typeof autoArrangePieces>,
+  settings: typeof DEFAULT_CUTTER_SHEET
+): void {
+  const safeArea = getSafeArea(settings)
+  for (const [index, placed] of layout.placedPieces.entries()) {
+    const bounds = placed.productionBoundsCm!
+    expect(isInside(bounds, safeArea), 'compact footprints stay inside the safe area')
+    for (const other of layout.placedPieces.slice(index + 1)) {
+      if (placed.sheetIndex !== other.sheetIndex) continue
+      expect(
+        !overlap(
+          bounds,
+          other.productionBoundsCm!,
+          settings.spacingMm / 10 - GEOMETRY_TOLERANCE_CM
+        ),
+        'compact footprints retain configured spacing'
+      )
+    }
+  }
+  const lastSheet = Math.max(...layout.placedPieces.map((placed) => placed.sheetIndex ?? 0))
+  const bottom = Math.max(
+    ...layout.placedPieces
+      .filter((placed) => (placed.sheetIndex ?? 0) === lastSheet)
+      .map((placed) => placed.productionBoundsCm!.yCm + placed.productionBoundsCm!.heightCm)
+  )
+  expectClose(layout.usedHeightCm!, bottom, 'material usage includes the lowest footprint')
 }
 
 function createMaskedPiece(): PiecePreset {

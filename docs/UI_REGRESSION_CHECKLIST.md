@@ -522,3 +522,110 @@ Artifacts: `output/playwright/cs6-compatible-print.png`,
 Local v0.2.12 release checks passed: repository formatting, TypeScript, all
 automated suites, Storybook and the production build. Actual Illustrator CS6
 opening and physical printer/cutter validation remain pending as noted above.
+
+## Compact multi-sticker distribution - 2026-10-17
+
+- Replaced full-row height reservations with free-area packing. Short lanes now
+  continue beside tall rotated copies, and later designs reuse holes on earlier
+  sheets. Artwork, mask and CutContour bounds, safe margins, grid snapping,
+  configured spacing, rotation restrictions and retained positions are respected.
+  Material-length capacity uses the same placement rules.
+- The 35 × 20 cm, nine-copy regression needs two sheets with the previous
+  algorithm and one sheet with this correction. Tests cover mixed designs,
+  overflow, preserved/locked copies, offset contours and height-limited rotation.
+  The existing shorter-sheet regression now fits 31 rather than 24 copies per
+  full sheet by using a rotated final row.
+- TypeScript, complete cutter and sticker suites, changed-file formatting and
+  diff whitespace checks passed. A 5,000-copy workshop-fixture order completed
+  in 25 ms on the main PC; this is not a workshop-PC performance measurement.
+- Inspected the live nine-copy preview at 1366×768 English/light, 1920×1080
+  French/dark and 1366×768 Arabic/light with low-end mode. Each retained one
+  production sheet and nine artwork copies, without page overflow. Keyboard
+  activation of Arrange Copies retained focus. The settled RTL canvas preserves
+  the production reading direction and the compact lanes. No controls, headings,
+  shared styles or output actions changed.
+- Physical print/cut checks and verification in a released workshop build remain
+  pending. No release or hardware print job was requested.
+
+Artifacts: `output/playwright/sticker-lanes-1366-en-light.png`,
+`output/playwright/sticker-lanes-1920-fr-dark.png`, and
+`output/playwright/sticker-lanes-1366-ar-light-settled.png`.
+
+## Export reliability - 2026-10-17
+
+- Booklet PDF exports parse each used source once and share embedded fonts and
+  images across its pages. Imported blank pages, CropBox offsets, PDF rotations
+  and transparency groups are retained. Missing artwork fails before producing
+  a PDF. Preparation yields between batches, and canceled output is checked
+  before it can reach saving or printing.
+- Shared native saves stage and sync complete files before replacing their
+  destinations. Folder exports validate the full requested list before writing;
+  each file is replaced atomically. A filesystem failure partway through a batch
+  can leave earlier completed files. Save history failures cannot turn a
+  completed file save into a reported export failure. Unchanged project snapshots
+  share one autosave across streamed image sheets.
+- `test:exports`, booklet, card, sequential-number, hardcover and cutter suites,
+  typecheck and the production build passed. Export regressions cover one parse
+  per source, shared resources, imported blanks, cropped/rotated pages,
+  cancellation, streamed image ordering, memory checks before canvas allocation,
+  cleanup, failed-save retries and destination validation.
+- The retained 183-page, 48,270,507-byte production PDF exported with one added
+  blank to 92 booklet sides and a 47,927,960-byte output. The local verification
+  script completed export, disk save and output parsing in about 5.1 seconds;
+  this is a main-PC measurement. Rendered cover and center spreads were inspected,
+  along with both sheets of a synthetic four-rotation/CropBox sample.
+- No workspace layout, button styling, action placement or headings changed.
+  The native save dialog now uses the shared label “Save exported file”. Live
+  export-state and save-dialog checks at 1366×768 and 1920×1080, light/dark,
+  French/Arabic RTL, keyboard operation and low-end mode remain pending.
+  Workshop/released-build and physical printing checks remain pending.
+
+Artifacts: `tmp/pdfs/export-reliability/production-booklet.pdf`,
+`tmp/pdfs/export-reliability/production-sheet-01.png`,
+`tmp/pdfs/export-reliability/production-sheet-92.png`, and
+`tmp/pdfs/export-reliability/rotated-sheet-*.png`.
+
+## Repeat a ticket number - 2026-10-17
+
+- In Sequential Number, the existing number action is now labeled Add same
+  number when a sequence position exists. It copies the selected number's
+  formatting (or the first number when fixed text is selected), offsets the
+  copy inside the ticket and selects it for independent positioning. With no
+  numbers, Add number creates the first sequence position. Both editing actions
+  share one wrapping row of shared outline buttons; no heading subtitle is added.
+- All number positions retain the same per-ticket sequence value in the editor,
+  sheet preview and exported PDF. Project serialization remains compatible.
+  Regression coverage includes matching ticket/stub numbers with prefixes,
+  suffixes, padding and custom increments in sheet and cut-and-stack orders,
+  duplex output, formatting reuse, fixed-text selection and placement near the
+  bottom edge.
+- Typecheck, sequential-number and i18n suites, changed-file formatting and diff
+  whitespace checks passed. Inspected the empty-design editor at 1366×768
+  English/light and representative ticket/stub artwork at 1920×1080 French/dark
+  and 1366×768 Arabic in light/dark with low-end mode. Also inspected 1600×900
+  Arabic/light. Controls wrap without horizontal page overflow; the canvas and
+  page can scroll to reach the second number. Keyboard movement updates only
+  the selected second position. Sheet preview shows two matching values for
+  every occupied ticket. French/Arabic action and position labels are translated.
+- Native project save/reopen, released workshop-build verification and physical
+  printing remain pending. No release or hardware print job was requested.
+
+Artifacts: `output/playwright/sequential-repeat-1366-en-light.png`,
+`output/playwright/sequential-repeat-1920-fr-dark.png`,
+`output/playwright/sequential-repeat-1366-ar-dark-low-end.png`,
+`output/playwright/sequential-repeat-1366-ar-light-low-end.png`, and
+`output/playwright/sequential-repeat-1600-ar-light-low-end.png`.
+
+## Stable release v0.2.13 - 2026-10-17
+
+- Full local `npm run release:check` passed: repository formatting, TypeScript,
+  every automated test suite, Storybook and the production build. This includes
+  the new shared file-save, output autosave and booklet export regressions.
+- The acceptance review retains the compact-sticker and repeated-number visual
+  results recorded above. Shared controls and action placement are retained;
+  no further UI changes were made during release preparation.
+- Live export-state/native save-dialog checks at 1366×768 and 1920×1080,
+  light/dark, French/Arabic RTL, keyboard access and low-end mode remain pending.
+  Released workshop-build and physical printer/cutter verification remain pending.
+
+Release check log: `.codex-release-0.2.13-check.log` (local, ignored by Git).

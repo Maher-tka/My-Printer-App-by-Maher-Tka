@@ -3439,6 +3439,26 @@ export const messages: Record<string, { fr: string; ar: string }> = {
     fr: 'Ajouter un numéro',
     ar: 'إضافة رقم'
   },
+  'Add same number': {
+    fr: 'Ajouter le même numéro',
+    ar: 'إضافة نفس الرقم'
+  },
+  'All number positions on a ticket use the same sequence number.': {
+    fr: 'Toutes les positions de numéro sur un ticket utilisent le même numéro de séquence.',
+    ar: 'تستخدم جميع مواضع الأرقام على التذكرة نفس الرقم التسلسلي.'
+  },
+  'Numbers & fixed text': {
+    fr: 'Numéros et texte fixe',
+    ar: 'الأرقام والنص الثابت'
+  },
+  Number: {
+    fr: 'Numéro',
+    ar: 'رقم'
+  },
+  'Fixed text': {
+    fr: 'Texte fixe',
+    ar: 'نص ثابت'
+  },
   'Add fixed text': {
     fr: 'Ajouter un texte fixe',
     ar: 'إضافة نص ثابت'

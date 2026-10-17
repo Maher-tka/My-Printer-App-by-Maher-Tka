@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
+import { mkdir, readFile } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
+import { exportBuffer, planOutputFiles, writeExportFile } from './export-files.js'
 import { registerAccountHandlers } from './account.js'
 import { assertOnlineProductionAccess } from './online-account.js'
 import { registerAppUpdaterHandlers } from './app-updater.js'
@@ -255,9 +256,10 @@ function registerBookletExportHandlers(): void {
     async (event, request: SaveFileRequest, context?: ExportContext) => {
       try {
         await assertOnlineProductionAccess('paid-tools', context?.toolId)
+        const bytes = exportBuffer(request.bytes)
         const owner = BrowserWindow.fromWebContents(event.sender)
         const options = {
-          title: 'Save booklet montage file',
+          title: 'Save exported file',
           defaultPath: request.suggestedName,
           filters: request.filters
         }
@@ -266,7 +268,7 @@ function registerBookletExportHandlers(): void {
           : await dialog.showSaveDialog(options)
 
         if (result.canceled || !result.filePath) {
-          await recordExportResult({
+          await recordFileExportResult({
             status: 'canceled',
             context,
             suggestedName: request.suggestedName
@@ -274,18 +276,19 @@ function registerBookletExportHandlers(): void {
           return { ok: false, canceled: true }
         }
 
-        await writeFile(result.filePath, toBuffer(request.bytes))
-        await recordExportResult({
+        const filePath = result.filePath
+        await writeExportFile(filePath, bytes)
+        await recordFileExportResult({
           status: 'success',
           context,
           suggestedName: request.suggestedName,
-          filePath: result.filePath
+          filePath
         })
 
-        return { ok: true, filePath: result.filePath }
+        return { ok: true, filePath }
       } catch (error) {
         recordAppError('save-file', error)
-        await recordExportResult({
+        await recordFileExportResult({
           status: 'failed',
           context,
           suggestedName: request?.suggestedName ?? 'export',
@@ -330,26 +333,16 @@ function registerBookletExportHandlers(): void {
           files.length > 1 ? 'batch-exports' : 'paid-tools',
           context?.toolId
         )
-        const folder = resolve(folderPath)
+        const planned = planOutputFiles(folderPath, files)
         const writtenPaths: string[] = []
 
-        for (const file of files) {
-          if (!isSafeRelativeOutputPath(file.fileName)) {
-            throw new Error(`Invalid output file path: ${file.fileName}`)
-          }
-
-          const targetPath = resolve(folder, file.fileName)
-
-          if (!isPathInsideFolder(folder, targetPath)) {
-            throw new Error(`Invalid output path: ${file.fileName}`)
-          }
-
-          await mkdir(dirname(targetPath), { recursive: true })
-          await writeFile(targetPath, toBuffer(file.bytes))
-          writtenPaths.push(targetPath)
+        for (const file of planned) {
+          await mkdir(dirname(file.filePath), { recursive: true })
+          await writeExportFile(file.filePath, file.bytes)
+          writtenPaths.push(file.filePath)
         }
 
-        await recordExportResult({
+        await recordFileExportResult({
           status: 'success',
           context,
           suggestedName: files[0]?.fileName ?? 'folder-export',
@@ -358,7 +351,7 @@ function registerBookletExportHandlers(): void {
         return { ok: true, filePaths: writtenPaths }
       } catch (error) {
         recordAppError('write-files-to-folder', error)
-        await recordExportResult({
+        await recordFileExportResult({
           status: 'failed',
           context,
           suggestedName: files[0]?.fileName ?? 'folder-export',
@@ -370,30 +363,15 @@ function registerBookletExportHandlers(): void {
   )
 }
 
-function toBuffer(bytes: Uint8Array | ArrayBuffer | number[]): Buffer {
-  if (bytes instanceof ArrayBuffer) {
-    return Buffer.from(bytes)
+async function recordFileExportResult(
+  input: Parameters<typeof recordExportResult>[0]
+): Promise<void> {
+  try {
+    await recordExportResult(input)
+  } catch (error) {
+    // History is secondary: a completed save must still report success.
+    recordAppError('export-history', error)
   }
-
-  return Buffer.from(bytes)
-}
-
-function isPathInsideFolder(folderPath: string, targetPath: string): boolean {
-  const folder = folderPath.endsWith(sep) ? folderPath : `${folderPath}${sep}`
-  const normalizedFolder = folder.toLowerCase()
-  const normalizedTarget = targetPath.toLowerCase()
-
-  return normalizedTarget.startsWith(normalizedFolder)
-}
-
-function isSafeRelativeOutputPath(fileName: string): boolean {
-  const trimmed = fileName.trim()
-
-  if (!trimmed || isAbsolute(trimmed)) {
-    return false
-  }
-
-  return trimmed.split(/[\\/]+/).every((part) => part.length > 0 && part !== '.' && part !== '..')
 }
 
 function getErrorMessage(error: unknown): string {

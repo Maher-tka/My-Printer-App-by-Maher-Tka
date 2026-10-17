@@ -1,9 +1,8 @@
 import {
-  type PDFDocument,
-  type PDFEmbeddedPage,
   type PDFImage,
   type PDFPage,
   clip,
+  degrees,
   endPath,
   popGraphicsState,
   pushGraphicsState,
@@ -38,31 +37,13 @@ import {
 import type { SheetLayoutMm } from './printSizes'
 import { mmToPixels, mmToPixelsExact, mmToPoints } from './units'
 import { getSolidFillHex, hexToRgb } from './colorUtils'
-
-export interface PdfRenderAssets {
-  pdf: PDFDocument
-  sourceMap: Map<string, BookletSource>
-  pdfPages: Map<string, PDFEmbeddedPage>
-  images: Map<string, PDFImage>
-}
+import type { PdfRenderAssets } from './pdfExportAssets'
+export { preparePdfRenderAssets } from './pdfExportAssets'
 
 export interface CanvasRenderAssets {
   sourceMap: Map<string, BookletSource>
   pdfCache: Map<string, PDFDocumentProxy>
   imageCache: Map<string, ImageBitmap>
-}
-
-export async function preparePdfRenderAssets(
-  pdf: PDFDocument,
-  _sheets: BookletSheet[],
-  sources: BookletSource[],
-  signal?: AbortSignal
-): Promise<PdfRenderAssets> {
-  assertNotCanceled(signal)
-
-  const sourceMap = new Map(sources.map((source) => [source.id, source]))
-
-  return { pdf, sourceMap, pdfPages: new Map(), images: new Map() }
 }
 
 export function createCanvasRenderAssets(sources: BookletSource[]): CanvasRenderAssets {
@@ -255,16 +236,18 @@ async function drawPdfSlot(
   )
 
   if (page.kind === 'pdf' && page.sourceId && page.sourcePageIndex !== undefined) {
-    const embeddedPage = await getEmbeddedPdfPage(
-      assets,
-      page.sourceId,
-      page.sourcePageIndex,
-      signal
-    )
-
-    if (embeddedPage) {
-      pdfPage.drawPage(embeddedPage, compensatedPlacement)
-    }
+    const asset = assets.pdfPages.get(`${page.sourceId}:${page.sourcePageIndex}`)
+    if (!asset) throw new Error(`Could not prepare artwork for ${page.displayName}.`)
+    const { rotation } = asset
+    const { x, y, width, height } = compensatedPlacement
+    const swapped = rotation === 90 || rotation === 270
+    pdfPage.drawPage(asset.page, {
+      x: x + (rotation === 180 || rotation === 270 ? width : 0),
+      y: y + (rotation === 90 || rotation === 180 ? height : 0),
+      width: swapped ? height : width,
+      height: swapped ? width : height,
+      rotate: degrees(-rotation)
+    })
   }
 
   if (page.kind === 'image' && page.sourceId) {
@@ -381,26 +364,21 @@ async function drawPdfPageToCanvas(
   )
   const viewport = pdfPage.getViewport({ scale: renderScale })
   const tempCanvas = document.createElement('canvas')
-  const tempContext = tempCanvas.getContext('2d')
-
-  if (!tempContext) {
-    throw new Error('Could not create a canvas context for PDF page image export.')
-  }
-
-  tempCanvas.width = Math.max(Math.round(viewport.width), 1)
-  tempCanvas.height = Math.max(Math.round(viewport.height), 1)
-  assertCanvasWithinLimit(
-    tempCanvas.width,
-    tempCanvas.height,
-    'rendering PDF pages for image export'
-  )
-
-  const renderTask = pdfPage.render({ canvas: tempCanvas, canvasContext: tempContext, viewport })
-  const abort = () => renderTask.cancel()
-
-  signal?.addEventListener('abort', abort, { once: true })
-
+  let renderTask: ReturnType<typeof pdfPage.render> | undefined
+  const abort = () => renderTask?.cancel()
   try {
+    const tempContext = tempCanvas.getContext('2d')
+    if (!tempContext) {
+      throw new Error('Could not create a canvas context for PDF page image export.')
+    }
+    assertNotCanceled(signal)
+    const width = Math.max(Math.round(viewport.width), 1)
+    const height = Math.max(Math.round(viewport.height), 1)
+    assertCanvasWithinLimit(width, height, 'rendering PDF pages for image export')
+    tempCanvas.width = width
+    tempCanvas.height = height
+    renderTask = pdfPage.render({ canvas: tempCanvas, canvasContext: tempContext, viewport })
+    signal?.addEventListener('abort', abort, { once: true })
     await renderTask.promise
     assertNotCanceled(signal)
     context.drawImage(tempCanvas, placement.x, placement.y, placement.width, placement.height)
@@ -444,33 +422,6 @@ async function getImageBitmap(
   return bitmap
 }
 
-async function getEmbeddedPdfPage(
-  assets: PdfRenderAssets,
-  sourceId: string,
-  pageIndex: number,
-  signal?: AbortSignal
-): Promise<PDFEmbeddedPage | undefined> {
-  const cacheKey = getPdfPageCacheKey(sourceId, pageIndex)
-  const cached = assets.pdfPages.get(cacheKey)
-
-  if (cached) {
-    return cached
-  }
-
-  assertNotCanceled(signal)
-
-  const source = assets.sourceMap.get(sourceId)
-
-  if (!source) {
-    return undefined
-  }
-
-  const [embeddedPage] = await assets.pdf.embedPdf(source.bytes, [pageIndex])
-  assets.pdfPages.set(cacheKey, embeddedPage)
-
-  return embeddedPage
-}
-
 async function getEmbeddedImage(
   assets: PdfRenderAssets,
   sourceId: string,
@@ -498,10 +449,6 @@ async function getEmbeddedImage(
   assets.images.set(sourceId, embeddedImage)
 
   return embeddedImage
-}
-
-function getPdfPageCacheKey(sourceId: string, pageIndex: number): string {
-  return `${sourceId}:${pageIndex}`
 }
 
 function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {

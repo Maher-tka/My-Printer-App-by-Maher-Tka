@@ -19,6 +19,7 @@ import {
 } from './renderSheet'
 import { getNumberedMontageImageFileName } from './exportNaming'
 import { mmToPixels } from './units'
+import { assertArtworkSources } from './pdfExportAssets'
 
 export { getBookletImageExportFolderName } from './exportNaming'
 
@@ -49,6 +50,7 @@ export async function exportBookletImages(
 
   assertNotCanceled(signal)
   assertExportCanStart(sheets, settings, emptySheets.length)
+  assertArtworkSources(sheets, sources)
 
   const sides = flattenSheetSides(sheets)
   const totalPages = sides.length + emptySheets.length
@@ -84,9 +86,11 @@ export async function exportBookletImages(
       }
 
       try {
-        canvas.width = mmToPixels(layout.paperSize.widthMm, dpi)
-        canvas.height = mmToPixels(layout.paperSize.heightMm, dpi)
-        assertCanvasWithinLimit(canvas.width, canvas.height, 'exporting montage sheets as images')
+        const width = mmToPixels(layout.paperSize.widthMm, dpi)
+        const height = mmToPixels(layout.paperSize.heightMm, dpi)
+        assertCanvasWithinLimit(width, height, 'exporting montage sheets as images')
+        canvas.width = width
+        canvas.height = height
         context.fillStyle = '#ffffff'
         context.fillRect(0, 0, canvas.width, canvas.height)
 
@@ -96,6 +100,7 @@ export async function exportBookletImages(
         )
 
         const blob = await canvasToBlob(canvas, format, settings.exportQuality)
+        assertNotCanceled(signal)
         const image = {
           blob,
           fileName: getNumberedMontageImageFileName(renderedCount + 1, format)
@@ -119,7 +124,7 @@ export async function exportBookletImages(
         message: `Rendered page ${renderedCount} of ${totalPages}`
       })
 
-      await yieldToUi()
+      await yieldToUi(0, signal)
     }
 
     for (const emptySheet of emptySheets) {
@@ -140,17 +145,16 @@ export async function exportBookletImages(
       }
 
       try {
-        canvas.width = mmToPixels(layout.paperSize.widthMm, dpi)
-        canvas.height = mmToPixels(layout.paperSize.heightMm, dpi)
-        assertCanvasWithinLimit(
-          canvas.width,
-          canvas.height,
-          'exporting empty montage sheets as images'
-        )
+        const width = mmToPixels(layout.paperSize.widthMm, dpi)
+        const height = mmToPixels(layout.paperSize.heightMm, dpi)
+        assertCanvasWithinLimit(width, height, 'exporting empty montage sheets as images')
+        canvas.width = width
+        canvas.height = height
         context.fillStyle = normalizeHex(emptySheet.colorHex) ?? '#FFFFFF'
         context.fillRect(0, 0, canvas.width, canvas.height)
 
         const blob = await canvasToBlob(canvas, format, settings.exportQuality)
+        assertNotCanceled(signal)
         const image = {
           blob,
           fileName: getNumberedMontageImageFileName(renderedCount + 1, format)
@@ -174,7 +178,7 @@ export async function exportBookletImages(
         message: `Rendered page ${renderedCount} of ${totalPages}`
       })
 
-      await yieldToUi()
+      await yieldToUi(0, signal)
     }
   } finally {
     await releaseCanvasRenderAssets(assets)
