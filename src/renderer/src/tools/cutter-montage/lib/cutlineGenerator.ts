@@ -7,6 +7,7 @@ import type {
   CutlineTransform
 } from '../types'
 import { mmToCm } from './units'
+import { getPathBounds } from './pathBounds'
 
 export interface CutlineRect {
   xCm: number
@@ -254,7 +255,14 @@ export function getPieceProductionFootprint(piece: PiecePreset): ProductionBound
   const productionObjects = getProductionObjects(piece)
   const bounds = productionObjects.map((object) => {
     const offsetCm = object.role === 'cutline' ? (object.offsetMm ?? 0) / 10 : 0
-    return getRotatedTransformBounds(object.transform, offsetCm)
+    const rect = {
+      ...object.transform,
+      xCm: object.transform.xCm - offsetCm,
+      yCm: object.transform.yCm - offsetCm,
+      widthCm: object.transform.widthCm + offsetCm * 2,
+      heightCm: object.transform.heightCm + offsetCm * 2
+    }
+    return getRotatedTransformBounds(getDrawnObjectRect(rect, object))
   })
 
   if (bounds.length === 0) {
@@ -306,10 +314,33 @@ export function getPlacedProductionBounds(
   }
 
   const bounds = productionObjects.map((object) =>
-    getRotatedTransformBounds(getPlacedEditorObjectRect(placed, preset, object))
+    getRotatedTransformBounds(
+      getDrawnObjectRect(getPlacedEditorObjectRect(placed, preset, object), object)
+    )
   )
 
   return unionBounds(bounds, 'Placed production bounds')
+}
+
+/** A path can occupy only part of its transform/viewBox; exclude that unused frame. */
+export function getDrawnObjectRect(rect: CutlineRect, object: EditorObject): CutlineRect {
+  const bounds =
+    object.shapeType === 'path' && object.pathData ? getPathBounds(object.pathData) : null
+  if (!bounds) return rect
+  const dx = (bounds.x + bounds.width / 2 - 0.5) * rect.widthCm
+  const dy = (bounds.y + bounds.height / 2 - 0.5) * rect.heightCm
+  const radians = (rect.rotation * Math.PI) / 180
+  const widthCm = bounds.width * rect.widthCm
+  const heightCm = bounds.height * rect.heightCm
+  return {
+    xCm:
+      rect.xCm + rect.widthCm / 2 + dx * Math.cos(radians) - dy * Math.sin(radians) - widthCm / 2,
+    yCm:
+      rect.yCm + rect.heightCm / 2 + dx * Math.sin(radians) + dy * Math.cos(radians) - heightCm / 2,
+    widthCm,
+    heightCm,
+    rotation: rect.rotation
+  }
 }
 
 export function getPieceCutlineRect(cutline: PieceCutline): CutlineRect {

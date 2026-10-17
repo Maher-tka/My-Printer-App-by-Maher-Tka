@@ -5,7 +5,7 @@ import { Sparkles, Copy, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { PiecePreset } from '../types'
 import { PieceOrderControls } from './PieceOrderControls'
-import { getPieceSize } from '../lib/pieceSize'
+import { getFinishedPieceSize } from '../lib/pieceSize'
 import { LiveNumberInput } from './LiveNumberInput'
 export function StickerLibraryRail({
   pieces,
@@ -124,7 +124,7 @@ export function StickerLibraryRail({
                     min={5}
                     max={960}
                     step={0.5}
-                    value={getPieceSize(piece).widthCm * 10}
+                    value={getFinishedPieceSize(piece).widthCm * 10}
                     precision={2}
                     onValueChange={(value) => onFinishedWidthChange(piece.id, value)}
                     className="mt-1 h-8 w-full rounded border bg-background px-2"
@@ -132,10 +132,14 @@ export function StickerLibraryRail({
                 </label>
                 <p className="text-muted-foreground">
                   {t('Artwork')} {Number((piece.artwork.transform.widthCm * 10).toFixed(1))} ×{' '}
-                  {Number((piece.artwork.transform.heightCm * 10).toFixed(1))} mm. Finished size{' '}
-                  {piece.clippingMaskEnabled
-                    ? 'is measured from the mask.'
-                    : 'includes the cut margin.'}
+                  {Number((piece.artwork.transform.heightCm * 10).toFixed(1))} mm.{' '}
+                  {t(
+                    piece.cutlineObjectId
+                      ? 'Finished size is measured from the cut contour.'
+                      : piece.clippingMaskEnabled
+                        ? 'Finished size is measured from the mask.'
+                        : 'Finished size is measured from the artwork.'
+                  )}
                 </p>
               </div>
             )}

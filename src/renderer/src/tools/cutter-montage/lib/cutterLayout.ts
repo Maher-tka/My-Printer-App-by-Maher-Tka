@@ -35,7 +35,7 @@ export const DEFAULT_CUTTER_SHEET: CutterSheetSettings = {
   rollWidthCm: MAX_VINYL_ROLL_WIDTH_CM,
   unit: 'cm',
   safeMarginCm: 1.5,
-  spacingMm: 3,
+  spacingMm: 3.5,
   snapToGrid: true,
   gridStepCm: 0.5,
   allowRotation: true,

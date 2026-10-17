@@ -2,7 +2,7 @@ import type { PiecePreset, PieceSourceFile } from '../types'
 import type { StickerMakerResult } from './stickerMaker'
 import { createCutterId } from './nesting'
 import { createPiecePresetFromSource } from './piecePresets'
-import { getPieceSize, resizePieceToSize } from './pieceSize'
+import { getFinishedPieceSize, resizeFinishedPiece } from './pieceSize'
 import { synchronizePieceEditorModel } from './editorObjects'
 import { bytesToArrayBuffer } from './sourcePreview'
 
@@ -90,13 +90,50 @@ export function createStickerCutterAssets(
       }
     ]
   })
-  return { source, piece }
+  return { source, piece: ensureStickerContourMask(piece) }
+}
+
+/** Retain the source PNG, but clip its padded canvas to the generated cut boundary. */
+function ensureStickerContourMask(piece: PiecePreset): PiecePreset {
+  if (piece.stickerMakerOffsetMm === undefined || piece.clippingMaskEnabled) return piece
+  const contour = piece.objects.find(
+    (object) => object.id === piece.cutlineObjectId && object.role === 'cutline'
+  )
+  if (!contour) return piece
+  const maskId = createCutterId('sticker-mask')
+  return synchronizePieceEditorModel({
+    ...piece,
+    clippingMaskEnabled: true,
+    maskObjectId: maskId,
+    maskWorkflowVersion: 3,
+    artworkLockBeforeMask:
+      piece.objects.find((object) => object.role === 'artwork')?.locked ?? false,
+    objects: [
+      ...piece.objects,
+      {
+        ...contour,
+        id: maskId,
+        type: 'mask',
+        role: 'clipping-mask',
+        name: 'Sticker boundary',
+        transform: { ...contour.transform },
+        exportEnabled: false,
+        offsetMm: 0
+      }
+    ]
+  })
 }
 
 /** Scale the finished artwork and vector contour together in Cutter Montage. */
 export function resizeFinishedStickerWidth(piece: PiecePreset, widthMm: number): PiecePreset {
   if (!Number.isFinite(widthMm) || widthMm < 5 || widthMm > 960) return piece
-  const resized = resizePieceToSize(piece, widthMm / 10, getPieceSize(piece).heightCm, 'width')
+  const prepared = ensureStickerContourMask(piece)
+  const resized = resizeFinishedPiece(
+    prepared,
+    widthMm / 10,
+    getFinishedPieceSize(piece).heightCm,
+    'width'
+  )
   return {
     ...resized,
     stickerMakerOffsetMm:

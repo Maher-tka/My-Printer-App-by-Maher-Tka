@@ -1,7 +1,7 @@
 import type { ArtworkTransform, EditorObject, PiecePreset } from '../types'
 import { getArtworkObject, getCutlineObject, getMaskObject } from './pieceModelSync'
 import { getCutlinePreviewTransform } from './cutlineAdjustment'
-import type { ProductionBounds } from './cutlineGenerator'
+import { getDrawnObjectRect, type ProductionBounds } from './cutlineGenerator'
 
 /** The cut view changes the camera only; source coordinates remain intact. */
 export function getPieceEditorViewBounds(
@@ -36,6 +36,7 @@ export function getCutViewMask(piece: PiecePreset): EditorObject | undefined {
 }
 
 function rotatedBounds(object: EditorObject, transform: ArtworkTransform): ProductionBounds {
+  transform = getDrawnObjectRect(transform, object)
   const angle = (transform.rotation * Math.PI) / 180
   const widthCm =
     object.shapeType === 'ellipse'

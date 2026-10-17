@@ -1,13 +1,70 @@
 import type { ArtworkTransform, EditorObject, PiecePreset } from '../types'
 import { synchronizePieceEditorModel } from './editorObjects'
 import { resizePiecePreset } from './piecePresets'
+import { getPathBounds } from './pathBounds'
 
 /** Measure the finished sticker, excluding cropped source artwork and cut margin. */
 export function getPieceSize(piece: PiecePreset): { widthCm: number; heightCm: number } {
   const boundary = getStickerBoundary(piece)
-  return boundary
-    ? { widthCm: boundary.transform.widthCm, heightCm: boundary.transform.heightCm }
-    : { widthCm: piece.widthCm, heightCm: piece.heightCm }
+  return boundary ? getBoundarySize(boundary) : { widthCm: piece.widthCm, heightCm: piece.heightCm }
+}
+
+function getBoundarySize(boundary: EditorObject): { widthCm: number; heightCm: number } {
+  const bounds =
+    boundary.shapeType === 'path' && boundary.pathData ? getPathBounds(boundary.pathData) : null
+  return {
+    widthCm: boundary.transform.widthCm * (bounds?.width ?? 1),
+    heightCm: boundary.transform.heightCm * (bounds?.height ?? 1)
+  }
+}
+
+function getCutContour(piece: PiecePreset): EditorObject | undefined {
+  return (
+    piece.objects.find(
+      (object) =>
+        object.role === 'cutline' &&
+        object.id === piece.cutlineObjectId &&
+        object.exportEnabled !== false
+    ) ?? piece.objects.find((object) => object.role === 'cutline' && object.exportEnabled !== false)
+  )
+}
+
+/** Finished production dimensions come from the cutting contour, including its cut margin. */
+export function getFinishedPieceSize(piece: PiecePreset): { widthCm: number; heightCm: number } {
+  const contour = getCutContour(piece)
+  if (!contour) return getPieceSize(piece)
+  const size = getBoundarySize(contour)
+  const margin = ((contour.offsetMm ?? 0) / 10) * 2
+  return margin
+    ? getBoundarySize({
+        ...contour,
+        transform: {
+          ...contour.transform,
+          widthCm: contour.transform.widthCm + margin,
+          heightCm: contour.transform.heightCm + margin
+        }
+      })
+    : size
+}
+
+export function resizeFinishedPiece(
+  piece: PiecePreset,
+  widthCm: number,
+  heightCm: number,
+  source: 'width' | 'height'
+): PiecePreset {
+  const normalized = synchronizePieceEditorModel(piece)
+  const contour = getCutContour(normalized)
+  if (!contour) return resizePieceToSize(piece, widthCm, heightCm, source)
+  const base = getBoundarySize(contour)
+  const finished = getFinishedPieceSize(normalized)
+  return resizeUsingBoundary(
+    normalized,
+    contour,
+    widthCm - (finished.widthCm - base.widthCm),
+    heightCm - (finished.heightCm - base.heightCm),
+    source
+  )
 }
 
 function getStickerBoundary(piece: PiecePreset): EditorObject | undefined {
@@ -35,6 +92,16 @@ export function resizePieceToSize(
   const normalized = synchronizePieceEditorModel(piece)
   const boundary = getStickerBoundary(normalized)
   if (!boundary) return resizePiecePreset(normalized, widthCm, heightCm, source)
+  return resizeUsingBoundary(normalized, boundary, widthCm, heightCm, source)
+}
+
+function resizeUsingBoundary(
+  normalized: PiecePreset,
+  boundary: EditorObject,
+  widthCm: number,
+  heightCm: number,
+  source: 'width' | 'height'
+): PiecePreset {
   const angle = boundary.transform.rotation
   const inStickerAxes = {
     ...normalized,
@@ -43,7 +110,13 @@ export function resizePieceToSize(
       transform: rotateTransform(object.transform, -angle)
     }))
   }
-  const resized = resizePiecePreset(inStickerAxes, widthCm, heightCm, source, boundary.transform)
+  const resized = resizePiecePreset(
+    inStickerAxes,
+    widthCm,
+    heightCm,
+    source,
+    getBoundarySize(boundary)
+  )
   const actualScaleX = resized.widthCm / normalized.widthCm
   const actualScaleY = resized.heightCm / normalized.heightCm
   // The source frame remains a coordinate frame; its dimensions are not the sticker size.

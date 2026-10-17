@@ -9,6 +9,9 @@ import { getDefaultCutterExportSettings } from './exportPresets'
 import { exportCutterPdf } from './pdfCutExport'
 import { createCutterProjectFile, deserializeCutterProjectPayload } from '@/projects/projectFiles'
 import type { CutterProject } from '../types'
+import { getFinishedPieceSize, resizeFinishedPiece } from './pieceSize'
+import { getPlacedProductionBounds } from './cutlineGenerator'
+import { getPieceEditorViewBounds } from './pieceEditorView'
 
 const mask = new Uint8Array(100)
 for (let y = 2; y < 8; y += 1) {
@@ -49,13 +52,89 @@ assert.equal(ordered.quantity, 7, 'maker copy count transfers to Cutter Montage'
 const arrangedOrder = autoArrangePieces([ordered], DEFAULT_CUTTER_SHEET, [])
 assert.equal(arrangedOrder.placedCount, 7, 'all requested sticker copies are placed')
 const resized = resizeFinishedStickerWidth(piece, 100)
-assert.equal(resized.widthCm, 10)
+const measuredWidth = getFinishedPieceSize(piece).widthCm
 assert.ok(
-  Math.abs(resized.artwork.transform.widthCm / piece.artwork.transform.widthCm - 10 / 8.4) < 0.001
+  measuredWidth < piece.widthCm,
+  'empty image space does not count as finished contour width'
+)
+assert.ok(
+  Math.abs(getFinishedPieceSize(resized).widthCm - 10) < 1e-9,
+  '100 mm means the drawn cut contour is 100 mm wide'
+)
+assert.ok(
+  Math.abs(
+    resized.artwork.transform.widthCm / piece.artwork.transform.widthCm - 10 / measuredWidth
+  ) < 0.001
 )
 assert.equal(resized.cutline.transform.widthCm, resized.widthCm)
 assert.equal(resized.cutline.customPathData, piece.cutline.customPathData)
-assert.ok(Math.abs((resized.stickerMakerOffsetMm ?? 0) - 2 * (10 / 8.4)) < 0.001)
+assert.ok(Math.abs((resized.stickerMakerOffsetMm ?? 0) - 2 * (10 / measuredWidth)) < 0.001)
+assert.equal(piece.clippingMaskEnabled, true, 'the padded source is clipped to the cut contour')
+const footprint = getPlacedProductionBounds(createPlacedPieceFromPreset(resized, 0, 0), resized)
+assert.ok(
+  Math.abs(getPieceEditorViewBounds(resized, true).widthCm - 10) < 1e-9,
+  'Fit view also focuses on the cut contour instead of source padding'
+)
+assert.ok(
+  Math.abs(footprint.widthCm - 10) < 1e-9,
+  'nesting measures the contour instead of the full PNG'
+)
+const legacy = {
+  ...piece,
+  clippingMaskEnabled: false,
+  maskObjectId: undefined,
+  mask: { ...piece.mask, enabled: false },
+  objects: piece.objects.filter((object) => object.role !== 'clipping-mask')
+}
+const resizedLegacy = resizeFinishedStickerWidth(legacy, 100)
+assert.equal(
+  resizedLegacy.clippingMaskEnabled,
+  true,
+  'existing AI stickers gain a non-destructive contour clip when resized'
+)
+assert.ok(Math.abs(getFinishedPieceSize(resizedLegacy).widthCm - 10) < 1e-9)
+const asymmetric = createStickerCutterAssets(
+  { ...result, pathData: 'M .2 .1 L .8 .1 L .8 .5 L .2 .5 Z' },
+  2,
+  []
+).piece
+const measured = getFinishedPieceSize(asymmetric)
+assert.ok(Math.abs(measured.widthCm - 5.04) < 1e-9)
+assert.ok(Math.abs(measured.heightCm - 3.36) < 1e-9)
+const taller = resizeFinishedPiece(asymmetric, measured.widthCm, 8, 'height')
+assert.ok(
+  Math.abs(getFinishedPieceSize(taller).heightCm - 8) < 1e-9,
+  'height also uses the actual cut path'
+)
+assert.ok(
+  Math.abs(getFinishedPieceSize(taller).widthCm - 12) < 1e-9,
+  'aspect ratio follows the contour instead of the square PNG'
+)
+const stretched = resizeFinishedPiece({ ...asymmetric, lockAspectRatio: false }, 8, 4, 'width')
+assert.ok(Math.abs(getFinishedPieceSize(stretched).widthCm - 8) < 1e-9)
+assert.ok(Math.abs(getFinishedPieceSize(stretched).heightCm - 4) < 1e-9)
+const narrowMask = {
+  ...asymmetric,
+  objects: asymmetric.objects.map((object) =>
+    object.role === 'clipping-mask'
+      ? { ...object, transform: { ...object.transform, widthCm: 1, heightCm: 1 } }
+      : object
+  )
+}
+assert.deepEqual(
+  getFinishedPieceSize(narrowMask),
+  measured,
+  'finished size prioritizes the cut contour over a different mask'
+)
+for (const rotation of [0, 90, 180, 270] as const) {
+  const bounds = getPlacedProductionBounds(
+    createPlacedPieceFromPreset(asymmetric, 0, 0, rotation),
+    asymmetric
+  )
+  assert.ok(
+    Math.abs(bounds.widthCm - (rotation % 180 ? measured.heightCm : measured.widthCm)) < 1e-9
+  )
+}
 
 const project: CutterProject = {
   sheet: { ...DEFAULT_CUTTER_SHEET, widthCm: 20, heightCm: 20 },

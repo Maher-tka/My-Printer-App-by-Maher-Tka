@@ -1,5 +1,21 @@
 // App-owned English copy is the stable key. Missing translations fall back to English.
 export const messages: Record<string, { fr: string; ar: string }> = {
+  'Finished size is measured from the cut contour.': {
+    fr: 'La taille finale est mesurée à partir du contour de découpe.',
+    ar: 'يُقاس الحجم النهائي من حدود خط القص.'
+  },
+  'Finished size is measured from the mask.': {
+    fr: 'La taille finale est mesurée à partir du masque.',
+    ar: 'يُقاس الحجم النهائي من حدود القناع.'
+  },
+  'Finished size is measured from the artwork.': {
+    fr: 'La taille finale est mesurée à partir du visuel.',
+    ar: 'يُقاس الحجم النهائي من حدود التصميم.'
+  },
+  'Resizing keeps the artwork, mask and cut lines together.': {
+    fr: 'Le redimensionnement conserve ensemble le visuel, le masque et les contours de découpe.',
+    ar: 'يحافظ تغيير الحجم على ترابط التصميم والقناع وخطوط القص.'
+  },
   'Moved stickers with their cut lines and rearranged nearby stickers.': {
     fr: 'Les stickers ont été déplacés avec leurs contours de découpe et les stickers voisins ont été réorganisés.',
     ar: 'تم نقل الملصقات مع خطوط قصها وإعادة ترتيب الملصقات المجاورة.'

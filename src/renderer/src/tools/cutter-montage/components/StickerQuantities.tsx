@@ -1,7 +1,7 @@
 import { useLanguage } from '@/i18n/useLanguage'
 import type { PiecePreset } from '../types'
 import { PieceOrderControls } from './PieceOrderControls'
-import { getPieceSize } from '../lib/pieceSize'
+import { getFinishedPieceSize } from '../lib/pieceSize'
 export function StickerQuantities({
   pieces,
   onQuantity,
@@ -45,8 +45,8 @@ export function StickerQuantities({
                     <span>
                       {piece.displayName}
                       <small className="block text-muted-foreground">
-                        {getPieceSize(piece).widthCm.toFixed(1)} x{' '}
-                        {getPieceSize(piece).heightCm.toFixed(1)} cm
+                        {getFinishedPieceSize(piece).widthCm.toFixed(1)} x{' '}
+                        {getFinishedPieceSize(piece).heightCm.toFixed(1)} cm
                       </small>
                     </span>
                   </button>

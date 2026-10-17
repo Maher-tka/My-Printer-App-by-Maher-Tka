@@ -29,7 +29,7 @@ import {
   setObjectGroup
 } from '../lib/editorObjects'
 import { syncLegacyFieldsFromObjects } from '../lib/pieceModelSync'
-import { getPieceSize, resizePieceToSize } from '../lib/pieceSize'
+import { getFinishedPieceSize, resizeFinishedPiece } from '../lib/pieceSize'
 import { formatCm } from '../lib/units'
 import { usePieceEditorClipboard } from '../hooks/usePieceEditorClipboard'
 import { usePieceEditorHistory } from '../hooks/usePieceEditorHistory'
@@ -185,8 +185,8 @@ function ActivePieceEditor({
               {stage === 'prepare' ? 'Prepare artwork' : 'Cut lines'}
             </h3>
             <p className="text-xs text-muted-foreground">
-              {piece.displayName} · {formatCm(getPieceSize(piece).widthCm)} x{' '}
-              {formatCm(getPieceSize(piece).heightCm)}
+              {piece.displayName} · {formatCm(getFinishedPieceSize(piece).widthCm)} x{' '}
+              {formatCm(getFinishedPieceSize(piece).heightCm)}
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -473,7 +473,7 @@ function ActivePieceEditor({
               selectedObject={selectedObject}
               onPieceSizeChange={(widthCm, heightCm, source) => {
                 history.commit((currentPiece) =>
-                  resizePieceToSize(currentPiece, widthCm, heightCm, source)
+                  resizeFinishedPiece(currentPiece, widthCm, heightCm, source)
                 )
                 setFitVersion((value) => value + 1)
               }}

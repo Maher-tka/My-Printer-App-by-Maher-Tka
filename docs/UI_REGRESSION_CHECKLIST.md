@@ -748,3 +748,74 @@ Artifacts: `output/playwright/cutter-clean-1366-en-light.png`,
   pending.
 
 Release check log: `.codex-release-0.2.14-check.log` (local, ignored by Git).
+
+## Measure AI stickers from the cut contour - 2026-10-17
+
+- Finished width/height in the cutter library, quantities, editor heading and
+  piece properties use the actual cut contour, including its configured cut
+  margin. Custom paths are measured from drawn geometry instead of the larger
+  normalized SVG frame; polygon, subpath and curve extrema are supported.
+  Resizing uses that measurement and keeps artwork, masks and cut lines aligned.
+- Cut-view fitting also follows the drawn contour, so the surrounding PNG
+  canvas no longer makes the finished sticker appear unnecessarily small.
+- Sticker Maker transfers retain original PNG data and add a non-destructive
+  contour clipping mask. White artwork inside the contour is preserved, while
+  unused source padding no longer enlarges layout footprints. Existing AI
+  stickers gain this clip when their finished width is changed. Production
+  footprint calculations use actual path bounds for nesting and selection.
+- Typecheck, cutter, sticker, project and i18n suites passed. Regressions cover
+  source padding, exact 100 mm contour resizing, height/aspect changes, unlocked
+  dimensions, mask-versus-contour priority, legacy AI copies, quarter turns,
+  relative paths, multiple subpaths, curve extrema and project/PDF round trips.
+- Browser checks exercised Add images → Process all → Send to Cutter using a
+  transparent 400×800 px source with a 200×180 px foreground containing white
+  artwork. At an 80 mm source width, the finished cut width correctly reads
+  40 mm. Changing it to 100 mm produces a 10×9 cm production footprint rather
+  than the padded 20×40 cm artwork frame. The result was inspected at 1366×768
+  English/light, 1920×1080 French/dark, 1600×900 Arabic/light and 1366×768
+  Arabic/dark; both Arabic checks used low-end mode. No horizontal page overflow
+  occurred. Arabic editor properties also passed keyboard width/height edits,
+  changing 10×9 cm to 6.67×6 cm and then 12×10.8 cm.
+- Acceptance review: existing shared controls and action locations are retained;
+  no headings or duplicate actions were added. Measurement help is translated
+  into French and Arabic. Live AI model inference on the photographed original,
+  native dialogs, released workshop-build and physical print/cut verification
+  remain pending. The fix is currently local and is not in v0.2.14.
+
+Artifacts: `output/playwright/contour-size-1366-en-light.png`,
+`output/playwright/contour-size-1920-fr-dark.png`,
+`output/playwright/contour-size-1600-ar-light.png`,
+`output/playwright/contour-size-1366-ar-dark.png`, and
+`output/playwright/contour-properties-1366-ar-dark.png`.
+
+## Default sticker spacing 3.5 mm - 2026-10-17
+
+- New cutter layouts default to a 3.5 mm minimum gap between production
+  footprints. The contour measurements above exclude unused image margins.
+  Existing saved projects retain their chosen spacing. Grid snapping and
+  irregular contour geometry may leave larger gaps.
+- Typecheck, cutter and sticker suites passed, including the existing
+  production-bounds spacing checks. The shared Copy spacing field displays
+  3.5 mm at 1366×768 English/light, 1920×1080 French/dark and 1600×900
+  Arabic/light with low-end mode. No controls or layout styles changed.
+- Released workshop-build and physical output verification remain pending.
+  This default is local and has not been published yet.
+
+Artifacts: `output/playwright/spacing-35-1366-en-light.png`,
+`output/playwright/spacing-35-1920-fr-dark.png`, and
+`output/playwright/spacing-35-1600-ar-light.png`.
+
+## Stable release v0.2.15 - 2026-10-17
+
+- Full local `npm run release:check` passed: repository formatting, TypeScript,
+  every automated test suite, Storybook and the production build. This includes
+  drawn-path bounds, exact contour sizing, AI transfer clipping and production
+  spacing regressions.
+- Acceptance review retains the contour-sizing and 3.5 mm spacing results
+  above, including required desktop sizes, light/dark themes, French/Arabic
+  RTL, keyboard edits and low-end mode. No additional UI changes were made
+  during release preparation.
+- Live AI inference on the photographed original, released workshop-build and
+  physical printer/cutter verification remain pending.
+
+Release check log: `.codex-release-0.2.15-check.log` (local, ignored by Git).

@@ -6,7 +6,7 @@ import {
   CUTTER_PIECE_MAX_DIMENSION_CM,
   CUTTER_PIECE_MIN_DIMENSION_CM
 } from '../../lib/piecePresets'
-import { getPieceSize, resizePieceToSize } from '../../lib/pieceSize'
+import { getFinishedPieceSize, resizeFinishedPiece } from '../../lib/pieceSize'
 import type { ArtworkTransform, EditorObject, PiecePreset } from '../../types'
 
 interface PieceEditorPropertiesPanelProps {
@@ -39,7 +39,7 @@ export function PieceEditorPropertiesPanel({
   const { t } = useLanguage()
 
   const activeMaskPairLocked = piece.clippingMaskEnabled
-  const pieceSize = getPieceSize(piece)
+  const pieceSize = getFinishedPieceSize(piece)
   const selectedTransformLocked = Boolean(
     selectedObject &&
     (selectedObject.locked ||
@@ -59,14 +59,14 @@ export function PieceEditorPropertiesPanel({
             max={CUTTER_PIECE_MAX_DIMENSION_CM}
             onChange={(value) => {
               const normalizedValue = clampPieceDimension(value)
-              const acceptedPiece = resizePieceToSize(
+              const acceptedPiece = resizeFinishedPiece(
                 piece,
                 normalizedValue,
                 pieceSize.heightCm,
                 'width'
               )
               onPieceSizeChange(normalizedValue, pieceSize.heightCm, 'width')
-              return getPieceSize(acceptedPiece).widthCm
+              return getFinishedPieceSize(acceptedPiece).widthCm
             }}
           />
           <NumberField
@@ -77,14 +77,14 @@ export function PieceEditorPropertiesPanel({
             max={CUTTER_PIECE_MAX_DIMENSION_CM}
             onChange={(value) => {
               const normalizedValue = clampPieceDimension(value)
-              const acceptedPiece = resizePieceToSize(
+              const acceptedPiece = resizeFinishedPiece(
                 piece,
                 pieceSize.widthCm,
                 normalizedValue,
                 'height'
               )
               onPieceSizeChange(pieceSize.widthCm, normalizedValue, 'height')
-              return getPieceSize(acceptedPiece).heightCm
+              return getFinishedPieceSize(acceptedPiece).heightCm
             }}
           />
           {!hideQuantity && (
@@ -100,10 +100,14 @@ export function PieceEditorPropertiesPanel({
             />
           )}
         </div>
-        {activeMaskPairLocked ? (
-          <p className="mt-2 rounded-md bg-sky-50 px-2 py-1.5 text-xs text-sky-800">
-            Size is measured from the mask, excluding cropped artwork and the cut margin. Resizing
-            keeps the artwork, mask and cut lines together.
+        {piece.cutlineObjectId || activeMaskPairLocked ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t(
+              piece.cutlineObjectId
+                ? 'Finished size is measured from the cut contour.'
+                : 'Finished size is measured from the mask.'
+            )}{' '}
+            {t('Resizing keeps the artwork, mask and cut lines together.')}
           </p>
         ) : null}
         <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
