@@ -1,10 +1,8 @@
 import { MaskedArtwork } from './MaskedArtwork'
 import { getNormalizedShapePath } from '../lib/shapeGeometry'
-import { Copy, LockKeyhole, RotateCw, Trash2, UnlockKeyhole } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import type { CutterLayerVisibility, PiecePreset, PlacedPiece } from '../types'
-import { getPlacedTransformScale } from '../lib/cutlineGenerator'
+import { getPlacedProductionBounds, getPlacedTransformScale } from '../lib/cutlineGenerator'
 import { roundToStep } from '../lib/units'
 
 interface PlacedPieceItemProps {
@@ -21,10 +19,6 @@ interface PlacedPieceItemProps {
   cleanArtworkPreview?: boolean
   onSelect: (pieceId: string, additive: boolean) => void
   onMove: (pieceId: string, xCm: number, yCm: number) => void
-  onDuplicate: (pieceId: string) => void
-  onDelete: (pieceId: string) => void
-  onRotate: (pieceId: string) => void
-  onToggleLock: (pieceId: string) => void
 }
 
 export const PlacedPieceItem = memo(function PlacedPieceItem({
@@ -40,11 +34,7 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
   simplifiedPreview = false,
   cleanArtworkPreview = false,
   onSelect,
-  onMove,
-  onDuplicate,
-  onDelete,
-  onRotate,
-  onToggleLock
+  onMove
 }: PlacedPieceItemProps): JSX.Element {
   const itemRef = useRef<HTMLDivElement>(null)
   const animationFrameRef = useRef<number | null>(null)
@@ -65,6 +55,9 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
     sceneWidthCm,
     sceneHeightCm
   } = useMemo(() => getPlacedTransformScale(placed, piece), [piece, placed])
+  const bounds = useMemo(() => getPlacedProductionBounds(placed, piece), [piece, placed])
+  const offsetX = bounds.xCm - placed.xCm
+  const offsetY = bounds.yCm - placed.yCm
   const artworkVisible = layers.artwork && piece.objectVisibility.artwork
   const maskObject = piece.objects.find(
     (object) => object.id === piece.maskObjectId || object.role === 'clipping-mask'
@@ -79,12 +72,16 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
     if (!dragRef.current.active) {
       setTransform(placed.xCm, placed.yCm)
     }
-  }, [placed.xCm, placed.yCm, scale])
+  }, [placed.xCm, placed.yCm, scale, offsetX, offsetY])
+
+  useEffect(() => () => cancelScheduledTransform(), [])
 
   return (
     <div
       ref={itemRef}
-      className={`group absolute touch-none select-none rounded-sm ${
+      data-placed-piece-id={placed.id}
+      title={placed.displayName}
+      className={`absolute touch-none select-none rounded-sm ${
         !cleanArtworkPreview && warning === 'out-of-bounds'
           ? 'ring-2 ring-destructive'
           : !cleanArtworkPreview && warning === 'overlap'
@@ -92,12 +89,12 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
             : !cleanArtworkPreview && selected
               ? 'ring-2 ring-primary'
               : ''
-      } ${dragging ? 'z-30 cursor-grabbing' : placed.locked ? 'z-10 cursor-not-allowed' : 'z-10 cursor-grab'}`}
+      } ${dragging ? 'z-30 cursor-grabbing' : selected ? 'z-20' : 'z-10'} ${placed.locked ? 'cursor-not-allowed' : dragging ? '' : 'cursor-grab'}`}
       style={{
-        width: placed.widthCm * scale,
-        height: placed.heightCm * scale,
-        transform: `translate3d(${placed.xCm * scale}px, ${placed.yCm * scale}px, 0)`,
-        willChange: 'transform'
+        width: bounds.widthCm * scale,
+        height: bounds.heightCm * scale,
+        transform: `translate3d(${bounds.xCm * scale}px, ${bounds.yCm * scale}px, 0)`,
+        willChange: dragging ? 'transform' : undefined
       }}
       onPointerDown={(event) => {
         if (
@@ -108,7 +105,13 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
         }
 
         event.preventDefault()
-        onSelect(placed.id, event.shiftKey || event.ctrlKey || event.metaKey)
+        event.currentTarget
+          .closest<HTMLElement>('[data-production-sheet-canvas]')
+          ?.focus({ preventScroll: true })
+        const additive = event.shiftKey || event.ctrlKey || event.metaKey
+        if (!selected || additive) onSelect(placed.id, additive)
+        // Modifier-click changes selection; dragging starts with the resulting selection next time.
+        if (additive) return
 
         if (placed.locked) {
           return
@@ -136,15 +139,16 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
         event.preventDefault()
         const deltaX = (event.clientX - drag.startX) / scale
         const deltaY = (event.clientY - drag.startY) / scale
+        // A clipped sticker's source frame can extend beyond its printable footprint.
         const xCm = clamp(
-          roundToStep(drag.originX + deltaX, snapStepCm),
-          0,
-          Math.max(sheetWidthCm - placed.widthCm, 0)
+          roundToStep(drag.originX + deltaX + offsetX, snapStepCm) - offsetX,
+          -offsetX,
+          Math.max(sheetWidthCm - bounds.widthCm, 0) - offsetX
         )
         const yCm = clamp(
-          roundToStep(drag.originY + deltaY, snapStepCm),
-          0,
-          Math.max(sheetHeightCm - placed.heightCm, 0)
+          roundToStep(drag.originY + deltaY + offsetY, snapStepCm) - offsetY,
+          -offsetY,
+          Math.max(sheetHeightCm - bounds.heightCm, 0) - offsetY
         )
 
         if (Math.abs(deltaX) + Math.abs(deltaY) > 0.2) {
@@ -171,11 +175,20 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
 
         if (!drag.moved) {
           setTransform(placed.xCm, placed.yCm)
-          onSelect(placed.id, event.shiftKey || event.ctrlKey || event.metaKey)
           return
         }
 
+        // A rejected/no-op drop may retain the exact same React props.
+        // Restore the transient DOM transform before committing the layout.
+        setTransform(placed.xCm, placed.yCm)
         onMove(placed.id, latestPositionRef.current.xCm, latestPositionRef.current.yCm)
+      }}
+      onPointerCancel={(event) => {
+        if (dragRef.current.pointerId !== event.pointerId) return
+        dragRef.current = { ...dragRef.current, active: false, pointerId: -1 }
+        cancelScheduledTransform()
+        setDragging(false)
+        setTransform(placed.xCm, placed.yCm)
       }}
     >
       {!cleanArtworkPreview && simplifiedPreview && dragging ? (
@@ -184,8 +197,8 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
         <div
           className="absolute"
           style={{
-            left: ((placed.widthCm - sceneWidthCm) / 2) * scale,
-            top: ((placed.heightCm - sceneHeightCm) / 2) * scale,
+            left: ((placed.widthCm - sceneWidthCm) / 2 - offsetX) * scale,
+            top: ((placed.heightCm - sceneHeightCm) / 2 - offsetY) * scale,
             width: sceneWidthCm * scale,
             height: sceneHeightCm * scale,
             transform: `rotate(${placed.rotation}deg)`,
@@ -221,7 +234,11 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
             piece.objects
               .filter((object) => object.role === 'cutline' && object.visible)
               .map((object) => {
-                const t = object.transform,
+                const primaryCutlineId =
+                  piece.cutlineObjectId ??
+                  piece.objects.find((candidate) => candidate.role === 'cutline')?.id
+                const t =
+                    object.id === primaryCutlineId ? placed.cutlineTransform : object.transform,
                   offset = (object.offsetMm ?? 0) / 10
                 return (
                   <svg
@@ -253,59 +270,6 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
               })}
         </div>
       )}
-      {!cleanArtworkPreview && (
-        <div className="pointer-events-none absolute left-1 top-1 rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-          {placed.displayName}
-          {warning ? ` · ${warning}` : ''}
-        </div>
-      )}
-      {selected && !cleanArtworkPreview && (
-        <div
-          className="absolute -right-2 -top-10 z-40 flex gap-1 rounded-md border bg-card p-1 shadow-sm"
-          data-no-drag="true"
-        >
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-8"
-            onClick={() => onDuplicate(placed.id)}
-            aria-label="Duplicate placed piece"
-          >
-            <Copy />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-8"
-            onClick={() => onRotate(placed.id)}
-            aria-label="Rotate placed piece"
-          >
-            <RotateCw />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-8"
-            onClick={() => onToggleLock(placed.id)}
-            aria-label={placed.locked ? 'Unlock placed piece' : 'Lock placed piece'}
-          >
-            {placed.locked ? <LockKeyhole /> : <UnlockKeyhole />}
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-8"
-            onClick={() => onDelete(placed.id)}
-            aria-label="Delete placed piece"
-          >
-            <Trash2 />
-          </Button>
-        </div>
-      )}
     </div>
   )
 
@@ -331,7 +295,7 @@ export const PlacedPieceItem = memo(function PlacedPieceItem({
 
   function setTransform(xCm: number, yCm: number): void {
     if (itemRef.current) {
-      itemRef.current.style.transform = `translate3d(${xCm * scale}px, ${yCm * scale}px, 0)`
+      itemRef.current.style.transform = `translate3d(${(xCm + offsetX) * scale}px, ${(yCm + offsetY) * scale}px, 0)`
     }
   }
 })

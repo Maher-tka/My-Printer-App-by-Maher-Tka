@@ -1,5 +1,33 @@
 // App-owned English copy is the stable key. Missing translations fall back to English.
 export const messages: Record<string, { fr: string; ar: string }> = {
+  'Moved stickers with their cut lines and rearranged nearby stickers.': {
+    fr: 'Les stickers ont été déplacés avec leurs contours de découpe et les stickers voisins ont été réorganisés.',
+    ar: 'تم نقل الملصقات مع خطوط قصها وإعادة ترتيب الملصقات المجاورة.'
+  },
+  'Moved stickers with their cut lines.': {
+    fr: 'Les stickers ont été déplacés avec leurs contours de découpe.',
+    ar: 'تم نقل الملصقات مع خطوط قصها.'
+  },
+  'Restored the previous layout.': {
+    fr: 'La disposition précédente a été restaurée.',
+    ar: 'تمت استعادة التخطيط السابق.'
+  },
+  'This sticker is missing its artwork. Reimport it before moving it.': {
+    fr: 'L’illustration de ce sticker est manquante. Réimportez-la avant de le déplacer.',
+    ar: 'صورة هذا الملصق مفقودة. أعد استيرادها قبل نقله.'
+  },
+  'The selected stickers cannot fit inside the sheet safe area.': {
+    fr: 'Les stickers sélectionnés ne tiennent pas dans la zone de sécurité de la feuille.',
+    ar: 'الملصقات المحددة لا تتسع داخل المنطقة الآمنة للورقة.'
+  },
+  'A locked sticker blocks this move. Choose another position or unlock it.': {
+    fr: 'Un sticker verrouillé bloque ce déplacement. Choisissez une autre position ou déverrouillez-le.',
+    ar: 'يوجد ملصق مقفل يمنع هذه الحركة. اختر موضعًا آخر أو ألغِ قفله.'
+  },
+  'There is not enough free space to rearrange these stickers. Try another position.': {
+    fr: 'Il n’y a pas assez d’espace libre pour réorganiser ces stickers. Essayez une autre position.',
+    ar: 'لا توجد مساحة كافية لإعادة ترتيب هذه الملصقات. جرّب موضعًا آخر.'
+  },
   'The destination PDF is already open in Illustrator. Close it or choose another filename.': {
     fr: 'Le PDF de destination est déjà ouvert dans Illustrator. Fermez-le ou choisissez un autre nom de fichier.',
     ar: 'ملف PDF المقصود مفتوح بالفعل في Illustrator. أغلقه أو اختر اسم ملف آخر.'

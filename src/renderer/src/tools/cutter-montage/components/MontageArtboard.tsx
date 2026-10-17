@@ -21,6 +21,9 @@ import { useCanvasFullscreen } from '../hooks/useCanvasFullscreen'
 import { getSheetDesignCounts } from '../lib/orderLayout'
 import { LiveNumberInput } from './LiveNumberInput'
 
+// Leave room for p-6, the border and the shared 8 px scrollbar on either axis.
+const VIEWPORT_FIT_INSET_PX = 48 + 2 + 8
+
 interface MontageArtboardProps {
   settings: CutterSheetSettings
   pieces: PiecePreset[]
@@ -46,8 +49,10 @@ interface MontageArtboardProps {
   onRotatePiece: (pieceId: string) => void
   onToggleLock: (pieceId: string) => void
   onNudgeSelected: (dxCm: number, dyCm: number) => void
+  onUndoLayout: () => void
   outOfBoundsPieceIds?: string[]
   overlapPieceIds?: string[]
+  layoutError?: string | null
   onAlignSelected: (command: AlignmentCommand) => void
 }
 
@@ -76,8 +81,10 @@ export function MontageArtboard({
   onRotatePiece,
   onToggleLock,
   onNudgeSelected,
+  onUndoLayout,
   outOfBoundsPieceIds = [],
   overlapPieceIds = [],
+  layoutError = null,
   onAlignSelected
 }: MontageArtboardProps): JSX.Element {
   const { t } = useLanguage()
@@ -90,12 +97,17 @@ export function MontageArtboard({
   useEffect(() => {
     const viewport = viewportRef.current
     if (!viewport) return
-    const updateSize = (): void => {
-      setViewportSize({ width: viewport.clientWidth, height: viewport.clientHeight })
-    }
-    updateSize()
-    const observer = new ResizeObserver(updateSize)
-    observer.observe(viewport)
+    const observer = new ResizeObserver(([entry]) => {
+      // Content/client sizes change when artwork or labels cause scrollbars.
+      // Fitting to those sizes can alternate between two scales every frame.
+      const box = entry.borderBoxSize[0]
+      const width = Math.floor(box.inlineSize)
+      const height = Math.floor(box.blockSize)
+      setViewportSize((current) =>
+        current.width === width && current.height === height ? current : { width, height }
+      )
+    })
+    observer.observe(viewport, { box: 'border-box' })
     return () => observer.disconnect()
   }, [])
   const pieceMap = useMemo(() => new Map(pieces.map((piece) => [piece.id, piece])), [pieces])
@@ -121,14 +133,13 @@ export function MontageArtboard({
   const fitScale = Math.max(
     0.1,
     Math.min(
-      (viewportSize.width - 48) / Math.max(settings.widthCm, 0.1),
-      (viewportSize.height - 48) / Math.max(settings.heightCm, 0.1)
+      (viewportSize.width - VIEWPORT_FIT_INSET_PX) / Math.max(settings.widthCm, 0.1),
+      (viewportSize.height - VIEWPORT_FIT_INSET_PX) / Math.max(settings.heightCm, 0.1)
     )
   )
   const scale = manualScale ?? fitScale
   const widthPx = settings.widthCm * scale
   const heightPx = settings.heightCm * scale
-  const showMiniMap = !cleanArtworkPreview && heightPx > viewportSize.height * 1.35
 
   return (
     <section
@@ -380,15 +391,16 @@ export function MontageArtboard({
         </div>
       </div>
 
-      {fullscreen.error && (
+      {(fullscreen.error || (fullscreen.isExpanded && layoutError)) && (
         <p role="alert" className="mb-2 text-sm text-destructive">
-          {fullscreen.error}
+          {t(fullscreen.error ?? layoutError ?? '')}
         </p>
       )}
       <div
         ref={viewportRef}
         dir="ltr"
-        className="relative min-h-0 flex-1 overflow-auto rounded-lg border bg-muted/70 p-6"
+        className="relative min-h-0 min-w-0 flex-1 overflow-auto rounded-lg border bg-muted/70 p-6"
+        style={{ overflowAnchor: 'none' }}
       >
         <div
           className="relative mx-auto shrink-0 bg-white shadow-panel outline-none"
@@ -404,6 +416,15 @@ export function MontageArtboard({
             backgroundSize: `${settings.gridStepCm * scale}px ${settings.gridStepCm * scale}px`
           }}
           onKeyDown={(event) => {
+            if (
+              (event.ctrlKey || event.metaKey) &&
+              event.key.toLowerCase() === 'z' &&
+              !event.shiftKey
+            ) {
+              event.preventDefault()
+              onUndoLayout()
+              return
+            }
             if (selectedPieceIds.length === 0) {
               return
             }
@@ -519,43 +540,7 @@ export function MontageArtboard({
                 snapStepCm={settings.snapToGrid ? settings.gridStepCm : 0.1}
                 simplifiedPreview={performancePreset === 'low-end'}
                 onSelect={onSelectPiece}
-                onMove={(pieceId, xCm, yCm) => {
-                  const dragged = placedPieces.find((candidate) => candidate.id === pieceId)
-
-                  if (
-                    !dragged ||
-                    !selectedPieceIds.includes(pieceId) ||
-                    selectedPieceIds.length < 2
-                  ) {
-                    onMovePiece(pieceId, xCm, yCm)
-                    return
-                  }
-
-                  const deltaX = xCm - dragged.xCm
-                  const deltaY = yCm - dragged.yCm
-
-                  for (const selected of selectedPieces) {
-                    if (!selected.locked) {
-                      onMovePiece(
-                        selected.id,
-                        clamp(
-                          selected.xCm + deltaX,
-                          0,
-                          Math.max(settings.widthCm - selected.widthCm, 0)
-                        ),
-                        clamp(
-                          selected.yCm + deltaY,
-                          0,
-                          Math.max(settings.heightCm - selected.heightCm, 0)
-                        )
-                      )
-                    }
-                  }
-                }}
-                onDuplicate={(pieceId) => onDuplicatePieces([pieceId])}
-                onDelete={(pieceId) => onDeletePieces([pieceId])}
-                onRotate={onRotatePiece}
-                onToggleLock={onToggleLock}
+                onMove={onMovePiece}
               />
             ) : null
           })}
@@ -572,30 +557,6 @@ export function MontageArtboard({
             />
           ) : null}
         </div>
-        {showMiniMap && (
-          <div className="sticky bottom-3 ml-auto mt-3 w-28 rounded-md border bg-card/95 p-2 shadow-sm">
-            <div
-              className="relative mx-auto bg-white"
-              style={{
-                width: 72,
-                height: Math.max(96, Math.min(180, (settings.heightCm / settings.widthCm) * 72))
-              }}
-            >
-              {placedPieces.map((piece) => (
-                <span
-                  key={piece.id}
-                  className="absolute rounded-sm bg-primary/55"
-                  style={{
-                    left: `${(piece.xCm / settings.widthCm) * 100}%`,
-                    top: `${(piece.yCm / settings.heightCm) * 100}%`,
-                    width: `${(piece.widthCm / settings.widthCm) * 100}%`,
-                    height: `${(piece.heightCm / settings.heightCm) * 100}%`
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </section>
   )

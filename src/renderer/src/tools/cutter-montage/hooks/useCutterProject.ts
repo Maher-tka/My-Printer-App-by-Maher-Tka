@@ -4,6 +4,7 @@ import { getCutterSheetPdfFileName } from '../../../../../shared/illustrator-pdf
 import { getProductionSheetLayoutGroups } from '../lib/productionSheetGroups'
 import { createIllustratorPdfExport, createIllustratorPdfBatch } from '../lib/illustratorPdfExport'
 import { getOrderLayoutSignature, rebuildOrderLayout } from '../lib/orderLayout'
+import { moveLayoutSelection } from '../lib/manualLayout'
 import { getCutterOrderLimitMessage, CUTTER_QUANTITY_LIMIT_MESSAGE } from '../lib/layoutLimits'
 import { createEditedArtwork, type ArtworkEditResult } from '../lib/applyArtworkEdit'
 import {
@@ -1179,7 +1180,7 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     setStatus(
       snapshot.repackWarningPieceIds.size > 0
         ? `Restored the layout from before Auto Arrange. ${snapshot.repackWarningPieceIds.size} piece ${snapshot.repackWarningPieceIds.size === 1 ? 'still needs' : 'pieces still need'} Arrange Copies to repack spacing.`
-        : 'Restored the layout from before Auto Arrange.'
+        : 'Restored the previous layout.'
     )
   }, [])
 
@@ -1263,15 +1264,41 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
     })
   }, [])
 
-  const movePlacedPiece = useCallback((pieceId: string, xCm: number, yCm: number): void => {
-    setPlacedPieces((current) =>
-      current.map((placed) =>
-        placed.id === pieceId
-          ? refreshPlacedPieceProductionBounds({ ...placed, xCm, yCm }, piecesRef.current)
-          : placed
+  const movePlacedPiece = useCallback(
+    (pieceId: string, xCm: number, yCm: number): void => {
+      const current = placedPiecesRef.current
+      const result = moveLayoutSelection(
+        current,
+        piecesRef.current,
+        sheetRef.current,
+        pieceId,
+        xCm,
+        yCm,
+        selectedPlacedIds
       )
-    )
-  }, [])
+      setError(result.error)
+      if (result.placedPieces === current) return
+      // Keep this edited arrangement when saving/reopening or changing order inputs.
+      const nextSheet = { ...sheetRef.current, preserveManualPositions: true }
+      autoArrangeUndoSnapshotRef.current = createAutoArrangeUndoSnapshot(
+        current,
+        repackWarningPieceIdsRef.current,
+        piecesRef.current,
+        nextSheet
+      )
+      lastOrderLayoutSignatureRef.current = getOrderLayoutSignature(piecesRef.current, nextSheet)
+      sheetRef.current = nextSheet
+      placedPiecesRef.current = result.placedPieces
+      setSheet(nextSheet)
+      setPlacedPieces(result.placedPieces)
+      setStatus(
+        result.rearrangedCount > 0
+          ? 'Moved stickers with their cut lines and rearranged nearby stickers.'
+          : 'Moved stickers with their cut lines.'
+      )
+    },
+    [selectedPlacedIds]
+  )
 
   const resizePlacedPiece = useCallback(
     (pieceId: string, widthCm: number, heightCm: number): void => {
@@ -1350,24 +1377,12 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
 
   const nudgeSelected = useCallback(
     (dxCm: number, dyCm: number): void => {
-      setPlacedPieces((current) =>
-        current.map((placed) => {
-          if (!selectedPlacedIds.includes(placed.id) || placed.locked) {
-            return placed
-          }
-
-          return refreshPlacedPieceProductionBounds(
-            {
-              ...placed,
-              xCm: clamp(placed.xCm + dxCm, 0, Math.max(sheet.widthCm - placed.widthCm, 0)),
-              yCm: clamp(placed.yCm + dyCm, 0, Math.max(sheet.heightCm - placed.heightCm, 0))
-            },
-            piecesRef.current
-          )
-        })
+      const anchor = placedPiecesRef.current.find(
+        (placed) => selectedPlacedIds.includes(placed.id) && !placed.locked
       )
+      if (anchor) movePlacedPiece(anchor.id, anchor.xCm + dxCm, anchor.yCm + dyCm)
     },
-    [selectedPlacedIds, sheet.heightCm, sheet.widthCm]
+    [selectedPlacedIds, movePlacedPiece]
   )
 
   const alignSelected = useCallback(

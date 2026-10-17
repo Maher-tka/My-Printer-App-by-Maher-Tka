@@ -154,6 +154,72 @@ export function createCutterId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+/** Relocate existing copies into the nearest free regions without changing their geometry or IDs. */
+export function relocatePlacedPiecesNearest(
+  displaced: PlacedPiece[],
+  fixed: PlacedPiece[],
+  settings: CutterSheetSettings
+): PlacedPiece[] | null {
+  const safeArea = getSafeArea(settings)
+  const spacingCm = mmToCm(settings.spacingMm)
+  let free: Bounds[] = [{ ...safeArea }]
+  for (const placed of fixed) {
+    free = subtractFootprint(free, getCachedProductionBounds(placed), spacingCm)
+  }
+  const relocated: PlacedPiece[] = []
+  // Give larger copies first choice of the available holes.
+  const sorted = [...displaced].sort((a, b) => {
+    const first = getCachedProductionBounds(a)
+    const second = getCachedProductionBounds(b)
+    return second.widthCm * second.heightCm - first.widthCm * first.heightCm
+  })
+  for (const placed of sorted) {
+    const bounds = getCachedProductionBounds(placed)
+    let best: { xCm: number; yCm: number; distance: number } | null = null
+    for (const region of free) {
+      const maxX = region.xCm + region.widthCm - bounds.widthCm
+      const maxY = region.yCm + region.heightCm - bounds.heightCm
+      if (maxX < region.xCm - GEOMETRY_EPSILON_CM || maxY < region.yCm - GEOMETRY_EPSILON_CM)
+        continue
+      const xCm = nearestCoordinate(bounds.xCm, region.xCm, maxX, safeArea.xCm, settings)
+      const yCm = nearestCoordinate(bounds.yCm, region.yCm, maxY, safeArea.yCm, settings)
+      if (xCm === null || yCm === null) continue
+      const distance = (xCm - bounds.xCm) ** 2 + (yCm - bounds.yCm) ** 2
+      if (!best || distance < best.distance - GEOMETRY_EPSILON_CM) best = { xCm, yCm, distance }
+    }
+    if (!best) return null
+    const productionBoundsCm = { ...bounds, xCm: best.xCm, yCm: best.yCm }
+    relocated.push({
+      ...placed,
+      xCm: placed.xCm + best.xCm - bounds.xCm,
+      yCm: placed.yCm + best.yCm - bounds.yCm,
+      productionBoundsCm
+    })
+    free = subtractFootprint(free, productionBoundsCm, spacingCm)
+  }
+  return relocated
+}
+
+function nearestCoordinate(
+  preferred: number,
+  min: number,
+  max: number,
+  safeEdge: number,
+  settings: CutterSheetSettings
+): number | null {
+  const clamped = Math.min(Math.max(preferred, min), max)
+  if (!settings.snapToGrid) return clamped
+  const step = Math.max(settings.gridStepCm, 0.01)
+  const candidates = [
+    Math.round(clamped / step) * step,
+    roundUpToStep(min, step),
+    Math.floor((max + GEOMETRY_EPSILON_CM) / step) * step,
+    ...(Math.abs(min - safeEdge) < GEOMETRY_EPSILON_CM ? [safeEdge] : [])
+  ].filter((value) => value >= min - GEOMETRY_EPSILON_CM && value <= max + GEOMETRY_EPSILON_CM)
+  candidates.sort((a, b) => Math.abs(a - preferred) - Math.abs(b - preferred))
+  return candidates[0] ?? null
+}
+
 type Bounds = { xCm: number; yCm: number; widthCm: number; heightCm: number }
 type PlacementOption = { footprint: Bounds; rotation: 0 | 90 }
 type AvailablePlacement = PlacementOption & { xCm: number; yCm: number }

@@ -629,3 +629,122 @@ Artifacts: `output/playwright/sequential-repeat-1366-en-light.png`,
   Released workshop-build and physical printer/cutter verification remain pending.
 
 Release check log: `.codex-release-0.2.13-check.log` (local, ignored by Git).
+
+## Cutter expanded canvas stability - 2026-10-17
+
+- Reproduced the resize feedback loop with a 96 × 100 cm sheet, a
+  550.6 × 572 px viewport and a small element extending beyond the sheet to
+  represent overflowing labels or selection controls. Scrollbars alternated
+  the canvas between 501 px and 493 px wide on every sampled frame (89 changes
+  over 90 settled frames).
+- The montage preview now observes the viewport border box, floors fractional
+  dimensions and reserves padding, borders and scrollbar space when fitting.
+  Scrollbar changes cannot trigger another fit. Unchanged measurements reuse
+  state, and scroll anchoring is disabled while resizing the preview. The same
+  reproduction now settles at 492 px wide with zero frame-to-frame changes.
+- Typecheck, the complete cutter suite, changed-file formatting and diff
+  whitespace checks passed. Browser checks covered 1366×768 English/light,
+  1920×1080 French/dark, 1600×900 Arabic/light and 1366×768 Arabic/dark; both
+  Arabic passes used low-end mode. Empty and 100-copy layouts stayed stable
+  when expanded, at the scrollbar threshold and after restoring the workspace.
+  Enter opens fullscreen, Escape and Restore workspace return focus to the
+  button, and manual zoom/Fit view work. No horizontal page overflow or change
+  to the 100 artwork copies occurred. Screenshots of expanded and restored
+  layouts were inspected.
+- Acceptance review: existing shared controls, labels, action placement and
+  heading structure are retained. Production geometry and export code are
+  unchanged. Native Electron/released workshop-build verification and physical
+  output remain pending; no release or hardware job was requested.
+
+Artifacts: `output/playwright/cutter-expand-1366-en-light.png`,
+`output/playwright/cutter-expand-1920-fr-dark.png`,
+`output/playwright/cutter-expand-1600-ar-light.png`,
+`output/playwright/cutter-expand-1366-ar-dark.png`, and corresponding
+`output/playwright/cutter-restored-*.png` screenshots.
+
+## Move stickers before export - 2026-10-17
+
+- In Layout & export, dropping a sticker onto other copies relocates overlapping
+  neighbors into nearby free regions on the same physical sheet. Artwork,
+  clipping geometry, CutContour, size, rotation, IDs and copy counts travel
+  together. Unaffected copies and other sheets retain their positions. Locked
+  obstacles or insufficient free space reject the entire move and restore the
+  drag preview. Safe margins and configured production spacing are respected.
+- Selected groups move together; Ctrl/Shift-click toggles selection once.
+  Keyboard arrows use the same placement rules. Undo Arrange and Ctrl+Z on the
+  canvas restore the previous placement snapshot. Manual positions are retained
+  through the existing Preserve manual positions setting. Rejection errors are
+  also visible within the expanded canvas, translated into French and Arabic.
+- Added the manual-layout regression suite to `test:cutter`: mixed sizes,
+  nearby relocation, group movement, locked copies, other sheets, insufficient
+  space, cut margins, rotation and independent copy dimensions. It verifies
+  production spacing, unchanged input snapshots, project serialization/reopen
+  and matching moved artwork/CutContour coordinates in exported SVG.
+- Browser checks passed with sixteen mixed-size stickers and visible cut lines
+  at 1366×768 English/light, 1920×1080 French/dark, 1600×900 Arabic/light and
+  1366×768 Arabic/dark; both Arabic passes used low-end mode. Each exercised
+  drop/rearrange, cutline retention, locked-move rejection, Ctrl+Z and serialized
+  project snapshots. Expanded screenshots were inspected. Group dragging and
+  undo also passed, along with keyboard nudging/undo in the normal layout.
+  No horizontal page overflow occurred.
+- Acceptance review: existing shared buttons, action locations, heading
+  structure, themes and production reading direction are retained. No new
+  toolbar or styling system was introduced. Native save/open dialogs, released
+  workshop-build verification and physical print/cut output remain pending.
+
+Artifacts: `output/playwright/cutter-drag-1366-en-light.png`,
+`output/playwright/cutter-drag-1920-fr-dark.png`,
+`output/playwright/cutter-drag-1600-ar-light.png`,
+`output/playwright/cutter-drag-1366-ar-dark.png`, and
+`output/playwright/cutter-drag-normal-1366-ar-dark.png`.
+
+## Clean sticker layout preview - 2026-10-17
+
+- Removed the automatic floating overview beneath the montage sheet and the
+  duplicate per-sticker command popover. Duplicate, Rotate, Lock and Delete
+  retain their existing shared buttons in the fixed canvas toolbar. Sticker
+  names remain available as native tooltips instead of labels covering artwork.
+- Selection and pointer targets now use the actual production footprint,
+  including clipping masks, rotation and cut margins. The source scene is
+  offset within that target, preserving artwork and cut-line coordinates.
+  Selected copies render above neighbors and the actively dragged copy renders
+  above other selections. Low-end drag previews use the same tight footprint.
+- Added rendered-component regressions to `test:cutter` for cropped masks at
+  all four quarter-turn rotations, selection dimensions/origin, toolbar
+  ownership and unchanged production data. Typecheck, the complete cutter
+  suite, changed-file formatting and diff whitespace checks passed.
+- Inspected a representative 50 cm sheet with twelve masked stickers from
+  larger source pages, selected near the bottom edge at 100% zoom. Browser
+  checks passed at 1366×768 English/light, 1920×1080 French/dark, 1600×900
+  Arabic/light and 1366×768 Arabic/dark; both Arabic passes used low-end mode.
+  A 5×3 cm sticker has a 50×30 px selection at this zoom, with no source-page
+  box extending below the paper, floating overview or duplicate controls.
+  Drag layering, undo, single toolbar actions and expanded/restored views
+  passed. Screenshots were inspected in these configurations. Empty and
+  100-copy expansion/Fit view checks also passed, including the prior scrollbar
+  threshold reproduction with no repeated resizing or page overflow.
+- Acceptance review: shared controls and task grouping are retained; no new
+  UI strings, subtitles or styling system were introduced. Print/export
+  geometry is unchanged. Verification on a released workshop build and
+  physical print/cut output remain pending.
+
+Artifacts: `output/playwright/cutter-clean-1366-en-light.png`,
+`output/playwright/cutter-clean-1920-fr-dark.png`,
+`output/playwright/cutter-clean-1600-ar-light.png`,
+`output/playwright/cutter-clean-1366-ar-dark.png`, and corresponding
+`output/playwright/cutter-clean-expanded-*.png` screenshots.
+
+## Stable release v0.2.14 - 2026-10-17
+
+- Full local `npm run release:check` passed: repository formatting, TypeScript,
+  every automated test suite, Storybook and the production build. The cutter
+  suites include manual rearrangement and rendered cropped-sticker selection
+  regressions, along with existing project/export/production checks.
+- Acceptance review retains the expansion-stability, manual-layout and clean
+  preview visual results above, including required desktop sizes, themes,
+  French/Arabic RTL, keyboard interaction and low-end mode. No additional UI
+  changes were made during release preparation.
+- Released workshop-build and physical printer/cutter verification remain
+  pending.
+
+Release check log: `.codex-release-0.2.14-check.log` (local, ignored by Git).

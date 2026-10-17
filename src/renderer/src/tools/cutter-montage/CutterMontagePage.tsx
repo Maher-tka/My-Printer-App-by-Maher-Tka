@@ -810,6 +810,8 @@ export function CutterMontagePage({
                                     onRotatePiece={cutter.rotatePlacedPiece}
                                     onToggleLock={cutter.togglePlacedLock}
                                     onNudgeSelected={cutter.nudgeSelected}
+                                    onUndoLayout={cutter.undoAutoArrange}
+                                    layoutError={cutter.error}
                                     outOfBoundsPieceIds={[
                                       ...cutter.preflight.outOfBoundsIds,
                                       ...cutter.preflight.safeAreaOutOfBoundsIds
