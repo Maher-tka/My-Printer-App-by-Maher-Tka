@@ -1,3 +1,5 @@
+import { useDroppedToolFiles } from '../shared/useDroppedToolFiles'
+import type { ToolFileDropProps } from '../shared/toolFileDrop'
 import { useLanguage } from '@/i18n/useLanguage'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -72,6 +74,8 @@ function NumericField({
 }
 
 export function CardMontagePage({
+  droppedFileImport,
+  onDroppedFileImportConsumed,
   draft,
   onDraftChange,
   onNavigate
@@ -79,7 +83,7 @@ export function CardMontagePage({
   draft: CardMontageDraft
   onDraftChange: (draft: CardMontageDraft) => void
   onNavigate: (route: AppRoute) => void
-}): JSX.Element {
+} & ToolFileDropProps): JSX.Element {
   const { t } = useLanguage()
 
   const { artwork, settings } = draft
@@ -131,11 +135,12 @@ export function CardMontagePage({
     onDraftChange({ ...draft, settings: { ...settings, ...patch } })
   }
   const importArtwork = async (
-    file: File | null,
+    file: File | [File, File] | null,
     side: 'front' | 'back',
     pageNumber?: number,
     sourceArtwork?: CardArtwork
   ) => {
+    const [frontFile, backFile] = Array.isArray(file) ? file : [file, undefined]
     const current = sourceArtwork ?? (side === 'front' ? artwork : draft.back)
     if (busy || (!file && !current)) return
     const operation = ++operationRef.current
@@ -143,11 +148,13 @@ export function CardMontagePage({
     setError(null)
     setMessage(null)
     try {
-      const next = file
-        ? await loadCardArtwork(file)
+      const next = frontFile
+        ? await loadCardArtwork(frontFile)
         : await changeCardArtworkPage(current!, pageNumber!)
       let pairedBack: CardArtwork | null | undefined
-      if (
+      if (backFile) {
+        pairedBack = await loadCardArtwork(backFile)
+      } else if (
         file &&
         side === 'front' &&
         (!draft.back || draft.back.bytesBase64 === artwork?.bytesBase64)
@@ -166,8 +173,12 @@ export function CardMontagePage({
               settings: { ...settings, includeBack: true, exportAllPdfPages: false }
             }
       onDraftChange(shareCardPagePreviews(nextDraft, side, next))
-      setPreviewSide(side)
-      setMessage(`Loaded ${next.name}${next.kind === 'pdf' ? ` · page ${next.pageNumber}` : ''}.`)
+      setPreviewSide(backFile ? 'both' : side)
+      setMessage(
+        backFile && pairedBack
+          ? t('Loaded front and back designs.')
+          : `Loaded ${next.name}${next.kind === 'pdf' ? ` · page ${next.pageNumber}` : ''}.`
+      )
     } catch (cause) {
       if (operation === operationRef.current)
         setError(cause instanceof Error ? cause.message : 'Could not read this design.')
@@ -175,6 +186,9 @@ export function CardMontagePage({
       if (operation === operationRef.current) setBusy(null)
     }
   }
+  useDroppedToolFiles({ droppedFileImport, onDroppedFileImportConsumed }, Boolean(busy), (files) =>
+    importArtwork(files.length === 2 ? [files[0], files[1]] : files[0], 'front')
+  )
   const loadMorePages = async (side: 'front' | 'back', start: number) => {
     const current = side === 'front' ? artwork : draft.back
     if (!current || busy) return

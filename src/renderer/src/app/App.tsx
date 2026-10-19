@@ -6,10 +6,17 @@ import { hasCurrentCloudAccess } from '../../../shared/cloud-access'
 import { scheduleDailyShopBackup } from '@/backup/shopBackup'
 import type { JobOpenRequest } from '@/jobs/jobTypes'
 import { AppLayout } from '@/components/layout/AppLayout'
+import { Button } from '@/components/ui/button'
 import { ToolAccessOverlay } from '@/licensing/ToolAccessOverlay'
 import { getToolAccessState } from '@/licensing/tool-access'
 import { useLicenseState } from '@/licensing/useLicenseState'
 import { printerTools } from '@/lib/app-data'
+import {
+  validateToolFileDrop,
+  toolDropFormats,
+  type FileDropTool,
+  type ToolFileImport
+} from '@/tools/shared/toolFileDrop'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
 import {
   isPrinterProjectFile,
@@ -18,6 +25,7 @@ import {
   type HardcoverProjectPayload
 } from '@/projects/projectFiles'
 import { AutosaveRecoveryBanner } from '@/projects/AutosaveRecoveryBanner'
+import { writeProjectRecovery } from '@/projects/recoverySave'
 import type { SequentialProject } from '@/tools/sequential-number/types'
 import { DEFAULT_CARD_SETTINGS, type CardMontageDraft } from '@/tools/card-montage/types'
 import type { AppRoute, PageMeta } from '@/types/navigation'
@@ -207,6 +215,21 @@ export function App(): JSX.Element {
   }))
   const [jobOpenRequest, setJobOpenRequest] = useState<JobOpenRequest | null>(null)
   const activeRouteRef = useRef(activeRoute)
+  const [toolFileImport, setToolFileImport] = useState<
+    (ToolFileImport & { route: FileDropTool }) | null
+  >(null)
+  const [toolDropError, setToolDropError] = useState<{ message: string } | null>(null)
+  const toolDropErrorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (toolDropError) toolDropErrorRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [toolDropError])
+  const [toolDropNavigating, setToolDropNavigating] = useState(false)
+  const toolDropInFlight = useRef(false)
+  const toolDropId = useRef(0)
+  const consumeToolFileImport = useCallback((id: number, error?: string): void => {
+    setToolFileImport((request) => (request?.id === id ? null : request))
+    if (error) setToolDropError({ message: error })
+  }, [])
   const activeProjectSessionRef = useRef<ActiveProjectSession | null>(null)
   const [openedProject, setOpenedProject] = useState<
     (OpenedPrinterProject & { instanceId: number }) | null
@@ -309,6 +332,7 @@ export function App(): JSX.Element {
   }, [])
 
   const clearActiveProjectSession = useCallback((): void => {
+    setToolFileImport(null)
     lastAllowedTool.current = null
     activeProjectSessionRef.current = null
     void window.printerApp?.setProjectDirty(false, 'Untitled Project')
@@ -329,11 +353,12 @@ export function App(): JSX.Element {
     const timer = window.setInterval(() => {
       const session = activeProjectSessionRef.current
       if (!session?.isDirty) return
-      void runtime
-        .writeAutosave({ project: session.snapshot, originalFilePath: session.filePath })
-        .catch(() =>
-          setRecoveryError('Automatic recovery could not be saved. Save your project manually.')
-        )
+      void writeProjectRecovery(
+        { project: session.snapshot, originalFilePath: session.filePath },
+        runtime.writeAutosave
+      ).catch(() =>
+        setRecoveryError('Automatic recovery could not be saved. Save your project manually.')
+      )
     }, AUTOSAVE_INTERVAL_MS)
 
     return () => window.clearInterval(timer)
@@ -347,19 +372,22 @@ export function App(): JSX.Element {
         return true
       }
 
-      if (action === 'navigate' && activeRouteRef.current === 'hardcover-cover') {
+      if (
+        action === 'navigate' &&
+        activeRouteRef.current === 'hardcover-cover' &&
+        window.printerApp?.runtime?.writeAutosave
+      ) {
         try {
-          const result = await window.printerApp?.runtime?.writeAutosave({
-            project: session.snapshot,
-            originalFilePath: session.filePath
-          })
-          if (!result?.ok) {
-            setRecoveryError('Could not save Hardcover recovery before switching tools.')
-          }
+          await writeProjectRecovery(
+            { project: session.snapshot, originalFilePath: session.filePath },
+            window.printerApp.runtime.writeAutosave
+          )
+          setRecoveryError(null)
+          return true
         } catch {
           setRecoveryError('Could not save Hardcover recovery before switching tools.')
+          return false
         }
-        return true
       }
 
       if (!window.printerApp?.confirmUnsavedChanges) {
@@ -466,6 +494,38 @@ export function App(): JSX.Element {
     },
     [clearActiveProjectSession, confirmUnsavedChanges]
   )
+
+  const dropToolFiles = async (route: FileDropTool, files: File[]): Promise<void> => {
+    if (toolDropInFlight.current || toolFileImport) return
+    const error = validateToolFileDrop(route, files)
+    if (error) {
+      setToolDropError({
+        message: `${t(error)} ${t('Supported files:')} ${toolDropFormats[route]}`
+      })
+      return
+    }
+    const tool = printerTools.find((item) => item.route === route)
+    const access = tool ? getToolAccessState(tool, license.state, license.isLoading) : null
+    if (!access || access.isCheckingLicense || access.isLicenseLocked) {
+      setToolDropError({ message: t('Open an available tool before importing files.') })
+      return
+    }
+    toolDropInFlight.current = true
+    setToolDropNavigating(true)
+    setToolDropError(null)
+    try {
+      await navigate(route)
+      if (activeRouteRef.current !== route) return
+      setToolFileImport({ route, files, id: ++toolDropId.current })
+    } catch (error) {
+      setToolDropError({
+        message: error instanceof Error ? error.message : t('Could not read the dropped files.')
+      })
+    } finally {
+      toolDropInFlight.current = false
+      setToolDropNavigating(false)
+    }
+  }
 
   useEffect(() => {
     const handleHashChange = (): void => {
@@ -672,12 +732,26 @@ export function App(): JSX.Element {
       activeRoute={activeRoute}
       pageMeta={activeMeta}
       onNavigate={navigate}
+      onDropToolFiles={(route, files) => void dropToolFiles(route, files)}
+      fileDropBusy={toolDropNavigating || Boolean(toolFileImport)}
       isDeveloperMode={license.isDeveloperMode}
       account={account.state?.profile ?? null}
       onSignOut={() => void signOut()}
       onOpenProject={() => void openProject()}
       onOpenImageFile={() => void openImageFile()}
     >
+      {toolDropError && (
+        <div
+          ref={toolDropErrorRef}
+          role="alert"
+          className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-card p-4 text-sm text-destructive"
+        >
+          <span>{toolDropError.message}</span>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setToolDropError(null)}>
+            {t('Dismiss')}
+          </Button>
+        </div>
+      )}
       {cloudMode && !hasCloudAccess && !isDeveloperAccess && (
         <div
           role="status"
@@ -744,6 +818,8 @@ export function App(): JSX.Element {
       {activeRoute === 'booklet-montage' && !showToolAccessOverlay && (
         <Suspense fallback={<ToolLoadingFallback label={t('Loading Booklet Montage...')} />}>
           <BookletMontagePage
+            droppedFileImport={toolFileImport?.route === 'booklet-montage' ? toolFileImport : null}
+            onDroppedFileImportConsumed={consumeToolFileImport}
             key={openedProject?.instanceId ?? 'new-booklet'}
             onNavigate={navigate}
             onOpenProject={openProject}
@@ -761,12 +837,20 @@ export function App(): JSX.Element {
       )}
       {activeRoute === 'card-montage' && !showToolAccessOverlay && (
         <Suspense fallback={<ToolLoadingFallback label={t('Loading Card Montage…')} />}>
-          <CardMontagePage draft={cardDraft} onDraftChange={setCardDraft} onNavigate={navigate} />
+          <CardMontagePage
+            droppedFileImport={toolFileImport?.route === 'card-montage' ? toolFileImport : null}
+            onDroppedFileImportConsumed={consumeToolFileImport}
+            draft={cardDraft}
+            onDraftChange={setCardDraft}
+            onNavigate={navigate}
+          />
         </Suspense>
       )}
       {activeRoute === 'hardcover-cover' && !showToolAccessOverlay && (
         <Suspense fallback={<ToolLoadingFallback label={t('Loading Hardcover Cover...')} />}>
           <HardcoverCoverPage
+            droppedFileImport={toolFileImport?.route === 'hardcover-cover' ? toolFileImport : null}
+            onDroppedFileImportConsumed={consumeToolFileImport}
             key={openedProject?.instanceId ?? 'new-hardcover'}
             onNavigate={navigate}
             onOpenProject={openProject}
@@ -783,6 +867,8 @@ export function App(): JSX.Element {
       {activeRoute === 'cutter-montage' && !showToolAccessOverlay && (
         <Suspense fallback={<ToolLoadingFallback label={t('Loading Cutter Montage...')} />}>
           <CutterMontagePage
+            droppedFileImport={toolFileImport?.route === 'cutter-montage' ? toolFileImport : null}
+            onDroppedFileImportConsumed={consumeToolFileImport}
             key={openedProject?.instanceId ?? 'new-cutter'}
             onNavigate={navigate}
             onOpenProject={openProject}
@@ -801,6 +887,10 @@ export function App(): JSX.Element {
       {activeRoute === 'sequential-number' && !showToolAccessOverlay && (
         <Suspense fallback={<ToolLoadingFallback label={t('Loading Sequential Number…')} />}>
           <SequentialNumberPage
+            droppedFileImport={
+              toolFileImport?.route === 'sequential-number' ? toolFileImport : null
+            }
+            onDroppedFileImportConsumed={consumeToolFileImport}
             key={openedProject?.instanceId ?? 'new-sequential'}
             onNavigate={navigate}
             onOpenProject={openProject}

@@ -1,6 +1,6 @@
 {
   "name": "my-printer-app-by-maher-tka",
-  "version": "0.2.15",
+  "version": "0.2.16",
   "description": "Local-first printer-shop hub desktop app by Maher Tka.",
   "author": "Maher Tka",
   "private": true,
@@ -20,15 +20,15 @@
     "test:card": "tsx src/renderer/src/tools/card-montage/lib/layout.test.ts && tsx src/renderer/src/tools/card-montage/lib/exportPdf.test.ts && tsx src/renderer/src/tools/card-montage/lib/artwork.test.ts && tsx src/renderer/src/tools/card-montage/lib/jpegArtwork.test.ts && tsx src/main/eps-import.test.ts",
     "test:access": "tsx src/shared/cloud-access.test.ts && tsx scripts/test-access-database.ts",
     "test:license": "tsx src/main/license-serial.test.ts",
-    "test:print": "tsx src/shared/print-types.test.ts",
+    "test:print": "tsx src/shared/print-types.test.ts && tsx src/shared/printer-preferences.test.ts && tsx src/main/printer-preferences-store.test.ts",
     "test:booklet": "tsx src/renderer/src/tools/booklet-montage/lib/bookletImposition.test.ts && tsx src/renderer/src/tools/booklet-montage/lib/creepCompensation.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/booklet-montage/lib/bookletImportReliability.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/booklet-montage/lib/pdfDecoderAssetConfiguration.test.ts && tsx src/renderer/src/tools/booklet-montage/lib/sharedPreviewDocumentCache.test.ts",
-    "test:projects": "tsx --tsconfig tsconfig.web.json src/renderer/src/projects/projectFiles.test.ts && tsx src/main/atomic-json.test.ts",
+    "test:projects": "tsx --tsconfig tsconfig.web.json src/renderer/src/projects/projectFiles.test.ts && tsx src/main/atomic-json.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/projects/recoverySave.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/shared/toolFileDrop.test.ts",
     "test:cutter": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/importOperation.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/editorWorkflow.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/nesting.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/manualLayout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/components/PlacedPieceItem.test.tsx && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/pieceEditorView.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/pieceResize.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/pathBounds.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/cutlineGenerator.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/hooks/useCutterProject.reconcile.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/hooks/useCutterProject.productionBounds.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/svgRotationExport.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/preflightProductionBounds.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/mimakiDirectOutput.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/mimakiRegistration.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/productionSheetGroups.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/pdfProductionMetadata.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/productionExportSemantics.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/layeredPdf.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/editorLayers.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/artworkBackground.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/applyArtworkEdit.test.ts && tsx src/main/finecut-handoff.test.ts && tsx src/main/illustrator-export-runner.test.ts && tsx src/main/illustrator-pdf-compatibility.test.ts && tsx src/main/illustrator-pdf-script.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/orderLayout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/illustratorPdfExport.test.ts",
     "test:sticker": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/stickerMaker.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/cutter-montage/lib/stickerCutterAdapter.test.ts",
     "test:hardcover": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/coverCalculations.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/spineTextLayout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/spineDetection.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/hardcoverQuote.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/hardcoverExport.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/hardcoverSourcePdf.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/hardcover-cover/lib/pdfDrop.test.ts",
     "samples:inspect": "tsx scripts/inspect-production-samples.ts",
     "test:preflight": "tsx --tsconfig tsconfig.web.json src/renderer/src/preflight/preflight.test.ts",
-    "test:jobs": "tsx --tsconfig tsconfig.web.json src/renderer/src/jobs/jobWorkflow.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/assistant/assistant.test.ts",
+    "test:jobs": "tsx --tsconfig tsconfig.web.json src/renderer/src/jobs/jobWorkflow.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/jobs/jobStorage.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/assistant/assistant.test.ts",
     "test:backup": "tsx --tsconfig tsconfig.web.json src/renderer/src/backup/shopBackup.test.ts",
     "test:updates": "tsx src/main/app-updater.test.ts",
     "test:i18n": "tsx --tsconfig tsconfig.web.json src/renderer/src/i18n/language.test.ts",
@@ -43,10 +43,11 @@
     "test:sequential": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/sequential-number/lib/layout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/sequential-number/lib/exportPdf.test.ts",
     "fast-print:install": "npm run build && npm run build:fast-print-shell && node scripts/fast-print-control.mjs install",
     "fast-print:remove": "node scripts/fast-print-control.mjs remove",
-    "test:fast-print": "tsx src/shared/fast-print.test.ts && tsx src/shared/fast-print-menu.test.ts && tsx src/shared/fast-print-batch.test.ts",
+    "test:fast-print": "tsx src/shared/fast-print.test.ts && tsx src/shared/fast-print-menu.test.ts && tsx src/shared/fast-print-batch.test.ts && tsx src/shared/fast-print-id.test.ts && tsx src/shared/polaroid-framing.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/fast-print/polaroidImage.test.ts",
     "build:fast-print-shell": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-fast-print-shell.ps1",
     "fast-print:settings": "node scripts/fast-print-control.mjs manage",
-    "test:fast-print:driver": "powershell -NoProfile -STA -ExecutionPolicy Bypass -File scripts/test-fast-print-profiles.ps1"
+    "test:fast-print:driver": "powershell -NoProfile -STA -ExecutionPolicy Bypass -File scripts/test-fast-print-profiles.ps1",
+    "test:fast-print:id-real": "node scripts/verify-fast-print-id.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -69,6 +70,7 @@
     "clsx": "^2.1.1",
     "electron-updater": "^6.8.9",
     "lucide-react": "^0.468.0",
+    "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "5.4.624",
     "react": "^18.3.1",
@@ -155,11 +157,16 @@
     ],
     "extraResources": [
       {
+        "from": "src/renderer/src/fast-print/models/YUNET-LICENSE.txt",
+        "to": "licenses/YUNET-LICENSE.txt"
+      },
+      {
         "filter": [
           "fast-print-menu.ps1",
           "fast-print-job.ps1",
           "fast-print-settings.ps1",
           "fast-print-profiles.ps1",
+          "printer-preferences.ps1",
           "FastPrintDriver.cs",
           "fast-print-machine.ps1"
         ],

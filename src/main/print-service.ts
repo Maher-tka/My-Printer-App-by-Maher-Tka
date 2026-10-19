@@ -16,6 +16,15 @@ import {
 import { recordAppError } from './release-runtime.js'
 import { assertOnlineProductionAccess } from './online-account.js'
 import type { ExportContext } from '../shared/release-types.js'
+import { printerPreferencesStore } from './printer-preferences.js'
+import {
+  appPrintingOption,
+  preferredPrinter,
+  preferredProfile
+} from '../shared/printer-preferences.js'
+import { runSavedDriverPrint } from './fast-print.js'
+import { runPrinterScript } from './printer-driver-runtime.js'
+import type { PrinterDevice } from '../shared/printer-preferences.js'
 
 const PRINT_TEMP_FOLDER = 'my-printer-app-print'
 const activeTempFiles = new Set<string>()
@@ -35,7 +44,8 @@ export function registerPrintHandlers(): void {
         jobTitle: request.jobTitle,
         pdfName,
         silent: request.silent === true,
-        copies: request.copies
+        copies: request.copies,
+        toolId: context?.toolId
       })
     } catch (error) {
       recordAppError('print-pdf', error)
@@ -57,7 +67,8 @@ export function registerPrintHandlers(): void {
         jobTitle: request.jobTitle,
         pdfName: normalizePdfPrintName(request.suggestedName ?? basename(request.filePath)),
         silent: request.silent === true,
-        copies: request.copies
+        copies: request.copies,
+        toolId: request.toolId
       })
     } catch (error) {
       recordAppError('print-pdf-file', error)
@@ -74,14 +85,56 @@ export function registerPrintHandlers(): void {
 
 async function printPdfFile(
   filePath: string,
+  options: Parameters<typeof printConfiguredPdf>[1]
+): Promise<PrintPdfResult> {
+  try {
+    return await printConfiguredPdf(filePath, options)
+  } finally {
+    if (options.cleanupAfterPrint) await cleanupTempPdf(filePath)
+  }
+}
+
+async function printConfiguredPdf(
+  filePath: string,
   options: {
     cleanupAfterPrint: boolean
     jobTitle?: string
     pdfName: string
     silent: boolean
     copies?: number
+    toolId?: string
   }
 ): Promise<PrintPdfResult> {
+  const preferences = await printerPreferencesStore().read()
+  const option = appPrintingOption(options.toolId)
+  let deviceName = preferredPrinter(preferences, option)
+  if (process.platform === 'win32') {
+    if (!deviceName) {
+      const printers = JSON.parse(
+        await runPrinterScript('fast-print-menu.ps1', ['-Action', 'List'])
+      ) as PrinterDevice[]
+      deviceName = printers.find((printer) => printer.isDefault)?.name
+    }
+    const profileId = deviceName
+      ? (preferredProfile(preferences, deviceName, option) ??
+        preferredProfile(preferences, deviceName, 'app-print'))
+      : undefined
+    if (profileId && deviceName) {
+      const result = await runSavedDriverPrint(
+        filePath,
+        {
+          printer: deviceName,
+          paper: 'A4',
+          color: true,
+          pagesPerSheet: 1,
+          mode: 'document',
+          profileId
+        },
+        { toolId: options.toolId, copies: options.copies }
+      )
+      return { ...result, printerName: deviceName, pdfName: options.pdfName }
+    }
+  }
   const window = new BrowserWindow({
     width: 1000,
     height: 760,
@@ -102,32 +155,39 @@ async function printPdfFile(
   try {
     await window.loadURL(pathToFileURL(filePath).toString())
     await waitForPdfViewer()
-    const result = await printWindow(window, options.silent, options.copies)
+    if (
+      deviceName &&
+      !(await window.webContents.getPrintersAsync()).some((printer) => printer.name === deviceName)
+    )
+      throw new Error('The preferred printer is unavailable. Change it in Printing settings.')
+    const result = await printWindow(window, options.silent, options.copies, deviceName)
 
     if (result.ok) {
       return {
         ...result,
-        pdfName: options.pdfName
+        pdfName: options.pdfName,
+        printerName: deviceName
       }
     }
 
     return result
   } finally {
     if (!window.isDestroyed()) window.close()
-    if (options.cleanupAfterPrint) await cleanupTempPdf(filePath)
   }
 }
 
 function printWindow(
   window: BrowserWindow,
   silent: boolean,
-  copies?: number
+  copies?: number,
+  deviceName?: string
 ): Promise<PrintPdfResult> {
   return new Promise((resolve) => {
     window.webContents.print(
       {
         silent,
         printBackground: true,
+        ...(deviceName ? { deviceName } : {}),
         ...(copies !== undefined ? { copies, collate: true } : {})
       },
       (success, failureReason) => {

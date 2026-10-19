@@ -7,6 +7,7 @@ import { assertOnlineProductionAccess } from './online-account.js'
 import { registerAppUpdaterHandlers } from './app-updater.js'
 import { registerLicenseHandlers } from './licensing.js'
 import { registerPrintHandlers } from './print-service.js'
+import { registerPrinterPreferenceHandlers } from './printer-preferences.js'
 import { isFastPrintCommand, runFastPrintCommand } from './fast-print.js'
 import { attachProjectWindowProtection, registerProjectHandlers } from './project-persistence.js'
 import {
@@ -175,6 +176,7 @@ app
     registerLicenseHandlers()
     registerProjectHandlers()
     registerPrintHandlers()
+    registerPrinterPreferenceHandlers()
     registerReleaseRuntimeHandlers()
     createMainWindow()
 

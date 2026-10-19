@@ -1,4 +1,5 @@
 import type { ExportHistoryEntry, ShopBackupRendererData } from './release-types.js'
+import { hasValidOptionalJobFields } from './job-validation.js'
 
 export const SHOP_BACKUP_SCHEMA = 'com.maher-tka.my-printer-app.shop-backup'
 export const SHOP_BACKUP_VERSION = 1
@@ -65,6 +66,7 @@ export function isShopBackupEnvelope(value: unknown): value is ShopBackupEnvelop
 function isBackupJob(value: unknown): boolean {
   if (!isRecord(value) || !isRecord(value.quote)) return false
   return Boolean(
+    hasValidOptionalJobFields(value) &&
     isBoundedString(value.id, 500, true) &&
     isOneOf(value.tool, ['booklet', 'cutter', 'hardcover', 'sequential']) &&
     isBoundedString(value.customerName, 10_000) &&

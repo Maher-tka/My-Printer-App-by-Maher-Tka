@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { fastPrintLayout, validateFastPrintPreset } from './fast-print.js'
+import { polaroidLayout, polaroidCoverCrop } from './fast-print-polaroid.js'
 
 for (const paper of ['A4', 'A3'] as const) {
   for (const pagesPerSheet of [1, 2, 4] as const) {
@@ -42,6 +43,30 @@ for (const invalid of [
   assert.throws(() => validateFastPrintPreset(invalid), /Invalid Fast Print/)
 }
 console.log('Fast Print preset and layout tests passed.')
+
+for (const mode of ['polaroid-8', 'polaroid-9'] as const) {
+  const layout = polaroidLayout(mode)
+  const count = mode === 'polaroid-8' ? 8 : 9
+  assert.equal(layout.photos.length, count)
+  assert.equal(layout.width > layout.height, count === 8)
+  assert.equal((layout.cutLineWidth / 300) * 96, 0.25)
+  assert.equal(polaroidLayout(mode, 600).cutLineWidth, layout.cutLineWidth * 2)
+  for (const photo of layout.photos) {
+    assert.ok(photo.x > 0 && photo.y > 0)
+    assert.ok(photo.x + photo.width < layout.width && photo.y + photo.height < layout.height)
+    assert.ok(layout.cutXs.every((x) => x <= photo.x || x >= photo.x + photo.width))
+    assert.ok(layout.cutYs.every((y) => y <= photo.y || y >= photo.y + photo.height))
+  }
+  const preset = { printer: 'Test', paper: 'A4', color: true, pagesPerSheet: 1, mode }
+  assert.equal(validateFastPrintPreset(preset).mode, mode)
+  assert.throws(() => validateFastPrintPreset({ ...preset, paper: 'A3' }), /Invalid/)
+  assert.throws(() => validateFastPrintPreset({ ...preset, pagesPerSheet: 4 }), /Invalid/)
+}
+const photo8 = polaroidLayout('polaroid-8').photos[0]
+assert.ok(Math.abs(photo8.x / polaroidLayout('polaroid-8').width - 40 / 3508) < 1e-9)
+assert.ok(Math.abs(photo8.height / polaroidLayout('polaroid-8').height - 975 / 2480) < 1e-9)
+const crop = polaroidCoverCrop(2000, 1000, 800, 1000)
+assert.deepEqual(crop, { x: 600, y: 0, width: 800, height: 1000 })
 
 const stockPreset = validateFastPrintPreset({
   printer: 'Work printer',

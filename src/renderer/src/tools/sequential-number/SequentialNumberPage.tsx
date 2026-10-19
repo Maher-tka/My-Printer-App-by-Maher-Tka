@@ -1,3 +1,5 @@
+import { useDroppedToolFiles } from '../shared/useDroppedToolFiles'
+import type { ToolFileDropProps } from '../shared/toolFileDrop'
 import { ActionIcon } from '@/components/ui/action-button'
 import { useLanguage } from '@/i18n/useLanguage'
 import { NumberColorInput } from './NumberColorInput'
@@ -32,7 +34,7 @@ import { createSequentialProjectFile } from './lib/project'
 import { createRepeatedNumberPosition } from './lib/positioning'
 import { exportSequentialPdf } from './lib/exportPdf'
 
-interface Props {
+interface Props extends ToolFileDropProps {
   onNavigate: (route: AppRoute) => void
   openedProject?: OpenedPrinterProject<SequentialProject> | null
   onOpenProject: (filePath?: string | null) => Promise<PrinterAppProjectResult>
@@ -109,6 +111,8 @@ const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : 'Something went wrong. Please try again.'
 
 export function SequentialNumberPage({
+  droppedFileImport,
+  onDroppedFileImportConsumed,
   onNavigate,
   openedProject,
   onOpenProject,
@@ -276,6 +280,9 @@ export function SequentialNumberPage({
       if (operation === operationRef.current) setBusy(false)
     }
   }
+  useDroppedToolFiles({ droppedFileImport, onDroppedFileImportConsumed }, busy, (files) =>
+    importArtwork(files[0], 'front')
+  )
   const changePage = async (
     artwork: NumberArtwork,
     page: number,

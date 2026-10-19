@@ -91,6 +91,7 @@ declare global {
 
   interface Window {
     printerApp?: {
+      printers: import('../../shared/printer-preferences').PrinterPreferencesApi
       platform: string
       storageMode: 'local-first'
       account: {

@@ -4,7 +4,7 @@ export const FAST_PRINT_MAX_PAGES = 2000
 /** Keep Explorer's order and remove repeated paths without changing their spelling. */
 export function normalizeFastPrintSelection(input: unknown): string[] {
   if (!Array.isArray(input) || input.length === 0)
-    throw new Error('Select PDF, PNG, or JPEG documents for Fast Print.')
+    throw new Error('Select PDF, PNG, JPEG, or GIF documents for Fast Print.')
   if (input.length > FAST_PRINT_MAX_FILES)
     throw new Error(`Fast Print supports up to ${FAST_PRINT_MAX_FILES} files in one batch.`)
   const seen = new Set<string>()
@@ -12,9 +12,9 @@ export function normalizeFastPrintSelection(input: unknown): string[] {
   for (const path of input) {
     if (typeof path !== 'string' || !path || path.includes('\0'))
       throw new Error('The selected file list is invalid.')
-    if (!/\.(pdf|png|jpe?g)$/i.test(path))
+    if (!/\.(pdf|png|jpe?g|gif)$/i.test(path))
       throw new Error(
-        `Unsupported document: ${path.split(/[\\/]/).pop()}. Choose PDFs, PNGs, or JPEGs.`
+        `Unsupported document: ${path.split(/[\\/]/).pop()}. Choose PDFs, PNGs, JPEGs, or GIFs.`
       )
     const key = path.replace(/\//g, '\\').toLowerCase()
     if (!seen.has(key)) {

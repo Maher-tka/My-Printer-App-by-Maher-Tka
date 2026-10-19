@@ -1,5 +1,40 @@
 # UI regression checklist
 
+## Stable 0.2.16 release preparation — 2026-10-19
+
+- Full `npm run release:check` passed: repository formatting, TypeScript, all
+  automated suites, Storybook production build, and app production build.
+- Native Fast Print DLL compilation and Windows driver-profile regression tests
+  passed, including encrypted full-buffer settings, printer/driver mismatch,
+  atomic updates, unchanged printer defaults, and paper/copy preservation.
+- Repeated the ID real-photo verifier with both originals, original placement,
+  and off-center ±45° cases: six cases and twelve color/grayscale page proofs.
+  Verified 90 mm target width, proportional height, matching sheet centers,
+  crop coverage, grayscale output, and unchanged source hashes. Inspected the
+  current crop/page proof review grid.
+- Rebuilt an isolated development verification worker from the release source
+  and repeated both actual Polaroid menu choices with all 15 original num216p
+  photos. Each produced two A4/color sheets; all photos matched, detected faces
+  stayed inside protected crops, final unused slots were white, and source
+  hashes were unchanged. Inspected all four generated sheets against originals.
+- Proofs and review grids are local under `output/fast-print-id/`,
+  `output/fast-print-num216p-menu/`, and `output/release-verification/0.2.16/`.
+  No hardware print jobs were sent. Physical Konica/Epson finishing, duplex/tray
+  alignment, and workshop low-memory performance remain pending. The earlier
+  browser matrix and its stated limits still apply.
+
+## App reliability audit — 2026-10-18
+
+See [the audit report](APP_AUDIT_2026-10-18.md) for the scoped fixes and evidence.
+All 12 routes received browser smoke checks at 1366×768 and 1920×1080 across
+light/dark, French, and Arabic RTL configurations, including low-end mode.
+Representative import/clear/cancel/focus checks passed for all five production
+tools across three configurations. Job save/edit/delete and simulated Hardcover
+recovery failure/retry checks passed. Native IPC, real printer drivers, workshop
+hardware, and physical low-end performance remain pending for this audit.
+These checks do not mark unrelated historical entries complete or establish full
+design-system compliance.
+
 Future UI changes must follow [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md), including its button hierarchy, action grouping, subtitle policy, and acceptance checklist. Record verification for each change; the historical entries below remain pending until actually checked.
 
 This is a verification ledger. Pending means not yet verified; it is not a claim of success. Production logic is not being rewritten. Baseline is the existing working feature and existing automated coverage, not a newly invented feature.
@@ -819,3 +854,445 @@ Artifacts: `output/playwright/spacing-35-1366-en-light.png`,
   physical printer/cutter verification remain pending.
 
 Release check log: `.codex-release-0.2.15-check.log` (local, ignored by Git).
+
+## Fast Print Polaroid and bypass defaults - 2026-10-17
+
+- A4 Color menus start with 8 PIC, then 9 PIC. Geometry follows the measured red
+  rectangles in the supplied landscape 8-photo and portrait 9-photo PDFs,
+  including their borders, as confirmed by the user. No extra page margin or
+  printable-area fitting is applied. Internal cutting strokes are 0.25 CSS px
+  (0.1875 pt). Photos use a centered crop without stretching; overflow continues
+  onto the next sheet, with empty slots white. Polaroid output is single-sided.
+- A native checkbox in the existing driver preset window marks a captured
+  bypass/face-up configuration as the default for its printer and paper. Generic
+  menu and direct-token jobs resolve that default; explicit saved stocks retain
+  their own settings. Driver-owned finishing is preserved in the complete saved
+  buffer. The checkbox requires the operator to capture actual bypass/face-up
+  options in the vendor dialog; it does not verify private driver settings.
+- Typecheck, Fast Print suites (including menu/default selection and Polaroid
+  dimensions/crop/stroke tests), driver buffer/profile tests, formatting checks
+  and the development build passed. Real Electron worker checks rendered ten
+  PDF photos through both presets, including a cross-file 9 PIC batch, to two
+  sheets each. Raster and Microsoft Print to PDF proofs were visually inspected;
+  remaining slots on the second sheets were checked as white. PDF output uses
+  the correct A4 orientation and measured placement without shrinking. No
+  hardware print jobs were submitted.
+- Acceptance review: existing menus, file actions, output location and native
+  setup controls are retained. One standard native checkbox was added; no new
+  action family or duplicate print/import command was introduced. The native
+  setup heading subtitle was removed. Its 950x710 preview shows no overlap.
+- Pending: live native menu/setup checks at 1366x768 and 1920x1080, keyboard
+  navigation, dark theme, French/Arabic RTL and low-end mode. The existing native
+  setup remains English and does not yet share renderer theme/i18n controls.
+  Workshop driver capture, face-up/bypass verification, physical edge clipping
+  and subscriber-release verification are pending. These changes are local.
+
+Artifacts: `tmp/pdfs/default-bypass-settings.png`,
+`tmp/fast-print-polaroid-proof/polaroid-8/00001.png`,
+`tmp/fast-print-polaroid-proof/polaroid-9/00001.png`,
+`output/pdf/polaroid-8-pic-proof.pdf`, `output/pdf/polaroid-9-pic-proof.pdf`.
+
+## Polaroid multi-sheet batch assessment - 2026-10-17
+
+- Verified 25 separate 6000x4000 JPEG/PNG files: 8 PIC produced four sheets in
+  6.6 seconds; 9 PIC produced three sheets in 5.6 seconds. A 100-file batch
+  produced 13 sheets with 8 PIC in 13.3 seconds. These runs used Windows driver
+  validation without sending hardware print jobs. The worker build was copied
+  into a temporary local verification directory to avoid concurrent builds
+  changing code during a run.
+- Sampled the complete worker process tree approximately every 300 ms plus
+  process-enumeration time. Peak working set was about 706-730 MiB; private
+  memory was about 706-1162 MiB. Larger batches did not multiply the active
+  working set, but these synthetic fixtures and main-PC measurements do not
+  establish workshop or low-memory-PC performance. The image resize change
+  did not demonstrate a reduction in overall peak process memory versus the
+  initial run; browser decoding can still allocate full-resolution buffers.
+- Image decoding now requests the photo-slot resolution using existing JPEG
+  metadata parsing (including EXIF rotation) or PNG dimensions. No decode
+  upscaling is requested, the bitmap long edge is capped at 2200 px, and unknown
+  or unsupported headers fall back to the browser decoder. Completed sheets
+  continue to be written sequentially to disk and the sheet canvas is reused.
+- Fast Print suites, image decode/rotation/fallback tests, typecheck and changed
+  file formatting passed. The development build passed; a representative
+  high-resolution batch proof was visually inspected. No interface layout,
+  heading, action placement or styling changed in this follow-up. Previously
+  pending native UI matrix and workshop-driver checks remain pending.
+
+Artifacts: `tmp/polaroid-benchmark/optimized-polaroid-8-25/benchmark.json`,
+`tmp/polaroid-benchmark/optimized-polaroid-8-100/benchmark.json`,
+`tmp/polaroid-benchmark/optimized-polaroid-9-25/benchmark.json` and matching PNGs.
+
+## Polaroid real-photo folder test - 2026-10-17
+
+- Used all 15 JPG files in the user-provided `Downloads/Compressed/num216p`
+  folder (about 1.8 MiB total, 640-1600 px dimensions, mixed portrait and
+  landscape). Source SHA-256 hashes matched before and after verification.
+- 8 PIC produced two landscape A4 sheets in 4.5 seconds, with seven photos and
+  one blank slot on the second sheet. 9 PIC produced two portrait A4 sheets in
+  4.7 seconds, with six photos and three blank slots on the second sheet. Sampled
+  worker-tree working-set peaks were 782.6 and 847.9 MiB respectively; private
+  memory peaks were 880.5 and 730.2 MiB. These are main-PC development results.
+- Compared every placed photo against its source using independently resized
+  centered-crop thumbnails. Mean RGB differences were below 2.4 out of 255 for
+  all 30 placements. Verified final empty slots as white, sheet count,
+  orientation, color and simplex settings. Inspected all four rendered sheets.
+  Generated and rendered two-page proofs through Microsoft Print to PDF. No
+  hardware printer was used.
+- Observations: some originals contain sideways artwork with no EXIF rotation
+  instruction; the output preserves that source orientation. Center-cover crop
+  trims the edges of wide group images, sometimes removing part of a person.
+  Automatic pagination works, but an in-app preview with per-photo rotation and
+  crop adjustment would improve production review for these particular sources.
+  No automatic rotation or source-file edits were performed.
+- Only verification artifacts and this record were added in this follow-up.
+  Existing native UI matrix and physical workshop-printer checks remain pending.
+
+Artifacts: `output/fast-print-num216p/results.json`, source hash manifest and
+four sheet PNGs; `output/pdf/num216p-8-pic.pdf` and
+`output/pdf/num216p-9-pic.pdf`.
+
+## Fast Print ID card preset - 2026-10-17
+
+- Added the ID card — 9 cm preset under printer/paper/color menus, including
+  saved stocks. Its standalone crop window supports up to eight images or PDF
+  pages, separate front/back selections, reuse of a combined photo, independent
+  corner masks, clockwise rotation, conservative rough auto crop and Reset crop.
+  Low-end mode uses smaller source/preview canvases; output stays at 300 DPI.
+- Both sides are 90 mm wide with proportional heights, centered independently
+  on the same A4/A3 sheet coordinates. They form one two-page job without a
+  batch separator. The driver draws the full physical page rather than shrinking
+  to printable margins. Color and grayscale are available in the crop window.
+  Automatic long-edge duplex is selected on capable printers; physical simplex
+  printers pause for reinsertion before the back. PDF/XPS keeps both pages in one
+  document. Canceling the reinsertion prompt reports the unprinted back, then
+  closes the worker. Busy output prevents duplicate printing and cancellation.
+- Visually inspected representative artwork at CSS viewports 1366x768
+  English/light, 1920x1080 French/dark, 1600x900 Arabic/light and 1366x768
+  Arabic/dark. Arabic checks used low-end mode. No horizontal overflow occurred;
+  filenames and dimensions remain readable, output pages retain their white
+  paper, and source/preview controls remain separate. Keyboard arrows and pointer
+  dragging moved crop corners. Four rotations preserve a usable crop. Removing
+  the back disables Print; selecting the same source for both sides enables it.
+  A mocked canceled-back response retained disabled submission controls and
+  finished cleanly after exactly two prepared pages.
+- Real Electron worker/IPC checks loaded two PNGs for A4 color and a two-page
+  PDF for A3 grayscale, then ran Windows driver validation without hardware
+  printing. Both produced exactly two pages with the correct paper, orientation
+  and color settings. Raster scans found zero chromatic pixels in grayscale
+  output and matching front/back centers within half a pixel. A real Microsoft
+  Print to PDF proof exercised physical-page drawing: both cards measured about
+  90.09 mm including raster antialiasing, with center offsets below 0.05 mm.
+- Fast Print geometry/crop/menu/batch tests, print API, language, appearance and
+  Windows driver profile suites passed. Storybook, the production build,
+  typecheck and changed-file formatting passed. Final checks were repeated after
+  concurrent changes in the shared checkout settled.
+- Acceptance review: ToolHeader, shared Button/ActionButton/PrintButton, tokens
+  and translations are reused. Print is the only primary action. Import, mask
+  editing and output each have one location. No explanatory heading subtitles
+  or duplicate PDF import action were introduced. Native reinsertion prompts
+  receive the renderer's English/French/Arabic copy and Arabic reading direction.
+- Pending: physical automatic duplex alignment, manual reinsertion/cancel flow,
+  vendor saved-stock/finishing behavior, customer-photo detection quality,
+  released workshop build and subscriber publishing. These changes are local.
+
+Artifacts: `output/playwright/fast-id-1366-en-light.png`,
+`output/playwright/fast-id-1920-fr-dark.png`,
+`output/playwright/fast-id-1600-ar-light.png`,
+`output/playwright/fast-id-1366-ar-dark.png`,
+`output/playwright/fast-id-native-a4.png`,
+`output/playwright/fast-id-proof/native-A4-color/`,
+`output/playwright/fast-id-proof/native-A3-mono/`, and
+`output/playwright/fast-id-proof/actual-size-proof.pdf`.
+
+## Smart Polaroid orientation and face framing - 2026-10-17
+
+- Added local YuNet face/landmark detection at 640x640 in four quarter-turn
+  orientations. The original orientation wins ambiguous cases. Clear upright
+  face evidence can rotate 90, 180 or 270 degrees. Crop placement protects all
+  detected face boxes with hair/forehead padding. Groups too wide for a cover
+  crop use full-photo fitting with white space inside the unchanged placeholder.
+  With no usable detections or an analysis failure, the complete source is kept.
+  Detection cannot guarantee finding every small or obscured face.
+- Model, matching ONNX Runtime WASM and loader are bundled; no photo uploads or
+  runtime model downloads are required. One inference thread and one session
+  per batch keep analysis bounded. Session, tensors and temporary canvases are
+  released. Model provenance/hash/license are documented next to the model;
+  its MIT license is included in packaged resources.
+- Retested all 15 original JPGs from `Downloads/Compressed/num216p` after the
+  implementation. Both presets produced two sheets. The same two sideways
+  photos rotated correctly: image 3 by 270 degrees and image 7 by 90 degrees.
+  The other 13 kept their orientation. Five photos used full-photo fitting;
+  ten used face-protected cover crops. All detected faces were retained, all
+  15 placements matched independent rotated/framed source thumbnails, and
+  unused final slots remained white. All original SHA-256 hashes are unchanged.
+- Final sampled main-PC runs: 8 PIC took 6.8 seconds (763.5 MiB peak working set,
+  948.8 MiB private memory); 9 PIC took 6.4 seconds (812.4 MiB working set,
+  664.1 MiB private memory). These include the worker process tree and Windows
+  driver validation, not physical printing or workshop performance.
+- Fault injection removed only the model from the isolated test build. Both
+  presets still produced two valid sheets with all 15 complete photos, no
+  speculative rotations and white unused slots. The model was restored before
+  the final successful smart-framing runs.
+- Geometry/rotation-confidence, protected-headroom, wide-group, no-face and
+  decode regressions, Fast Print tests, typecheck, formatting and isolated
+  development builds passed. All four smart sheet PNGs were visually inspected.
+  Generated and rendered two-page Microsoft Print to PDF proofs. No hardware
+  print jobs were sent and no original photo was edited.
+- No interface layout, action grouping or styling was changed. Previous native
+  UI matrix, packaged/offline installer, workshop driver and physical output
+  checks remain pending. Changes are local and have not been published.
+- AGENTS.md now preserves the user's standing instruction to use this same
+  folder for future Polaroid acceptance checks.
+
+Artifacts: `output/fast-print-num216p-smart/results.json`, per-mode framing
+metadata and four PNG sheets; `output/fast-print-num216p-smart-fallback/`;
+`output/pdf/num216p-smart-8-pic.pdf` and
+`output/pdf/num216p-smart-9-pic.pdf`.
+
+## Sidebar tool file drops - 2026-10-17
+
+- Production-tool navigation icons accept compatible artwork in collapsed and
+  expanded navigation. A token-based inset ring and translated tooltip identify
+  the drop target and accepted formats. Existing import buttons remain the
+  keyboard-accessible alternative; no headings or duplicate buttons were added.
+- Card accepts one AI/EPS/PDF/PNG/JPG front design; Sequential accepts one
+  PDF/PNG/JPG front design. Back artwork retains its existing import action.
+  Booklet accepts PDF/PNG/JPG batches (including mixed batches); Cutter accepts
+  AI/PDF/SVG/PNG/JPG. Hardcover retains its existing PDF and named front/back
+  pair routing. Existing importers retain size/content checks and error handling.
+- Browser checks passed for all five tools with empty, hover and loaded states:
+  1366x768 English/light, 1920x1080 French/dark, 1366x768 Arabic/dark/low-end,
+  and 1600x900 Arabic/light/low-end. Checked expanded and collapsed navigation,
+  tooltip and target bounds, no page overflow, keyboard focus and real fixture
+  imports. Representative screenshots were visually inspected; the expanded
+  hover ring was moved inside the target to avoid clipping.
+- Behavior checks passed for mixed Booklet imports, same-tool append, immediate
+  duplicate drops, busy-drop blocking, canceling an unsaved-work prompt, normal
+  keyboard navigation, incompatible-file rejection without navigation, locked
+  subscription tools, and dropping an image onto Card from the Hardcover page
+  without its global PDF handler intercepting the drop.
+- Shared drop validation is included in test:projects. Typecheck, changed-file
+  Prettier checks, project, Card, Booklet, Hardcover, Cutter, Sequential and i18n
+  suites passed. Storybook builds with interactive enabled/error and busy drop
+  examples. Existing Fast Print work was preserved.
+- Acceptance: shared tokens/components and semantic navigation retained; one
+  primary action and existing source/back import placement retained; no heading
+  subtitles added; translated hints and errors, focus, busy state and validation
+  checked. Existing production imports/measurements/export regressions passed.
+- Pending: native Windows Explorer-to-Electron drag-and-drop verification. Browser
+  QA used a local development renderer with a test account/license bridge and
+  actual PNG/PDF fixtures dispatched through DataTransfer. No subscriber release,
+  workshop-PC changes or hardware printing were performed.
+
+Artifacts: `output/playwright/sidebar-drop-matrix.log`,
+`output/playwright/sidebar-drop-edges.log`, `sidebar-matrix-*.png`,
+`sidebar-drop-*-hover.png`, `sidebar-drop-*-loaded.png`,
+`sidebar-drop-cutter-tests.log` and `sidebar-drop-storybook.log` in that directory.
+
+## Polaroid group-photo rotation for frame coverage - 2026-10-17
+
+- User preference: a wide group can print sideways when a 90-degree turn fills
+  the Polaroid photo area better. After upright-face analysis, compare protected
+  framing in that orientation against an additional clockwise quarter turn.
+  Select the turn only when photo-area coverage improves by over ten percentage
+  points. Both face boxes and forehead/hair padding rotate together. Existing
+  no-face/error fallback and single-subject orientation remain unchanged.
+- Retested all 15 originals in `Downloads/Compressed/num216p` with both presets.
+  Five group photos gained the additional quarter turn. Three now fill the
+  photo area completely; two very wide groups retain full-photo fitting with
+  less white space. All detected face boxes remain inside the crop. The other
+  ten placements retained their previous framing. Both presets still produce
+  two sheets with correct final white slots, and source hashes are unchanged.
+- 8 PIC took 7.1 seconds; 9 PIC took 6.8 seconds on the main PC. All placements
+  matched independently rotated/framed source thumbnails (mean RGB differences
+  below 1.8/255). Working-set peaks were approximately 751 and 843 MiB. No
+  hardware printing was performed.
+- Added regressions for improved-area quarter turns, fully covered rotated
+  groups, groups requiring full-photo fitting, unchanged portraits/single
+  subjects/no-face fallback, and rotated forehead protection. Fast Print suites,
+  typecheck and the isolated development build passed. Inspected both presets'
+  output and generated Microsoft Print to PDF proofs. No application controls,
+  styles or layout were changed; existing pending native/workshop checks remain.
+
+Artifacts: `output/fast-print-num216p-rotated/`;
+`output/pdf/num216p-rotated-8-pic.pdf` and
+`output/pdf/num216p-rotated-9-pic.pdf`.
+
+Follow-up: Chromium CDP file-drag events using real filesystem PNG/PDF paths
+were dropped at the center of each sidebar SVG icon while Dashboard was open.
+All five tools navigated and loaded their artwork automatically. This validates
+icon hit-testing and browser-native file delivery; the Windows Explorer-to-Electron
+OS gesture remains pending. Artifact: `output/playwright/sidebar-icon-native-drop.log`.
+
+## Card Montage two-file sidebar drop fix - 2026-10-17
+
+- Removed the Card-only single-file restriction. One file retains its existing
+  import behavior; two files load as front then back in dropped-file order.
+  More than two files are rejected with translated guidance. Sequential retains
+  its existing one-file restriction. The Card icon tooltip now explains pairs.
+- Both designs finish loading before the draft is replaced. A successful pair
+  enables back output and selects both previews. A corrupt second file preserves
+  the previous front, back and settings. No import buttons or headings were added.
+- Chromium native file-drag events dropped a distinct PNG/JPG pair onto the Card
+  SVG icon from Dashboard at 1366x768 English/light, 1920x1080 French/dark,
+  1366x768 Arabic/dark/low-end and 1600x900 Arabic/light/low-end. Verified both
+  previews, different artwork, back-output selection, two-page PDF export and
+  preservation of both sides after a corrupt back import. Screenshots were
+  visually inspected; no page overflow occurred. Single-PDF page-2 assignment
+  also passed. A development hot reload interrupted one repeated QA run; the
+  complete rerun after the reload finished passed.
+- Typecheck, project/drop-validation, Card and i18n suites, changed-file formatting
+  and Storybook build passed. The shared enabled/busy drop stories include a
+  two-file front/back fixture. Existing shared components, tokens, actions and
+  keyboard access remain in use; no production dimensions or artwork files were
+  changed. Native Windows Explorer-to-Electron gesture verification remains
+  pending, as recorded above. No hardware printing or release was performed.
+
+Artifacts: `output/playwright/card-pair-drop/results.log`, `storybook.log`,
+PNG/JPG QA fixtures and four layout screenshots in the same directory.
+
+## Direct printer > Polaroid menu - 2026-10-17
+
+- Moved the two Polaroid commands to a single submenu directly under each
+  A4/color-capable printer: Fast Print > printer > Polaroid > 8 PIC / 9 PIC.
+  They use A4 and color automatically and inherit the marked default A4
+  bypass/face-up profile. Removed the duplicate commands from paper/color and
+  saved-stock branches. Unsupported monochrome/A3-only printers do not offer
+  these color A4 presets. Updated both live Electron choices and the registry
+  menu generator, saved-stock verification expectations and usage instructions.
+- Menu regressions passed for path/order, unique command placement, A4/color
+  defaults, unsupported devices and saved default-profile inheritance.
+  Typecheck, formatting, PowerShell parsing and the isolated development build
+  passed. The native worker's menu-verification mode confirmed the actual path
+  for Microsoft Print to PDF. This reads menu data without hardware printing.
+- Selected the two presets from that actual generated menu and retested all 15
+  unchanged photos in `Downloads/Compressed/num216p`. Both produced two sheets,
+  five group-area quarter turns, correct white final slots and protected face
+  crops. Independent thumbnail comparisons and original hashes passed; sample
+  output sheets were visually inspected. Runtime was 6.8 seconds for 8 PIC and
+  6.6 seconds for 9 PIC on the main PC.
+- Full `npm run test:fast-print` currently stops at an unrelated ID-card geometry
+  assertion in `src/shared/fast-print-id.test.ts:22`; its width/height behavior
+  is outside this menu change. Preset, menu and batch tests before that point
+  passed. Direct Polaroid geometry/decode tests also passed separately.
+- Acceptance: one visible home for each Polaroid command, existing native menu
+  semantics and action labels retained, no added buttons or explanatory
+  subtitles. Actual native-menu checks at 1366x768/1920x1080, keyboard navigation,
+  theme/RTL and low-end behavior remain pending along with workshop/release
+  checks. Changes remain local and unpublished.
+
+Artifacts: `output/fast-print-num216p-menu/menu.json`, `results.json` and
+per-mode sheet/framing results.
+
+## ID photo position, straightening and real-picture checks - 2026-10-18
+
+- ID detection now searches the complete photo for an oriented card outline.
+  Selected edges determine the straightening angle before the card is measured
+  and centered at 90 mm wide. The angle field supports -180° to 180°, including
+  keyboard adjustment, with an independent override per side and Auto straighten
+  to restore the edge-based angle. Camera perspective and missing corners remain
+  approximate. The existing Rotate, crop handles and Reset crop remain available.
+- The standard real-picture folder is recorded in AGENTS.md as
+  `C:\Users\Maher\Downloads\ID TEST`. Both current originals are used: one GIF
+  and one JPEG. Added GIF acceptance to the ID picker, validated Explorer
+  selection, registration filters and native compatibility handler; GIF decoding
+  uses the first frame. Source files remain unchanged.
+- `npm run test:fast-print:id-real` runs an isolated local Electron canvas
+  verifier against every picture in that folder. It saves local proofs and
+  SHA-256 hashes, with approximate visible-edge annotations for the two initial
+  pictures. Original, off-center +45° and off-center -45° cases yield six cases
+  and twelve color/grayscale proofs. The annotated card coverage is at least
+  99.9%, with 92-96% mask precision (some surrounding background is retained).
+  Measured ink bounds are 89.75-90.09 mm wide; offsets from sheet center are
+  at most 0.09 mm. Grayscale proofs contain zero chromatic pixels. Every crop,
+  color and grayscale result was visually inspected in two review grids.
+- Original-photo angles were about +2.7° and -1.0°. The augmented ±45° cases
+  were detected at approximately ±44.96° and rendered straight. Pure geometry
+  regressions additionally cover off-center placements from -70° to +89°,
+  different sheet sizes, manual angles, and a card clipped at the photo edge.
+- Real-data UI checks passed at 1366x768 English/light, 1920x1080 French/dark,
+  1600x900 Arabic/light/low-end and 1366x768 Arabic/dark/low-end. No horizontal
+  overflow occurred. Verified GIF import through the file input; changing 42.5°
+  to 42.6° with ArrowUp, independent side angles, and Auto straighten restoring
+  the detected angle. Shared inputs/buttons, selected semantics, translated
+  field help and the single primary Print action remain in use.
+- Fast Print, print API and i18n suites, the real-picture verifier, native
+  Explorer DLL compilation, whole-app typecheck, production build and changed-file
+  formatting passed. Build log: `.codex-id-real-build.log` (local, ignored).
+- Pending: workshop hardware duplex registration and reinsertion checks,
+  unusual/nonuniform backgrounds beyond this folder, and subscriber publishing.
+  No hardware print jobs were sent. These changes remain local.
+
+Artifacts: `output/fast-print-id/results.json`, the matching crop/color/mono
+PNGs and `review-1.png` / `review-2.png`; real-data UI screenshots
+`output/playwright/fast-id-real-1366-en-light.png`,
+`output/playwright/fast-id-real-1920-fr-dark.png`,
+`output/playwright/fast-id-real-1600-ar-light.png`, and
+`output/playwright/fast-id-real-1366-ar-dark.png`.
+
+## In-app printer and driver preferences - 2026-10-18
+
+- Added Settings > Printing settings using shared Button/Input/Select/Field and
+  AlertDialog patterns. It manages the app default printer, reusable per-printer
+  driver presets, 24 print-option assignments, and per-app-tool preferred
+  printers. Native capture opens the manufacturer's own driver settings dialog;
+  profiles retain the full encrypted DEVMODE, paper dimensions, color, duplex,
+  tray, copies and vendor-private settings. The app never sets Windows printer
+  defaults. Deletion confirms and clears the preset's assignments.
+- Preferences persist atomically with backup in the shared local Fast Print
+  folder. Fast Print resolves separate settings for 8 PIC, 9 PIC, ID/color/paper
+  and n-up choices, while explicit saved-stock selections retain precedence.
+  Preferred printers sort first. Invalid cross-printer/paper assignments are
+  rejected, and changed drivers require recapture. Existing profiles remain
+  compatible; app profiles can also use driver-supported non-A4/A3 media.
+- Assigned app-tool driver presets are applied through the prepared-sheet print
+  worker rather than the Chromium dialog, preserving private driver options per
+  job. PDF pages retain actual physical dimensions and mixed orientations;
+  mismatched PDF/profile paper fails before submission. Explicit copies override
+  the saved driver count. The raster path is up to 300 DPI with a 6000 px edge
+  cap; exported PDFs remain untouched. With no assigned preset the existing
+  dialog continues, preselecting the preferred device.
+- Unit checks passed for validation, independent per-printer/option assignments,
+  explicit-stock precedence, disk persistence/restart loading, backup and corrupt
+  files. Existing native tests passed for full-buffer encryption/restore,
+  driver/printer mismatch and unchanged Windows defaults; additional A5/copy
+  metadata checks passed. Typecheck, print/Fast Print/i18n suites, production
+  build and Storybook production build passed.
+- Isolated Electron integration used the real preload/IPC API and Microsoft Print
+  to PDF: enumerated captured profiles without exposing encrypted bytes, saved
+  and reloaded assignments, rejected wrong-paper selection, deleted a preset
+  without dangling links, applied a saved driver profile to a three-page mixed
+  portrait/landscape A4 document, and validated an explicit three-copy override.
+  Driver proof PDFs retained three pages at the correct physical A4 orientation.
+  All test preferences, profiles and user data were isolated from user settings.
+- Playwright checks passed at 1366x768 English/light, 1920x1080 French/dark,
+  1600x900 Arabic/light and 1366x768 Arabic/dark with low-end appearance rules.
+  Inspected captured layouts, no horizontal overflow. Exercised independent
+  printer/8-versus-9 assignments, per-tool printer switching, paper filtering,
+  delete-cancel focus restoration, keyboard Select/Escape, and empty/loading/error
+  states. The production Storybook artifact was used for the final matrix.
+  A Windows dev-watch EBUSY issue occurred on transient test files; generated
+  artifacts were checked with a read-only static server instead. No workaround
+  or unrelated watcher configuration change is included.
+- Retested all 15 original photos in num216p through both actual generated menu
+  choices. Each produced two sheets with five group-area rotations, protected
+  faces and correct white final slots. Independent thumbnail comparisons and
+  source hashes passed; final runtime was about 6.8 / 8.5 seconds on the main PC.
+  A separate native ValidateOnly check also confirmed a saved Fast Print copy
+  preference of two copies is retained when no explicit copy override is supplied.
+- Acceptance: one primary capture action; defaults/assignments save on selection.
+  Shared controls, translated labels, concise headings and semantic status/errors
+  are retained. The Settings header subtitle was removed. The native driver
+  dialog is intentionally vendor-owned. No duplicate Polaroid command or file
+  import/export/print action was added.
+- Pending: authenticated native Settings view (the isolated app's UI remained on
+  sign-in, although preload/IPC integration passed), actual Konica/Epson capture
+  dialog/finishing, physical duplex and tray output, low-memory workshop runtime,
+  packaged installer and subscriber release. No hardware jobs were submitted;
+  existing projects, artwork, source photos and user printer preferences were
+  preserved. Changes are local and unpublished.
+
+Artifacts: `output/playwright/printer-settings-*.png`,
+`output/printer-settings/backend-result.json`, `app-print/driver-settings.json`,
+`output/pdf/printer-settings-mixed-a4.pdf`,
+`output/fast-print-num216p-menu/results.json` and matching photo sheets.

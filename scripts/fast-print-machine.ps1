@@ -38,7 +38,7 @@ if ($Action -eq 'Install') {
   Set-Value $path 'Icon' ($Executable+',0')
   Set-Value $path 'Position' 'Top'
   Set-Value $path 'MultiSelectModel' 'Player'
-  Set-Value $path 'AppliesTo' 'System.FileExtension:=.pdf OR System.FileExtension:=.png OR System.FileExtension:=.jpg OR System.FileExtension:=.jpeg'
+  Set-Value $path 'AppliesTo' 'System.FileExtension:=.pdf OR System.FileExtension:=.png OR System.FileExtension:=.jpg OR System.FileExtension:=.jpeg OR System.FileExtension:=.gif'
   Set-Value "$path\command" '' ($command+' --fast-print-menu -- "%1"')
   Set-Value $path 'BatchCommand' ($command+' --fast-print-batch')
   Set-Value "$path\DropTarget" 'CLSID' $selectionId

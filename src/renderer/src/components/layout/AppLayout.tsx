@@ -5,12 +5,15 @@ import { CommandCenter } from '@/components/command-center/CommandCenter'
 import { useEffect, useRef, useState } from 'react'
 import type { AppRoute, PageMeta } from '@/types/navigation'
 import type { AccountProfile } from '../../../../shared/account-types'
+import type { FileDropTool } from '@/tools/shared/toolFileDrop'
 
 interface AppLayoutProps {
   activeRoute: AppRoute
   pageMeta: PageMeta
   children: React.ReactNode
   onNavigate: (route: AppRoute) => void
+  onDropToolFiles?: (route: FileDropTool, files: File[]) => void
+  fileDropBusy?: boolean
   isDeveloperMode?: boolean
   account?: AccountProfile | null
   onSignOut: () => void
@@ -24,6 +27,8 @@ export function AppLayout({
   pageMeta,
   children,
   onNavigate,
+  onDropToolFiles,
+  fileDropBusy,
   account,
   onSignOut,
   onOpenProject,
@@ -68,7 +73,12 @@ export function AppLayout({
         >
           {t('Skip to workspace')}
         </a>
-        <Sidebar activeRoute={activeRoute} onNavigate={onNavigate} />
+        <Sidebar
+          activeRoute={activeRoute}
+          onNavigate={onNavigate}
+          onDropToolFiles={onDropToolFiles}
+          fileDropBusy={fileDropBusy}
+        />
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <TopBar
             isDashboard={activeRoute === 'dashboard'}

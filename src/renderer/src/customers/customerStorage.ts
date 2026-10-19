@@ -25,7 +25,16 @@ export function writeStoredCustomers(customers: ShopCustomer[]): void {
 
 export function upsertStoredCustomer(customer: ShopCustomer): ShopCustomer[] {
   const current = readStoredCustomers()
-  const next = [customer, ...current.filter((item) => item.id !== customer.id)]
+  const next = normalizeStoredCustomers([
+    customer,
+    ...current.filter((item) => item.id !== customer.id)
+  ])
+  writeStoredCustomers(next)
+  return next
+}
+
+export function deleteStoredCustomer(customerId: string): ShopCustomer[] {
+  const next = readStoredCustomers().filter((customer) => customer.id !== customerId)
   writeStoredCustomers(next)
   return next
 }

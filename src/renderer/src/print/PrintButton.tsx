@@ -9,7 +9,8 @@ export function PrintButton({
   isBusy,
   onPrint,
   compact = false,
-  variant = 'default'
+  variant = 'default',
+  mode = 'dialog'
 }: {
   label: string
   disabled?: boolean
@@ -17,14 +18,19 @@ export function PrintButton({
   onPrint: () => void
   compact?: boolean
   variant?: ButtonProps['variant']
+  mode?: 'dialog' | 'fast-print'
 }): JSX.Element {
   const { t } = useLanguage()
 
-  const isAvailable = Boolean(window.printerApp?.printPdf)
+  const isAvailable =
+    mode === 'fast-print' ? Boolean(window.fastPrint?.submit) : Boolean(window.printerApp?.printPdf)
   const descriptionId = useId()
-  const description = isAvailable
-    ? 'Printing opens your printer driver dialog. Check paper size, duplex, and scale before printing.'
-    : 'Printing is available in the desktop app. Export a PDF to print from this browser.'
+  const description =
+    mode === 'fast-print'
+      ? 'Prints with the selected Fast Print settings.'
+      : isAvailable
+        ? 'Uses saved printer preferences or opens the printer dialog.'
+        : 'Printing is available in the desktop app. Export a PDF to print from this browser.'
   return (
     <div
       className={

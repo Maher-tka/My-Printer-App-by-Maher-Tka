@@ -3,7 +3,7 @@ import {
   CUSTOMER_STORAGE_EVENT,
   readStoredCustomers,
   upsertStoredCustomer,
-  writeStoredCustomers
+  deleteStoredCustomer
 } from './customerStorage'
 import type { ShopCustomer } from './customerTypes'
 
@@ -30,11 +30,7 @@ export function useCustomerStore(): {
   }, [])
 
   const deleteCustomer = useCallback((customerId: string): void => {
-    setCustomers((current) => {
-      const next = current.filter((customer) => customer.id !== customerId)
-      writeStoredCustomers(next)
-      return next
-    })
+    setCustomers(deleteStoredCustomer(customerId))
   }, [])
 
   const refreshCustomers = useCallback((): void => setCustomers(readStoredCustomers()), [])

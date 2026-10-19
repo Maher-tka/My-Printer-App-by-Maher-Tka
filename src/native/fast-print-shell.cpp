@@ -124,7 +124,7 @@ public:
     if (FAILED(selectedFile(items, file))) return S_OK;
     std::wstring extension = PathFindExtensionW(file.c_str());
     std::transform(extension.begin(), extension.end(), extension.begin(), towlower);
-    if (extension == L".pdf" || extension == L".png" || extension == L".jpg" || extension == L".jpeg") *state = ECS_ENABLED;
+    if (extension == L".pdf" || extension == L".png" || extension == L".jpg" || extension == L".jpeg" || extension == L".gif") *state = ECS_ENABLED;
     return S_OK;
   }
   HRESULT STDMETHODCALLTYPE Invoke(IShellItemArray* items, IBindCtx*) override {
@@ -224,7 +224,7 @@ public:
     if ((flags & CMF_DEFAULTONLY) || file.empty()) return MAKE_HRESULT(SEVERITY_SUCCESS, 0, 0);
     std::wstring ext = PathFindExtensionW(file.c_str());
     std::transform(ext.begin(), ext.end(), ext.begin(), towlower);
-    if (ext != L".pdf" && ext != L".png" && ext != L".jpg" && ext != L".jpeg") return MAKE_HRESULT(SEVERITY_SUCCESS, 0, 0);
+    if (ext != L".pdf" && ext != L".png" && ext != L".jpg" && ext != L".jpeg" && ext != L".gif") return MAKE_HRESULT(SEVERITY_SUCCESS, 0, 0);
     actions.clear();
     HMENU submenu = CreatePopupMenu();
     HRESULT hr = append(submenu, root, first, last, 0); diagnostic("Build menu", hr);

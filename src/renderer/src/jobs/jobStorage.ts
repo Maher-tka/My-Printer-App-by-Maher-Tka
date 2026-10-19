@@ -1,4 +1,5 @@
 import type { PrinterJob } from './jobTypes'
+import { hasValidOptionalJobFields } from '../../../shared/job-validation'
 
 export const JOB_STORAGE_KEY = 'my-printer-app.jobs.v1'
 export const JOB_STORAGE_EVENT = 'my-printer-app:jobs-changed'
@@ -33,7 +34,13 @@ export function writeStoredJobs(jobs: PrinterJob[]): void {
 
 export function upsertStoredJob(job: PrinterJob): PrinterJob[] {
   const current = readStoredJobs()
-  const next = [job, ...current.filter((item) => item.id !== job.id)]
+  const next = normalizeStoredJobs([job, ...current.filter((item) => item.id !== job.id)])
+  writeStoredJobs(next)
+  return next
+}
+
+export function deleteStoredJob(jobId: string): PrinterJob[] {
+  const next = readStoredJobs().filter((job) => job.id !== jobId)
   writeStoredJobs(next)
   return next
 }
@@ -43,7 +50,8 @@ export function normalizeStoredJobs(value: unknown): PrinterJob[] {
 }
 
 export function isPrinterJob(value: unknown): value is PrinterJob {
-  if (!value || typeof value !== 'object') return false
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  if (!hasValidOptionalJobFields(value as Record<string, unknown>)) return false
   const item = value as Partial<PrinterJob>
   const quote = item.quote
   return Boolean(

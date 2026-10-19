@@ -4,6 +4,32 @@ When the user asks to start or restart this app, use development/test mode with 
 
 The existing `.env.development` enables `VITE_DEV_UNLOCK_ALL=true` for the non-packaged development build. Clear an inherited `ELECTRON_RUN_AS_NODE` environment variable before launching Electron.
 
+# ID print test photos
+
+When changing ID detection, cropping, straightening, sizing or output, always test
+all ID pictures in `C:\Users\Maher\Downloads\ID TEST`. Preserve the originals.
+Check the original pictures and off-center/approximately 45-degree placements,
+inspect the cropped and printed proofs, and verify 90 mm width, proportional
+height and matching front/back centers without sending hardware print jobs.
+If the folder is unavailable, report that real-photo validation is pending.
+
+# Polaroid test photos
+
+When changing Polaroid rotation, cropping, framing, or batch output, test both
+8 PIC and 9 PIC with all photos in
+`C:\Users\Maher\Downloads\Compressed\num216p` after implementation. Keep the
+original photos unchanged. Verify every photo is included, rotation/crop results,
+multi-sheet pagination and blank final slots; inspect generated proofs without
+sending unsolicited hardware print jobs. If the folder is unavailable, report
+that real-photo validation is pending.
+
+For group photos, prefer a 90-degree print rotation when it fills the Polaroid
+photo area better while keeping faces visible. Sideways group placement is
+intentional when it improves the printed result.
+
+Keep Polaroid directly under the selected printer in Fast Print, with 8 PIC
+and 9 PIC choices using A4 and color automatically.
+
 # Subscriber update preference
 
 When the user says to push an update, they mean publish a new stable app release for all subscribers, not only push Git commits. Bump the version in `package.json` and `package-lock.json`, add release notes, run the release checks, and push the matching version tag to trigger `.github/workflows/release.yml`. Verify the workflow succeeds and the published release includes the installer and automatic-update metadata before reporting completion.

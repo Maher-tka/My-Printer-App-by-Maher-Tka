@@ -24,6 +24,11 @@ assert.deepEqual(parseFastPrintSelectionManifest(JSON.stringify({ version: 1, fi
   paths[4]
 ])
 assert.equal(countBatchSheets([5, 1, 3], 2), 6, 'Each document starts on a fresh sheet')
+assert.deepEqual(
+  normalizeFastPrintSelection(['C:\\Jobs\\id.GIF', 'C:/Jobs/id.gif']),
+  ['C:\\Jobs\\id.GIF'],
+  'Accept GIF ID pictures and deduplicate paths'
+)
 assert.equal(countBatchSheets([1, 1, 1], 4), 3, 'Separate images are separate documents')
 assert.throws(() => normalizeFastPrintSelection([]), /Select/)
 assert.throws(

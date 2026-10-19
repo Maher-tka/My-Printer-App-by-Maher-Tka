@@ -10,6 +10,7 @@ export function ToolHeader({
   title,
   projectName,
   onBack,
+  backDisabled = false,
   backLabel = 'All tools',
   actions,
   exportPdf,
@@ -19,6 +20,7 @@ export function ToolHeader({
   title: string
   projectName?: string
   onBack: () => void
+  backDisabled?: boolean
   backLabel?: string
   actions?: ReactNode
   exportPdf?: { onExport: () => void; disabled?: boolean; isBusy?: boolean }
@@ -37,7 +39,7 @@ export function ToolHeader({
       data-tool-header
     >
       <div className="min-w-0 sm:row-span-2" dir="auto">
-        <Button type="button" variant="ghost" size="sm" onClick={onBack}>
+        <Button type="button" variant="ghost" size="sm" onClick={onBack} disabled={backDisabled}>
           <ArrowLeft aria-hidden="true" />
           {t(backLabel)}
         </Button>

@@ -7,12 +7,17 @@ export interface FastPrintPreset {
   profileName?: string
   landscape?: boolean
   duplex?: boolean
+  mode?: 'id-card' | 'polaroid-8' | 'polaroid-9' | 'document'
+  paperWidthMm?: number
+  paperHeightMm?: number
 }
 
 export interface FastPrintBatchSource {
   name: string
   files: Array<{ name: string; extension: string }>
   preset: FastPrintPreset
+  canDuplex?: boolean
+  canColor?: boolean
 }
 
 export interface FastPrintSource {
@@ -20,6 +25,12 @@ export interface FastPrintSource {
   extension: string
   bytes: Uint8Array
   preset: FastPrintPreset
+}
+
+export interface FastPrintSubmitOptions {
+  color: boolean
+  duplex: boolean
+  manualDuplexPrompt?: { message: string; title: string; rtl: boolean }
 }
 
 export function validateFastPrintPreset(value: unknown): FastPrintPreset {
@@ -34,7 +45,13 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     ![1, 2, 4].includes(p.pagesPerSheet ?? 0) ||
     (p.profileId !== undefined &&
       (typeof p.profileId !== 'string' || !/^[a-f0-9]{32}$/.test(p.profileId))) ||
-    (p.landscape !== undefined && typeof p.landscape !== 'boolean')
+    (p.landscape !== undefined && typeof p.landscape !== 'boolean') ||
+    (p.duplex !== undefined && typeof p.duplex !== 'boolean') ||
+    (p.mode !== undefined &&
+      !['id-card', 'polaroid-8', 'polaroid-9', 'document'].includes(p.mode)) ||
+    (p.mode === 'document' && (!p.profileId || p.pagesPerSheet !== 1)) ||
+    (p.mode?.startsWith('polaroid-') && (p.paper !== 'A4' || p.pagesPerSheet !== 1)) ||
+    (p.mode === 'id-card' && p.pagesPerSheet !== 1)
   ) {
     throw new Error('Invalid Fast Print preset. Refresh the Explorer menu and try again.')
   }
@@ -44,7 +61,9 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     color: p.color,
     pagesPerSheet: p.pagesPerSheet!,
     ...(p.profileId ? { profileId: p.profileId } : {}),
-    ...(p.landscape !== undefined ? { landscape: p.landscape } : {})
+    ...(p.landscape !== undefined ? { landscape: p.landscape } : {}),
+    ...(p.duplex !== undefined ? { duplex: p.duplex } : {}),
+    ...(p.mode ? { mode: p.mode } : {})
   }
 }
 

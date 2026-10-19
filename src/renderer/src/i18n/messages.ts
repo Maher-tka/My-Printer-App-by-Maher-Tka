@@ -1,5 +1,146 @@
+import { printerPreferencesMessages } from './printerPreferencesMessages'
 // App-owned English copy is the stable key. Missing translations fall back to English.
 export const messages: Record<string, { fr: string; ar: string }> = {
+  ...printerPreferencesMessages,
+  'Choose PDF, PNG, JPEG or GIF files.': {
+    fr: 'Choisissez des fichiers PDF, PNG, JPEG ou GIF.',
+    ar: 'اختر ملفات PDF أو PNG أو JPEG أو GIF.'
+  },
+  'Card angle (°)': { fr: 'Angle de la carte (°)', ar: 'زاوية البطاقة (°)' },
+  'Auto straighten': { fr: 'Redresser automatiquement', ar: 'تسوية تلقائية' },
+  'Match the card’s tilt. The selected card is straightened and centered for printing.': {
+    fr: 'Indiquez l’inclinaison de la carte. La carte sélectionnée est redressée et centrée pour l’impression.',
+    ar: 'اضبط زاوية ميل البطاقة. تُسوّى البطاقة المحددة وتُوسّط للطباعة.'
+  },
+  'Choose a card angle between -180° and 180°.': {
+    fr: 'Choisissez un angle entre -180° et 180°.',
+    ar: 'اختر زاوية للبطاقة بين ‎-180° و180°.'
+  },
+  'Drop one file, or two files for the front and back.': {
+    fr: 'Déposez un fichier, ou deux fichiers pour le recto et le verso.',
+    ar: 'أفلت ملفًا واحدًا، أو ملفين للوجه والظهر.'
+  },
+  'Loaded front and back designs.': {
+    fr: 'Les visuels du recto et du verso sont chargés.',
+    ar: 'تم تحميل تصميمَي الوجه والظهر.'
+  },
+  'Wait for the current import to finish.': {
+    fr: 'Attendez la fin de l’import en cours.',
+    ar: 'انتظر حتى ينتهي الاستيراد الحالي.'
+  },
+  'Drop files to import': { fr: 'Déposez des fichiers à importer', ar: 'أفلت الملفات لاستيرادها' },
+  'Supported files:': { fr: 'Fichiers acceptés :', ar: 'الملفات المدعومة:' },
+  'Drop files, not folders or links.': {
+    fr: 'Déposez des fichiers, pas des dossiers ni des liens.',
+    ar: 'أفلت ملفات وليس مجلدات أو روابط.'
+  },
+  'These files are not supported by this tool.': {
+    fr: 'Ces fichiers ne sont pas acceptés par cet outil.',
+    ar: 'هذه الملفات غير مدعومة في هذه الأداة.'
+  },
+  'One or more dropped files are empty.': {
+    fr: 'Un ou plusieurs fichiers déposés sont vides.',
+    ar: 'ملف واحد أو أكثر من الملفات فارغ.'
+  },
+  'Drop one front design at a time. Use the back import to add a separate back.': {
+    fr: 'Déposez un seul recto à la fois. Utilisez l’import du verso pour ajouter un verso séparé.',
+    ar: 'أفلت تصميم وجه واحد في كل مرة. استخدم استيراد الظهر لإضافة تصميم خلفي منفصل.'
+  },
+  'Open an available tool before importing files.': {
+    fr: 'Ouvrez un outil disponible avant d’importer des fichiers.',
+    ar: 'افتح أداة متاحة قبل استيراد الملفات.'
+  },
+  'ID card — 9 cm': { fr: 'Carte d’identité — 9 cm', ar: 'بطاقة هوية — 9 سم' },
+  'Fast Print — print the back': {
+    fr: 'Impression rapide — imprimer le verso',
+    ar: 'الطباعة السريعة — طباعة الظهر'
+  },
+  'Wait for the front side to finish printing. Reinsert the same sheet using your printer’s manual-duplex feed direction, then click OK to print the back. Cancel leaves the back unprinted.':
+    {
+      fr: 'Attendez la fin de l’impression du recto. Réinsérez la même feuille dans le sens prévu pour le recto verso manuel de votre imprimante, puis cliquez sur OK pour imprimer le verso. Annuler laisse le verso non imprimé.',
+      ar: 'انتظر حتى تنتهي طباعة الوجه. أعد إدخال الورقة نفسها باتجاه التغذية المناسب للطباعة اليدوية على الوجهين في طابعتك، ثم اضغط موافق لطباعة الظهر. يؤدي الإلغاء إلى ترك الظهر دون طباعة.'
+    },
+  'Add images or PDF': { fr: 'Ajouter des images ou un PDF', ar: 'إضافة صور أو PDF' },
+  'Front image': { fr: 'Image du recto', ar: 'صورة الوجه' },
+  'Back image': { fr: 'Image du verso', ar: 'صورة الظهر' },
+  'Color mode': { fr: 'Mode couleur', ar: 'وضع اللون' },
+  'Black & white': { fr: 'Noir et blanc', ar: 'أبيض وأسود' },
+  'Two-sided printing': { fr: 'Impression recto verso', ar: 'الطباعة على الوجهين' },
+  'Automatic duplex': { fr: 'Recto verso automatique', ar: 'طباعة تلقائية على الوجهين' },
+  'Two pages (manual duplex)': {
+    fr: 'Deux pages (recto verso manuel)',
+    ar: 'صفحتان (طباعة يدوية على الوجهين)'
+  },
+  'Width: 9 cm · Height: proportional · Centered': {
+    fr: 'Largeur : 9 cm · Hauteur proportionnelle · Centré',
+    ar: 'العرض: 9 سم · الارتفاع متناسب · في الوسط'
+  },
+  'Crop card': { fr: 'Recadrer la carte', ar: 'قص البطاقة' },
+  'Card side': { fr: 'Face de la carte', ar: 'جانب البطاقة' },
+  'Choose an image': { fr: 'Choisir une image', ar: 'اختر صورة' },
+  'Top left corner': { fr: 'Coin supérieur gauche', ar: 'الزاوية العلوية اليسرى' },
+  'Top right corner': { fr: 'Coin supérieur droit', ar: 'الزاوية العلوية اليمنى' },
+  'Bottom right corner': { fr: 'Coin inférieur droit', ar: 'الزاوية السفلية اليمنى' },
+  'Bottom left corner': { fr: 'Coin inférieur gauche', ar: 'الزاوية السفلية اليسرى' },
+  'Drag the corners around the card. Arrow keys adjust a focused corner.': {
+    fr: 'Déplacez les coins autour de la carte. Les flèches ajustent le coin sélectionné.',
+    ar: 'اسحب الزوايا حول البطاقة. استخدم الأسهم لضبط الزاوية المحددة.'
+  },
+  'Auto crop': { fr: 'Recadrer automatiquement', ar: 'قص تلقائي' },
+  'Reset crop': { fr: 'Réinitialiser le recadrage', ar: 'إعادة ضبط القص' },
+  'Choose a photo for this side. You can use the same photo for both sides.': {
+    fr: 'Choisissez une photo pour cette face. La même photo peut servir aux deux faces.',
+    ar: 'اختر صورة لهذا الجانب. يمكنك استخدام الصورة نفسها للوجهين.'
+  },
+  'Choose a back image before printing.': {
+    fr: 'Choisissez une image pour le verso avant d’imprimer.',
+    ar: 'اختر صورة الظهر قبل الطباعة.'
+  },
+  'Saves front and back as two pages in one document.': {
+    fr: 'Enregistre le recto et le verso sur deux pages dans un même document.',
+    ar: 'يحفظ الوجه والظهر في صفحتين ضمن مستند واحد.'
+  },
+  'Front prints first. Reinsert the same sheet when prompted to print the back.': {
+    fr: 'Le recto s’imprime d’abord. Réinsérez la même feuille lorsque le message le demande pour imprimer le verso.',
+    ar: 'يُطبع الوجه أولاً. أعد إدخال الورقة نفسها عند ظهور الرسالة لطباعة الظهر.'
+  },
+  'Front submitted; back canceled.': {
+    fr: 'Recto envoyé ; verso annulé.',
+    ar: 'تم إرسال الوجه؛ أُلغيت طباعة الظهر.'
+  },
+  'Print preview': { fr: 'Aperçu avant impression', ar: 'معاينة الطباعة' },
+  'Prints with the selected Fast Print settings.': {
+    fr: 'Imprime avec les paramètres d’impression rapide sélectionnés.',
+    ar: 'يطبع بإعدادات الطباعة السريعة المحددة.'
+  },
+  'Adjust the crop corners to form a card.': {
+    fr: 'Ajustez les coins du recadrage pour former une carte.',
+    ar: 'اضبط زوايا القص لتشكيل بطاقة.'
+  },
+  'The crop is too tall for this sheet at 9 cm wide. Rotate or crop the photo.': {
+    fr: 'Le recadrage est trop haut pour cette feuille à 9 cm de large. Tournez ou recadrez la photo.',
+    ar: 'القص طويل جدًا لهذه الورقة بعرض 9 سم. قم بتدوير الصورة أو قصها.'
+  },
+  'Choose up to 8 images or PDF pages for one ID job.': {
+    fr: 'Choisissez au maximum 8 images ou pages PDF pour une carte.',
+    ar: 'اختر ما يصل إلى 8 صور أو صفحات PDF لمهمة هوية واحدة.'
+  },
+  'Choose PDF, PNG or JPEG files.': {
+    fr: 'Choisissez des fichiers PDF, PNG ou JPEG.',
+    ar: 'اختر ملفات PDF أو PNG أو JPEG.'
+  },
+  'Choose a non-empty document smaller than 512 MB.': {
+    fr: 'Choisissez un document non vide de moins de 512 Mo.',
+    ar: 'اختر مستندًا غير فارغ أصغر من 512 ميغابايت.'
+  },
+  'Print settings verified': {
+    fr: 'Paramètres d’impression vérifiés',
+    ar: 'تم التحقق من إعدادات الطباعة'
+  },
+  'Sent to print queue': {
+    fr: 'Envoyé à la file d’impression',
+    ar: 'تم الإرسال إلى قائمة الطباعة'
+  },
   'Finished size is measured from the cut contour.': {
     fr: 'La taille finale est mesurée à partir du contour de découpe.',
     ar: 'يُقاس الحجم النهائي من حدود خط القص.'

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { JOB_STORAGE_EVENT, readStoredJobs, upsertStoredJob, writeStoredJobs } from './jobStorage'
+import { JOB_STORAGE_EVENT, readStoredJobs, upsertStoredJob, deleteStoredJob } from './jobStorage'
 import type { PrinterJob } from './jobTypes'
 
 export function useJobStore(): {
@@ -25,11 +25,7 @@ export function useJobStore(): {
   }, [])
 
   const deleteJob = useCallback((jobId: string): void => {
-    setJobs((current) => {
-      const next = current.filter((job) => job.id !== jobId)
-      writeStoredJobs(next)
-      return next
-    })
+    setJobs(deleteStoredJob(jobId))
   }, [])
 
   const refreshJobs = useCallback((): void => setJobs(readStoredJobs()), [])

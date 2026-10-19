@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 Add-Type -AssemblyName System.Drawing
-$extensions = @('.pdf', '.png', '.jpg', '.jpeg')
+$extensions = @('.pdf', '.png', '.jpg', '.jpeg', '.gif')
 $menuRoot = 'Software\Classes\MaherTka.FastPrint'
 $classes = [Microsoft.Win32.Registry]::CurrentUser
 $handlerId = '{D8335FE6-ED4F-4386-8E87-69527F75B4EF}'
@@ -23,6 +23,17 @@ function Add-Cascade([string]$Path, [string]$Label, [string]$Target) {
 function Quote-Argument([string]$Value) {
   if ($Value.Contains('"') -or $Value.Contains("`r") -or $Value.Contains("`n")) { throw 'Invalid command path.' }
   return '"' + $Value + '"'
+}
+function Add-PolaroidChoices([string]$Root, [string]$Printer, [string]$Paper, [bool]$Color, [string]$ProfileId = '') {
+  if ($Paper -ne 'A4') { return }
+  foreach ($count in @(8,9)) {
+    $preset=@{ printer=$Printer; paper=$Paper; color=$Color; pagesPerSheet=1; mode="polaroid-$count" }
+    if ($ProfileId) { $preset.profileId=$ProfileId }
+    $token=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($preset | ConvertTo-Json -Compress)))
+    $leaf="$Root\shell\00-$count"
+    Set-MenuValue $leaf 'MUIVerb' "$count PIC"
+    Set-MenuValue "$leaf\command" '' ($commandPrefix + ' --fast-print ' + $token + ' -- "%1"')
+  }
 }
 function Remove-Menu {
   $previous=$classes.OpenSubKey($menuRoot)
@@ -66,7 +77,7 @@ $printers = @(foreach ($name in [System.Drawing.Printing.PrinterSettings]::Insta
   if (!$settings.IsValid) { continue }
   $papers = @($settings.PaperSizes | Where-Object { $_.Kind.ToString() -in @('A4','A3') } |
     ForEach-Object { $_.Kind.ToString() } | Sort-Object -Unique)
-  [PSCustomObject]@{ name = $name; color = $settings.SupportsColor; papers = $papers; isDefault = $settings.IsDefaultPrinter }
+  [PSCustomObject]@{ name = $name; color = $settings.SupportsColor; papers = $papers; isDefault = $settings.IsDefaultPrinter; duplex = $settings.CanDuplex }
 })
 if ($Action -eq 'List') { ConvertTo-Json -InputObject $printers -Depth 5 -Compress; exit 0 }
 if (!(Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Fast Print executable is missing. Build the app first.' }
@@ -87,15 +98,21 @@ foreach ($printer in ($printers | Sort-Object @{Expression='isDefault';Descendin
   $label = $printer.name.Replace('&', '&&')
   if ($printer.isDefault) { $label += ' (default)' }
   Add-Cascade "$menuRoot\shell\$id" $label $printerTarget
-  $printerProfiles = @($profiles | Where-Object { $_.printer -ceq $printer.name } | Sort-Object name)
+  $printerProfiles = @($profiles | Where-Object { $_.printer -ceq $printer.name -and $_.paper -in $printer.papers } | Sort-Object name)
+  if ($printer.color -and 'A4' -in $printer.papers) {
+    $polaroidRoot="Software\Classes\$printerTarget\shell\00-polaroid"
+    $defaultStock=$printerProfiles | Where-Object { $_.paper -eq 'A4' -and $_.defaultBypassFaceUp -eq $true } | Sort-Object @{Expression='savedAt';Descending=$true},id | Select-Object -First 1
+    Add-Cascade $polaroidRoot 'Polaroid' ''
+    Add-PolaroidChoices $polaroidRoot $printer.name 'A4' $true $defaultStock.id
+  }
   if ($printerProfiles.Count -gt 0) {
     $savedRoot = "Software\Classes\$printerTarget\shell\00-saved"
     Add-Cascade $savedRoot 'Saved paper && tray presets' ''
     foreach ($profile in $printerProfiles) {
       $profileRoot = "$savedRoot\shell\$($profile.id)"
       Add-Cascade $profileRoot ($profile.name.Replace('&','&&')) ''
-      foreach ($mode in @('01-mono','02-color')) {
-        $color = $mode -eq '02-color'
+      foreach ($mode in @('01-color','02-mono')) {
+        $color = $mode -eq '01-color'
         if ($color -and !$printer.color) { continue }
         $modeRoot = "$profileRoot\shell\$mode"
         $modeLabel = if ($color) { 'Color' } else { 'Black && white' }
@@ -116,8 +133,8 @@ foreach ($printer in ($printers | Sort-Object @{Expression='isDefault';Descendin
     $paperTarget = "$printerTarget\shell\$paper"
     $paperLabel = if ($paper -eq 'A4') { 'A4 - 210 x 297 mm' } else { 'A3 - 297 x 420 mm' }
     Add-Cascade "Software\Classes\$printerTarget\shell\$paper" $paperLabel $paperTarget
-    foreach ($mode in @('01-mono', '02-color')) {
-      $color = $mode -eq '02-color'
+    foreach ($mode in @('01-color', '02-mono')) {
+      $color = $mode -eq '01-color'
       if ($color -and !$printer.color) { continue }
       $modeTarget = "$paperTarget\shell\$mode"
       $modeLabel = if ($color) { 'Color' } else { 'Black && white' }
@@ -145,7 +162,7 @@ Set-MenuValue $path 'MUIVerb' 'Fast Print'
 Set-MenuValue $path 'Icon' ($Executable + ',0')
 Set-MenuValue $path 'Position' 'Top'
 Set-MenuValue $path 'MultiSelectModel' 'Single'
-Set-MenuValue $path 'AppliesTo' 'System.FileExtension:=.pdf OR System.FileExtension:=.png OR System.FileExtension:=.jpg OR System.FileExtension:=.jpeg'
+Set-MenuValue $path 'AppliesTo' 'System.FileExtension:=.pdf OR System.FileExtension:=.png OR System.FileExtension:=.jpg OR System.FileExtension:=.jpeg OR System.FileExtension:=.gif'
 Set-MenuValue "$path\command" '' ($commandPrefix + ' --fast-print-menu -- "%1"')
 # Also register our verb with the user's active file classes, alongside Open/Print.
 $directClasses=@(foreach ($extension in $extensions) {

@@ -1,7 +1,8 @@
 import {
   fastPrintLayout,
   type FastPrintSource,
-  type FastPrintBatchSource
+  type FastPrintBatchSource,
+  type FastPrintSubmitOptions
 } from '../../../shared/fast-print'
 import { FAST_PRINT_MAX_PAGES, needsBatchBlankBack } from '../../../shared/fast-print-batch'
 import {
@@ -15,8 +16,10 @@ declare global {
     fastPrint: {
       source(): Promise<FastPrintBatchSource>
       file(index: number): Promise<FastPrintSource>
-      sheet(png: string): Promise<void>
-      submit(): Promise<{ verified: boolean }>
+      sheet(png: string, size?: { widthMm: number; heightMm: number }): Promise<void>
+      submit(
+        options?: FastPrintSubmitOptions
+      ): Promise<{ verified: boolean; manualBackCanceled?: boolean }>
       finish(error?: string): Promise<void>
     }
   }
@@ -31,6 +34,21 @@ async function run(): Promise<void> {
   const canvas = document.createElement('canvas')
   try {
     const batch = await window.fastPrint.source()
+    if (batch.preset.mode === 'document') {
+      const { printDriverDocument } = await import('./driverDocument')
+      await printDriverDocument(batch)
+      return
+    }
+    if (batch.preset.mode === 'polaroid-8' || batch.preset.mode === 'polaroid-9') {
+      const { printPolaroid } = await import('./polaroid')
+      await printPolaroid(batch)
+      return
+    }
+    if (batch.preset.mode === 'id-card') {
+      const { openIdPrint } = await import('./IdPrint')
+      openIdPrint(batch)
+      return
+    }
     const { preset } = batch
     label('file', batch.name)
     label(

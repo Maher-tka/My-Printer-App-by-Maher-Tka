@@ -17,9 +17,10 @@ try {
   $document.DefaultPageSettings.Color=$true
   $document.DefaultPageSettings.Landscape=$true
   $captured=[FastPrintDriver]::Capture($printer,[IntPtr]::Zero,[FastPrintDriver]::FromDocument($document),$false)
-  $profile=Save-FastPrintProfile -Name 'Test A4 stock & tray' -Printer $printer -Bytes $captured -Directory $folder
+  $profile=Save-FastPrintProfile -Name 'Test A4 stock & tray' -Printer $printer -Bytes $captured -Directory $folder -DefaultBypassFaceUp
   Assert ($profile.paper -eq 'A4' -and $profile.landscape -eq $true) 'Captured paper/orientation lost.'
   $loaded=Read-FastPrintProfile $profile.id $folder
+  Assert ($loaded.defaultBypassFaceUp -eq $true) 'Default bypass profile flag lost.'
   $restored=Get-FastPrintProfileBytes $loaded $printer
   Assert ([Convert]::ToBase64String($restored) -ceq [Convert]::ToBase64String($captured)) 'Full private driver buffer did not survive encrypted storage.'
   Assert ($profile.driverSettings -cne [Convert]::ToBase64String($captured)) 'Driver settings were stored unprotected.'
@@ -37,7 +38,14 @@ try {
   $current=[FastPrintDriver]::Capture($printer,[IntPtr]::Zero,$null,$false)
   # Compare public default fields (some vendor private data can include timestamps).
   Assert ([Convert]::ToBase64String($original[76..101]) -ceq [Convert]::ToBase64String($current[76..101])) 'Printer defaults were changed by profile capture.'
-  Write-Output "Driver profile tests passed: full-buffer round trip, encrypted storage, atomic update, driver mismatch, printer mismatch, corrupt data, defaults unchanged."
+  $a5=$document.PrinterSettings.PaperSizes | Where-Object Kind -eq A5 | Select-Object -First 1
+  if ($a5) {
+    $document.DefaultPageSettings.PaperSize=$a5
+    $document.PrinterSettings.Copies=2
+    $other=Save-FastPrintProfile -Name 'App A5 paper' -Printer $printer -Bytes ([FastPrintDriver]::FromDocument($document)) -Directory $folder
+    Assert ($other.paper -eq 'A5' -and $other.paperWidthMm -gt 0 -and $other.paperHeightMm -gt 0 -and $other.copies -eq 2) 'App-only paper size or driver copies were not retained.'
+  }
+  Write-Output "Driver profile tests passed: full-buffer round trip, encrypted storage, atomic update, driver mismatch, printer mismatch, corrupt data, defaults unchanged, app paper sizes/copies."
 } finally {
   $document.Dispose()
   # Remove only files created by this test; no recursive directory deletion.

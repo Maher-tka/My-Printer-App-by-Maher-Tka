@@ -1,3 +1,5 @@
+import { useDroppedToolFiles } from '../shared/useDroppedToolFiles'
+import type { ToolFileDropProps } from '../shared/toolFileDrop'
 import { useLanguage } from '@/i18n/useLanguage'
 import { ToolHeader } from '../shared/ToolHeader'
 import { CheckCircle2, FileDown, FileText, Ruler, Settings2, UserRound } from 'lucide-react'
@@ -48,7 +50,7 @@ import { exportHardcoverImage } from './lib/hardcoverExportImages'
 import { exportHardcoverSvg } from './lib/hardcoverExportSvg'
 import { resolveAutomaticSpineBackgroundColor } from './lib/spineBackground'
 
-interface HardcoverCoverPageProps {
+interface HardcoverCoverPageProps extends ToolFileDropProps {
   onNavigate: (route: AppRoute) => void
   openedProject?: OpenedPrinterProject<HardcoverProjectPayload> | null
   onOpenProject: (filePath?: string | null) => Promise<PrinterAppProjectResult>
@@ -86,6 +88,8 @@ const WORKFLOW_STEPS: Array<{
 ]
 
 export function HardcoverCoverPage({
+  droppedFileImport,
+  onDroppedFileImportConsumed,
   onNavigate,
   openedProject,
   onOpenProject,
@@ -120,6 +124,11 @@ export function HardcoverCoverPage({
   const pdfDrop = useHardcoverPdfDrop(
     hardcover.importSourcePdf,
     isBusy || discardDialogOpen || Boolean(pendingExport)
+  )
+  useDroppedToolFiles(
+    { droppedFileImport, onDroppedFileImportConsumed },
+    isBusy || pdfDrop.importingPdf || discardDialogOpen || Boolean(pendingExport),
+    (files) => pdfDrop.dropPdfFiles(files)
   )
   const stateKey = useMemo(() => getHardcoverProjectStateKey(hardcover.state), [hardcover.state])
   const isDirty = stateKey !== savedStateKey

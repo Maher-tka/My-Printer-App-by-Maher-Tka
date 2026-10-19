@@ -16,6 +16,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { ToolSettingsTabs } from '@/tools/shared/ToolSettingsTabs'
 import { PdfPageSelector } from '@/tools/shared/PdfPageSelector'
+import { PrintButton } from '@/print/PrintButton'
 
 const meta = {
   title: 'Design system/Foundations',
@@ -26,6 +27,23 @@ const meta = {
 
 export default meta
 type Story = StoryObj<typeof meta>
+
+export const FastPrintActions: Story = {
+  beforeEach: () => {
+    const original = window.fastPrint
+    window.fastPrint = { ...original, submit: async () => ({ verified: true }) }
+    return () => {
+      window.fastPrint = original
+    }
+  },
+  render: () => (
+    <div className="flex flex-wrap gap-4">
+      <PrintButton compact mode="fast-print" label="Print" onPrint={() => {}} />
+      <PrintButton compact mode="fast-print" label="Print" disabled onPrint={() => {}} />
+      <PrintButton compact mode="fast-print" label="Print" isBusy onPrint={() => {}} />
+    </div>
+  )
+}
 
 export const Actions: Story = {
   render: () => (

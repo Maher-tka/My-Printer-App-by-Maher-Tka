@@ -16,7 +16,7 @@ try {
   $electron=Join-Path $root 'node_modules\electron\dist\electron.exe'
   & (Join-Path $PSScriptRoot 'fast-print-menu.ps1') -Action Install -Executable $electron -AppPath $root
   $menuEntries=@(Get-ChildItem 'HKCU:\Software\Classes\MaherTka.FastPrint' -Recurse | Where-Object { $_.PSChildName -eq 'command' -and $_.Name.Contains($profile.id) })
-  if ($menuEntries.Count -ne 6) { throw 'Expected six saved-stock menu commands.' }
+  if ($menuEntries.Count -ne 6) { throw 'Expected six standard saved-stock menu commands; Polaroid is directly under the printer.' }
   foreach ($entry in $menuEntries) {
     if ($entry.GetValue('') -notmatch '--fast-print ([A-Za-z0-9+/=]+) -- "%1"$') { throw 'Invalid saved preset command.' }
     $settings=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Matches[1])) | ConvertFrom-Json

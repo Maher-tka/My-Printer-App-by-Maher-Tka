@@ -1,3 +1,5 @@
+import { useDroppedToolFiles } from '../shared/useDroppedToolFiles'
+import type { ToolFileDropProps } from '../shared/toolFileDrop'
 import { useLanguage } from '@/i18n/useLanguage'
 import { ToolHeader } from '../shared/ToolHeader'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -36,7 +38,7 @@ import { useBookletMontage } from './hooks/useBookletMontage'
 import { getPrintSizeMm, validatePrintSettings } from './lib/printSizes'
 import type { BookletViewMode } from './types'
 
-interface BookletMontagePageProps {
+interface BookletMontagePageProps extends ToolFileDropProps {
   onNavigate: (route: AppRoute) => void
   openedProject?: OpenedPrinterProject<BookletProjectPayload> | null
   onOpenProject: (filePath?: string | null) => Promise<PrinterAppProjectResult>
@@ -47,6 +49,8 @@ interface BookletMontagePageProps {
 }
 
 export function BookletMontagePage({
+  droppedFileImport,
+  onDroppedFileImportConsumed,
   onNavigate,
   openedProject,
   onOpenProject,
@@ -115,6 +119,18 @@ export function BookletMontagePage({
     montage.exportProgress.phase === 'rendering-page' ||
     montage.exportProgress.phase === 'creating-pdf' ||
     montage.exportProgress.phase === 'saving-file'
+  useDroppedToolFiles(
+    { droppedFileImport, onDroppedFileImportConsumed },
+    projectIsBusy || isPrinting || importIsBusy || exportIsBusy,
+    async (files) => {
+      if (files.every((file) => /\.pdf$/i.test(file.name))) return montage.importPdfFiles(files)
+      if (files.every((file) => !/\.pdf$/i.test(file.name))) return montage.importImages(files)
+      for (const file of files) {
+        if (/\.pdf$/i.test(file.name)) await montage.importPdfFiles([file])
+        else await montage.importImages([file])
+      }
+    }
+  )
   const hasExportableItems = montage.sheets.length > 0 || montage.emptySheetsForExport.length > 0
   const readingDirectionLabel =
     montage.settings.readingDirection === 'rtl' ? 'RTL Arabic mode' : 'LTR mode'

@@ -1,9 +1,14 @@
 # Explorer Fast Print
 
-Right-click one PDF, PNG, or JPEG in Windows Explorer. On Windows 11, choose
+Select one or more PDF, PNG, JPEG, or GIF files in Windows Explorer and right-click. On Windows 11, choose
 **Show more options > Fast Print**. Click Fast Print once; a native menu opens at
 the pointer. Hover through **printer > A4/A3 or saved stock > color > 1/2/4 pages
 per sheet**, then click the final Print item. The main app does not open.
+
+For Polaroid output, choose **printer > Polaroid > 8 PIC or 9 PIC** directly.
+These choices use A4 and color automatically, with the saved default A4
+bypass/face-up stock when configured. They appear once, directly under printers
+that support both A4 and color.
 
 This is deliberately a standard Explorer file command rather than an in-process
 shell DLL. The earlier DLL implementation passed standalone shell tests but did
@@ -14,6 +19,48 @@ failures and Windows' static submenu command limit.
 The menu queries installed printers each time it opens. Saved stocks are separate
 for each printer. Manage printer presets opens the standalone setup window; after
 closing it, the menu reloads. Cancel or click outside to dismiss without printing.
+
+## Printing preferences inside the app
+
+Open **Settings > Printing settings** to manage printers and saved driver options.
+
+1. Choose the app's **Default printer**, or keep the Windows default. This does
+   not change the Windows default printer used by other applications.
+2. Under **Driver presets**, choose the printer, enter a preset name, and select
+   **Capture and save driver settings**. The manufacturer's actual driver dialog
+   opens. Configure paper, tray, stock/weight, duplex, copies and finishing there,
+   then confirm. Reopen a saved preset to recapture it or delete it with confirmation.
+3. Under **Print options**, choose the printing option and assign a saved preset
+   for the selected printer. Polaroid 8 PIC and 9 PIC, every A4/A3 color/mono
+   1/2/4-up option, ID cards, and the five app production tools have separate
+   assignments. App tools also have their own preferred-printer override.
+
+Changes save immediately and persist across restarts. Each printer has its own
+assignments; an Epson preset cannot be assigned to a Konica. Full driver-owned
+DEVMODE buffers are retained and encrypted for the current Windows account.
+Changing drivers requires recapturing affected presets. Deleted presets clear
+their assignments, while stale external entries remain visible for correction.
+Preference JSON is written atomically with a previous-file backup under
+`%LOCALAPPDATA%\MaherTka\FastPrint\preferences.json`. Existing saved driver
+profiles remain in the sibling `profiles` directory.
+
+Explorer's selected printer takes precedence. The app's default printer appears
+first in the live menu, labeled preferred. Per-option profiles take precedence
+over the older paper/bypass default; explicitly selected saved stocks keep their
+own profile. Polaroid still uses A4/color and its required layout orientation.
+The saved profile supplies paper source, stock and finishing. ID setup starts
+with the profile's duplex preference and permits an explicit change before printing.
+
+App PDF printing uses the configured preferred printer and assigned tool preset,
+falling back to **Other app printing** for a printer-wide app-print assignment.
+With no assignment, the existing printer dialog remains available. An assigned
+driver profile is applied per job without changing Windows driver defaults.
+Prepared PDFs use actual physical page size, rendering up to 300 DPI with a
+6000 px maximum long edge. This path rasterizes PDF pages; exported PDF files
+remain unchanged. Page size must match the captured driver paper within 1 mm;
+portrait/landscape pages on the same paper are supported. A mismatch fails
+before submission instead of shrinking the artwork. Explicit copy counts override
+the saved driver count; otherwise that driver's count is retained.
 
 ## Installation and removal
 
@@ -40,9 +87,10 @@ Windows security policies are unchanged.
 
 ## Supported input and output
 
-- One PDF, PNG, JPG or JPEG file at a time. Export other documents to PDF first.
+- PDF, PNG, JPG, JPEG and GIF files. GIFs use their first frame. Export other documents to PDF first.
 - Up to 512 MB per file and 2,000 PDF pages. Password-protected PDFs are unsupported.
-- One copy per job. Generic presets use simplex; saved driver presets retain duplex.
+- Jobs without a driver preset use one copy and simplex. Saved presets retain
+  their preferred copy count and duplex settings, subject to layout constraints.
 - Two-up uses landscape; four-up reads left to right, top to bottom. Images count
   as one source page and are not duplicated to fill empty cells.
 - Pages render at 200 DPI and fit inside the printer's printable margins.
@@ -50,15 +98,55 @@ Windows security policies are unchanged.
   manage cancellation in the Windows print queue. Submission is not proof of
   physical completion. PDF printers may ask for an output filename.
 
-## Verification
+## ID card preset
+
+Choose **printer > paper or saved stock > Color / Black & white > ID card — 9 cm…**.
+The crop window opens before anything prints. It accepts up to eight images or PDF
+pages for choosing the front and back. The first two pages/images are assigned in
+selection order; with only one image, choose a back explicitly. The same photo can
+be selected for both sides when it contains both card faces.
+
+Each side has an independent four-corner mask, rotation, automatic rough cropping,
+and Reset crop. Auto crop searches the whole photo for an oriented card outline,
+including off-center and approximately 45-degree cards. It is conservative on
+uniform backgrounds and keeps the whole photo when it cannot find a confident
+card region. Drag handles or use arrow keys on a focused corner (Shift moves
+farther). The selected edges set automatic straightening; Card angle allows a
+manual adjustment from -180° to 180°, and Auto straighten restores the detected
+angle. These settings are independent for each side. Camera perspective and
+partly missing corners remain approximate.
+
+Output is two pages at 300 DPI, each card **90 mm wide with proportional height**,
+measured after straightening and centered on the same physical sheet coordinates. Unlike normal document presets,
+the ID output is printed at physical page size without fitting to printer margins.
+Paper and saved tray/stock settings remain available. Select Color or Black & white
+in the crop window; mono-only printers disable Color.
+
+Automatic long-edge duplex is the default when the printer supports it. Manual
+duplex prints the front first, pauses with a reinsertion prompt, then prints the
+back on confirmation. Canceling that prompt leaves the back unprinted. PDF/XPS
+printers save the two pages together. Submission controls prevent cancellation or
+duplicate printing while the driver is running. Physical feed direction and duplex
+registration still need verification with the workshop printer.
+
+## Verification commands
 
 ```powershell
 npm run typecheck
 npm run test:fast-print
 npm run test:fast-print:driver
+npm run test:fast-print:id-real
 node scripts/verify-fast-print.mjs
 powershell -NoProfile -STA -File scripts/inspect-fast-print-menu.ps1 -FilePath "C:\path\sample.pdf"
 ```
+
+The ID real-photo check always reads all supported pictures from
+`C:\Users\Maher\Downloads\ID TEST` (or `ID_TEST_FOLDER` when explicitly testing a
+different folder). It preserves the originals and checks their SHA-256 hashes,
+then renders original and off-center ±45° cases in color and grayscale. Proofs and
+measurements are saved under `output/fast-print-id/`; no printer is called. The
+two initial files have approximate visible-edge annotations for crop-coverage
+regressions. Newly added pictures still need visual crop review until annotated.
 
 The shell probe verifies command discovery in a fresh process, not visibility in
 an already-running Explorer. Do not use its historical `-VerifyInvoke` option for
@@ -67,6 +155,76 @@ output file when launching `--fast-print-menu -- "file.pdf"`; this checks the
 actual device/profile choices without opening the menu or printing.
 
 ## Saved stock and driver presets
+
+Color appears first for standard layouts on color-capable printers. The direct
+**Polaroid** submenu starts with **8 PIC**, then **9 PIC**, without paper or
+color submenus. These Polaroid layouts use the red photo areas measured from
+`Polaroid 8p temp 2023.pdf` and `Polaroid 2R-1.pdf`: landscape A4, four columns
+by two rows; portrait A4, three columns by three rows. Photos use automatic local
+orientation and face-aware framing, preserving aspect ratio and the reference borders. Selected
+images and PDF pages fill slots in selection/page order across file boundaries;
+extra photos continue onto another sheet. Empty slots remain white. The red
+template artwork is never printed. Internal cutting lines are 0.25 CSS px
+(0.1875 pt), with no additional page margin or fit-to-page shrinking. Hardware
+non-printable edges can still clip content. Polaroid jobs always use simplex.
+
+The bundled YuNet detector checks four quarter-turn orientations on a 640x640
+analysis canvas using one CPU/WASM thread. Upright orientation is detected first.
+Group photos then receive an additional 90-degree clockwise print rotation when
+it improves the filled photo area by more than ten percentage points while
+preserving the protected faces. Groups can therefore print sideways to make
+better use of the Polaroid frame, as requested by the user. A crop shifts to
+keep all detected faces and padding for hair/foreheads inside the photo area.
+The face boxes and their forehead padding rotate along with the photo.
+When a group cannot fit without losing faces, the complete photo is fitted
+inside the original placeholder, leaving white space as necessary. Images with
+no usable detections, and jobs where analysis fails, use full-photo fitting in
+the original orientation rather than an arbitrary crop. Face detection can miss
+small, obscured or unusual faces; it cannot guarantee every subject is found.
+No identity recognition or photo uploads are used. Model, WASM and loader assets
+are bundled for offline operation; the model license is included in resources.
+
+After changing Polaroid output, use all photos in
+`C:\Users\Maher\Downloads\Compressed\num216p` to check both 8 PIC and 9 PIC,
+including rotation, faces near edges, wide groups, overflow and blank slots.
+Preserve originals and create local proof PDFs rather than unsolicited hardware
+prints. The project's AGENTS.md records this fixture preference.
+
+Batching is automatic: 25 photos produce four 8 PIC sheets or three 9 PIC
+sheets. One sheet canvas is reused, source files/pages are processed sequentially,
+and completed sheets are written to temporary disk files instead of accumulating
+full-resolution sheets in renderer memory. Recognized JPEG/PNG headers allow
+decoding a bitmap at the resolution needed for its photo slot, capped at a 2200 px
+long edge; smaller originals are not enlarged during decoding. Browser decoders
+can still allocate larger temporary buffers, especially for PNG files.
+
+Earlier verification, before face analysis was added, used synthetic 6000x4000
+JPEG/PNG files on the development PC:
+25 photos took 6.6 seconds for 8 PIC (four sheets) and 5.6 seconds for 9 PIC
+(three sheets); 100 photos took 13.3 seconds for 8 PIC (13 sheets). The worker
+process tree peaked at approximately 706-730 MiB working set and 706-1162 MiB
+private memory across these runs. These are sampled development measurements,
+including renderer/GPU/helper processes and driver validation, not timings for a
+physical printer or guarantees for the workshop PC. A separate in-app workspace
+is useful for preview/reordering/crop controls, but is not needed for pagination
+and does not inherently reduce decoder memory.
+
+To make bypass/manual-feed and face-up output the default, capture those options
+in the manufacturer's driver and check **Default bypass / face-up preset for this
+paper** before saving. Capture one profile per paper size and printer. Ordinary
+A4/A3 menu choices then automatically use that complete driver profile, including
+its private output settings. If multiple profiles are marked, the most recently
+saved one wins. Explicitly choosing another saved stock still uses that stock.
+The checkbox records the operator's driver setup; it does not change or verify
+private face-up options by itself. Without a marked profile, existing printer
+settings remain in use. Windows printer defaults are unchanged.
+
+Verify Polaroid rendering without submitting a print job:
+
+```powershell
+npx electron-vite build --mode development
+node scripts/verify-fast-print-polaroid.mjs
+```
 
 Open **Fast Print > Manage printer presets...** from the Explorer menu, or run
 `npm run fast-print:settings` in this development checkout. This opens a separate
@@ -90,7 +248,7 @@ Recapture a preset after changing drivers. Live acquisition of the printer's tra
 contents is vendor-specific and is not automatically invoked on every print job.
 
 Saved presets retain duplex and vendor options; per-job color, paper orientation,
-one copy, and fitted page placement are merged through the owning driver. Two-up
+explicit copy requests, and fitted page placement are merged through the owning driver. Two-up
 uses landscape; one-up/four-up keep the captured orientation. Generic presets keep
 the original simplex behavior. Fast Print cannot verify that the physical stock in
 a tray matches a preset name.
@@ -132,7 +290,7 @@ npm run test:fast-print:driver
 powershell -NoProfile -STA -File scripts/verify-fast-print-profile.ps1
 ```
 
-The latter briefly registers a uniquely identified test preset, verifies six menu
+The latter briefly registers a uniquely identified test preset, verifies six saved-stock menu
 choices and a saved-profile render, then removes the test preset and refreshes the
 menu. It never submits a physical print job.
 

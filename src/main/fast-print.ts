@@ -9,22 +9,27 @@ import {
 } from 'electron'
 import {
   createFastPrintChoices,
+  defaultFastPrintStock,
   type FastPrintChoice,
   type FastPrintDevice,
   type FastPrintSavedStock
 } from '../shared/fast-print-menu.js'
-import { execFile } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile, copyFile } from 'node:fs/promises'
 import { basename, extname, join, resolve } from 'node:path'
-import { promisify } from 'node:util'
+import { runPrinterScript as powershell } from './printer-driver-runtime.js'
+import { printerPreferencesStore } from './printer-preferences.js'
+import { fastPrintOptionId, preferredProfile } from '../shared/printer-preferences.js'
 import { assertOnlineProductionAccess } from './online-account.js'
-import { validateFastPrintPreset, type FastPrintPreset } from '../shared/fast-print.js'
+import {
+  validateFastPrintPreset,
+  type FastPrintPreset,
+  type FastPrintSubmitOptions
+} from '../shared/fast-print.js'
 import {
   normalizeFastPrintSelection,
   parseFastPrintSelectionManifest
 } from '../shared/fast-print-batch.js'
 
-const execFileAsync = promisify(execFile)
 const switches = [
   '--fast-print',
   '--fast-print-menu',
@@ -41,41 +46,6 @@ const args = process.argv.slice(
   process.argv.indexOf('--') < 0 ? undefined : process.argv.indexOf('--')
 )
 export const isFastPrintCommand = switches.some((flag) => args.includes(flag))
-
-function scriptPath(name: string): string {
-  return app.isPackaged
-    ? join(process.resourcesPath, 'fast-print', name)
-    : join(app.getAppPath(), 'scripts', name)
-}
-
-async function powershell(name: string, parameters: string[]): Promise<string> {
-  const executable = join(
-    process.env.SystemRoot || 'C:\\Windows',
-    'System32',
-    'WindowsPowerShell',
-    'v1.0',
-    'powershell.exe'
-  )
-  const result = await execFileAsync(
-    executable,
-    [
-      '-NoProfile',
-      '-STA',
-      '-NonInteractive',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      scriptPath(name),
-      ...parameters
-    ],
-    {
-      windowsHide: true,
-      encoding: 'utf8',
-      maxBuffer: 4 * 1024 * 1024
-    }
-  )
-  return result.stdout.trim()
-}
 
 export async function runFastPrintCommand(): Promise<void> {
   let exitCode = 0
@@ -141,7 +111,7 @@ export async function runFastPrintCommand(): Promise<void> {
           message: output,
           detail: remove
             ? 'The Explorer menu has been removed.'
-            : 'Right-click a PDF, PNG, or JPEG file → Show more options → Fast Print. Hover over your printer, paper size, and color mode, then click a layout to print.'
+            : 'Right-click a PDF, PNG, JPEG, or GIF file → Show more options → Fast Print. Hover over your printer, paper size, and color mode, then click a layout to print.'
         })
       }
     } else {
@@ -195,7 +165,11 @@ async function showFastPrintMenu(filePaths: string[]): Promise<void> {
     const profiles = JSON.parse(
       await powershell('fast-print-settings.ps1', ['-Action', 'List'])
     ) as FastPrintSavedStock[]
-    const choices = createFastPrintChoices(devices, profiles)
+    const choices = createFastPrintChoices(
+      devices,
+      profiles,
+      await printerPreferencesStore().read()
+    )
     if (!app.isPackaged && process.env.FAST_PRINT_MENU_VERIFY) {
       await writeFile(process.env.FAST_PRINT_MENU_VERIFY, JSON.stringify(choices, null, 2))
       return
@@ -249,13 +223,41 @@ async function showFastPrintMenu(filePaths: string[]): Promise<void> {
   }
 }
 
-async function runJob(filePaths: string[], preset: FastPrintPreset): Promise<void> {
+let savedDriverJobRunning = false
+export async function runSavedDriverPrint(
+  filePath: string,
+  preset: FastPrintPreset,
+  options: { toolId?: string; copies?: number }
+): Promise<{ ok: boolean; canceled?: boolean }> {
+  if (savedDriverJobRunning) throw new Error('Another saved-driver print job is still running.')
+  savedDriverJobRunning = true
+  try {
+    return await runJob([filePath], preset, options)
+  } finally {
+    savedDriverJobRunning = false
+  }
+}
+async function runJob(
+  filePaths: string[],
+  preset: FastPrintPreset,
+  jobOptions: { toolId?: string; copies?: number } = { toolId: 'fast-print' }
+): Promise<{ ok: boolean; canceled?: boolean }> {
   const files = normalizeFastPrintSelection(filePaths)
   await validateSelection(files)
   const jobName = files.length === 1 ? basename(files[0]) : `Fast Print - ${files.length} documents`
   const printers = JSON.parse(
     await powershell('fast-print-menu.ps1', ['-Action', 'List'])
-  ) as Array<{ name: string; papers: string[]; color: boolean }>
+  ) as Array<{ name: string; papers: string[]; color: boolean; duplex?: boolean }>
+  if (!preset.profileId) {
+    const preferences = await printerPreferencesStore().read()
+    const stocks = JSON.parse(
+      await powershell('fast-print-settings.ps1', ['-Action', 'List'])
+    ) as FastPrintSavedStock[]
+    const stock = defaultFastPrintStock(stocks, preset.printer, preset.paper)
+    const preferred =
+      preferredProfile(preferences, preset.printer, fastPrintOptionId(preset)) ?? stock?.id
+    if (preferred) preset = { ...preset, profileId: preferred }
+  }
   if (preset.profileId) {
     const profile = JSON.parse(
       await powershell('fast-print-settings.ps1', [
@@ -264,31 +266,58 @@ async function runJob(filePaths: string[], preset: FastPrintPreset): Promise<voi
         '-ProfileId',
         preset.profileId
       ])
-    ) as { printer: string; paper: string; name: string; landscape: boolean; duplex: string }
-    if (profile.printer !== preset.printer || profile.paper !== preset.paper) {
+    ) as {
+      printer: string
+      paper: string
+      name: string
+      landscape: boolean
+      duplex: string
+      color: boolean
+      paperWidthMm?: number
+      paperHeightMm?: number
+    }
+    if (
+      profile.printer !== preset.printer ||
+      (preset.mode !== 'document' && profile.paper !== preset.paper)
+    ) {
       throw new Error('This preset has changed. Refresh the printer list and choose it again.')
     }
     preset = {
       ...preset,
       landscape: profile.landscape,
       profileName: profile.name,
-      duplex: ['Vertical', 'Horizontal'].includes(profile.duplex)
+      duplex: ['Vertical', 'Horizontal'].includes(profile.duplex),
+      ...(preset.mode === 'document'
+        ? {
+            color: profile.color,
+            paperWidthMm: profile.paperWidthMm ?? (profile.paper === 'A3' ? 297 : 210),
+            paperHeightMm: profile.paperHeightMm ?? (profile.paper === 'A3' ? 420 : 297)
+          }
+        : {})
     }
   }
   const printer = printers.find((item) => item.name === preset.printer)
+  if (preset.mode === 'polaroid-8' || preset.mode === 'polaroid-9') {
+    preset = { ...preset, landscape: preset.mode === 'polaroid-8', duplex: false }
+  }
   if (!printer)
     throw new Error(
       'The selected printer is no longer installed. Use Refresh printer list in Fast Print.'
     )
-  if (!printer.papers.includes(preset.paper))
+  if (preset.mode !== 'document' && !printer.papers.includes(preset.paper))
     throw new Error(`This printer does not support ${preset.paper}.`)
   if (preset.color && !printer.color) throw new Error('This printer does not support color.')
+  if (preset.mode === 'id-card' && !preset.profileId)
+    preset = { ...preset, duplex: printer.duplex === true }
   const temp = await mkdtemp(join(app.getPath('temp'), 'maher-fast-print-'))
   const sheets: string[] = []
+  const sheetSizes: Array<{ widthMm: number; heightMm: number }> = []
   const window = new BrowserWindow({
-    width: 490,
-    height: 310,
-    resizable: false,
+    width: preset.mode === 'id-card' ? 1160 : 490,
+    height: preset.mode === 'id-card' ? 720 : 310,
+    minWidth: preset.mode === 'id-card' ? 800 : undefined,
+    minHeight: preset.mode === 'id-card' ? 600 : undefined,
+    resizable: preset.mode === 'id-card',
     autoHideMenuBar: true,
     title: 'Fast Print',
     backgroundColor: '#f5f7fb',
@@ -298,10 +327,20 @@ async function runJob(filePaths: string[], preset: FastPrintPreset): Promise<voi
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      partition: 'fast-print-' + basename(temp)
+      // ID setup uses the app's saved language, theme and performance preferences.
+      ...(preset.mode !== 'id-card' ? { partition: 'fast-print-' + basename(temp) } : {})
     }
   })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  if (!app.isPackaged && process.env.FAST_PRINT_VERIFY_DIR) {
+    window.webContents.on('console-message', ({ message }) => {
+      if (
+        message.startsWith('[polaroid-photo]') ||
+        message.includes('Smart photo analysis unavailable')
+      )
+        console.log(message)
+    })
+  }
   window.webContents.on('will-navigate', (event) => event.preventDefault())
   let submitted = false
   let done = false
@@ -332,7 +371,9 @@ async function runJob(filePaths: string[], preset: FastPrintPreset): Promise<voi
         name: basename(filePath),
         extension: extname(filePath).toLowerCase()
       })),
-      preset
+      preset,
+      canDuplex: printer.duplex === true,
+      canColor: printer.color
     }
   })
   ipcMain.handle('fast-print:file', async (event, index: number) => {
@@ -347,42 +388,90 @@ async function runJob(filePaths: string[], preset: FastPrintPreset): Promise<voi
       preset
     }
   })
-  ipcMain.handle('fast-print:sheet', async (event, png: string) => {
-    authorize(event)
-    if (
-      submitted ||
-      acceptingSheet ||
-      typeof png !== 'string' ||
-      png.length > 64 * 1024 * 1024 ||
-      !png.startsWith('data:image/png;base64,')
-    )
-      throw new Error('Invalid prepared sheet.')
-    acceptingSheet = true
-    try {
-      const output = join(temp, `${String(sheets.length + 1).padStart(5, '0')}.png`)
-      const bytes = Buffer.from(png.slice('data:image/png;base64,'.length), 'base64')
-      preparedBytes += bytes.length
-      if (preparedBytes > 2 * 1024 * 1024 * 1024)
-        throw new Error(
-          'The prepared batch exceeds 2 GB. Split this selection into smaller batches.'
-        )
-      currentSheetWrite = writeFile(output, bytes)
-      await currentSheetWrite
-      sheets.push(output)
-    } finally {
-      acceptingSheet = false
+  ipcMain.handle(
+    'fast-print:sheet',
+    async (event, png: string, pageSize?: { widthMm: number; heightMm: number }) => {
+      authorize(event)
+      if (
+        submitted ||
+        acceptingSheet ||
+        typeof png !== 'string' ||
+        png.length > 64 * 1024 * 1024 ||
+        !png.startsWith('data:image/png;base64,')
+      )
+        throw new Error('Invalid prepared sheet.')
+      if (
+        preset.mode === 'document' &&
+        (!pageSize ||
+          !Number.isFinite(pageSize.widthMm) ||
+          !Number.isFinite(pageSize.heightMm) ||
+          pageSize.widthMm <= 0 ||
+          pageSize.heightMm <= 0 ||
+          pageSize.widthMm > 10000 ||
+          pageSize.heightMm > 10000)
+      )
+        throw new Error('Invalid document page size.')
+      acceptingSheet = true
+      try {
+        const output = join(temp, `${String(sheets.length + 1).padStart(5, '0')}.png`)
+        const bytes = Buffer.from(png.slice('data:image/png;base64,'.length), 'base64')
+        preparedBytes += bytes.length
+        if (preparedBytes > 2 * 1024 * 1024 * 1024)
+          throw new Error(
+            'The prepared batch exceeds 2 GB. Split this selection into smaller batches.'
+          )
+        currentSheetWrite = writeFile(output, bytes)
+        await currentSheetWrite
+        sheets.push(output)
+        if (pageSize) sheetSizes.push(pageSize)
+      } finally {
+        acceptingSheet = false
+      }
     }
-  })
-  ipcMain.handle('fast-print:submit', async (event) => {
-    await assertOnlineProductionAccess('paid-tools', 'fast-print')
+  )
+  ipcMain.handle('fast-print:submit', async (event, options?: FastPrintSubmitOptions) => {
+    await assertOnlineProductionAccess('paid-tools', jobOptions.toolId)
     authorize(event)
     if (submitted || acceptingSheet || !sheets.length)
       throw new Error('No complete print job is ready.')
+    if (preset.mode === 'id-card') {
+      if (
+        sheets.length !== 2 ||
+        !options ||
+        typeof options.color !== 'boolean' ||
+        typeof options.duplex !== 'boolean'
+      )
+        throw new Error('Prepare both ID sides before printing.')
+      if (options.color && !printer.color) throw new Error('This printer does not support color.')
+      if (options.duplex && !printer.duplex)
+        throw new Error('This printer does not support automatic duplex.')
+      const prompt = options.manualDuplexPrompt
+      if (
+        prompt &&
+        (typeof prompt.message !== 'string' ||
+          prompt.message.length > 1500 ||
+          typeof prompt.title !== 'string' ||
+          prompt.title.length > 100 ||
+          typeof prompt.rtl !== 'boolean')
+      )
+        throw new Error('Invalid manual duplex prompt.')
+      preset = { ...preset, color: options.color, duplex: options.duplex }
+    } else if (options !== undefined) throw new Error('Invalid Fast Print options.')
     submitted = true
     clearTimeout(watchdog)
     const manifest = join(temp, 'job.json')
     try {
-      await writeFile(manifest, JSON.stringify({ name: jobName, preset, sheets }))
+      await writeFile(
+        manifest,
+        JSON.stringify({
+          name: jobName,
+          preset,
+          sheets,
+          sheetSizes,
+          copies: jobOptions.copies,
+          manualDuplexPrompt: options?.manualDuplexPrompt
+        })
+      )
       const verifyFolder = !app.isPackaged && process.env.FAST_PRINT_VERIFY_DIR
       const result = await powershell('fast-print-job.ps1', [
         '-Manifest',
@@ -397,13 +486,18 @@ async function runJob(filePaths: string[], preset: FastPrintPreset): Promise<voi
           JSON.stringify({
             name: jobName,
             preset,
-            sheets: sheets.map((sheet) => join(verifyFolder, basename(sheet)))
+            sheets: sheets.map((sheet) => join(verifyFolder, basename(sheet))),
+            sheetSizes,
+            copies: jobOptions.copies
           })
         )
         await writeFile(join(verifyFolder, 'driver-settings.json'), result)
       }
       console.log('[fast-print]', result)
-      return { verified: Boolean(verifyFolder) }
+      return {
+        verified: Boolean(verifyFolder),
+        manualBackCanceled: result === 'Front submitted; back canceled.'
+      }
     } catch (error) {
       fail(error instanceof Error ? error : new Error(String(error)))
       throw error
@@ -427,12 +521,13 @@ async function runJob(filePaths: string[], preset: FastPrintPreset): Promise<voi
   )
   const watchdog = setTimeout(
     () => fail(new Error('Fast Print preparation timed out.')),
-    10 * 60_000
+    (preset.mode === 'id-card' ? 60 : 10) * 60_000
   )
   try {
     await window.loadFile(join(__dirname, '../renderer/fast-print.html'))
     window.show()
     await ready
+    return { ok: submitted, ...(!submitted ? { canceled: true } : {}) }
   } finally {
     clearTimeout(watchdog)
     done = true

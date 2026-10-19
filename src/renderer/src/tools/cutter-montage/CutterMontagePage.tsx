@@ -1,3 +1,5 @@
+import { useDroppedToolFiles } from '../shared/useDroppedToolFiles'
+import type { ToolFileDropProps } from '../shared/toolFileDrop'
 import { useLanguage } from '@/i18n/useLanguage'
 import { ToolHeader } from '../shared/ToolHeader'
 import { ProjectFileActions } from '@/projects/ProjectFileActions'
@@ -56,7 +58,7 @@ interface PendingCutterImageImport {
   files: File[]
 }
 
-interface CutterMontagePageProps {
+interface CutterMontagePageProps extends ToolFileDropProps {
   onNavigate: (route: AppRoute) => void
   openedProject?: OpenedPrinterProject<CutterProjectPayload> | null
   onOpenProject: (filePath?: string | null) => Promise<PrinterAppProjectResult>
@@ -67,6 +69,8 @@ interface CutterMontagePageProps {
 }
 
 export function CutterMontagePage({
+  droppedFileImport,
+  onDroppedFileImportConsumed,
   onNavigate,
   openedProject,
   onOpenProject,
@@ -88,6 +92,11 @@ export function CutterMontagePage({
   const [projectIsBusy, setProjectIsBusy] = useState(false)
   const [projectMessage, setProjectMessage] = useState<string | null>(
     openedProject ? `Opened ${openedProject.project.metadata.jobName}` : null
+  )
+  useDroppedToolFiles(
+    { droppedFileImport, onDroppedFileImportConsumed },
+    projectIsBusy || cutter.isPdfImportBusy || cutter.fineCutBusy || cutter.printBusy,
+    cutter.importDesignFiles
   )
   const consumedImageImportIdsRef = useRef(new Set<number>())
   const [step, setStep] = useState<'prepare' | 'cut' | 'quantity' | 'layout'>('prepare')

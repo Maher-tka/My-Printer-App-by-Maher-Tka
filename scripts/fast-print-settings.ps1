@@ -4,14 +4,16 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'fast-print-profiles.ps1')
 
 if ($Action -eq 'List') {
-  $profiles=@(Get-FastPrintProfiles | Select-Object id,name,printer,paper)
+  $profiles=@(Get-FastPrintProfiles | Select-Object id,name,printer,paper,defaultBypassFaceUp,savedAt)
   ConvertTo-Json -InputObject $profiles -Compress
   exit 0
 }
 if ($Action -eq 'Resolve') {
   $profile = Read-FastPrintProfile $ProfileId
-  $null = Get-FastPrintProfileBytes $profile $profile.printer
-  $profile | Select-Object id,name,printer,paper,color,landscape,tray,duplex | ConvertTo-Json -Compress
+  $bytes = Get-FastPrintProfileBytes $profile $profile.printer
+  $summary = Get-FastPrintProfileSummary $profile.printer $bytes
+  if ($summary.paper -ne $profile.paper) { throw 'The saved paper setting is inconsistent. Capture this preset again.' }
+  $profile | Select-Object id,name,printer,paper,color,landscape,tray,duplex,@{Name='paperWidthMm';Expression={$summary.paperWidthMm}},@{Name='paperHeightMm';Expression={$summary.paperHeightMm}},@{Name='copies';Expression={$summary.copies}} | ConvertTo-Json -Compress
   exit 0
 }
 
@@ -43,7 +45,6 @@ function Show-FastPrintError($Failure) {
 
 $title=Add-Label 'Printer presets' 24 20 700 36
 $title.Font=[Drawing.Font]::new('Segoe UI',21,[Drawing.FontStyle]::Bold)
-$null=Add-Label 'Set up your stock once. Apply its printer settings from the Explorer menu.' 24 66 880
 $null=Add-Label 'SAVED PRESETS' 24 116 270
 $list=[Windows.Forms.ListBox]::new(); $list.Location=[Drawing.Point]::new(24,146); $list.Size=[Drawing.Size]::new(280,404)
 $list.DisplayMember='display'; $form.Controls.Add($list)
@@ -58,8 +59,12 @@ $null=Add-Label '2. Preset name (shown in the right-click menu)' 332 194 560
 $nameBox=[Windows.Forms.TextBox]::new(); $nameBox.Location=[Drawing.Point]::new(332,224); $nameBox.Size=[Drawing.Size]::new(560,30); $nameBox.MaxLength=100; $form.Controls.Add($nameBox)
 $null=Add-Label 'Example: A4 - 80 gsm - Tray 1, or A3 - 350 gsm - Bypass - Face up' 332 259 570 36
 $null=Add-Label 'Stock / operator notes (optional)' 332 301 550
-$notes=[Windows.Forms.TextBox]::new(); $notes.Location=[Drawing.Point]::new(332,331); $notes.Size=[Drawing.Size]::new(560,50)
+$notes=[Windows.Forms.TextBox]::new(); $notes.Location=[Drawing.Point]::new(332,331); $notes.Size=[Drawing.Size]::new(560,30)
 $notes.Multiline=$true; $notes.MaxLength=1000; $form.Controls.Add($notes)
+$defaultBypass=[Windows.Forms.CheckBox]::new()
+$defaultBypass.Text='Default bypass / face-up preset for this paper'
+$defaultBypass.Location=[Drawing.Point]::new(332,365); $defaultBypass.Size=[Drawing.Size]::new(560,28)
+$form.Controls.Add($defaultBypass)
 $capture=Add-Button '3. Configure and capture driver settings...' 332 398 560
 $null=Add-Label 'In the driver: refresh tray data if needed; set paper, tray, weight, face up, and finishing. Use 1 page per sheet / normal layout here.' 332 446 560 48
 $summary=[Windows.Forms.TextBox]::new(); $summary.Location=[Drawing.Point]::new(332,501); $summary.Size=[Drawing.Size]::new(560,63)
@@ -103,10 +108,12 @@ function Show-CapturedSummary {
 $new.add_Click({
   $list.ClearSelected(); $script:fpState.id=''; $script:fpState.bytes=$null; $script:fpState.fingerprint=''
   $nameBox.Clear(); $notes.Clear(); $save.Enabled=$false
+  $defaultBypass.Checked=$false
   $summary.Text='No settings captured. Configure the driver before saving.'; $nameBox.Focus()
 })
 $printerBox.add_SelectedIndexChanged({
   if ($script:fpState.loading) { return }
+  $defaultBypass.Checked=$false
   $script:fpState.id=''; $script:fpState.bytes=$null; $script:fpState.fingerprint=''; $save.Enabled=$false
   $summary.Text='Printer changed. Capture its settings before saving.'
 })
@@ -117,6 +124,7 @@ $list.add_SelectedIndexChanged({
     $script:fpState.loading=$true
     $script:fpState.id=$profile.id; $script:fpState.bytes=$null; $script:fpState.fingerprint=''; $save.Enabled=$false
     $nameBox.Text=$profile.name; $notes.Text=$profile.notes
+    $defaultBypass.Checked=$profile.defaultBypassFaceUp -eq $true
     if (!$printerBox.Items.Contains($profile.printer)) { $printerBox.Items.Add($profile.printer) | Out-Null }
     $printerBox.SelectedItem=$profile.printer
     try {
@@ -144,7 +152,7 @@ $save.add_Click({
   try {
     if (!$script:fpState.bytes) { throw 'Capture the driver settings first.' }
     if ($script:fpState.fingerprint -cne [FastPrintDriver]::Fingerprint([string]$printerBox.SelectedItem)) { throw 'The driver changed. Capture this preset again.' }
-    $profile=Save-FastPrintProfile -Name $nameBox.Text -Printer ([string]$printerBox.SelectedItem) -Bytes $script:fpState.bytes -Id $script:fpState.id -Notes $notes.Text
+    $profile=Save-FastPrintProfile -Name $nameBox.Text -Printer ([string]$printerBox.SelectedItem) -Bytes $script:fpState.bytes -Id $script:fpState.id -Notes $notes.Text -DefaultBypassFaceUp:$defaultBypass.Checked
     $script:fpState.id=$profile.id; $script:fpState.changed=$true
     Refresh-FastPrintList
     $status.Text='Saved. Click Done to update the Explorer menu.'

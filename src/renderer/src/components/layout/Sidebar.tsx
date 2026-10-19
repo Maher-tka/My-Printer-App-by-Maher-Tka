@@ -16,14 +16,17 @@ import {
   SquareStack,
   type LucideIcon
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState, type DragEvent } from 'react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { AppRoute } from '@/types/navigation'
+import { isFileDropTool, toolDropFormats, type FileDropTool } from '@/tools/shared/toolFileDrop'
 
 interface SidebarProps {
   activeRoute: AppRoute
   onNavigate: (route: AppRoute) => void
+  onDropToolFiles?: (route: FileDropTool, files: File[]) => void
+  fileDropBusy?: boolean
 }
 interface NavItem {
   route: AppRoute
@@ -45,35 +48,98 @@ const operationsItems: NavItem[] = [
 ]
 const settingsRoutes = new Set<AppRoute>(['settings', 'license', 'app-health', 'quality-lab'])
 
-export function Sidebar({ activeRoute, onNavigate }: SidebarProps): JSX.Element {
+export function Sidebar({
+  activeRoute,
+  onNavigate,
+  onDropToolFiles,
+  fileDropBusy = false
+}: SidebarProps): JSX.Element {
   const { t, direction } = useLanguage()
 
   const [expanded, setExpanded] = useState(false)
+  const [dragRoute, setDragRoute] = useState<AppRoute | null>(null)
+  const [tooltipRoute, setTooltipRoute] = useState<AppRoute | null>(null)
+  useEffect(() => {
+    const reset = (): void => setDragRoute(null)
+    window.addEventListener('drop', reset)
+    window.addEventListener('dragend', reset)
+    window.addEventListener('blur', reset)
+    return () => {
+      window.removeEventListener('drop', reset)
+      window.removeEventListener('dragend', reset)
+      window.removeEventListener('blur', reset)
+    }
+  }, [])
   const renderItem = (item: NavItem, active = activeRoute === item.route): JSX.Element => {
     const Icon = item.icon
+    const dropTool = isFileDropTool(item.route) ? item.route : null
+    const acceptsDrop = Boolean(dropTool && onDropToolFiles)
+    const dropHint = t(
+      fileDropBusy
+        ? 'Wait for the current import to finish.'
+        : dropTool === 'card-montage'
+          ? 'Drop one file, or two files for the front and back.'
+          : 'Drop files to import'
+    )
+    const dragOver = (event: DragEvent<HTMLButtonElement>): void => {
+      if (!Array.from(event.dataTransfer.types).includes('Files')) return
+      event.preventDefault()
+      event.stopPropagation()
+      event.dataTransfer.dropEffect = acceptsDrop && !fileDropBusy ? 'copy' : 'none'
+      setDragRoute(acceptsDrop && !fileDropBusy ? item.route : null)
+    }
     return (
-      <Tooltip key={item.route}>
+      <Tooltip
+        key={item.route}
+        open={dragRoute === item.route || tooltipRoute === item.route}
+        onOpenChange={(open) => setTooltipRoute(open ? item.route : null)}
+      >
         <TooltipTrigger asChild>
           <button
             type="button"
             onClick={() => onNavigate(item.route)}
             aria-label={t(item.label)}
             aria-current={active ? 'page' : undefined}
+            aria-description={
+              acceptsDrop && dropTool ? `${dropHint} · ${toolDropFormats[dropTool]}` : undefined
+            }
+            data-file-drop-tool={acceptsDrop ? dropTool : undefined}
+            onDragEnter={dragOver}
+            onDragOver={dragOver}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+                setDragRoute(null)
+            }}
+            onDrop={(event) => {
+              if (!Array.from(event.dataTransfer.types).includes('Files')) return
+              event.preventDefault()
+              event.stopPropagation()
+              setDragRoute(null)
+              if (dropTool && acceptsDrop && !fileDropBusy)
+                onDropToolFiles?.(dropTool, Array.from(event.dataTransfer.files))
+            }}
             className={cn(
-              'sidebar-navigation-button group flex min-h-11 items-center gap-3 rounded-full px-3 text-left text-[13px] transition-colors ui-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'sidebar-navigation-button group flex min-h-11 items-center gap-3 rounded-full px-3 text-left text-[13px] transition-colors ui-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
               expanded ? 'w-full' : 'size-11 justify-center',
               active
                 ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+                : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+              dragRoute === item.route &&
+                'bg-primary/10 text-primary ring-2 ring-inset ring-primary'
             )}
           >
             <Icon className="size-5 shrink-0" aria-hidden="true" />
             {expanded && <span className="truncate font-medium">{t(item.label)}</span>}
           </button>
         </TooltipTrigger>
-        {!expanded && (
+        {(!expanded || dragRoute === item.route) && (
           <TooltipContent side={direction === 'rtl' ? 'left' : 'right'} sideOffset={12}>
             {t(item.label)}
+            {acceptsDrop && dropTool && (
+              <span className="block text-xs">
+                {dropHint} · {toolDropFormats[dropTool]}
+              </span>
+            )}
           </TooltipContent>
         )}
       </Tooltip>

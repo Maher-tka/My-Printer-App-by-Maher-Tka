@@ -62,6 +62,14 @@ function getActiveExportContext(): ExportContext | undefined {
 }
 
 contextBridge.exposeInMainWorld('printerApp', {
+  printers: {
+    get: () => ipcRenderer.invoke('printers:get'),
+    save: (preferences: import('../shared/printer-preferences.js').PrinterPreferences) =>
+      ipcRenderer.invoke('printers:save', preferences),
+    capture: (request: import('../shared/printer-preferences.js').CaptureDriverPresetRequest) =>
+      ipcRenderer.invoke('printers:capture', request),
+    remove: (id: string) => ipcRenderer.invoke('printers:remove', id)
+  },
   setActiveTool: (route: string): void => {
     activeToolId = SUBSCRIPTION_TOOLS.find((tool) => tool.id === route)?.id
   },

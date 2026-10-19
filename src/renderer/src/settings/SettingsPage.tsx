@@ -14,10 +14,11 @@ import {
 import type { ReactNode } from 'react'
 import { BackupRestoreSettings } from '@/backup/BackupRestoreSettings'
 import { AppearanceSettings } from '@/appearance/AppearanceSettings'
+import { PrinterSettings } from './PrinterSettings'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -68,13 +69,13 @@ export function SettingsPage({
           </div>
           <div className="flex flex-col gap-1">
             <CardTitle className="text-lg">{t('Settings')}</CardTitle>
-            <CardDescription>{t('Workspace preferences and app management.')}</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-6 pt-6">
           <Tabs defaultValue="general">
-            <TabsList className="grid w-full grid-cols-2" aria-label={t('App settings')}>
+            <TabsList className="grid w-full grid-cols-3" aria-label={t('App settings')}>
               <TabsTrigger value="general">{t('General')}</TabsTrigger>
+              <TabsTrigger value="printing">{t('Printing settings')}</TabsTrigger>
               <TabsTrigger value="advanced">{t('Advanced')}</TabsTrigger>
             </TabsList>
             <TabsContent value="general" className="mt-5 space-y-6">
@@ -99,6 +100,9 @@ export function SettingsPage({
                   />
                 </div>
               </section>
+            </TabsContent>
+            <TabsContent value="printing" className="mt-5">
+              <PrinterSettings />
             </TabsContent>
             <TabsContent value="advanced" className="mt-5 space-y-6">
               <p className="text-sm text-muted-foreground">

@@ -16,7 +16,7 @@ function Read-FastPrintProfile([string]$Id, [string]$Directory = (Get-FastPrintP
   $path = Get-FastPrintProfilePath $Id $Directory
   if (!(Test-Path -LiteralPath $path)) { throw 'This saved preset was removed. Refresh the printer list.' }
   $profile = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
-  if ($profile.version -ne 1 -or $profile.id -ne $Id -or !$profile.name -or !$profile.printer -or $profile.paper -notin @('A4','A3') -or $profile.color -isnot [bool] -or $profile.landscape -isnot [bool]) {
+  if ($profile.version -ne 1 -or $profile.id -ne $Id -or !$profile.name -or !$profile.printer -or $profile.paper -isnot [string] -or !$profile.paper -or $profile.color -isnot [bool] -or $profile.landscape -isnot [bool]) {
     throw 'This saved printer preset is invalid. Capture it again in Manage printer presets.'
   }
   return $profile
@@ -46,11 +46,11 @@ function Get-FastPrintProfileSummary([string]$Printer, [byte[]]$Bytes) {
     [FastPrintDriver]::Apply($document, $Bytes)
     $page = $document.DefaultPageSettings
     $paper = $page.PaperSize.Kind.ToString()
-    if ($paper -notin @('A4','A3')) { throw 'Choose standard A4 or A3 in the driver before saving this Fast Print preset.' }
-    return [PSCustomObject]@{ paper=$paper; color=$page.Color; landscape=$page.Landscape; tray=$page.PaperSource.SourceName; trayId=$page.PaperSource.RawKind; duplex=$document.PrinterSettings.Duplex.ToString() }
+    if ($page.PaperSize.Width -le 0 -or $page.PaperSize.Height -le 0) { throw 'The driver did not return a valid paper size.' }
+    return [PSCustomObject]@{ paper=$paper; color=$page.Color; landscape=$page.Landscape; tray=$page.PaperSource.SourceName; trayId=$page.PaperSource.RawKind; duplex=$document.PrinterSettings.Duplex.ToString(); paperWidthMm=($page.PaperSize.Width*0.254); paperHeightMm=($page.PaperSize.Height*0.254); copies=$document.PrinterSettings.Copies }
   } finally { $document.Dispose() }
 }
-function Save-FastPrintProfile([string]$Name, [string]$Printer, [byte[]]$Bytes, [string]$Id = '', [string]$Notes = '', [string]$Directory = (Get-FastPrintProfileDirectory)) {
+function Save-FastPrintProfile([string]$Name, [string]$Printer, [byte[]]$Bytes, [string]$Id = '', [string]$Notes = '', [string]$Directory = (Get-FastPrintProfileDirectory), [switch]$DefaultBypassFaceUp) {
   $Name = $Name.Trim()
   if (!$Name -or $Name.Length -gt 100) { throw 'Give this preset a name of 1 to 100 characters.' }
   if ($Notes.Length -gt 1000) { throw 'Keep the stock notes under 1,000 characters.' }
@@ -62,6 +62,8 @@ function Save-FastPrintProfile([string]$Name, [string]$Printer, [byte[]]$Bytes, 
     version=1; id=$Id; name=$Name; printer=$Printer; notes=$Notes
     paper=$summary.paper; color=$summary.color; landscape=$summary.landscape
     tray=$summary.tray; trayId=$summary.trayId; duplex=$summary.duplex
+    paperWidthMm=$summary.paperWidthMm; paperHeightMm=$summary.paperHeightMm; copies=$summary.copies
+    defaultBypassFaceUp=[bool]$DefaultBypassFaceUp
     driverFingerprint=[FastPrintDriver]::Fingerprint($Printer)
     driverSettings=[Convert]::ToBase64String($protected)
     savedAt=[DateTime]::UtcNow.ToString('o')
