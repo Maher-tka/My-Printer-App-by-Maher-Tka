@@ -24,7 +24,7 @@
   Polaroid artwork in both modes. All originals were unchanged.
 - Repaint regression passed 960 frames across both themes and three languages:
   no legacy corner pixels, outstanding invalid regions, GDI growth or blank
-  preview replacements. ID real-photo checks passed for all originals and six
+  preview replacements. ID real-photo checks passed all six original and
   off-center/rotated cases, with 90 mm width, proportional height and aligned
   front/back centers in color and grayscale. No hardware jobs were submitted.
 - Full `release:check` passed (format, typecheck, all behavior suites, Storybook
@@ -34,6 +34,13 @@
   The packaged v0.2.17 executable/helper also prepared both fifteen-photo modes
   headlessly, matching production sheet artwork byte-for-byte without an access
   override. Inspected the generated photo/ID proofs and themed/RTL native renders.
+- Published stable v0.2.17 from commit `6da402d`; release workflow
+  [39381315432](https://github.com/Maher-tka/My-Printer-App-by-Maher-Tka/actions/runs/39381315432)
+  succeeded. GitHub's latest stable release includes Setup, Portable, blockmap,
+  `latest.yml` and SHA256 checksums. The downloaded 224,265,101-byte Setup matches
+  the update manifest's SHA512 and size; Setup, blockmap and metadata SHA256 values
+  match the published checksums. The local Explorer worker was restored to the
+  configured development build and passed both fifteen-photo mode proofs again.
 - Live desktop input was not used. Live dropdown/focus/keyboard interaction,
   desktop flicker video, high DPI/high contrast, actual scrolled keyboard behavior,
   low-memory workshop performance and physical output remain pending. Offscreen
