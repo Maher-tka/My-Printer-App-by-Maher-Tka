@@ -4,6 +4,12 @@ When the user asks to start or restart this app, use development/test mode with 
 
 The existing `.env.development` enables `VITE_DEV_UNLOCK_ALL=true` for the non-packaged development build. Clear an inherited `ELECTRON_RUN_AS_NODE` environment variable before launching Electron.
 
+# Desktop control preference
+
+Ask the user before interactive desktop or browser control on the main PC, and
+use it only when necessary. Prefer source inspection, background builds and
+headless proof checks. Do not take over the desktop to run routine validation.
+
 # ID print test photos
 
 When changing ID detection, cropping, straightening, sizing or output, always test

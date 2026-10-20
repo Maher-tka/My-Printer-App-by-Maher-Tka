@@ -153,7 +153,7 @@ export async function printPolaroid(batch: FastPrintBatchSource): Promise<void> 
     const result = await window.fastPrint.submit()
     label('heading', result.verified ? 'Print settings verified' : 'Sent to print queue')
     label('status', `${pages} photos · ${sheets} sheets · ${batch.preset.printer}`)
-    await new Promise((resolve) => setTimeout(resolve, 1600))
+    if (!batch.previewOnly) await new Promise((resolve) => setTimeout(resolve, 1600))
     await window.fastPrint.finish()
   } finally {
     await framer.dispose()

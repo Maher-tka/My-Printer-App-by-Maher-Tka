@@ -1,5 +1,214 @@
 # UI regression checklist
 
+## 2026-10-20 — Fast Print audit for v0.2.17
+
+- Printer settings are generation-checked, with dependent controls and Print
+  disabled until the active queue is ready. Controlled asynchronous response
+  tests cover late successes/errors and rapid printer changes. Explicit copies
+  survive queue changes; incompatible Polaroid driver properties retain A4/color.
+- PDF previews use temporary snapshots rather than locking originals. Source
+  metadata invalidates PDF/image conversions and previews. Edited PDF/BMP/PNG
+  fixtures refresh correctly; Print detects changed inputs and requires review.
+  Missing/empty inputs and invalid profiles cannot re-enable Print on failure.
+- File selection follows sheet navigation, including document pages within
+  Polaroid batches. Converted inputs keep their original names; literal ampersands
+  remain visible. Active-layout selection can refresh edited inputs. Layout tile
+  navigation accounts for scrolling without changing the selected print settings.
+- Microsoft Print to PDF/XPS grayscale fallback preserves requested output color
+  intent when their driver reports color. Hardware queues still require matching
+  driver color settings. Native/worker grayscale proofs match the same luminance
+  conversion; all generated grayscale pixels and updated-source pixels passed.
+- The hidden audit passed in English/dark, French/light and Arabic RTL/light:
+  three-sheet/seven-copy requests, source edits, printer races and validation.
+  Hidden DOCX/image proofs retained both Word pages and matched prepared/printed
+  Polaroid artwork in both modes. All originals were unchanged.
+- Repaint regression passed 960 frames across both themes and three languages:
+  no legacy corner pixels, outstanding invalid regions, GDI growth or blank
+  preview replacements. ID real-photo checks passed for all originals and six
+  off-center/rotated cases, with 90 mm width, proportional height and aligned
+  front/back centers in color and grayscale. No hardware jobs were submitted.
+- Full `release:check` passed (format, typecheck, all behavior suites, Storybook
+  and production build), followed by native shell/dialog compilation and Windows
+  packaging. The production Polaroid regression passed all six real-photo cases,
+  including signed-out Print denial and previews without an account override.
+  The packaged v0.2.17 executable/helper also prepared both fifteen-photo modes
+  headlessly, matching production sheet artwork byte-for-byte without an access
+  override. Inspected the generated photo/ID proofs and themed/RTL native renders.
+- Live desktop input was not used. Live dropdown/focus/keyboard interaction,
+  desktop flicker video, high DPI/high contrast, actual scrolled keyboard behavior,
+  low-memory workshop performance and physical output remain pending. Offscreen
+  layouts are checked at 1366×768, 1920×1080, 1600×900 and 820×640; a headless check
+  cannot establish every interactive or hardware acceptance criterion.
+
+Artifacts: `output/fast-print-audit`, `output/fast-print-docx-audit`,
+`output/fast-print-paint`, `output/fast-print-id` and the production-build Polaroid
+regression under `output/fast-print-polaroid-native`. Release/package logs and
+packaged preview checks are under `output/release-0.2.17`.
+
+## 2026-10-20 — Native Fast Print flicker and legacy-edge correction
+
+- Removed the double-paint path that drew the standard combo face/frame and then
+  overlaid a rounded skin. Combo faces now own their full client area and render
+  once into a buffer using paired BeginPaint/EndPaint. Background erase and native
+  non-client painting no longer expose a second rectangular layer.
+- Buttons and layout tiles use the same complete-frame rendering for normal paint
+  and offscreen rendering. Opaque backgrounds are filled without antialiasing
+  before drawing rounded edges; this fixes the leftover edge pixels caught by the
+  new corner checks. Tiles draw their content once and invalidate only the old/new
+  selection. Options-menu rendering uses the shared palette and buffered surface.
+- Table/flow containers are buffered. Preview painting no longer changes BackColor
+  while painting. An in-progress Polaroid replacement retains the existing sheet
+  behind a static loading overlay; stale errors cannot overwrite a newer request.
+- `test:fast-print:paint` passed against the installed local helper: 960 explicit
+  repaint cycles across English/French/Arabic and light/dark themes, zero remaining
+  invalid regions, zero GDI-resource growth, zero legacy corner pixels in enabled
+  and disabled controls, two tile invalidations per selection and no blank preview
+  replacements. Inspected hidden-form renders at 1366×768, 1920×1080, 1600×900 and
+  820×640; sharp underlay edges are absent and fields/footer remain readable.
+- Repeated both Polaroid modes through the actual local Explorer worker arguments
+  with all fifteen real photos and no account-mode override. Each produced two
+  sheets, with preview/print artwork matching byte-for-byte and zero blank-sheet
+  replacements. Existing source artwork/framing/output geometry is unchanged.
+- Native compilation, typecheck, Fast Print, print/preferences, appearance, i18n
+  and changed-file formatting passed. The tested helper replaced FastPrint.exe
+  without closing the user's windows; reopen Fast Print to load it. The main worker
+  retains the configured non-packaged development build, preserving the preceding
+  access correction. No release was published.
+- No desktop input or hardware print jobs were sent. Live desktop flicker, actual
+  dropdown/focus interaction, high DPI/high contrast and low-memory workshop checks
+  remain pending; the checked images are offscreen renders, not captured desktop
+  video. Physical shop printer validation remains pending.
+
+Artifacts: `output/fast-print-paint/results.json`, themed/RTL dialog and control
+renders; `output/fast-print-local-worker/checks.json`, matching Polaroid proofs
+and `result.json` (`blankPreviewReplacements: 0`).
+
+## 2026-10-20 — Polaroid preview access-gate regression
+
+- The user's follow-up screenshot exposed a missed environment: preview preparation
+  returned `[fast-print] Request access`. The earlier checks used `local-test`,
+  masking production access checks in both command startup and renderer submit.
+- Preview-only sheet composition now skips both print authorization checks and
+  retains its early return before the Windows print script. Actual Print still
+  checks access at startup and immediately before submission. No accounts, grants,
+  saved sessions or subscriber permissions were changed.
+- The headless Polaroid regression now launches native preview workers without an
+  account-mode override. A separate isolated signed-out production worker must
+  reject Print before a job is created. Explicit offline mode is limited to the
+  generated artwork/driver proofs. This distinguishes preview behavior from actual
+  print authorization instead of claiming test-mode success covers both.
+- Production-build checks passed for both modes with all fifteen originals and
+  exact eight/nine-photo selections. Preview and generated print artwork matched;
+  the isolated signed-out Print was denied before a job was created. Original
+  hashes, rotations, face-safe crops, pagination and white final slots passed.
+- The local worker was then built with the project's configured development mode,
+  preserving `.env.development`'s non-packaged unlock preference. Its actual
+  Explorer executable/argument path passed both fifteen-photo native previews and
+  ValidateOnly print proofs without `PRINTER_ACCOUNT_MODE` overrides. Both produced
+  two matching sheets. Subscriber builds retain the existing packaged-access guard.
+- Typecheck, production/development builds, Fast Print, print/preferences, access
+  enforcement checks and changed-file formatting passed. Detailed results:
+  `output/fast-print-polaroid-native/results.json` and
+  `output/fast-print-local-worker/checks.json`.
+- No desktop/browser control or hardware printing was used. Physical printer
+  output remains pending; no new layout or framing algorithm was introduced.
+
+## 2026-10-20 — Polaroid native preview correction
+
+- Fixed the gap identified in the user's screenshot: 8 PIC/9 PIC now compose the
+  entire selection into actual Polaroid sheets instead of previewing one source
+  photo. Eight/nine photos fit one A4 sheet; overflow continues onto further sheets.
+  Next/Previous navigates sheets; file selection locates its containing sheet.
+- A hidden preparation worker uses the production compositor, including smart
+  rotations, protected faces, frames and cut lines. This preview path returns
+  before the Windows print script; only explicit Print can submit a print job.
+  A4/color and single-sided output stay automatic. Busy preparation disables Print;
+  errors remain visible, and stale results cannot replace another selected mode.
+- Prepared output is cached by mode and source metadata. Four bounded sheet
+  thumbnails support navigation without reopening full-resolution artwork.
+  Source changes invalidate previews. Closing the dialog cleans its owned cache.
+- The new headless regression used all fifteen num216p originals and selections
+  of exactly eight and nine photos in both modes. All six combinations passed:
+  one-sheet output where appropriate, two-sheet overflow, every photo in order,
+  expected rotations/crops, protected detected faces and white final slots.
+- Preview preparation PNGs matched the actual production print artwork
+  byte-for-byte. Native displayed previews matched downsampled print proofs.
+  A4/color/landscape-or-portrait/simplex driver settings passed ValidateOnly.
+  The original source hashes were unchanged; no hardware jobs were submitted.
+- Inspected generated proofs and hidden-form renders at 1366×768, 1920×1080,
+  1600×900 and 820×640, with English/dark, French/light and Arabic RTL/light cases.
+  The sheet preview and pagination show the composed batch. These are offscreen
+  self-test renders, not a new desktop automation session. Actual interactive
+  focus/keyboard, high DPI/high contrast and low-memory workshop checks are pending.
+- Typecheck/build, native compilation, Fast Print, print/preferences, i18n,
+  appearance and driver-profile checks passed. Mixed PDF/image batch rendering
+  and unsupported-input rejection passed headlessly. ID originals and ±45° cases
+  again passed 90 mm/proportional/centered color/mono proof checks.
+- No desktop/browser control was used. The user's requirement to ask before
+  necessary interactive main-PC control is recorded in AGENTS.md. Existing open
+  windows are left alone; reopen Fast Print to load the replaced native helper.
+  Physical shop printer validation and a subscriber release remain pending.
+
+Artifacts: `output/fast-print-polaroid-native/results.json`, per-case
+`sheet-*.png`, `preview-*.png`, `worker/driver-settings.json`, `proof-check.json`
+and hidden-form layout renders. Repeat with
+`npm run test:fast-print:polaroid-native`. Changes are local and unpublished.
+
+## 2026-10-20 — Fast Print performance, layouts and native appearance
+
+- The new native dialog remains separate from the app. Its buttons, layout tiles,
+  fields and preview surfaces consume the shared app tokens, with light/dark/system
+  appearance and a Windows 10/11 manifest. Native controls retain accessible names;
+  layout tiles expose radio/checked semantics and arrow-key selection. Polaroid
+  stays directly below the printer. One primary Print/Review ID action remains.
+- Added shared A4/A3 grids for 1/2/4/6/8/9/12/16-up; native preview and print worker
+  consume the same layout definitions. Consecutive photos fill sheets together;
+  PDF/Word boundaries remain separate. Existing per-option driver assignments
+  include the expanded counts, without changing Windows printer defaults.
+- Initial source decoding runs alongside printer discovery. Driver capabilities
+  and bounded page images are cached; stale preview requests are discarded. The
+  six-million-pixel page cache caps retained artwork at approximately 24 MB.
+- Main-PC PDF runs measured 0.25–0.49 s to first paint, 0.54–0.79 s to source
+  preview and 57–90 ms for warm preview changes. Driver-ready full layout previews
+  took 2.36–2.79 s; the two-page DOCX conversion took 9.75 s. These are local
+  measurements, not Windows-dialog parity or workshop performance guarantees.
+- Inspected generated light/dark, French and Arabic RTL snapshots at 1366×768,
+  1920×1080, 1600×900 and the 820×640 minimum. The layout panel scrolls at smaller
+  sizes; footer actions, fields, long French labels and artwork stay visible.
+  Native rendering has no animated web effects or app low-end-mode dependency.
+- Real Explorer test selected PDF, PNG and DOCX together and invoked Show more
+  options > Fast Print. One native window opened with all three files, not the old
+  nested printer list. Process inspection confirmed Explorer directly launched
+  FastPrint.exe through the batch manifest; no Print action was invoked.
+- All sixteen A4/A3 worker cases passed using a nineteen-page mixed-orientation
+  PDF, with matching native first-sheet previews, expected landscape orientation,
+  pagination and copies. Independent pixel checks confirmed first/final sheet
+  order and white trailing cells. Thirteen uniquely colored photos retained order
+  across four four-up sheets; image/PDF/image groups produced six sheets.
+- Two-page DOCX conversion through the local LibreOffice runtime passed formatting,
+  pagination, source hashes and three-copy driver handoff. Native request/parser,
+  saved-profile precedence, unchanged defaults and session cleanup checks passed.
+- Repeated all original ID TEST photos plus off-center ±45° cases: 90 mm width,
+  proportional height and centered color/mono proofs passed. Both Polaroid modes
+  again included all fifteen num216p photos on two sheets, with intentional group
+  rotations, protected faces and white final slots. Inspected proofs; originals
+  and saved settings are unchanged. No hardware jobs were submitted.
+- Typecheck, production build, native compilation, Fast Print, print/preferences,
+  i18n, native shell selection (122 files), driver-profile tests and changed-file
+  formatting passed. Final native executable was replaced without closing the
+  user's already-open preview; reopen Fast Print to load the newest styling.
+- User stopped Computer Use with Escape. No further desktop input was issued.
+  The last non-client combo-border and RTL tile-order polish compiled, but its
+  final on-screen recheck and interactive arrow/dropdown/focus checks remain
+  pending. Also pending: OS high contrast/high DPI, low-memory workshop timing,
+  actual Konica/Epson finishing and hardware output, Microsoft Word COM, and
+  packaged installer/subscriber release. Changes remain local and unpublished.
+
+Artifacts: `output/fast-print-native-verification/results.json`,
+`grid-proof-check.json`, `grid-final-sheets.png`, per-case layout/UI/worker proofs,
+`output/fast-print-modern/`, `output/fast-print-id/` and
+`output/fast-print-num216p-menu/`.
+
 ## Stable 0.2.16 release preparation — 2026-10-19
 
 - Full `npm run release:check` passed: repository formatting, TypeScript, all
@@ -1296,3 +1505,59 @@ Artifacts: `output/playwright/printer-settings-*.png`,
 `output/printer-settings/backend-result.json`, `app-print/driver-settings.json`,
 `output/pdf/printer-settings-mixed-a4.pdf`,
 `output/fast-print-num216p-menu/results.json` and matching photo sheets.
+
+## 2026-10-19 — Native Explorer Fast Print dialog
+
+- Supersedes the earlier Electron selector, which the user rejected. Explorer now
+  launches a roughly 80 KB .NET/Windows Forms helper directly, with Windows.Data.Pdf
+  previews and native printer controls. No Electron process/browser/dashboard is
+  required before Print. The user's Windows Print Pictures reference takes
+  precedence over the app-shell styling requirement; native system controls and
+  system colors are used instead of another web styling system.
+- Printer, A4/A3 paper, driver quality, color, saved profiles, orientation, copies,
+  fill/fit, native vendor options, preset management and paginated source/layout
+  previews are available. Polaroid 8/9 is directly below the printer and locks
+  A4/color. ID retains the dedicated front/back review before printing. One output
+  action, no duplicate commands or explanatory heading subtitles.
+- Native UI snapshots inspected in English/French/Arabic RTL at 900×699, 1366×768,
+  1920×1080, 1600×900 and 780×580. Labels, scrolling layout list, preview, controls
+  and footer remain usable. Production artwork remains in its own coordinates.
+  Native controls have accessible names and standard keyboard/tab/Enter/Escape
+  behavior; no web animation or browser effects are used in low-end mode.
+- Native integration verifies five-page/mixed-orientation PDF preview, image/PDF
+  batches, final blank cells, fill-frame rendering, automatic bypass stock,
+  independent option assignment and explicit-profile precedence, 3-copy encrypted
+  driver handoff, source hashes and unchanged printer defaults. Actual Print to
+  PDF driver checks run ValidateOnly; no hardware jobs are submitted.
+- Window first-paint measurements on the main PC were approximately 0.14–0.21 s;
+  initial PDF previews about 2.1–2.5 s. Cold driver/converter startup is measured
+  separately. Memory for the five-page preview was around 110 MB in these runs;
+  these measurements are local, not guarantees for workshop hardware.
+- DOCX conversion tested with an official, checksum/signature-verified LibreOffice
+  runtime extracted locally, without changing file associations. A two-page Word
+  document retained its table, formatting, explicit page break and original hash;
+  its temporary PDF produced the expected one four-up sheet with three copies.
+  The private converter is available locally; the app installer does not bundle it.
+  Microsoft Word COM conversion is implemented but unavailable for local testing.
+- Main-PC Explorer registration was updated to the native executable. Actual
+  Shell inspection confirms one Fast Print entry for PDF and DOCX; duplicate
+  wildcard/ProgID registration was removed. Saved app settings are preserved.
+- Native shell selection checks passed for 122 files, order, Unicode, ampersands
+  and the 1,000-file limit. Shared request validation rejects unsafe cleanup paths,
+  invalid copies, unconverted DOCX and invalid/missing driver snapshots.
+- Typecheck, production build, native builds, Fast Print, print/preferences, i18n,
+  appearance and driver-profile checks passed. Encrypted full-buffer round trips,
+  fingerprint/printer mismatch handling and unchanged Windows defaults passed.
+- All original ID TEST images and off-center ±45° variants passed 90 mm width,
+  proportional height, centered color/mono proof and source-hash checks. Inspected
+  crop overlays and generated proofs. Both Polaroid modes again included all 15
+  num216p photos on two sheets each, with protected faces, intentional sideways
+  group placements, correct blank final slots and unchanged source hashes.
+- Pending: native OS dark/high-contrast appearance, physical printer output,
+  vendor-specific options on workshop hardware, Word COM conversion, packaged
+  installer/subscriber release and low-memory workshop startup measurements.
+  The current native UI uses the OS system-color scheme rather than the app theme.
+
+Artifacts: `output/fast-print-native-verification/results.json`, per-case native
+screenshots/layout proofs/driver validation; `output/fast-print-id/` and
+`output/fast-print-num216p-menu/`. Changes remain local and unpublished.

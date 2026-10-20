@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict'
-import { fastPrintLayout, validateFastPrintPreset } from './fast-print.js'
+import {
+  FAST_PRINT_COUNTS,
+  FAST_PRINT_LAYOUTS,
+  fastPrintLayout,
+  validateFastPrintPreset
+} from './fast-print.js'
 import { polaroidLayout, polaroidCoverCrop } from './fast-print-polaroid.js'
 
 for (const paper of ['A4', 'A3'] as const) {
-  for (const pagesPerSheet of [1, 2, 4] as const) {
+  for (const pagesPerSheet of FAST_PRINT_COUNTS) {
     for (const color of [false, true]) {
       const preset = validateFastPrintPreset({
         printer: 'Office \\ printer & العربية',
@@ -13,7 +18,10 @@ for (const paper of ['A4', 'A3'] as const) {
       })
       const layout = fastPrintLayout(preset)
       assert.equal(layout.columns * layout.rows, pagesPerSheet)
-      assert.equal(layout.width > layout.height, pagesPerSheet === 2)
+      assert.equal(
+        layout.width > layout.height,
+        FAST_PRINT_LAYOUTS.find((item) => item.count === pagesPerSheet)!.landscape
+      )
       assert.ok(layout.cellWidth > 0 && layout.cellHeight > 0)
       assert.ok(
         Math.abs(

@@ -65,6 +65,12 @@ async function run(): Promise<void> {
     let totalSheets = 0
     for (let documentIndex = 0; documentIndex < batch.files.length; documentIndex++) {
       const source = await window.fastPrint.file(documentIndex)
+      let groupEnd = documentIndex
+      if (preset.combineImages && source.extension !== '.pdf') {
+        while (groupEnd + 1 < batch.files.length && batch.files[groupEnd + 1].extension !== '.pdf')
+          groupEnd++
+      }
+      const imageGroup = source.extension !== '.pdf' && groupEnd > documentIndex
       label(
         'file',
         batch.files.length === 1
@@ -74,7 +80,7 @@ async function run(): Promise<void> {
       try {
         if (source.extension === '.pdf') pdf = await loadPdfDocument(new Uint8Array(source.bytes))
         else image = await createImageBitmap(new Blob([new Uint8Array(source.bytes)]))
-        const pageCount = pdf?.numPages ?? 1
+        const pageCount = pdf?.numPages ?? groupEnd - documentIndex + 1
         totalPages += pageCount
         if (totalPages > FAST_PRINT_MAX_PAGES)
           throw new Error(
@@ -88,11 +94,19 @@ async function run(): Promise<void> {
           context.fillStyle = '#ffffff'
           context.fillRect(0, 0, canvas.width, canvas.height)
           for (let slot = 0; slot < preset.pagesPerSheet && first + slot < pageCount; slot++) {
+            if (imageGroup && first + slot > 0) {
+              image?.close()
+              const next = await window.fastPrint.file(documentIndex + first + slot)
+              image = await createImageBitmap(new Blob([new Uint8Array(next.bytes)]))
+            }
             const page = pdf ? await pdf.getPage(first + slot + 1) : undefined
             const viewport = page?.getViewport({ scale: 1 })
             const sourceWidth = viewport?.width ?? image!.width
             const sourceHeight = viewport?.height ?? image!.height
-            const scale = Math.min(layout.cellWidth / sourceWidth, layout.cellHeight / sourceHeight)
+            const scale = (preset.fitToFrame ? Math.max : Math.min)(
+              layout.cellWidth / sourceWidth,
+              layout.cellHeight / sourceHeight
+            )
             const width = Math.max(1, Math.floor(sourceWidth * scale))
             const height = Math.max(1, Math.floor(sourceHeight * scale))
             const x =
@@ -102,41 +116,68 @@ async function run(): Promise<void> {
               Math.floor(slot / layout.columns) * (layout.cellHeight + layout.gap) +
               (layout.cellHeight - height) / 2
             context.filter = preset.color ? 'none' : 'grayscale(1)'
+            context.save()
+            context.beginPath()
+            context.rect(
+              (slot % layout.columns) * (layout.cellWidth + layout.gap),
+              Math.floor(slot / layout.columns) * (layout.cellHeight + layout.gap),
+              layout.cellWidth,
+              layout.cellHeight
+            )
+            context.clip()
             if (page) {
               const pageCanvas = document.createElement('canvas')
-              pageCanvas.width = width
-              pageCanvas.height = height
+              // Cover mode crops into a bounded cell instead of allocating an
+              // arbitrarily wide/tall bitmap for panoramic PDF pages.
+              pageCanvas.width = preset.fitToFrame ? Math.ceil(layout.cellWidth) : width
+              pageCanvas.height = preset.fitToFrame ? Math.ceil(layout.cellHeight) : height
               try {
                 await page.render({
                   canvas: pageCanvas,
                   viewport: page.getViewport({ scale }),
+                  ...(preset.fitToFrame
+                    ? {
+                        transform: [
+                          1,
+                          0,
+                          0,
+                          1,
+                          (layout.cellWidth - width) / 2,
+                          (layout.cellHeight - height) / 2
+                        ]
+                      }
+                    : {}),
                   intent: 'print',
                   background: '#ffffff'
                 }).promise
-                context.drawImage(pageCanvas, x, y, width, height)
+                context.drawImage(
+                  pageCanvas,
+                  preset.fitToFrame ? (slot % layout.columns) * (layout.cellWidth + layout.gap) : x,
+                  preset.fitToFrame
+                    ? Math.floor(slot / layout.columns) * (layout.cellHeight + layout.gap)
+                    : y,
+                  preset.fitToFrame ? layout.cellWidth : width,
+                  preset.fitToFrame ? layout.cellHeight : height
+                )
               } finally {
                 pageCanvas.width = 0
                 pageCanvas.height = 0
                 page.cleanup()
               }
             } else context.drawImage(image!, x, y, width, height)
+            context.restore()
           }
           await window.fastPrint.sheet(canvas.toDataURL('image/png'))
           totalSheets++
           const count = Math.floor(first / preset.pagesPerSheet) + 1
-          progress.value = documentIndex + count / documentSheets
+          progress.value = documentIndex + ((groupEnd - documentIndex + 1) * count) / documentSheets
           label(
             'status',
             `File ${documentIndex + 1} of ${batch.files.length} · Sheet ${count} of ${documentSheets}. Close to cancel.`
           )
         }
         if (
-          needsBatchBlankBack(
-            documentSheets,
-            documentIndex,
-            batch.files.length,
-            preset.duplex === true
-          )
+          needsBatchBlankBack(documentSheets, groupEnd, batch.files.length, preset.duplex === true)
         ) {
           context.filter = 'none'
           context.fillStyle = '#ffffff'
@@ -144,6 +185,7 @@ async function run(): Promise<void> {
           await window.fastPrint.sheet(canvas.toDataURL('image/png'))
           totalSheets++
         }
+        documentIndex = groupEnd
       } catch (error) {
         throw new Error(
           `${source.name}: ${error instanceof Error ? error.message : String(error)}. The batch has not been sent to the printer.`

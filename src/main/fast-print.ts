@@ -1,16 +1,10 @@
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  ipcMain,
-  Menu,
-  screen,
-  type MenuItemConstructorOptions
-} from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { nativePrintSession, parseNativePrintRequest } from '../shared/fast-print-native.js'
 import {
   createFastPrintChoices,
   defaultFastPrintStock,
-  type FastPrintChoice,
   type FastPrintDevice,
   type FastPrintSavedStock
 } from '../shared/fast-print-menu.js'
@@ -32,6 +26,8 @@ import {
 
 const switches = [
   '--fast-print',
+  '--fast-print-request',
+  '--fast-print-preview',
   '--fast-print-menu',
   '--fast-print-batch',
   '--install-fast-print',
@@ -67,6 +63,35 @@ export async function runFastPrintCommand(): Promise<void> {
       )
       // Remove earlier per-user registrations so there is exactly one Explorer entry.
       await powershell('fast-print-menu.ps1', ['-Action', 'Remove'])
+    } else if (args.includes('--fast-print-request') || args.includes('--fast-print-preview')) {
+      const previewOnly = args.includes('--fast-print-preview')
+      if (!previewOnly) await assertOnlineProductionAccess('paid-tools', 'fast-print')
+      const requestPath =
+        args[args.indexOf(previewOnly ? '--fast-print-preview' : '--fast-print-request') + 1]
+      if (!requestPath) throw new Error('Missing native Fast Print request.')
+      const directory = nativePrintSession(requestPath, app.getPath('temp'))
+      try {
+        if ((await stat(requestPath)).size > 4 * 1024 * 1024)
+          throw new Error('The print request is too large.')
+        const request = parseNativePrintRequest(await readFile(requestPath, 'utf8'))
+        if (previewOnly && !request.preset.mode?.startsWith('polaroid-'))
+          throw new Error('Only Polaroid sheets use background preparation.')
+        await runJob(request.files, request.preset, {
+          toolId: 'fast-print',
+          copies: request.copies,
+          profileDirectory: directory,
+          ...(previewOnly ? { previewDirectory: join(directory, 'preview') } : {})
+        })
+      } catch (error) {
+        if (previewOnly)
+          await writeFile(
+            join(directory, 'preview-error.txt'),
+            error instanceof Error ? error.message : String(error)
+          )
+        throw error
+      } finally {
+        if (!previewOnly) await rm(directory, { recursive: true, force: true })
+      }
     } else if (args.includes('--fast-print-batch')) {
       await assertOnlineProductionAccess('paid-tools', 'fast-print')
       const manifestPath = args[args.indexOf('--fast-print-batch') + 1]
@@ -111,7 +136,7 @@ export async function runFastPrintCommand(): Promise<void> {
           message: output,
           detail: remove
             ? 'The Explorer menu has been removed.'
-            : 'Right-click a PDF, PNG, JPEG, or GIF file → Show more options → Fast Print. Hover over your printer, paper size, and color mode, then click a layout to print.'
+            : 'Right-click a PDF, PNG, JPEG, or GIF file → Show more options → Fast Print. Choose your printer, options, and saved presets in the Fast Print window, then click Print.'
         })
       }
     } else {
@@ -125,7 +150,9 @@ export async function runFastPrintCommand(): Promise<void> {
       )
       const separator = process.argv.indexOf('--')
       const paths = separator < 0 ? [] : process.argv.slice(separator + 1)
-      await runJob(normalizeFastPrintSelection(paths.map((path) => resolve(path))), preset)
+      const files = normalizeFastPrintSelection(paths.map((path) => resolve(path)))
+      if (!app.isPackaged && process.env.FAST_PRINT_VERIFY_DIR) await runJob(files, preset)
+      else await showFastPrintMenu(files, preset)
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -153,73 +180,55 @@ async function validateSelection(files: string[]): Promise<void> {
   }
 }
 
-async function showFastPrintMenu(filePaths: string[]): Promise<void> {
+async function showFastPrintMenu(
+  filePaths: string[],
+  initialPreset?: FastPrintPreset
+): Promise<void> {
   const files = normalizeFastPrintSelection(filePaths)
   await validateSelection(files)
-  const selectionName =
-    files.length === 1 ? basename(files[0]) : `${files.length} documents selected`
-  for (;;) {
+  if (!app.isPackaged && process.env.FAST_PRINT_MENU_VERIFY) {
     const devices = JSON.parse(
       await powershell('fast-print-menu.ps1', ['-Action', 'List'])
     ) as FastPrintDevice[]
     const profiles = JSON.parse(
       await powershell('fast-print-settings.ps1', ['-Action', 'List'])
     ) as FastPrintSavedStock[]
-    const choices = createFastPrintChoices(
-      devices,
-      profiles,
-      await printerPreferencesStore().read()
+    await writeFile(
+      process.env.FAST_PRINT_MENU_VERIFY,
+      JSON.stringify(
+        createFastPrintChoices(devices, profiles, await printerPreferencesStore().read()),
+        null,
+        2
+      )
     )
-    if (!app.isPackaged && process.env.FAST_PRINT_MENU_VERIFY) {
-      await writeFile(process.env.FAST_PRINT_MENU_VERIFY, JSON.stringify(choices, null, 2))
-      return
-    }
-    const position = screen.getCursorScreenPoint()
-    const workArea = screen.getDisplayNearestPoint(position).workArea
-    const owner = new BrowserWindow({
-      title: 'Fast Print',
-      x: workArea.x,
-      y: workArea.y,
-      width: workArea.width,
-      height: workArea.height,
-      frame: false,
-      transparent: true,
-      skipTaskbar: true,
-      resizable: false,
-      show: false,
-      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false }
-    })
-    const choice = await new Promise<FastPrintChoice | null>((resolveChoice) => {
-      const convert = (item: FastPrintChoice): MenuItemConstructorOptions => ({
-        label: item.label,
-        enabled: item.enabled,
-        ...(item.children
-          ? { submenu: item.children.map(convert) }
-          : { click: () => resolveChoice(item) })
-      })
-      const menu = Menu.buildFromTemplate([
-        { label: selectionName.replaceAll('&', '&&'), enabled: false },
-        { type: 'separator' },
-        ...choices.map(convert)
-      ])
-      owner.once('closed', () => resolveChoice(null))
-      owner.show()
-      owner.focus()
-      menu.popup({
-        window: owner,
-        callback: () => resolveChoice(null)
-      })
-    }).finally(() => {
-      if (!owner.isDestroyed()) owner.destroy()
-    })
-    if (!choice || choice.action === 'cancel') return
-    if (choice.action === 'manage') {
-      await powershell('fast-print-settings.ps1', ['-Action', 'Manage'])
-      continue
-    }
-    if (choice.action === 'refresh') continue
-    if (choice.preset) await runJob(files, choice.preset)
     return
+  }
+  const helper = app.isPackaged
+    ? join(process.resourcesPath, 'fast-print', 'FastPrint.exe')
+    : join(app.getAppPath(), 'out', 'native', 'FastPrint.exe')
+  const directory = await mkdtemp(join(app.getPath('temp'), 'maher-fast-print-launch-'))
+  try {
+    const manifest = join(directory, 'selection.json')
+    await writeFile(manifest, JSON.stringify({ version: 1, files }))
+    const env = { ...process.env }
+    delete env.ELECTRON_RUN_AS_NODE
+    delete env.ELECTRON_RENDERER_URL
+    await promisify(execFile)(
+      helper,
+      [
+        '--app',
+        process.execPath,
+        ...(!app.isPackaged ? ['--app-path', app.getAppPath()] : []),
+        ...(initialPreset
+          ? ['--preset', Buffer.from(JSON.stringify(initialPreset)).toString('base64')]
+          : []),
+        '--batch',
+        manifest
+      ],
+      { windowsHide: true, env }
+    )
+  } finally {
+    await rm(directory, { recursive: true, force: true })
   }
 }
 
@@ -240,14 +249,26 @@ export async function runSavedDriverPrint(
 async function runJob(
   filePaths: string[],
   preset: FastPrintPreset,
-  jobOptions: { toolId?: string; copies?: number } = { toolId: 'fast-print' }
+  jobOptions: {
+    toolId?: string
+    copies?: number
+    profileDirectory?: string
+    previewDirectory?: string
+  } = {
+    toolId: 'fast-print'
+  }
 ): Promise<{ ok: boolean; canceled?: boolean }> {
   const files = normalizeFastPrintSelection(filePaths)
   await validateSelection(files)
   const jobName = files.length === 1 ? basename(files[0]) : `Fast Print - ${files.length} documents`
-  const printers = JSON.parse(
-    await powershell('fast-print-menu.ps1', ['-Action', 'List'])
-  ) as Array<{ name: string; papers: string[]; color: boolean; duplex?: boolean }>
+  const printers = jobOptions.previewDirectory
+    ? [{ name: preset.printer, papers: ['A4'], color: true, duplex: false }]
+    : (JSON.parse(await powershell('fast-print-menu.ps1', ['-Action', 'List'])) as Array<{
+        name: string
+        papers: string[]
+        color: boolean
+        duplex?: boolean
+      }>)
   if (!preset.profileId) {
     const preferences = await printerPreferencesStore().read()
     const stocks = JSON.parse(
@@ -258,13 +279,14 @@ async function runJob(
       preferredProfile(preferences, preset.printer, fastPrintOptionId(preset)) ?? stock?.id
     if (preferred) preset = { ...preset, profileId: preferred }
   }
-  if (preset.profileId) {
+  if (preset.profileId && !jobOptions.previewDirectory) {
     const profile = JSON.parse(
       await powershell('fast-print-settings.ps1', [
         '-Action',
         'Resolve',
         '-ProfileId',
-        preset.profileId
+        preset.profileId,
+        ...(jobOptions.profileDirectory ? ['-ProfileDirectory', jobOptions.profileDirectory] : [])
       ])
     ) as {
       printer: string
@@ -309,9 +331,20 @@ async function runJob(
   if (preset.color && !printer.color) throw new Error('This printer does not support color.')
   if (preset.mode === 'id-card' && !preset.profileId)
     preset = { ...preset, duplex: printer.duplex === true }
-  const temp = await mkdtemp(join(app.getPath('temp'), 'maher-fast-print-'))
+  if (jobOptions.previewDirectory) await mkdir(jobOptions.previewDirectory, { recursive: true })
+  const temp = await mkdtemp(
+    jobOptions.previewDirectory
+      ? join(jobOptions.previewDirectory, 'render-')
+      : join(app.getPath('temp'), 'maher-fast-print-')
+  )
   const sheets: string[] = []
   const sheetSizes: Array<{ widthMm: number; heightMm: number }> = []
+  const backgroundPreparation = Boolean(
+    jobOptions.previewDirectory ||
+    (!app.isPackaged &&
+      process.env.FAST_PRINT_VERIFY_DIR &&
+      process.env.FAST_PRINT_NONINTERACTIVE === '1')
+  )
   const window = new BrowserWindow({
     width: preset.mode === 'id-card' ? 1160 : 490,
     height: preset.mode === 'id-card' ? 720 : 310,
@@ -327,6 +360,7 @@ async function runJob(
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: !backgroundPreparation,
       // ID setup uses the app's saved language, theme and performance preferences.
       ...(preset.mode !== 'id-card' ? { partition: 'fast-print-' + basename(temp) } : {})
     }
@@ -372,6 +406,7 @@ async function runJob(
         extension: extname(filePath).toLowerCase()
       })),
       preset,
+      previewOnly: Boolean(jobOptions.previewDirectory),
       canDuplex: printer.duplex === true,
       canColor: printer.color
     }
@@ -430,7 +465,9 @@ async function runJob(
     }
   )
   ipcMain.handle('fast-print:submit', async (event, options?: FastPrintSubmitOptions) => {
-    await assertOnlineProductionAccess('paid-tools', jobOptions.toolId)
+    // A preview only writes composed sheets. Authorization still gates every print submission.
+    if (!jobOptions.previewDirectory)
+      await assertOnlineProductionAccess('paid-tools', jobOptions.toolId)
     authorize(event)
     if (submitted || acceptingSheet || !sheets.length)
       throw new Error('No complete print job is ready.')
@@ -472,10 +509,25 @@ async function runJob(
           manualDuplexPrompt: options?.manualDuplexPrompt
         })
       )
+      // Preparing a preview has no path to the Windows print script or spooler.
+      if (jobOptions.previewDirectory) {
+        for (const sheet of sheets)
+          await copyFile(sheet, join(jobOptions.previewDirectory, basename(sheet)))
+        await writeFile(
+          join(jobOptions.previewDirectory, 'sheets.json'),
+          JSON.stringify({
+            version: 1,
+            mode: preset.mode,
+            sheets: sheets.map((sheet) => basename(sheet))
+          })
+        )
+        return { verified: true }
+      }
       const verifyFolder = !app.isPackaged && process.env.FAST_PRINT_VERIFY_DIR
       const result = await powershell('fast-print-job.ps1', [
         '-Manifest',
         manifest,
+        ...(jobOptions.profileDirectory ? ['-ProfileDirectory', jobOptions.profileDirectory] : []),
         ...(verifyFolder ? ['-ValidateOnly'] : [])
       ])
       if (verifyFolder) {
@@ -525,7 +577,7 @@ async function runJob(
   )
   try {
     await window.loadFile(join(__dirname, '../renderer/fast-print.html'))
-    window.show()
+    if (!backgroundPreparation) window.show()
     await ready
     return { ok: submitted, ...(!submitted ? { canceled: true } : {}) }
   } finally {

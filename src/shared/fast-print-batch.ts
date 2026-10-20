@@ -1,3 +1,4 @@
+import type { FastPrintPagesPerSheet } from './fast-print.js'
 export const FAST_PRINT_MAX_FILES = 1000
 export const FAST_PRINT_MAX_PAGES = 2000
 
@@ -36,7 +37,10 @@ export function parseFastPrintSelectionManifest(text: string): string[] {
   return normalizeFastPrintSelection(data.files)
 }
 
-export function countBatchSheets(pageCounts: number[], pagesPerSheet: 1 | 2 | 4): number {
+export function countBatchSheets(
+  pageCounts: number[],
+  pagesPerSheet: FastPrintPagesPerSheet
+): number {
   return pageCounts.reduce((sum, pages) => sum + Math.ceil(pages / pagesPerSheet), 0)
 }
 

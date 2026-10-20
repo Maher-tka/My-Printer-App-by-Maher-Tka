@@ -1,4 +1,4 @@
-param([ValidateSet('Manage','Resolve','List')][string]$Action = 'Manage', [string]$ProfileId, [string]$PreviewPath)
+param([ValidateSet('Manage','Resolve','List')][string]$Action = 'Manage', [string]$ProfileId, [string]$PreviewPath, [string]$ProfileDirectory)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 . (Join-Path $PSScriptRoot 'fast-print-profiles.ps1')
@@ -9,7 +9,7 @@ if ($Action -eq 'List') {
   exit 0
 }
 if ($Action -eq 'Resolve') {
-  $profile = Read-FastPrintProfile $ProfileId
+  $profile = if ($ProfileDirectory) { Read-FastPrintProfile $ProfileId $ProfileDirectory } else { Read-FastPrintProfile $ProfileId }
   $bytes = Get-FastPrintProfileBytes $profile $profile.printer
   $summary = Get-FastPrintProfileSummary $profile.printer $bytes
   if ($summary.paper -ne $profile.paper) { throw 'The saved paper setting is inconsistent. Capture this preset again.' }

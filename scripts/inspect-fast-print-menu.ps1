@@ -44,7 +44,7 @@ public static class FastPrintMenuProbe {
       if (label.Length == 0) continue;
       rows.Add(prefix + label);
       string branch = ancestry + "/" + label;
-      if (branch.Contains("/Fast Print/") && branch.Contains("/Microsoft Print to PDF") && branch.Contains("/A4 -") && branch.Contains("/Color/") && label.ToString() == "Print - 4 pages per sheet") selectedId = GetMenuItemID(menu, i);
+      if (label.ToString().Replace("&", "").Trim() == "Fast Print") selectedId = GetMenuItemID(menu, i);
       var sub = GetSubMenu(menu, i);
       if (sub != IntPtr.Zero) Read(sub, prefix + "  ", rows, depth+1, branch);
     }
@@ -63,10 +63,10 @@ public static class FastPrintMenuProbe {
       active = contextMenu as IContextMenu3; var rows = new List<string>();
       Read(popup, "", rows, 0);
       if (invoke) {
-        if (selectedId == 0 || selectedId == 0xFFFFFFFF) throw new Exception("Test preset not found in the real Shell menu.");
+        if (selectedId == 0 || selectedId == 0xFFFFFFFF) throw new Exception("Fast Print was not found in the real Shell menu.");
         var info = new InvokeInfo(); info.size = (uint)Marshal.SizeOf(typeof(InvokeInfo)); info.verb = new IntPtr(selectedId - 1); info.show = 1;
         contextMenu.InvokeCommand(ref info);
-        rows.Add("Invoked Microsoft Print to PDF / A4 / Color / 4-up in verification mode.");
+        rows.Add("Opened the native Fast Print dialog. Printing still requires confirmation.");
       }
       return rows.ToArray();
     } finally {

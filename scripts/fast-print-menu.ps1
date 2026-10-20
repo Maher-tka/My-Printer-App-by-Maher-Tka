@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 Add-Type -AssemblyName System.Drawing
-$extensions = @('.pdf', '.png', '.jpg', '.jpeg', '.gif')
+$extensions = @('.pdf', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tif', '.tiff', '.docx')
 $menuRoot = 'Software\Classes\MaherTka.FastPrint'
 $classes = [Microsoft.Win32.Registry]::CurrentUser
 $handlerId = '{D8335FE6-ED4F-4386-8E87-69527F75B4EF}'
@@ -16,24 +16,9 @@ function Set-MenuValue([string]$Path, [string]$Name, [string]$Value) {
   try { $key.SetValue($Name, $Value, [Microsoft.Win32.RegistryValueKind]::String) }
   finally { $key.Dispose() }
 }
-function Add-Cascade([string]$Path, [string]$Label, [string]$Target) {
-  Set-MenuValue $Path 'MUIVerb' $Label
-  Set-MenuValue $Path 'SubCommands' ''
-}
 function Quote-Argument([string]$Value) {
   if ($Value.Contains('"') -or $Value.Contains("`r") -or $Value.Contains("`n")) { throw 'Invalid command path.' }
   return '"' + $Value + '"'
-}
-function Add-PolaroidChoices([string]$Root, [string]$Printer, [string]$Paper, [bool]$Color, [string]$ProfileId = '') {
-  if ($Paper -ne 'A4') { return }
-  foreach ($count in @(8,9)) {
-    $preset=@{ printer=$Printer; paper=$Paper; color=$Color; pagesPerSheet=1; mode="polaroid-$count" }
-    if ($ProfileId) { $preset.profileId=$ProfileId }
-    $token=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($preset | ConvertTo-Json -Compress)))
-    $leaf="$Root\shell\00-$count"
-    Set-MenuValue $leaf 'MUIVerb' "$count PIC"
-    Set-MenuValue "$leaf\command" '' ($commandPrefix + ' --fast-print ' + $token + ' -- "%1"')
-  }
 }
 function Remove-Menu {
   $previous=$classes.OpenSubKey($menuRoot)
@@ -45,6 +30,7 @@ function Remove-Menu {
     }
   }
   $classes.DeleteSubKeyTree('Software\Classes\*\shell\MaherTka.FastPrint',$false)
+  $classes.DeleteSubKeyTree('Software\Classes\*\shell\MaherTka.FastPrint.Native',$false)
   $classes.DeleteSubKeyTree('Software\Classes\*\shellex\ContextMenuHandlers\MaherTka.FastPrint',$false)
   $oldId='{8E20C856-7F3B-4A98-A55D-9E600C3D481B}'
   $cache=$classes.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Cached',$true)
@@ -65,6 +51,8 @@ function Remove-Menu {
     $classes.DeleteSubKeyTree("Software\Classes\SystemFileAssociations\$ext\shell\MaherTka.FastPrint", $false)
     $classes.DeleteSubKeyTree("Software\Classes\SystemFileAssociations\$ext\shellex\ContextMenuHandlers\MaherTka.FastPrint", $false)
   }
+  $classes.DeleteSubKeyTree('Software\Classes\CLSID\{629B66DE-9172-48DF-A7DD-348225B0693F}', $false)
+  $classes.DeleteSubKeyTree('Software\Classes\CLSID\{C7CD21F2-188D-4609-B8E2-3B5831C0F98E}', $false)
   $classes.DeleteSubKeyTree($menuRoot, $false)
   $classes.DeleteSubKeyTree("Software\Classes\CLSID\$handlerId", $false)
 }
@@ -82,104 +70,52 @@ $printers = @(foreach ($name in [System.Drawing.Printing.PrinterSettings]::Insta
 if ($Action -eq 'List') { ConvertTo-Json -InputObject $printers -Depth 5 -Compress; exit 0 }
 if (!(Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Fast Print executable is missing. Build the app first.' }
 if ($AppPath -and !(Test-Path -LiteralPath $AppPath)) { throw 'Fast Print app path is missing.' }
-$commandPrefix = Quote-Argument $Executable
-if ($AppPath) { $commandPrefix += ' ' + (Quote-Argument $AppPath) }
-
-# Validate everything before replacing only this application's keys.
-. (Join-Path $PSScriptRoot 'fast-print-profiles.ps1')
-$profiles = @(Get-FastPrintProfiles)
-Remove-Menu
-$index = 0
-foreach ($printer in ($printers | Sort-Object @{Expression='isDefault';Descending=$true}, name)) {
-  if ($printer.papers.Count -eq 0) { continue }
-  $id = 'p{0:D3}' -f $index
-  $index++
-  $printerTarget = "MaherTka.FastPrint\shell\$id"
-  $label = $printer.name.Replace('&', '&&')
-  if ($printer.isDefault) { $label += ' (default)' }
-  Add-Cascade "$menuRoot\shell\$id" $label $printerTarget
-  $printerProfiles = @($profiles | Where-Object { $_.printer -ceq $printer.name -and $_.paper -in $printer.papers } | Sort-Object name)
-  if ($printer.color -and 'A4' -in $printer.papers) {
-    $polaroidRoot="Software\Classes\$printerTarget\shell\00-polaroid"
-    $defaultStock=$printerProfiles | Where-Object { $_.paper -eq 'A4' -and $_.defaultBypassFaceUp -eq $true } | Sort-Object @{Expression='savedAt';Descending=$true},id | Select-Object -First 1
-    Add-Cascade $polaroidRoot 'Polaroid' ''
-    Add-PolaroidChoices $polaroidRoot $printer.name 'A4' $true $defaultStock.id
+# A per-user install must not report success while Explorer continues invoking
+# the older all-users registration. That installation needs the elevated path.
+$machineLegacy=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('Software\Classes\*\shell\MaherTka.FastPrint')
+$machineNative=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('Software\Classes\*\shell\MaherTka.FastPrint.Native')
+try {
+  if ($machineLegacy -and !$machineNative) {
+    throw 'An older Fast Print command is installed for all users. Update its machine-wide registration with administrator approval before installing the native dialog.'
   }
-  if ($printerProfiles.Count -gt 0) {
-    $savedRoot = "Software\Classes\$printerTarget\shell\00-saved"
-    Add-Cascade $savedRoot 'Saved paper && tray presets' ''
-    foreach ($profile in $printerProfiles) {
-      $profileRoot = "$savedRoot\shell\$($profile.id)"
-      Add-Cascade $profileRoot ($profile.name.Replace('&','&&')) ''
-      foreach ($mode in @('01-color','02-mono')) {
-        $color = $mode -eq '01-color'
-        if ($color -and !$printer.color) { continue }
-        $modeRoot = "$profileRoot\shell\$mode"
-        $modeLabel = if ($color) { 'Color' } else { 'Black && white' }
-        Add-Cascade $modeRoot $modeLabel ''
-        foreach ($count in @(1,2,4)) {
-          $preset = @{ printer=$printer.name; paper=$profile.paper; color=$color; pagesPerSheet=$count; profileId=$profile.id } | ConvertTo-Json -Compress
-          $token = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($preset))
-          $leaf = "$modeRoot\shell\$count"
-          $label = if ($count -eq 1) { 'Print - 1 page per sheet' } else { "Print - $count pages per sheet" }
-          Set-MenuValue $leaf 'MUIVerb' $label
-          Set-MenuValue "$leaf\command" '' ($commandPrefix + ' --fast-print ' + $token + ' -- "%1"')
-        }
-      }
-    }
-  }
-  foreach ($paper in @('A4', 'A3')) {
-    if ($paper -notin $printer.papers) { continue }
-    $paperTarget = "$printerTarget\shell\$paper"
-    $paperLabel = if ($paper -eq 'A4') { 'A4 - 210 x 297 mm' } else { 'A3 - 297 x 420 mm' }
-    Add-Cascade "Software\Classes\$printerTarget\shell\$paper" $paperLabel $paperTarget
-    foreach ($mode in @('01-color', '02-mono')) {
-      $color = $mode -eq '01-color'
-      if ($color -and !$printer.color) { continue }
-      $modeTarget = "$paperTarget\shell\$mode"
-      $modeLabel = if ($color) { 'Color' } else { 'Black && white' }
-      Add-Cascade "Software\Classes\$paperTarget\shell\$mode" $modeLabel $modeTarget
-      foreach ($count in @(1, 2, 4)) {
-        $preset = @{ printer = $printer.name; paper = $paper; color = $color; pagesPerSheet = $count } | ConvertTo-Json -Compress
-        $token = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($preset))
-        $leaf = "Software\Classes\$modeTarget\shell\$count"
-        $leafLabel = if ($count -eq 1) { 'Print - 1 page per sheet' } else { "Print - $count pages per sheet" }
-        Set-MenuValue $leaf 'MUIVerb' $leafLabel
-        Set-MenuValue $leaf 'MultiSelectModel' 'Single'
-        Set-MenuValue "$leaf\command" '' ($commandPrefix + ' --fast-print ' + $token + ' -- "%1"')
-      }
-    }
-  }
+} finally {
+  if ($machineLegacy) { $machineLegacy.Dispose() }
+  if ($machineNative) { $machineNative.Dispose() }
 }
-Set-MenuValue "$menuRoot\shell\zy-settings" 'MUIVerb' 'Manage printer presets...'
-Set-MenuValue "$menuRoot\shell\zy-settings\command" '' ($commandPrefix + ' --manage-fast-print')
-Set-MenuValue "$menuRoot\shell\zz-refresh" 'MUIVerb' 'Refresh printer list'
-Set-MenuValue "$menuRoot\shell\zz-refresh\command" '' ($commandPrefix + ' --install-fast-print')
-# A standard file verb launches the cascading menu in our own process.
-# Explorer no longer needs to load a third-party DLL to display Fast Print.
-$path='Software\Classes\*\shell\MaherTka.FastPrint'
+# The native dialog opens directly; Electron starts only after Print is confirmed.
+$nativeDialog=Join-Path $PSScriptRoot 'FastPrint.exe'
+if (!(Test-Path -LiteralPath $nativeDialog)) { $nativeDialog=Join-Path (Split-Path $PSScriptRoot -Parent) 'out\native\FastPrint.exe' }
+if (!(Test-Path -LiteralPath $nativeDialog)) { throw 'Build the native Fast Print dialog before installing Explorer integration.' }
+$dialogCommand=(Quote-Argument $nativeDialog)+' --app '+(Quote-Argument $Executable)
+if ($AppPath) { $dialogCommand+=' --app-path '+(Quote-Argument $AppPath) }
+$selectionLibrary=Join-Path $PSScriptRoot 'fast-print-selection.dll'
+if (!(Test-Path -LiteralPath $selectionLibrary)) { $selectionLibrary=Join-Path (Split-Path $PSScriptRoot -Parent) 'out\native\fast-print-selection.dll' }
+if (!(Test-Path -LiteralPath $selectionLibrary)) { throw 'The batch selection bridge is missing.' }
+$selectionId='{C7CD21F2-188D-4609-B8E2-3B5831C0F98E}'
+$hash=(Get-FileHash -LiteralPath $selectionLibrary -Algorithm SHA256).Hash.Substring(0,16)
+$registeredLibrary=Join-Path (Split-Path $selectionLibrary -Parent) ('fast-print-selection-'+$hash+'.dll')
+if (!(Test-Path -LiteralPath $registeredLibrary)) { Copy-Item -LiteralPath $selectionLibrary -Destination $registeredLibrary }
+Remove-Menu
+$index=@($printers | Where-Object { $_.papers.Count -gt 0 }).Count
+$path='Software\Classes\*\shell\MaherTka.FastPrint.Native'
+# Explorer can cache the installed release's original verb and class factory.
+# A distinct native verb avoids that cached command. Hide the older machine
+# entry for this user without modifying the installed release or its settings.
+Set-MenuValue 'Software\Classes\*\shell\MaherTka.FastPrint' 'LegacyDisable' ''
+Set-MenuValue 'Software\Classes\*\shell\MaherTka.FastPrint' 'ProgrammaticAccessOnly' ''
 Set-MenuValue $path 'MUIVerb' 'Fast Print'
 Set-MenuValue $path 'Icon' ($Executable + ',0')
 Set-MenuValue $path 'Position' 'Top'
-Set-MenuValue $path 'MultiSelectModel' 'Single'
-Set-MenuValue $path 'AppliesTo' 'System.FileExtension:=.pdf OR System.FileExtension:=.png OR System.FileExtension:=.jpg OR System.FileExtension:=.jpeg OR System.FileExtension:=.gif'
-Set-MenuValue "$path\command" '' ($commandPrefix + ' --fast-print-menu -- "%1"')
-# Also register our verb with the user's active file classes, alongside Open/Print.
-$directClasses=@(foreach ($extension in $extensions) {
-  $choice=$classes.OpenSubKey("Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$extension\UserChoice")
-  if ($choice) { try { $choice.GetValue('ProgId') } finally { $choice.Dispose() } }
-}) | Where-Object { $_ -match '^[A-Za-z0-9_.-]+$' } | Select-Object -Unique
-foreach ($class in $directClasses) {
-  $directPath="Software\Classes\$class\shell\MaherTka.FastPrint"
-  Set-MenuValue $directPath '' 'Fast Print'
-  Set-MenuValue $directPath 'MUIVerb' 'Fast Print'
-  Set-MenuValue $directPath 'Position' 'Top'
-  Set-MenuValue $directPath 'MultiSelectModel' 'Single'
-  Set-MenuValue $directPath 'Icon' ($Executable + ',0')
-  Set-MenuValue "$directPath\command" '' ($commandPrefix + ' --fast-print-menu -- "%1"')
-}
+Set-MenuValue $path 'MultiSelectModel' 'Player'
+Set-MenuValue $path 'AppliesTo' 'System.FileExtension:=.pdf OR System.FileExtension:=.png OR System.FileExtension:=.jpg OR System.FileExtension:=.jpeg OR System.FileExtension:=.gif OR System.FileExtension:=.bmp OR System.FileExtension:=.tif OR System.FileExtension:=.tiff OR System.FileExtension:=.docx'
+Set-MenuValue "$path\command" '' ($dialogCommand+' -- "%1"')
+Set-MenuValue $path 'BatchCommand' ($dialogCommand+' --batch')
+Set-MenuValue "$path\DropTarget" 'CLSID' $selectionId
+Set-MenuValue "Software\Classes\CLSID\$selectionId\InprocServer32" '' $registeredLibrary
+Set-MenuValue "Software\Classes\CLSID\$selectionId\InprocServer32" 'ThreadingModel' 'Apartment'
+# One wildcard verb avoids duplicate entries from simultaneous ProgID registration.
 $settingsKey=$classes.CreateSubKey($menuRoot)
-try { $settingsKey.SetValue('DirectAssociationClasses',[string[]]$directClasses,[Microsoft.Win32.RegistryValueKind]::MultiString) }
+try { $settingsKey.SetValue('DirectAssociationClasses',[string[]]@(),[Microsoft.Win32.RegistryValueKind]::MultiString) }
 finally { $settingsKey.Dispose() }
 # Tell Explorer to invalidate its association cache without restarting it.
 Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class FastPrintShell { [DllImport("shell32.dll")] public static extern void SHChangeNotify(uint e, uint f, IntPtr a, IntPtr b); }'

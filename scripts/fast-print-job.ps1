@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Manifest, [switch]$ValidateOnly, [string]$ProofPath)
+param([Parameter(Mandatory=$true)][string]$Manifest, [switch]$ValidateOnly, [string]$ProofPath, [string]$ProfileDirectory)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 Add-Type -AssemblyName System.Drawing
@@ -11,7 +11,7 @@ try {
   $profile = $null
   if ($job.preset.profileId) {
     . (Join-Path $PSScriptRoot 'fast-print-profiles.ps1')
-    $profile = Read-FastPrintProfile $job.preset.profileId
+    $profile = if ($ProfileDirectory) { Read-FastPrintProfile $job.preset.profileId $ProfileDirectory } else { Read-FastPrintProfile $job.preset.profileId }
     $bytes = Get-FastPrintProfileBytes $profile $job.preset.printer
     if (!$isDocument -and $profile.paper -ne $job.preset.paper) { throw 'The paper preset has changed. Refresh the printer list.' }
     $normalized = [FastPrintDriver]::Capture($job.preset.printer, [IntPtr]::Zero, $bytes, $false)
@@ -31,6 +31,10 @@ try {
   if (!$profile -and $document.PrinterSettings.CanDuplex) { $document.PrinterSettings.Duplex = [System.Drawing.Printing.Duplex]::Simplex }
   $isId = $job.preset.mode -eq 'id-card'
   $isPolaroid = $job.preset.mode -in @('polaroid-8','polaroid-9')
+  # PDF/XPS drivers can normalize dmColor back to color; the compositor already
+  # rendered these non-document-mode sheets as grayscale. Hardware queues must
+  # still honor their captured color mode.
+  $virtualGrayscale = !$isDocument -and !$job.preset.color -and $job.preset.printer -in @('Microsoft Print to PDF','Microsoft XPS Document Writer')
   if ($isPolaroid -and $document.PrinterSettings.CanDuplex) { $document.PrinterSettings.Duplex = [Drawing.Printing.Duplex]::Simplex }
   if ($isId) {
     if (@($job.sheets).Count -ne 2 -or $job.preset.pagesPerSheet -ne 1) { throw 'An ID job must contain exactly two sides.' }
@@ -41,7 +45,7 @@ try {
   }
   $document.DefaultPageSettings.PaperSize = $paper
   $document.DefaultPageSettings.Color = [bool]$job.preset.color
-  $landscape = ($job.preset.pagesPerSheet -eq 2 -or [bool]$job.preset.landscape -or ($profile -and $profile.landscape))
+  $landscape = ($job.preset.pagesPerSheet -in @(2,6,8) -or [bool]$job.preset.landscape -or ($profile -and $profile.landscape))
   if ($isPolaroid) { $landscape = $job.preset.mode -eq 'polaroid-8' }
   if ($isDocument) {
     if (!$profile -or @($job.sheetSizes).Count -ne @($job.sheets).Count) { throw 'A saved driver preset and physical page sizes are required.' }
@@ -60,7 +64,7 @@ try {
     $updated = [FastPrintDriver]::Capture($job.preset.printer, [IntPtr]::Zero, [FastPrintDriver]::FromDocument($document), $false)
     [FastPrintDriver]::Apply($document, $updated)
     if ((!$isDocument -and $document.DefaultPageSettings.PaperSize.Kind.ToString() -ne $job.preset.paper) -or
-        $document.DefaultPageSettings.Color -ne [bool]$job.preset.color -or
+        ($document.DefaultPageSettings.Color -ne [bool]$job.preset.color -and !$virtualGrayscale) -or
         $document.DefaultPageSettings.Landscape -ne $landscape -or
         $document.DefaultPageSettings.PaperSource.RawKind -ne $profile.trayId) {
       throw 'The driver could not keep the selected paper, color, orientation, or tray. Reconfigure this preset before printing.'
@@ -75,7 +79,7 @@ try {
   }
   $document.PrintController = [System.Drawing.Printing.StandardPrintController]::new()
   if ($ValidateOnly) {
-    @{ printer=$document.PrinterSettings.PrinterName; paper=$document.DefaultPageSettings.PaperSize.Kind.ToString(); color=$document.DefaultPageSettings.Color; landscape=$document.DefaultPageSettings.Landscape; sheets=@($job.sheets).Count; profileId=$job.preset.profileId; tray=$document.DefaultPageSettings.PaperSource.SourceName; duplex=$document.PrinterSettings.Duplex.ToString(); copies=$document.PrinterSettings.Copies; sheetSizes=$job.sheetSizes } | ConvertTo-Json -Depth 5 -Compress
+    @{ printer=$document.PrinterSettings.PrinterName; paper=$document.DefaultPageSettings.PaperSize.Kind.ToString(); color=$document.DefaultPageSettings.Color; outputColor=[bool]$job.preset.color; rasterGrayscale=(!$isDocument -and !$job.preset.color); landscape=$document.DefaultPageSettings.Landscape; sheets=@($job.sheets).Count; profileId=$job.preset.profileId; tray=$document.DefaultPageSettings.PaperSource.SourceName; duplex=$document.PrinterSettings.Duplex.ToString(); copies=$document.PrinterSettings.Copies; sheetSizes=$job.sheetSizes } | ConvertTo-Json -Depth 5 -Compress
     exit 0
   }
   $script:sheetIndex = 0

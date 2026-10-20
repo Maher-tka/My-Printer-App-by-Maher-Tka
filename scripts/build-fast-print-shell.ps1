@@ -23,3 +23,5 @@ if ($target -eq 'fast-print-selection') { $arguments += '/EXPORT:FastPrintWriteS
 if ($LASTEXITCODE -ne 0) { throw 'Native Explorer handler build failed.' }
 
 }
+
+& (Join-Path $PSScriptRoot 'build-fast-print-native.ps1')

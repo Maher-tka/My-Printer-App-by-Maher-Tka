@@ -1,4 +1,8 @@
-import type { FastPrintPreset } from './fast-print.js'
+import {
+  FAST_PRINT_COUNTS,
+  type FastPrintPreset,
+  type FastPrintPagesPerSheet
+} from './fast-print.js'
 import {
   emptyPrinterPreferences,
   fastPrintOptionId,
@@ -53,7 +57,7 @@ export function createFastPrintChoices(
     profileId?: string,
     usePreferences = false
   ): FastPrintChoice[] {
-    function profileFor(pagesPerSheet: 1 | 2 | 4, color: boolean, mode?: 'id-card') {
+    function profileFor(pagesPerSheet: FastPrintPagesPerSheet, color: boolean, mode?: 'id-card') {
       const id = usePreferences
         ? (preferredProfile(
             preferences,
@@ -66,7 +70,7 @@ export function createFastPrintChoices(
     return [...(device.color ? [true] : []), false].map((color) => ({
       label: color ? 'Color' : 'Black && white',
       children: [
-        ...([1, 2, 4] as const).map((pagesPerSheet) => ({
+        ...FAST_PRINT_COUNTS.map((pagesPerSheet) => ({
           label: `Print — ${pagesPerSheet} page${pagesPerSheet === 1 ? '' : 's'} per sheet`,
           preset: {
             printer: device.name,

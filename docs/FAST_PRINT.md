@@ -1,24 +1,133 @@
 # Explorer Fast Print
 
-Select one or more PDF, PNG, JPEG, or GIF files in Windows Explorer and right-click. On Windows 11, choose
-**Show more options > Fast Print**. Click Fast Print once; a native menu opens at
-the pointer. Hover through **printer > A4/A3 or saved stock > color > 1/2/4 pages
-per sheet**, then click the final Print item. The main app does not open.
+Select PDFs, images, or Word documents in Explorer and choose **Show more options >
+Fast Print**. Explorer launches the small native Windows **FastPrint.exe** directly.
+The app dashboard, Electron, and a browser are not needed to open the dialog or
+show ordinary PDF/image previews. A legacy Electron command delegates to the same native helper.
 
-For Polaroid output, choose **printer > Polaroid > 8 PIC or 9 PIC** directly.
-These choices use A4 and color automatically, with the saved default A4
-bypass/face-up stock when configured. They appear once, directly under printers
-that support both A4 and color.
+The compact Windows dialog has printer, A4/A3 paper, driver quality, color,
+saved preset, orientation, file selection, preview navigation, copies and Fit to
+frame controls. Choose 1, 2, 4, 6, 8, 9, 12 or 16 pages per sheet on A4 or A3,
+or ID in the scrolling layout tiles. Two-, six- and eight-up use landscape sheets.
+The native controls use the app's shared color, spacing and radius tokens, with
+rounded buttons, layout thumbnails and light/dark appearance. **Options…** can
+select light, dark or the Windows app appearance without changing OS settings.
+There is one Print action, with native Enter/Escape behavior and arrow-key layout selection.
+The language follows the Windows UI culture (English, French and Arabic labels).
 
-This is deliberately a standard Explorer file command rather than an in-process
-shell DLL. The earlier DLL implementation passed standalone shell tests but did
-not appear in the user's Explorer, so it is no longer registered. The extra click
-opens the full cascading menu in the app's own process, avoiding both DLL-loading
-failures and Windows' static submenu command limit.
+**8 PIC** and **9 PIC** sit directly below the printer selector. They require an
+A4/color-capable printer and lock those settings automatically. Polaroid previews
+show the complete composed sheets from every selected photo, with the exact
+production rotation, face protection, framing, borders and cut lines. Eight or nine
+photos fill one sheet; larger selections continue onto additional sheets, leaving
+unused final slots white. Previous/Next moves between sheets, and choosing a file
+shows the sheet containing it. ID retains a source preview and **Review ID…** to
+open the dedicated front/back editor before its separate print confirmation.
 
-The menu queries installed printers each time it opens. Saved stocks are separate
-for each printer. Manage printer presets opens the standalone setup window; after
-closing it, the menu reloads. Cancel or click outside to dismiss without printing.
+Selecting 8 PIC or 9 PIC starts a hidden preparation worker; it never opens the
+dashboard or calls the Windows print script. Composing a preview does not require
+print access or a signed-in account. The actual Print action still checks access
+before starting output and again before submission. Print stays disabled while preparing.
+Prepared sheets are cached per mode/selection, with four bounded thumbnails for
+quick navigation. Switching back reuses them; changing a source invalidates the
+cache. While a new mode prepares, the existing sheet stays behind a loading overlay
+instead of flashing blank. Confirming Print uses the same production compositor and real driver
+settings. Closing the native dialog removes its temporary prepared sheets.
+
+**Options… > Printer properties…** opens the real vendor driver dialog for tray,
+stock, duplex, quality and finishing. Changes apply only to this print session.
+**Options… > Manage saved presets…** opens preset management and refreshes the
+printer list afterwards. Automatic selection uses the existing per-option and
+bypass defaults; explicit preset selections take precedence. Copies initially
+use the captured driver count and can be changed from 1 to 999. An explicit copy
+count survives printer changes. Print remains unavailable until the current
+printer's settings have loaded; late responses cannot replace newer selections.
+
+Supported inputs are PDF, PNG, JPEG, GIF, BMP, single-frame TIFF and DOCX. PDFs use
+Windows.Data.Pdf for native previews of temporary snapshots, so an open preview
+does not lock the original PDF. BMP/TIFF are converted into temporary PNGs.
+Multi-page TIFF is rejected with a PDF-conversion message to avoid losing pages.
+DOCX is converted read-only to a temporary PDF through installed Microsoft Word
+or LibreOffice. Macros/link updates are disabled in the dedicated Word instance;
+LibreOffice uses an isolated profile. DOCX conversion has its own progress state
+and can take longer than opening the native dialog. No converter means an explicit
+error with Print disabled. A private extracted LibreOffice runtime may also be
+placed in `%LOCALAPPDATA%\MaherTka\FastPrint\docx-converter`; it is separate from
+saved projects/settings and is not bundled in the application installer.
+
+Only confirming Print allows the licensed worker to submit a print job. An encrypted,
+short-lived driver snapshot carries the complete native selections to the worker;
+Windows printer defaults and persistent saved presets are never overwritten.
+Prepared files/snapshots live in a GUID session under the Windows temporary folder
+and are cleaned after output/cancellation. Consecutive photos fill the available
+slots together; each PDF or converted Word document starts a new sheet group.
+Normal layouts optionally crop to fill the frame; PDF cover rendering
+uses a bounded cell canvas. Originals are never modified. Subscription checks,
+existing output validation and the ID/Polaroid renderers remain in the worker.
+
+The first source preview decodes concurrently with printer discovery. Printer
+capabilities are cached per queue, and preview page images share a bounded six
+million-pixel cache (about 24 MB). Rapid changes discard stale renders. This
+improves reopening layouts without retaining print-resolution sheet images.
+DOCX still needs conversion before its first page can be previewed.
+Selecting the active layout again refreshes edited files. Changes detected when
+Print is pressed refresh the preview and require another review/confirmation;
+missing, empty or invalid inputs keep Print disabled. Snapshot/conversion names
+retain the original filename, including literal ampersands.
+
+Black-and-white output through Microsoft Print to PDF/XPS uses grayscale artwork
+when those built-in drivers normalize their color setting back to color. Hardware
+queues retain strict driver-color validation; this fallback does not weaken it.
+
+Native verification (build the app and native helper first):
+
+```powershell
+npm run test:fast-print:native
+```
+
+This opens native test windows, records startup/preview timings and screenshots,
+then exercises all eight layouts on A4/A3, photo grouping/document boundaries,
+encrypted settings/copies and matching preview/output through the real worker in
+ValidateOnly mode. DOCX runs when Word/LibreOffice is available; no hardware jobs
+are submitted. The matrix uses a 19-page mixed-orientation document to exercise
+pagination and trailing empty slots, plus thirteen ordered photo fixtures.
+
+The Polaroid regression runs without visible windows or desktop input:
+
+```powershell
+npm run build
+npm run test:fast-print:polaroid-native
+```
+
+It uses all fifteen `num216p` originals plus exact eight/nine-photo selections,
+compares prepared preview sheets byte-for-byte with generated print artwork,
+checks each source photo, face-safe crops, overflow and white final slots, and
+validates A4/color/simplex driver settings without submitting hardware jobs.
+Its preview workers run without `PRINTER_ACCOUNT_MODE=local-test`. An isolated,
+signed-out production worker must still reject Print; only artwork/driver proof
+generation uses the explicit offline test mode. Run the production build above
+first so the development access override cannot hide an access-gate regression.
+
+The paint regression needs the native helper, but no visible windows or printers:
+
+```powershell
+npm run test:fast-print:paint
+```
+
+It verifies complete buffered control frames, rounded corners in enabled/disabled
+states, cleared repaint regions, bounded GDI resources, retained loading previews
+and localized layout renders. Buttons, combo faces and their containers buffer
+their rendering instead of drawing a native skin underneath the rounded surface.
+
+The hidden audit regression also checks printer-response races, copy preservation,
+editable PDF/BMP/PNG inputs, changed-source review, missing/empty input rejection,
+file/sheet navigation, and color/grayscale proofs in English, French and Arabic:
+
+```powershell
+npm run test:fast-print:audit
+```
+
+It edits disposable fixtures only and runs driver validation without hardware jobs.
 
 ## Printing preferences inside the app
 
@@ -32,7 +141,7 @@ Open **Settings > Printing settings** to manage printers and saved driver option
    then confirm. Reopen a saved preset to recapture it or delete it with confirmation.
 3. Under **Print options**, choose the printing option and assign a saved preset
    for the selected printer. Polaroid 8 PIC and 9 PIC, every A4/A3 color/mono
-   1/2/4-up option, ID cards, and the five app production tools have separate
+   1/2/4/6/8/9/12/16-up option, ID cards, and the five app production tools have separate
    assignments. App tools also have their own preferred-printer override.
 
 Changes save immediately and persist across restarts. Each printer has its own
@@ -45,7 +154,7 @@ Preference JSON is written atomically with a previous-file backup under
 profiles remain in the sibling `profiles` directory.
 
 Explorer's selected printer takes precedence. The app's default printer appears
-first in the live menu, labeled preferred. Per-option profiles take precedence
+first in the printer selector. Per-option profiles take precedence
 over the older paper/bypass default; explicitly selected saved stocks keep their
 own profile. Polaroid still uses A4/color and its required layout orientation.
 The saved profile supplies paper source, stock and finishing. ID setup starts
@@ -226,7 +335,7 @@ npx electron-vite build --mode development
 node scripts/verify-fast-print-polaroid.mjs
 ```
 
-Open **Fast Print > Manage printer presets...** from the Explorer menu, or run
+Open **Fast Print > Options… > Manage saved presets…**, or run
 `npm run fast-print:settings` in this development checkout. This opens a separate
 setup window; the main app is not required.
 
@@ -236,8 +345,8 @@ setup window; the main app is not required.
    options, duplex, and finishing settings. Acquire/refresh tray information here
    if the driver requires it. Use normal layout / one page per sheet in the driver.
 3. Finish the driver dialog with OK, save the preset, then click Done.
-4. Right-click a document and choose **Fast Print > printer > Saved paper & tray
-   presets > stock name > color mode > pages per sheet**.
+4. Right-click a document and choose **Fast Print**. Select the printer, saved
+   paper & tray preset, color mode, and layout, then click **Print**.
 
 Fast Print captures the full Windows DEVMODE, including the private driver block,
 using DocumentProperties. Saved settings are encrypted for the current Windows user
@@ -325,7 +434,9 @@ once. The popup shows the document count. All documents are prepared sequentiall
 and submitted together as one printer job; a PDF printer asks for one output file.
 
 The order provided by Explorer is preserved, and duplicate paths are removed.
-Every document starts on a new sheet. When a captured preset is double-sided,
+In the native dialog, consecutive photos share n-up sheets while PDFs and Word
+documents retain their document boundaries. Legacy direct commands keep the older
+per-file boundaries unless `combineImages` is enabled. When a captured preset is double-sided,
 a blank back is added between documents where necessary to preserve that boundary.
 A failed or unsupported document stops preparation before any part of the batch is
 submitted. Closing the progress window during preparation cancels the whole batch.

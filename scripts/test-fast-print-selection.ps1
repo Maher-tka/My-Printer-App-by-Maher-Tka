@@ -11,6 +11,22 @@ public static class FastPrintSelectionProbe {
   [DllImport("kernel32.dll")]static extern bool FreeLibrary(IntPtr library);
   [UnmanagedFunctionPointer(CallingConvention.StdCall)]
   delegate int WriteManifest([MarshalAs(UnmanagedType.Interface)] System.Runtime.InteropServices.ComTypes.IDataObject data,out IntPtr path);
+  [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+  delegate int GetClassObject(ref Guid clsid,ref Guid iid,out IntPtr factory);
+  public static void VerifyNativeClass(string libraryPath) {
+    IntPtr library=LoadLibrary(libraryPath);
+    if(library==IntPtr.Zero)throw new Exception("Cannot load the native selection bridge.");
+    try{
+      var function=(GetClassObject)Marshal.GetDelegateForFunctionPointer(GetProcAddress(library,"DllGetClassObject"),typeof(GetClassObject));
+      var nativeId=new Guid("C7CD21F2-188D-4609-B8E2-3B5831C0F98E");
+      var iid=new Guid("00000001-0000-0000-C000-000000000046");IntPtr factory;
+      Marshal.ThrowExceptionForHR(function(ref nativeId,ref iid,out factory));
+      if(factory==IntPtr.Zero)throw new Exception("Native dialog class factory missing.");
+      Marshal.Release(factory);
+      var oldId=new Guid("629B66DE-9172-48DF-A7DD-348225B0693F");
+      if(function(ref oldId,ref iid,out factory)>=0){if(factory!=IntPtr.Zero)Marshal.Release(factory);throw new Exception("The old release's cached class identity must be distinct.");}
+    }finally{FreeLibrary(library);}
+  }
   public static string Generate(string libraryPath,string[] files) {
     IntPtr library=LoadLibrary(libraryPath);
     if(library==IntPtr.Zero)throw new Exception("Cannot load the native selection bridge: "+Marshal.GetLastWin32Error());
@@ -28,6 +44,7 @@ public static class FastPrintSelectionProbe {
 '@ -ReferencedAssemblies System.Windows.Forms
 $root=Split-Path $PSScriptRoot -Parent
 $library=Join-Path $root 'out\native\fast-print-selection.dll'
+[FastPrintSelectionProbe]::VerifyNativeClass($library)
 $folder=Join-Path $root ('tmp\native-selection-'+[Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $folder | Out-Null
 try {

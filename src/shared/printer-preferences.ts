@@ -1,4 +1,4 @@
-import type { FastPrintPreset } from './fast-print.js'
+import { FAST_PRINT_COUNTS, type FastPrintPreset } from './fast-print.js'
 
 export interface PrintingOption {
   id: string
@@ -11,7 +11,7 @@ export const PRINTING_OPTIONS: PrintingOption[] = [
   { id: 'polaroid-9', label: 'Polaroid — 9 PIC', paper: 'A4', color: true },
   ...(['A4', 'A3'] as const).flatMap((paper) =>
     [true, false].flatMap((color) => [
-      ...([1, 2, 4] as const).map((count) => ({
+      ...FAST_PRINT_COUNTS.map((count) => ({
         id: `fast:${paper}:${color ? 'color' : 'mono'}:${count}`,
         label: `${paper} · ${color ? 'Color' : 'Black & white'} · ${count} per sheet`,
         paper,

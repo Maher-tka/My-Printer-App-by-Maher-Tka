@@ -10,7 +10,9 @@
 
 // Explorer delivers the entire selection in one IDataObject. This bridge only
 // writes a selection manifest and starts the app; it never executes file contents.
-static const CLSID CLSID_Selection={0x629b66de,0x9172,0x48df,{0xa7,0xdd,0x34,0x82,0x25,0xb0,0x69,0x3f}};
+// New identity for the native-dialog generation. Explorer can retain the old
+// release's class factory even after its DLL registration changes.
+static const CLSID CLSID_Selection={0xc7cd21f2,0x188d,0x4609,{0xb8,0xe2,0x3b,0x58,0x31,0xc0,0xf9,0x8e}};
 static std::atomic<long> objects{0}, locks{0};
 static HRESULT filesFromData(IDataObject* data,std::vector<std::wstring>& files) {
   if(!data) return E_INVALIDARG;
@@ -77,7 +79,10 @@ extern "C" HRESULT __stdcall FastPrintWriteSelectionManifest(IDataObject* data,P
 }
 static HRESULT launch(IDataObject* data) {
   wchar_t prefix[32768];DWORD size=sizeof(prefix);
-  LONG status=RegGetValueW(HKEY_LOCAL_MACHINE,L"Software\\Classes\\*\\shell\\MaherTka.FastPrint",L"BatchCommand",RRF_RT_REG_SZ,nullptr,prefix,&size);
+  LONG status=RegGetValueW(HKEY_CURRENT_USER,L"Software\\Classes\\*\\shell\\MaherTka.FastPrint.Native",L"BatchCommand",RRF_RT_REG_SZ,nullptr,prefix,&size);
+  if(status!=ERROR_SUCCESS){size=sizeof(prefix);status=RegGetValueW(HKEY_LOCAL_MACHINE,L"Software\\Classes\\*\\shell\\MaherTka.FastPrint.Native",L"BatchCommand",RRF_RT_REG_SZ,nullptr,prefix,&size);}
+  if(status!=ERROR_SUCCESS){size=sizeof(prefix);status=RegGetValueW(HKEY_CURRENT_USER,L"Software\\Classes\\*\\shell\\MaherTka.FastPrint",L"BatchCommand",RRF_RT_REG_SZ,nullptr,prefix,&size);}
+  if(status!=ERROR_SUCCESS){size=sizeof(prefix);status=RegGetValueW(HKEY_LOCAL_MACHINE,L"Software\\Classes\\*\\shell\\MaherTka.FastPrint",L"BatchCommand",RRF_RT_REG_SZ,nullptr,prefix,&size);}
   if(status!=ERROR_SUCCESS)return HRESULT_FROM_WIN32(status);
   std::wstring manifest;HRESULT hr=writeManifest(data,manifest);if(FAILED(hr))return hr;
   std::wstring command=std::wstring(prefix)+L" \""+manifest+L"\"";
