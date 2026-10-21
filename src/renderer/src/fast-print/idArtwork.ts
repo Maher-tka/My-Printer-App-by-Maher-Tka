@@ -1,18 +1,103 @@
-import { detectIdCrop, idCardPlacement, type IdCrop } from '../../../shared/fast-print-id'
+import {
+  detectIdCrop,
+  idCardPlacement,
+  initialIdSide,
+  idCopiesLayout,
+  idCopyCenters,
+  DEFAULT_ID_SHEET_SETTINGS,
+  type IdSheetSettings,
+  type IdCopiesLayout,
+  rotateIdSide,
+  type IdSide,
+  type IdCrop
+} from '../../../shared/fast-print-id'
+export type { IdSide } from '../../../shared/fast-print-id'
 import type { FastPrintPreset } from '../../../shared/fast-print'
 import { loadPdfDocument, destroyPdfDocument } from '../tools/booklet-montage/lib/pdfWorker'
 import { getPerformancePreset } from '@/performance/performanceSettings'
+import { idHeaderOrientation } from '../../../shared/id-orientation'
+import { rectifyIdPixels } from '../../../shared/id-card-perspective'
+import type { IdTextOrientationReader } from './idTextOrientation'
 
 export interface IdArtwork {
   id: string
   name: string
   canvas: HTMLCanvasElement
 }
-export interface IdSide {
-  sourceId: string
-  turns: number
-  crop: IdCrop
-  angleDegrees?: number
+
+export function autoIdSide(source: IdArtwork) {
+  return initialIdSide(
+    source.id,
+    source.canvas.width,
+    source.canvas.height,
+    autoIdCrop(source.canvas)
+  )
+}
+
+/** Geometry is cheap; load the offline text reader only when the header cannot decide. */
+export class IdAutoAnalyzer {
+  private cache = new Map<string, Promise<IdSide>>()
+  private reader?: IdTextOrientationReader
+  private stopped = false
+  dispose(): void {
+    this.stopped = true
+    this.reader?.dispose()
+  }
+  analyze(source: IdArtwork): Promise<IdSide> {
+    const cached = this.cache.get(source.id)
+    if (cached) return cached
+    const result = this.orient(source, autoIdSide(source))
+    this.cache.set(source.id, result)
+    return result
+  }
+  async orient(source: IdArtwork, side: IdSide): Promise<IdSide> {
+    const art = orientIdArtwork(source, side.turns)
+    const placement = idCardPlacement(
+      art.width,
+      art.height,
+      side.crop,
+      'A4',
+      false,
+      side.angleDegrees
+    )
+    const card = document.createElement('canvas'),
+      scale = 900 / placement.width
+    card.width = 900
+    card.height = Math.max(1, Math.round(placement.height * scale))
+    const context = card.getContext('2d', { willReadFrequently: true })!
+    context.fillStyle = '#fff'
+    context.fillRect(0, 0, card.width, card.height)
+    context.transform(
+      scale * placement.cos,
+      -scale * placement.sin,
+      scale * placement.sin,
+      scale * placement.cos,
+      -placement.left * scale,
+      -placement.top * scale
+    )
+    context.drawImage(art, 0, 0)
+    const pixels = context.getImageData(0, 0, card.width, card.height)
+    let orientation = idHeaderOrientation(pixels.data, card.width, card.height)
+    try {
+      if (orientation === null) {
+        const { IdTextOrientationReader } = await import('./idTextOrientation')
+        if (this.stopped) return side
+        this.reader ??= new IdTextOrientationReader()
+        orientation = await this.reader.read(card)
+      }
+    } catch {
+      /* Keep the editable crop when recognition is unavailable or ambiguous. */
+    } finally {
+      card.width = card.height = 0
+      if (art !== source.canvas) art.width = art.height = 0
+    }
+    return orientation === 2
+      ? {
+          ...rotateIdSide(side, 2),
+          ...(side.angleDegrees === undefined ? {} : { angleDegrees: side.angleDegrees })
+        }
+      : { ...side, orientationVerified: orientation === 0 }
+  }
 }
 
 export async function loadIdArtwork(
@@ -96,57 +181,92 @@ export function autoIdCrop(canvas: HTMLCanvasElement): IdCrop {
   )
 }
 
+const rectifiedCards = new WeakMap<HTMLCanvasElement, Map<string, HTMLCanvasElement>>()
+export function rectifyIdArtwork(
+  artwork: HTMLCanvasElement,
+  crop: IdCrop,
+  width: number,
+  height: number
+): HTMLCanvasElement {
+  let cache = rectifiedCards.get(artwork)
+  if (!cache) {
+    cache = new Map()
+    rectifiedCards.set(artwork, cache)
+  }
+  const key = JSON.stringify([crop, width, height]),
+    previous = cache.get(key)
+  if (previous) return previous
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const source = artwork
+    .getContext('2d', { willReadFrequently: true })!
+    .getImageData(0, 0, artwork.width, artwork.height)
+  const pixels = rectifyIdPixels(source.data, artwork.width, artwork.height, crop, width, height)
+  canvas
+    .getContext('2d')!
+    .putImageData(new ImageData(new Uint8ClampedArray(pixels), width, height), 0, 0)
+  if (cache.size >= 4) cache.delete(cache.keys().next().value!)
+  cache.set(key, canvas)
+  return canvas
+}
 export function drawIdSheet(
   artwork: HTMLCanvasElement,
   crop: IdCrop,
   preset: FastPrintPreset,
   dpi = 300,
-  angleDegrees?: number
+  _angleDegrees?: number,
+  copies?: {
+    count: number
+    cellHeightMm: number
+    cellWidthMm?: number
+    back?: boolean
+    settings?: IdSheetSettings
+    sheetTurns?: number
+    layout?: IdCopiesLayout
+  }
 ): HTMLCanvasElement {
-  const placement = idCardPlacement(
-    artwork.width,
-    artwork.height,
+  const settings = copies?.settings ?? DEFAULT_ID_SHEET_SETTINGS,
+    factor = dpi / 25.4
+  const card = rectifyIdArtwork(
+    artwork,
     crop,
-    preset.paper,
-    preset.landscape,
-    angleDegrees
+    Math.round(90 * factor),
+    Math.round(settings.heightMm * factor)
   )
-  const factor = dpi / 25.4
+  const layout =
+    copies?.layout ??
+    idCopiesLayout(
+      preset.paper,
+      preset.landscape === true,
+      [copies?.cellHeightMm ?? settings.heightMm],
+      copies?.count ?? 1,
+      {
+        cellWidthMm: copies?.cellWidthMm ?? 90,
+        marginMm: settings.marginMm,
+        gapMm: settings.gapMm,
+        spacing: settings.spacing
+      }
+    )
   const sheet = document.createElement('canvas')
-  sheet.width = Math.round(placement.paperWidth * factor)
-  sheet.height = Math.round(placement.paperHeight * factor)
+  sheet.width = Math.round(layout.paperWidth * factor)
+  sheet.height = Math.round(layout.paperHeight * factor)
   const context = sheet.getContext('2d')!
-  context.fillStyle = '#ffffff'
+  context.fillStyle = '#fff'
   context.fillRect(0, 0, sheet.width, sheet.height)
-  const scale = (90 * factor) / placement.width
-  const x = placement.xMm * factor - placement.left * scale
-  const y = placement.yMm * factor - placement.top * scale
-  context.save()
-  context.beginPath()
-  crop.forEach((point, index) => {
-    const px =
-        x +
-        (point.x * artwork.width * placement.cos + point.y * artwork.height * placement.sin) *
-          scale,
-      py =
-        y +
-        (-point.x * artwork.width * placement.sin + point.y * artwork.height * placement.cos) *
-          scale
-    if (index === 0) context.moveTo(px, py)
-    else context.lineTo(px, py)
-  })
-  context.closePath()
-  context.clip()
-  context.filter = preset.color ? 'none' : 'grayscale(1)'
-  context.transform(
-    scale * placement.cos,
-    -scale * placement.sin,
-    scale * placement.sin,
-    scale * placement.cos,
-    x,
-    y
-  )
-  context.drawImage(artwork, 0, 0)
-  context.restore()
+  for (const center of idCopyCenters(layout, copies?.back)) {
+    context.save()
+    context.translate(center.x * factor, center.y * factor)
+    context.rotate((((copies?.sheetTurns ?? 0) % 2 ? 0 : (copies?.sheetTurns ?? 0)) * Math.PI) / 2)
+    context.filter = preset.color ? 'none' : 'grayscale(1)'
+    context.drawImage(
+      card,
+      -45 * factor,
+      (-settings.heightMm / 2) * factor,
+      90 * factor,
+      settings.heightMm * factor
+    )
+    context.restore()
+  }
   return sheet
 }

@@ -3,6 +3,7 @@ import {
   FAST_PRINT_COUNTS,
   FAST_PRINT_LAYOUTS,
   fastPrintLayout,
+  fastPrintCell,
   validateFastPrintPreset
 } from './fast-print.js'
 import { polaroidLayout, polaroidCoverCrop } from './fast-print-polaroid.js'
@@ -25,12 +26,19 @@ for (const paper of ['A4', 'A3'] as const) {
       assert.ok(layout.cellWidth > 0 && layout.cellHeight > 0)
       assert.ok(
         Math.abs(
-          layout.columns * layout.cellWidth + (layout.columns - 1) * layout.gap - layout.width
+          layout.columns * layout.cellWidth +
+            (layout.columns - 1) * layout.gap +
+            2 * layout.margin -
+            layout.width
         ) < 0.001
       )
       assert.ok(
-        Math.abs(layout.rows * layout.cellHeight + (layout.rows - 1) * layout.gap - layout.height) <
-          0.001
+        Math.abs(
+          layout.rows * layout.cellHeight +
+            (layout.rows - 1) * layout.gap +
+            2 * layout.margin -
+            layout.height
+        ) < 0.001
       )
       const token = Buffer.from(JSON.stringify(preset)).toString('base64')
       assert.deepEqual(
@@ -97,4 +105,73 @@ assert.throws(
 assert.throws(
   () => validateFastPrintPreset({ ...stockPreset, landscape: 'false' }),
   /Invalid Fast Print/
+)
+
+for (const paper of ['A4', 'A3'] as const)
+  for (const pagesPerSheet of FAST_PRINT_COUNTS)
+    for (const marginMm of [5, 7, 10, 20])
+      for (const gapMm of [3, 5, 10]) {
+        const preset = {
+          printer: 'Proof',
+          paper,
+          color: true,
+          pagesPerSheet,
+          marginMm,
+          gapMm,
+          sourceRotations: [0, 1, 2, 3]
+        }
+        assert.deepEqual(validateFastPrintPreset(preset), preset)
+        const layout = fastPrintLayout(preset, 254)
+        for (let occupied = 1; occupied <= pagesPerSheet; occupied++) {
+          const cells = Array.from({ length: occupied }, (_, slot) =>
+            fastPrintCell(layout, slot, occupied)
+          )
+          for (const cell of cells) {
+            assert.ok(cell.x >= layout.margin - 1e-8 && cell.y >= layout.margin - 1e-8)
+            assert.ok(
+              cell.x + cell.width <= layout.width - layout.margin + 1e-8 &&
+                cell.y + cell.height <= layout.height - layout.margin + 1e-8
+            )
+          }
+          const left = Math.min(...cells.map((c) => c.x)),
+            right = Math.max(...cells.map((c) => c.x + c.width)),
+            top = Math.min(...cells.map((c) => c.y)),
+            bottom = Math.max(...cells.map((c) => c.y + c.height))
+          assert.ok(
+            Math.abs((left + right) / 2 - layout.width / 2) < 1e-8 &&
+              Math.abs((top + bottom) / 2 - layout.height / 2) < 1e-8
+          )
+          for (let i = 0; i < cells.length; i++)
+            for (const b of cells.slice(i + 1)) {
+              const a = cells[i]
+              assert.ok(
+                a.x + a.width + layout.gap <= b.x + 1e-8 ||
+                  b.x + b.width + layout.gap <= a.x + 1e-8 ||
+                  a.y + a.height + layout.gap <= b.y + 1e-8 ||
+                  b.y + b.height + layout.gap <= a.y + 1e-8
+              )
+            }
+        }
+      }
+for (const extra of [
+  { marginMm: 0 },
+  { marginMm: NaN },
+  { gapMm: 0 },
+  { sourceRotations: [4] },
+  { sourceRotations: [0.5] },
+  { sourceRotations: '90' }
+])
+  assert.throws(
+    () =>
+      validateFastPrintPreset({
+        printer: 'Test',
+        paper: 'A4',
+        color: true,
+        pagesPerSheet: 4,
+        ...extra
+      }),
+    /Invalid/
+  )
+console.log(
+  'General Fast Print equal-cell margins, gaps, rotation validation and centered final sheets passed.'
 )

@@ -7,6 +7,7 @@ export interface NativePrintRequest {
   files: string[]
   preset: FastPrintPreset
   copies: number
+  preparedPolaroid?: boolean
 }
 
 /** Only the helper-owned session directory is eligible for automatic cleanup. */
@@ -33,7 +34,18 @@ export function parseNativePrintRequest(text: string): NativePrintRequest {
   )
     throw new Error('Invalid native Fast Print request.')
   const preset = validateFastPrintPreset(data.preset)
+  if (
+    data.preparedPolaroid !== undefined &&
+    (typeof data.preparedPolaroid !== 'boolean' || !preset.mode?.startsWith('polaroid-'))
+  )
+    throw new Error('Invalid prepared Polaroid request.')
   if (!preset.profileId || preset.mode === 'document')
     throw new Error('Missing native printer settings.')
-  return { version: 1, files: normalizeFastPrintSelection(data.files), preset, copies: data.copies }
+  return {
+    version: 1,
+    files: normalizeFastPrintSelection(data.files),
+    preset,
+    copies: data.copies,
+    ...(data.preparedPolaroid ? { preparedPolaroid: true } : {})
+  }
 }

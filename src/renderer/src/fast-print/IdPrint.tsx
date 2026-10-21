@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RotateCw, Scan } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { ActionButton } from '@/components/ui/action-button'
 import { ToolHeader } from '@/tools/shared/ToolHeader'
 import { useLanguage } from '@/i18n/useLanguage'
@@ -12,8 +11,12 @@ import { getPerformancePreset } from '@/performance/performanceSettings'
 import {
   fullIdCrop,
   validIdCrop,
-  idCardPlacement,
-  idCardAngle,
+  isFullIdCrop,
+  idCopiesLayout,
+  MAX_IDS_PER_SHEET,
+  DEFAULT_ID_SHEET_SETTINGS,
+  idPrintedSize,
+  horizontalIdSide,
   type IdCrop,
   type IdPoint
 } from '../../../shared/fast-print-id'
@@ -21,6 +24,7 @@ import type { FastPrintBatchSource, FastPrintPreset } from '../../../shared/fast
 import {
   loadIdArtwork,
   autoIdCrop,
+  IdAutoAnalyzer,
   orientIdArtwork,
   drawIdSheet,
   type IdArtwork,
@@ -34,10 +38,15 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
   const [sides, setSides] = useState<[IdSide | null, IdSide | null]>([null, null])
   const [active, setActive] = useState(0)
   const [color, setColor] = useState(batch.preset.color)
-  const [duplex, setDuplex] = useState(batch.canDuplex === true)
+  const [duplex, setDuplex] = useState(batch.canDuplex === true && batch.preset.duplex === true)
   const [busy, setBusy] = useState(true)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [idsPerSheet, setIdsPerSheet] = useState(batch.idDraft?.idsPerSheet ?? 1)
+  const [sheetSettings, setSheetSettings] = useState(
+    batch.idDraft?.sheetSettings ?? { ...DEFAULT_ID_SHEET_SETTINGS }
+  )
   const input = useRef<HTMLInputElement>(null)
   const stage = useRef<HTMLDivElement>(null)
   const drag = useRef<number | null>(null)
@@ -50,13 +59,56 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
     'Bottom left corner'
   ]
 
-  function initialSide(source: IdArtwork): IdSide {
-    return { sourceId: source.id, turns: 0, crop: autoIdCrop(source.canvas) }
+  const analyzer = useMemo(() => new IdAutoAnalyzer(), [])
+  const initialSide = (source: IdArtwork): Promise<IdSide> => analyzer.analyze(source)
+  useEffect(() => () => analyzer.dispose(), [analyzer])
+  async function selectSource(selected?: IdArtwork) {
+    setBusy(true)
+    setError('')
+    try {
+      updateSide(selected ? await initialSide(selected) : null)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setBusy(false)
+    }
   }
   useEffect(() => {
     let cancelled = false
     void (async () => {
       try {
+        if (batch.idDraft) {
+          const loaded: IdArtwork[] = []
+          for (const item of batch.idDraft.sources) {
+            const bytes = Uint8Array.from(atob(item.png.split(',')[1]), (character) =>
+              character.charCodeAt(0)
+            )
+            const [artwork] = await loadIdArtwork(item.name, '.png', bytes)
+            loaded.push({ ...artwork, id: item.id })
+          }
+          if (cancelled) return
+          const restored: [IdSide | null, IdSide | null] = [null, null]
+          for (const [index, side] of batch.idDraft.sides.entries()) {
+            const source = loaded.find((item) => item.id === side?.sourceId)
+            if (!side || !source) continue
+            const horizontal = {
+              ...horizontalIdSide(source.canvas.width, source.canvas.height, side),
+              ...(side.sheetTurns === undefined
+                ? {}
+                : { sheetTurns: side.sheetTurns % 2 ? 0 : side.sheetTurns })
+            }
+            restored[index] =
+              horizontal.turns !== side.turns || horizontal.crop !== side.crop
+                ? await analyzer.orient(source, horizontal)
+                : horizontal
+          }
+          if (cancelled) return
+          setSources(loaded)
+          setSides(restored)
+          setActive(batch.idDraft.active)
+          setNotice('ID edits restored.')
+          return
+        }
         if (batch.files.length > 8)
           throw new Error('Choose up to 8 images or PDF pages for one ID job.')
         const loaded: IdArtwork[] = []
@@ -67,11 +119,11 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
             throw new Error('Choose up to 8 images or PDF pages for one ID job.')
         }
         if (cancelled) return
+        const first = loaded[0] ? await initialSide(loaded[0]) : null
+        const second = loaded[1] ? await initialSide(loaded[1]) : null
+        if (cancelled) return
         setSources(loaded)
-        setSides([
-          loaded[0] ? initialSide(loaded[0]) : null,
-          loaded[1] ? initialSide(loaded[1]) : null
-        ])
+        setSides([first, second])
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason))
       } finally {
@@ -91,39 +143,81 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
       }),
     [sides[0]?.sourceId, sides[0]?.turns, sides[1]?.sourceId, sides[1]?.turns, sources]
   )
+  const copiesLayout = useMemo(() => {
+    const sizes = sides
+      .filter(Boolean)
+      .map((side) => idPrintedSize(sheetSettings.heightMm, side!.sheetTurns))
+    if (!sizes.length) sizes.push(idPrintedSize(sheetSettings.heightMm))
+    const heights = sizes.map((size) => size.heightMm),
+      options = {
+        cellWidthMm: Math.max(...sizes.map((size) => size.widthMm)),
+        marginMm: sheetSettings.marginMm,
+        gapMm: sheetSettings.gapMm,
+        spacing: sheetSettings.spacing
+      }
+    let capacity = 0,
+      count = idsPerSheet
+    try {
+      capacity = idCopiesLayout(
+        preset.paper,
+        preset.landscape === true,
+        heights,
+        1,
+        options
+      ).capacity
+      count = sheetSettings.fillSheet ? capacity : idsPerSheet
+      return {
+        layout: idCopiesLayout(preset.paper, preset.landscape === true, heights, count, options),
+        capacity,
+        count,
+        error: ''
+      }
+    } catch (reason) {
+      return {
+        layout: null,
+        capacity,
+        count,
+        error: reason instanceof Error ? reason.message : String(reason)
+      }
+    }
+  }, [sides, sheetSettings, preset.paper, preset.landscape, idsPerSheet])
+  const count = copiesLayout.count
   const previews = useMemo(
     () =>
       sides.map((side, i) => {
         if (!side || !oriented[i]) return null
         try {
-          const placement = idCardPlacement(
-            oriented[i]!.width,
-            oriented[i]!.height,
-            side.crop,
-            preset.paper,
-            preset.landscape,
-            side.angleDegrees
-          )
+          if (!copiesLayout.layout) throw new Error(copiesLayout.error)
+          const size = idPrintedSize(sheetSettings.heightMm, side.sheetTurns)
           return {
             url: drawIdSheet(
               oriented[i]!,
               side.crop,
               preset,
               getPerformancePreset() === 'low-end' ? 60 : 85,
-              side.angleDegrees
+              undefined,
+              {
+                count,
+                cellHeightMm: copiesLayout.layout.cellHeightMm,
+                back: i === 1,
+                settings: sheetSettings,
+                sheetTurns: side.sheetTurns,
+                layout: copiesLayout.layout
+              }
             ).toDataURL('image/png'),
-            heightMm: placement.heightMm,
+            ...size,
             error: ''
           }
         } catch (reason) {
           return {
             url: '',
-            heightMm: 0,
+            widthMm: 90,
+            heightMm: sheetSettings.heightMm,
             error: reason instanceof Error ? reason.message : String(reason)
           }
         }
       }),
-    [sides, oriented, color, preset.paper, preset.landscape]
+    [sides, oriented, color, preset.paper, preset.landscape, count, sheetSettings, copiesLayout]
   )
   const side = sides[active]
   const art = oriented[active]
@@ -160,12 +254,13 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
         if (sources.length + loaded.length > 8)
           throw new Error('Choose up to 8 images or PDF pages for one ID job.')
       }
+      const defaults: IdSide[] = []
+      for (const source of loaded.slice(0, sides.filter((value) => !value).length))
+        defaults.push(await initialSide(source))
       setSources((previous) => [...previous, ...loaded])
       setSides((previous) => {
         let index = 0
-        return previous.map(
-          (value) => value ?? (loaded[index] ? initialSide(loaded[index++]) : null)
-        ) as typeof previous
+        return previous.map((value) => value ?? defaults[index++] ?? null) as typeof previous
       })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
@@ -178,10 +273,27 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
     if (!canPrint) return
     setBusy(true)
     setError('')
+    let preparingSheets = false
     try {
+      if (batch.canReturnToSettings) await window.fastPrint.saveIdDraft(reviewDraft())
+      preparingSheets = true
       // ID sides are one duplex document: never insert a batch blank between front and back.
       for (let i = 0; i < 2; i++) {
-        const sheet = drawIdSheet(oriented[i]!, sides[i]!.crop, preset, 300, sides[i]!.angleDegrees)
+        const sheet = drawIdSheet(
+          oriented[i]!,
+          sides[i]!.crop,
+          preset,
+          300,
+          sides[i]!.angleDegrees,
+          {
+            count,
+            cellHeightMm: copiesLayout.layout!.cellHeightMm,
+            back: i === 1,
+            settings: sheetSettings,
+            sheetTurns: sides[i]!.sheetTurns,
+            layout: copiesLayout.layout!
+          }
+        )
         try {
           await window.fastPrint.sheet(sheet.toDataURL('image/png'))
         } finally {
@@ -192,6 +304,7 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
       const result = await window.fastPrint.submit({
         color,
         duplex,
+        idsPerSheet: count,
         manualDuplexPrompt: {
           title: t('Fast Print — print the back'),
           message: t(
@@ -211,19 +324,59 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
       await new Promise((resolve) => setTimeout(resolve, result.manualBackCanceled ? 3500 : 1600))
       await window.fastPrint.finish()
     } catch (reason) {
-      // Finish the worker after any preparation/submission failure; never append duplicate sides on retry.
+      if (!preparingSheets) {
+        setError(reason instanceof Error ? reason.message : String(reason))
+        setBusy(false)
+        return
+      }
+      // After transferring sheets, finish the worker to prevent duplicate sides on retry.
       await window.fastPrint.finish(reason instanceof Error ? reason.message : String(reason))
     }
   }
 
+  function reviewDraft() {
+    return {
+      version: 1 as const,
+      sources: sources.map((item) => ({
+        id: item.id,
+        name: item.name,
+        png: item.canvas.toDataURL('image/png')
+      })),
+      sides,
+      active,
+      color,
+      duplex,
+      idsPerSheet: count,
+      sheetSettings
+    }
+  }
+  async function returnToSettings() {
+    if (busy || sent) return
+    if (!batch.canReturnToSettings) {
+      await window.fastPrint.finish()
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await window.fastPrint.back(reviewDraft())
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+      setBusy(false)
+    }
+  }
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-[1600px] flex-col gap-4 p-4" dir={direction}>
+    <main
+      className="mx-auto flex min-h-screen max-w-[1600px] flex-col gap-4 p-4 text-foreground"
+      dir={direction}
+    >
       <ToolHeader
         title="ID card — 9 cm"
         projectName={`${batch.preset.printer} · ${batch.preset.paper}${batch.preset.profileName ? ` · ${batch.preset.profileName}` : ''}`}
-        onBack={() => void window.fastPrint.finish()}
-        backDisabled={busy}
-        backLabel="Cancel"
+        onBack={() => void returnToSettings()}
+        backDisabled={busy || sent}
+        backLabel={batch.canReturnToSettings ? 'Printer settings' : 'Cancel'}
         print={{
           mode: 'fast-print',
           onPrint: () => void print(),
@@ -276,8 +429,137 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
             <option value="manual">{t('Two pages (manual duplex)')}</option>
           </select>
         </label>
-        <span className="text-xs text-muted-foreground">
-          {t('Width: 9 cm · Height: proportional · Centered')}
+        <label className="flex items-center gap-2" htmlFor="id-card-size">
+          {t('Card size')}
+          <select
+            id="id-card-size"
+            className="h-9 rounded-[var(--ui-radius-md)] border bg-background px-3"
+            dir="ltr"
+            value={sheetSettings.heightMm}
+            disabled={busy || sent}
+            onChange={(event) =>
+              setSheetSettings((previous) => ({
+                ...previous,
+                heightMm: Number(event.target.value)
+              }))
+            }
+          >
+            {[55, 56, 60].map((height) => (
+              <option key={height} value={height}>
+                90 × {height} mm
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2" htmlFor="id-copies-per-sheet">
+          {t('Sheet preset')}
+          <select
+            id="id-copies-per-sheet"
+            className="h-9 max-w-full rounded-[var(--ui-radius-md)] border bg-background px-3"
+            value={sheetSettings.fillSheet ? 'fill' : idsPerSheet}
+            disabled={busy || sent}
+            aria-describedby="id-copies-help"
+            onChange={(event) => {
+              const fillSheet = event.target.value === 'fill'
+              setSheetSettings((previous) => ({ ...previous, fillSheet }))
+              if (!fillSheet) setIdsPerSheet(Number(event.target.value))
+            }}
+          >
+            <option value="fill">{t('Fill sheet')}</option>
+            <optgroup label={t('Common presets')}>
+              {[1, 2, 4, 6, 8].map((value) => (
+                <option
+                  key={value}
+                  value={value}
+                  disabled={copiesLayout.capacity > 0 && value > copiesLayout.capacity}
+                >
+                  {value} · {t('IDs per sheet')}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label={t('More copies')}>
+              {Array.from({ length: MAX_IDS_PER_SHEET }, (_, index) => index + 1)
+                .filter((value) => ![1, 2, 4, 6, 8].includes(value))
+                .map((value) => (
+                  <option
+                    key={value}
+                    value={value}
+                    disabled={copiesLayout.capacity > 0 && value > copiesLayout.capacity}
+                  >
+                    {value} · {t('IDs per sheet')}
+                  </option>
+                ))}
+            </optgroup>
+          </select>
+        </label>
+        <label className="flex items-center gap-2" htmlFor="id-sheet-spacing">
+          {t('Spacing')}
+          <select
+            id="id-sheet-spacing"
+            className="h-9 rounded-[var(--ui-radius-md)] border bg-background px-3"
+            value={sheetSettings.spacing}
+            disabled={busy || sent}
+            onChange={(event) =>
+              setSheetSettings((previous) => ({
+                ...previous,
+                spacing: event.target.value as 'compact' | 'even'
+              }))
+            }
+          >
+            <option value="even">{t('Even spacing')}</option>
+            <option value="compact">{t('Compact')}</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2" htmlFor="id-sheet-margin">
+          {t('Margins')}
+          <select
+            id="id-sheet-margin"
+            className="h-9 rounded-[var(--ui-radius-md)] border bg-background px-3"
+            dir="ltr"
+            value={sheetSettings.marginMm}
+            disabled={busy || sent}
+            onChange={(event) =>
+              setSheetSettings((previous) => ({
+                ...previous,
+                marginMm: Number(event.target.value)
+              }))
+            }
+          >
+            {[5, 7, 10, 15, 20].map((value) => (
+              <option key={value} value={value}>
+                {value} mm
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2" htmlFor="id-sheet-gap">
+          {t('Cutting gap')}
+          <select
+            id="id-sheet-gap"
+            className="h-9 rounded-[var(--ui-radius-md)] border bg-background px-3"
+            dir="ltr"
+            value={sheetSettings.gapMm}
+            disabled={busy || sent}
+            onChange={(event) =>
+              setSheetSettings((previous) => ({ ...previous, gapMm: Number(event.target.value) }))
+            }
+          >
+            {[3, 5, 8, 10].map((value) => (
+              <option key={value} value={value}>
+                {value} mm
+              </option>
+            ))}
+          </select>
+        </label>
+        <span id="id-copies-help" className="text-xs text-muted-foreground">
+          {t('Matching front/back size')} · <bdi dir="ltr">90 × {sheetSettings.heightMm} mm</bdi> ·{' '}
+          {count} {t('IDs per sheet')}
+          {copiesLayout.capacity > 0 && (
+            <>
+              {' '}
+              · {t('Maximum on this sheet:')} {copiesLayout.capacity}
+            </>
+          )}
         </span>
       </div>
       {(error || busy) && (
@@ -285,6 +567,8 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
           {t(error || 'Preparing…')}
         </p>
       )}
+      {!error && !busy && notice && <p role="status">{t(notice)}</p>}
+      {!busy && copiesLayout.error && <p role="alert">{t(copiesLayout.error)}</p>}
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <section
           className="min-w-0 rounded-[var(--ui-radius-lg)] border bg-card p-4"
@@ -312,7 +596,7 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
               disabled={busy || sent}
               onChange={(event) => {
                 const selected = sources.find((item) => item.id === event.target.value)
-                updateSide(selected ? initialSide(selected) : null)
+                void selectSource(selected)
               }}
             >
               <option value="">{t('Choose an image')}</option>
@@ -333,7 +617,7 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
                   ref={stage}
                   className="relative select-none"
                   style={{
-                    width: `min(100%, ${Math.round((art.width / art.height) * 240)}px)`,
+                    width: `min(100%, calc(clamp(180px, calc(100vh - 600px), 360px) * ${art.width / art.height}))`,
                     aspectRatio: `${art.width}/${art.height}`,
                     touchAction: 'none'
                   }}
@@ -413,26 +697,19 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
               <p className="my-3 text-xs text-muted-foreground">
                 {t('Drag the corners around the card. Arrow keys adjust a focused corner.')}
               </p>
+              {side.orientationVerified === false && (
+                <p role="status" className="mb-3 text-sm">
+                  {t(
+                    'Check orientation before printing. Rotate the side in the sheet preview if needed.'
+                  )}
+                </p>
+              )}
+              {isFullIdCrop(side.crop) && (
+                <p role="status" className="mb-3 text-sm">
+                  {t('Check the card outline. Adjust the four corners to remove the background.')}
+                </p>
+              )}
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy || sent}
-                  onClick={() => {
-                    const crop = [side.crop[3], side.crop[0], side.crop[1], side.crop[2]].map(
-                      (p) => ({ x: 1 - p.y, y: p.x })
-                    ) as IdCrop
-                    updateSide({
-                      ...side,
-                      turns: (side.turns + 1) % 4,
-                      crop,
-                      angleDegrees: undefined
-                    })
-                  }}
-                >
-                  <RotateCw aria-hidden="true" />
-                  {t('Rotate')}
-                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -454,46 +731,6 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
                   {t('Reset crop')}
                 </ActionButton>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-2" htmlFor="id-card-angle">
-                  {t('Card angle (°)')}
-                  <Input
-                    id="id-card-angle"
-                    type="number"
-                    className="w-24"
-                    dir="ltr"
-                    min={-180}
-                    max={180}
-                    step={0.1}
-                    value={Number(
-                      (side.angleDegrees ?? idCardAngle(art.width, art.height, side.crop)).toFixed(
-                        1
-                      )
-                    )}
-                    disabled={busy || sent}
-                    aria-describedby="id-card-angle-help"
-                    onChange={(event) => {
-                      const value = event.target.valueAsNumber
-                      if (Number.isFinite(value))
-                        updateSide({ ...side, angleDegrees: Math.max(-180, Math.min(180, value)) })
-                    }}
-                  />
-                </label>
-                <Button
-                  type="button"
-                  variant={side.angleDegrees === undefined ? 'selected' : 'outline'}
-                  aria-pressed={side.angleDegrees === undefined}
-                  disabled={busy || sent}
-                  onClick={() => updateSide({ ...side, angleDegrees: undefined })}
-                >
-                  {t('Auto straighten')}
-                </Button>
-              </div>
-              <p id="id-card-angle-help" className="mt-2 text-xs text-muted-foreground">
-                {t(
-                  'Match the card’s tilt. The selected card is straightened and centered for printing.'
-                )}
-              </p>
             </>
           ) : (
             <div className="flex min-h-48 items-center justify-center rounded-[var(--ui-radius-md)] border border-dashed p-6 text-muted-foreground">
@@ -509,7 +746,30 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
           <div className="grid grid-cols-2 gap-4" dir="ltr">
             {names.map((name, i) => (
               <div key={name} className="min-w-0 text-center" dir={direction}>
-                <h3 className="mb-2 font-medium">{t(name)}</h3>
+                <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
+                  <h3 className="font-medium">{t(name)}</h3>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || sent || !sides[i]}
+                    aria-label={t(i === 0 ? 'Rotate front on sheet' : 'Rotate back on sheet')}
+                    data-id-sheet-rotate={i}
+                    onClick={() =>
+                      setSides(
+                        (previous) =>
+                          previous.map((side, index) =>
+                            side && index === i
+                              ? { ...side, sheetTurns: ((side.sheetTurns ?? 0) + 2) % 4 }
+                              : side
+                          ) as typeof previous
+                      )
+                    }
+                  >
+                    <RotateCw aria-hidden="true" />
+                    {t('Rotate 180°')}
+                  </Button>
+                </div>
                 {previews[i]?.url ? (
                   <img
                     src={previews[i]!.url}
@@ -523,7 +783,9 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
                 )}
                 {previews[i]?.url && (
                   <p className="mt-2 text-xs text-muted-foreground" dir="ltr">
-                    90 × {previews[i]!.heightMm.toFixed(1)} mm
+                    {count > 1
+                      ? `${count} × (${previews[i]!.widthMm} × ${previews[i]!.heightMm}) mm`
+                      : `${previews[i]!.widthMm} × ${previews[i]!.heightMm} mm`}
                   </p>
                 )}
               </div>

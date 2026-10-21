@@ -1,6 +1,6 @@
 {
   "name": "my-printer-app-by-maher-tka",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Local-first printer-shop hub desktop app by Maher Tka.",
   "author": "Maher Tka",
   "private": true,
@@ -43,15 +43,17 @@
     "test:sequential": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/sequential-number/lib/layout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/sequential-number/lib/exportPdf.test.ts",
     "fast-print:install": "npm run build && npm run build:fast-print-shell && node scripts/fast-print-control.mjs install",
     "fast-print:remove": "node scripts/fast-print-control.mjs remove",
-    "test:fast-print": "tsx src/shared/fast-print-native.test.ts && tsx src/shared/fast-print.test.ts && tsx src/shared/fast-print-menu.test.ts && tsx src/shared/fast-print-batch.test.ts && tsx src/shared/fast-print-id.test.ts && tsx src/shared/polaroid-framing.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/fast-print/polaroidImage.test.ts",
+    "test:fast-print": "tsx src/shared/fast-print-native.test.ts && tsx src/shared/fast-print.test.ts && tsx src/shared/fast-print-menu.test.ts && tsx src/shared/fast-print-batch.test.ts && tsx src/shared/fast-print-id.test.ts && tsx src/main/fast-print-id-draft.test.ts && tsx src/main/fast-print-polaroid-cache.test.ts && tsx src/shared/polaroid-framing.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/fast-print/polaroidImage.test.ts",
     "build:fast-print-shell": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-fast-print-shell.ps1",
     "fast-print:settings": "node scripts/fast-print-control.mjs manage",
     "test:fast-print:driver": "powershell -NoProfile -STA -ExecutionPolicy Bypass -File scripts/test-fast-print-profiles.ps1",
     "test:fast-print:native": "node scripts/verify-fast-print-native.mjs",
     "test:fast-print:polaroid-native": "tsx scripts/verify-fast-print-polaroid-native.mjs",
     "test:fast-print:paint": "node scripts/verify-fast-print-paint.mjs",
+    "test:fast-print:presets": "tsx scripts/verify-fast-print-presets.mjs",
     "test:fast-print:audit": "node scripts/verify-fast-print-audit.mjs",
-    "test:fast-print:id-real": "node scripts/verify-fast-print-id.mjs"
+    "test:fast-print:id-real": "node scripts/verify-fast-print-id.mjs",
+    "test:fast-print:id-workflow": "tsx scripts/verify-fast-print-id-workflow.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

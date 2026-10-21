@@ -1,10 +1,12 @@
 import {
   fastPrintLayout,
+  fastPrintCell,
   type FastPrintSource,
   type FastPrintBatchSource,
   type FastPrintSubmitOptions
 } from '../../../shared/fast-print'
 import { FAST_PRINT_MAX_PAGES, needsBatchBlankBack } from '../../../shared/fast-print-batch'
+import type { IdPrintDraft } from '../../../shared/fast-print-id'
 import {
   loadPdfDocument,
   destroyPdfDocument,
@@ -21,6 +23,8 @@ declare global {
         options?: FastPrintSubmitOptions
       ): Promise<{ verified: boolean; manualBackCanceled?: boolean }>
       finish(error?: string): Promise<void>
+      back(draft: IdPrintDraft): Promise<void>
+      saveIdDraft(draft: IdPrintDraft): Promise<void>
     }
   }
 }
@@ -100,30 +104,32 @@ async function run(): Promise<void> {
               image = await createImageBitmap(new Blob([new Uint8Array(next.bytes)]))
             }
             const page = pdf ? await pdf.getPage(first + slot + 1) : undefined
-            const viewport = page?.getViewport({ scale: 1 })
+            const turns =
+              preset.sourceRotations?.[imageGroup ? documentIndex + first + slot : documentIndex] ??
+              0
+            const rotation = page ? (page.rotate + turns * 90) % 360 : 0
+            const viewport = page?.getViewport({ scale: 1, rotation })
             const sourceWidth = viewport?.width ?? image!.width
             const sourceHeight = viewport?.height ?? image!.height
+            const rotatedWidth = !page && turns % 2 ? sourceHeight : sourceWidth,
+              rotatedHeight = !page && turns % 2 ? sourceWidth : sourceHeight
             const scale = (preset.fitToFrame ? Math.max : Math.min)(
-              layout.cellWidth / sourceWidth,
-              layout.cellHeight / sourceHeight
+              layout.cellWidth / rotatedWidth,
+              layout.cellHeight / rotatedHeight
             )
-            const width = Math.max(1, Math.floor(sourceWidth * scale))
-            const height = Math.max(1, Math.floor(sourceHeight * scale))
-            const x =
-              (slot % layout.columns) * (layout.cellWidth + layout.gap) +
-              (layout.cellWidth - width) / 2
-            const y =
-              Math.floor(slot / layout.columns) * (layout.cellHeight + layout.gap) +
-              (layout.cellHeight - height) / 2
+            const width = Math.max(1, Math.floor(rotatedWidth * scale))
+            const height = Math.max(1, Math.floor(rotatedHeight * scale))
+            const cell = fastPrintCell(
+              layout,
+              slot,
+              Math.min(preset.pagesPerSheet, pageCount - first)
+            )
+            const x = cell.x + (cell.width - width) / 2,
+              y = cell.y + (cell.height - height) / 2
             context.filter = preset.color ? 'none' : 'grayscale(1)'
             context.save()
             context.beginPath()
-            context.rect(
-              (slot % layout.columns) * (layout.cellWidth + layout.gap),
-              Math.floor(slot / layout.columns) * (layout.cellHeight + layout.gap),
-              layout.cellWidth,
-              layout.cellHeight
-            )
+            context.rect(cell.x, cell.y, layout.cellWidth, layout.cellHeight)
             context.clip()
             if (page) {
               const pageCanvas = document.createElement('canvas')
@@ -134,7 +140,7 @@ async function run(): Promise<void> {
               try {
                 await page.render({
                   canvas: pageCanvas,
-                  viewport: page.getViewport({ scale }),
+                  viewport: page.getViewport({ scale, rotation }),
                   ...(preset.fitToFrame
                     ? {
                         transform: [
@@ -152,10 +158,8 @@ async function run(): Promise<void> {
                 }).promise
                 context.drawImage(
                   pageCanvas,
-                  preset.fitToFrame ? (slot % layout.columns) * (layout.cellWidth + layout.gap) : x,
-                  preset.fitToFrame
-                    ? Math.floor(slot / layout.columns) * (layout.cellHeight + layout.gap)
-                    : y,
+                  preset.fitToFrame ? cell.x : x,
+                  preset.fitToFrame ? cell.y : y,
                   preset.fitToFrame ? layout.cellWidth : width,
                   preset.fitToFrame ? layout.cellHeight : height
                 )
@@ -164,7 +168,17 @@ async function run(): Promise<void> {
                 pageCanvas.height = 0
                 page.cleanup()
               }
-            } else context.drawImage(image!, x, y, width, height)
+            } else {
+              context.translate(cell.x + cell.width / 2, cell.y + cell.height / 2)
+              context.rotate((turns * Math.PI) / 2)
+              context.drawImage(
+                image!,
+                (-sourceWidth * scale) / 2,
+                (-sourceHeight * scale) / 2,
+                sourceWidth * scale,
+                sourceHeight * scale
+              )
+            }
             context.restore()
           }
           await window.fastPrint.sheet(canvas.toDataURL('image/png'))

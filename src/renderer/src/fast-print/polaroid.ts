@@ -6,6 +6,14 @@ import { polaroidDecodeOptions } from './polaroidImage'
 import { SmartPhotoFramer } from './smartPhoto'
 
 export async function printPolaroid(batch: FastPrintBatchSource): Promise<void> {
+  if (batch.preparedPolaroid) {
+    document.getElementById('heading')!.textContent = 'Sending to your printer'
+    document.getElementById('status')!.textContent =
+      `${batch.preparedPolaroid.photos} photos · ${batch.preparedPolaroid.sheets} sheets · ${batch.preset.printer}`
+    await window.fastPrint.submit()
+    await window.fastPrint.finish()
+    return
+  }
   const layout = polaroidLayout(batch.preset.mode as PolaroidMode)
   const canvas = document.createElement('canvas')
   canvas.width = layout.width
@@ -96,6 +104,7 @@ export async function printPolaroid(batch: FastPrintBatchSource): Promise<void> 
   clear()
   try {
     for (let index = 0; index < batch.files.length; index++) {
+      console.info('[polaroid-progress]', `${index}/${batch.files.length}`)
       const source = await window.fastPrint.file(index)
       label('file', source.name)
       if (source.extension === '.pdf') {
@@ -146,6 +155,7 @@ export async function printPolaroid(batch: FastPrintBatchSource): Promise<void> 
         }
       }
       progress.value = index + 1
+      console.info('[polaroid-progress]', `${index + 1}/${batch.files.length}`)
       label('status', `${pages} photos · ${sheets + (slot ? 1 : 0)} sheets. Close to cancel.`)
     }
     await flush()

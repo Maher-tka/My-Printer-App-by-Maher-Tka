@@ -27,6 +27,19 @@ const request = {
 }
 assert.equal(parseNativePrintRequest(JSON.stringify(request)).preset.fitToFrame, true)
 assert.equal(parseNativePrintRequest(JSON.stringify(request)).copies, 3)
+const polaroid = {
+  ...request,
+  preset: { ...request.preset, pagesPerSheet: 1, mode: 'polaroid-8' }
+}
+assert.equal(
+  parseNativePrintRequest(JSON.stringify({ ...polaroid, preparedPolaroid: true })).preparedPolaroid,
+  true
+)
+for (const invalid of [
+  { ...request, preparedPolaroid: true },
+  { ...polaroid, preparedPolaroid: 'true' }
+])
+  assert.throws(() => parseNativePrintRequest(JSON.stringify(invalid)), /Invalid prepared/)
 for (const pagesPerSheet of [1, 2, 4, 6, 8, 9, 12, 16]) {
   const parsed = parseNativePrintRequest(
     JSON.stringify({

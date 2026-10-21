@@ -1,4 +1,5 @@
 import layoutDefinitions from './fast-print-layouts.json' with { type: 'json' }
+import type { IdPrintDraft } from './fast-print-id.js'
 
 export type FastPrintPagesPerSheet = 1 | 2 | 4 | 6 | 8 | 9 | 12 | 16
 export const FAST_PRINT_LAYOUTS = layoutDefinitions as Array<{
@@ -23,10 +24,16 @@ export interface FastPrintPreset {
   paperHeightMm?: number
   fitToFrame?: boolean
   combineImages?: boolean
+  marginMm?: number
+  gapMm?: number
+  sourceRotations?: number[]
 }
 
 export interface FastPrintBatchSource {
+  canReturnToSettings?: boolean
+  idDraft?: IdPrintDraft
   previewOnly?: boolean
+  preparedPolaroid?: { photos: number; sheets: number }
   name: string
   files: Array<{ name: string; extension: string }>
   preset: FastPrintPreset
@@ -44,6 +51,7 @@ export interface FastPrintSource {
 export interface FastPrintSubmitOptions {
   color: boolean
   duplex: boolean
+  idsPerSheet?: number
   manualDuplexPrompt?: { message: string; title: string; rtl: boolean }
 }
 
@@ -63,6 +71,13 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     (p.duplex !== undefined && typeof p.duplex !== 'boolean') ||
     (p.fitToFrame !== undefined && typeof p.fitToFrame !== 'boolean') ||
     (p.combineImages !== undefined && typeof p.combineImages !== 'boolean') ||
+    (p.marginMm !== undefined &&
+      (!Number.isInteger(p.marginMm) || p.marginMm < 5 || p.marginMm > 20)) ||
+    (p.gapMm !== undefined && (!Number.isInteger(p.gapMm) || p.gapMm < 3 || p.gapMm > 10)) ||
+    (p.sourceRotations !== undefined &&
+      (!Array.isArray(p.sourceRotations) ||
+        p.sourceRotations.length > 1000 ||
+        p.sourceRotations.some((turn) => !Number.isInteger(turn) || turn < 0 || turn > 3))) ||
     (p.mode !== undefined &&
       !['id-card', 'polaroid-8', 'polaroid-9', 'document'].includes(p.mode)) ||
     (p.mode === 'document' && (!p.profileId || p.pagesPerSheet !== 1)) ||
@@ -81,6 +96,9 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     ...(p.duplex !== undefined ? { duplex: p.duplex } : {}),
     ...(p.fitToFrame !== undefined ? { fitToFrame: p.fitToFrame } : {}),
     ...(p.combineImages !== undefined ? { combineImages: p.combineImages } : {}),
+    ...(p.marginMm !== undefined ? { marginMm: p.marginMm } : {}),
+    ...(p.gapMm !== undefined ? { gapMm: p.gapMm } : {}),
+    ...(p.sourceRotations !== undefined ? { sourceRotations: [...p.sourceRotations] } : {}),
     ...(p.mode ? { mode: p.mode } : {})
   }
 }
@@ -93,14 +111,39 @@ export function fastPrintLayout(preset: FastPrintPreset, dpi = 200) {
   const width = Math.round(((landscape ? paper[1] : paper[0]) / 25.4) * dpi)
   const height = Math.round(((landscape ? paper[0] : paper[1]) / 25.4) * dpi)
   const { columns, rows } = grid
-  const gap = Math.round((3 / 25.4) * dpi)
+  const gap = Math.round(((preset.gapMm ?? 3) / 25.4) * dpi)
+  const margin = Math.round(((preset.marginMm ?? 5) / 25.4) * dpi)
   return {
     width,
     height,
     columns,
     rows,
     gap,
-    cellWidth: (width - gap * (columns - 1)) / columns,
-    cellHeight: (height - gap * (rows - 1)) / rows
+    margin,
+    cellWidth: (width - 2 * margin - gap * (columns - 1)) / columns,
+    cellHeight: (height - 2 * margin - gap * (rows - 1)) / rows
+  }
+}
+
+/** Keep cell sizes fixed while centering an incomplete final sheet and row. */
+export function fastPrintCell(
+  layout: ReturnType<typeof fastPrintLayout>,
+  slot: number,
+  occupied: number
+) {
+  const row = Math.floor(slot / layout.columns),
+    rowCount = Math.min(layout.columns, occupied - row * layout.columns),
+    usedRows = Math.ceil(occupied / layout.columns)
+  return {
+    x:
+      layout.margin +
+      ((layout.columns - rowCount) * (layout.cellWidth + layout.gap)) / 2 +
+      (slot % layout.columns) * (layout.cellWidth + layout.gap),
+    y:
+      layout.margin +
+      ((layout.rows - usedRows) * (layout.cellHeight + layout.gap)) / 2 +
+      row * (layout.cellHeight + layout.gap),
+    width: layout.cellWidth,
+    height: layout.cellHeight
   }
 }

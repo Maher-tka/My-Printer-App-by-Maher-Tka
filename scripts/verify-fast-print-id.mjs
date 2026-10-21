@@ -13,10 +13,23 @@ const require = createRequire(import.meta.url)
 const electron = require('electron')
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceFolder = process.env.ID_TEST_FOLDER || 'C:\\Users\\Maher\\Downloads\\ID TEST'
-const output = resolve(root, 'output', 'fast-print-id')
+const copiesArgument = process.argv.indexOf('--copies')
+const idsPerSheet = Number(
+  copiesArgument < 0 ? process.env.ID_COPIES_PER_SHEET || 1 : process.argv[copiesArgument + 1]
+)
+assert.ok(Number.isInteger(idsPerSheet) && idsPerSheet >= 1 && idsPerSheet <= 24)
+const geometryOnly = process.env.ID_GEOMETRY_ONLY === '1'
+const output = process.env.ID_PROOF_OUTPUT
+  ? resolve(root, process.env.ID_PROOF_OUTPUT)
+  : resolve(
+      root,
+      'output',
+      (idsPerSheet === 1 ? 'fast-print-id' : `fast-print-id-copies-${idsPerSheet}`) +
+        (geometryOnly ? '-geometry' : '')
+    )
 
 if (typeof electron === 'string') {
-  const env = { ...process.env }
+  const env = { ...process.env, ID_COPIES_PER_SHEET: String(idsPerSheet) }
   delete env.ELECTRON_RUN_AS_NODE
   const child = spawn(electron, [fileURLToPath(import.meta.url)], {
     cwd: root,
@@ -41,6 +54,10 @@ if (typeof electron === 'string') {
     try {
       const names = (await readdir(sourceFolder))
         .filter((name) => /\.(png|jpe?g|gif)$/i.test(name))
+        .filter(
+          (name) =>
+            !process.env.ID_TEST_NAMES || JSON.parse(process.env.ID_TEST_NAMES).includes(name)
+        )
         .sort()
       assert.ok(names.length, 'The ID test folder has no supported pictures.')
       await mkdir(output, { recursive: true })
@@ -68,13 +85,13 @@ if (typeof electron === 'string') {
                 if (!request.url?.startsWith('/id-proof.html')) return next()
                 response.setHeader('Content-Type', 'text/html')
                 response.end(
-                  `<html><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' ws:; img-src 'self' data: blob:; worker-src 'self' blob:"><title>ID verification</title></head><body></body></html>`
+                  `<html><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ws:; img-src 'self' data: blob:; worker-src 'self' blob:"><title>ID verification</title></head><body></body></html>`
                 )
               })
             }
           }
         ],
-        server: { host: '127.0.0.1', port: 0 }
+        server: { host: '127.0.0.1', port: 0, hmr: false, watch: null }
       })
       console.log('Preparing ID proof renderer...')
       await server.listen()
@@ -86,28 +103,34 @@ if (typeof electron === 'string') {
       })
       await window.loadURL(`http://127.0.0.1:${server.httpServer.address().port}/id-proof.html`)
       console.log('Rendering original and rotated ID pictures...')
-      // Approximate visible card edges, independently marked after inspecting the
-      // two current originals. These are geometry only; no ID content is stored.
-      const annotations = {
-        'carte-identite-tunisie-1.gif': [
-          [34, 9],
-          [670, 44],
-          [646, 394],
-          [11, 364]
-        ],
-        'images (2).jpg': [
-          [28, 71],
-          [588, 62],
-          [602, 407],
-          [33, 440]
-        ]
-      }
-      const run = async (sources, annotations, rootPath) => {
-        const { loadIdArtwork, autoIdCrop, drawIdSheet } =
+      // Independently marked visible edges in decoded/EXIF-corrected coordinates.
+      // Geometry only; no identity content is committed to the repository.
+      const annotations = JSON.parse(
+        await readFile(join(root, 'scripts/id-photo-annotations.json'), 'utf8')
+      )
+      const run = async (
+        sources,
+        annotations,
+        rootPath,
+        idsPerSheet,
+        geometryOnly,
+        variantsFilter
+      ) => {
+        const { loadIdArtwork, autoIdCrop, drawIdSheet, IdAutoAnalyzer, orientIdArtwork } =
           await import('/src/fast-print/idArtwork.ts')
-        const { idCardPlacement } = await import(
-          '/@fs/' + rootPath + '/src/shared/fast-print-id.ts'
+        const {
+          idCardPlacement,
+          idCopiesLayout,
+          rotateIdSide,
+          horizontalIdSide,
+          DEFAULT_ID_SHEET_SETTINGS,
+          idPrintedSize,
+          idCopyCenters
+        } = await import('/@fs/' + rootPath + '/src/shared/fast-print-id.ts')
+        const { measureIdProof } = await import(
+          '/@fs/' + rootPath + '/scripts/id-proof-metrics.mjs'
         )
+        const analyzer = new IdAutoAnalyzer()
         const results = []
         const inside = (x, y, polygon) =>
           polygon.every((a, i) => {
@@ -119,7 +142,26 @@ if (typeof electron === 'string') {
           const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
           const [art] = await loadIdArtwork(source.name, source.extension, bytes)
           const marked = annotations[source.name]?.map(([x, y]) => ({ x, y }))
-          const variants = [{ name: 'original', canvas: art.canvas, expected: marked }]
+          const variants = [
+            { name: 'original', canvas: art.canvas, expected: marked },
+            ...[1, 3].map((turns) => ({
+              name: `legacy-review-${turns * 90}`,
+              canvas: art.canvas,
+              expected: marked,
+              legacyTurns: turns
+            }))
+          ]
+          for (const turns of [1, 2, 3]) {
+            const canvas = orientIdArtwork(art, turns)
+            const expected = marked?.map((p) =>
+              turns === 1
+                ? { x: art.canvas.height - p.y, y: p.x }
+                : turns === 2
+                  ? { x: art.canvas.width - p.x, y: art.canvas.height - p.y }
+                  : { x: p.y, y: art.canvas.width - p.x }
+            )
+            variants.push({ name: `camera-${turns * 90}`, canvas, expected })
+          }
           if (marked) {
             const cx = marked.reduce((s, p) => s + p.x, 0) / 4,
               cy = marked.reduce((s, p) => s + p.y, 0) / 4
@@ -161,10 +203,107 @@ if (typeof electron === 'string') {
                 expected
               })
             }
+            for (const [name, background, angle] of [
+              ['busy-fabric', '#47617b', 0],
+              ['pale-paper', '#ddd7ce', 0],
+              ['vertical-phone', '#ddd7ce', 90]
+            ]) {
+              const radians = (angle * Math.PI) / 180 - baseline,
+                cos = Math.cos(radians),
+                sin = Math.sin(radians)
+              const canvas = document.createElement('canvas')
+              canvas.width = angle ? 900 : 1200
+              canvas.height = angle ? 1200 : 1000
+              const context = canvas.getContext('2d')
+              context.fillStyle = background
+              context.fillRect(0, 0, canvas.width, canvas.height)
+              if (name === 'busy-fabric') {
+                for (let offset = -1000; offset < 2000; offset += 32) {
+                  context.strokeStyle = offset % 64 ? '#7699b0' : '#263d64'
+                  context.lineWidth = 7
+                  context.beginPath()
+                  context.moveTo(offset, 0)
+                  context.lineTo(offset + 500, canvas.height)
+                  context.stroke()
+                  context.strokeStyle = '#c1cbd0'
+                  context.lineWidth = 3
+                  context.beginPath()
+                  context.moveTo(0, offset)
+                  context.lineTo(canvas.width, offset + 100)
+                  context.stroke()
+                }
+              } else {
+                context.strokeStyle = '#c6c0b8'
+                context.lineWidth = 1
+                for (let row = 100; row < canvas.height; row += 70) {
+                  context.beginPath()
+                  context.moveTo(30, row)
+                  for (let x = 40; x < canvas.width - 30; x += 12)
+                    context.lineTo(x, row + Math.sin(x * 0.09) * 2)
+                  context.stroke()
+                }
+              }
+              const cardScale = 1100 / Math.hypot(dx, dy),
+                targetX = canvas.width * 0.52,
+                targetY = canvas.height * 0.57
+              context.save()
+              context.translate(targetX, targetY)
+              context.rotate(radians)
+              context.scale(cardScale, cardScale)
+              context.translate(-cx, -cy)
+              context.beginPath()
+              marked.forEach((point, i) =>
+                i ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y)
+              )
+              context.closePath()
+              context.clip()
+              context.drawImage(art.canvas, 0, 0)
+              context.restore()
+              const expected = marked.map((point) => ({
+                x: targetX + ((point.x - cx) * cos - (point.y - cy) * sin) * cardScale,
+                y: targetY + ((point.x - cx) * sin + (point.y - cy) * cos) * cardScale
+              }))
+              variants.push({ name, canvas, expected })
+            }
           }
-          for (const variant of variants) {
-            const { canvas, expected } = variant,
-              crop = autoIdCrop(canvas)
+          for (const variant of variants.filter(
+            (variant) => !variantsFilter || variantsFilter.includes(variant.name)
+          )) {
+            const { canvas, expected } = variant
+            const before = performance.now(),
+              crop = autoIdCrop(canvas),
+              detectionMs = performance.now() - before
+            let side = geometryOnly
+              ? { turns: 0, crop, orientationVerified: true }
+              : await analyzer.analyze({
+                  id: crypto.randomUUID(),
+                  name: source.name,
+                  canvas
+                })
+            if (variant.legacyTurns && !geometryOnly)
+              side = await analyzer.orient(
+                { id: crypto.randomUUID(), name: source.name, canvas },
+                horizontalIdSide(
+                  canvas.width,
+                  canvas.height,
+                  rotateIdSide(side, variant.legacyTurns)
+                )
+              )
+            const oriented = orientIdArtwork({ id: 'proof', name: source.name, canvas }, side.turns)
+            const outputPlacement = idCardPlacement(
+              oriented.width,
+              oriented.height,
+              side.crop,
+              'A4'
+            )
+            const dx = expected ? expected[1].x - expected[0].x + expected[2].x - expected[3].x : 1
+            const dy = expected ? expected[1].y - expected[0].y + expected[2].y - expected[3].y : 0
+            const orientationAngle =
+              ((Math.atan2(dy, dx) * 180) / Math.PI +
+                side.turns * 90 -
+                outputPlacement.angleDegrees +
+                720) %
+              360
             const placement = idCardPlacement(canvas.width, canvas.height, crop, 'A4')
             const selected = crop.map((p) => ({ x: p.x * canvas.width, y: p.y * canvas.height }))
             let expectedCount = 0,
@@ -200,50 +339,131 @@ if (typeof electron === 'string') {
               variant: variant.name,
               angle: placement.angleDegrees,
               widthMm: placement.widthMm,
-              heightMm: placement.heightMm,
+              heightMm: 56,
+              detectedHeightMm: placement.heightMm,
               crop,
+              detectionMs,
+              orientationVerified: side.orientationVerified,
+              orientationError: Math.min(orientationAngle, 360 - orientationAngle),
+              autoTurns: side.turns,
               coverage: expected ? intersection / expectedCount : null,
               precision: expected ? intersection / selectedCount : null,
               overlay: overlay.toDataURL('image/png'),
               proofs: []
             }
-            for (const color of [true, false]) {
-              const sheet = drawIdSheet(canvas, crop, {
-                printer: 'Verification only',
-                paper: 'A4',
-                pagesPerSheet: 1,
-                color
+            const profiles = [
+              {
+                name: 'color',
+                color: true,
+                heightMm: 56,
+                turns: 0,
+                spacing: 'even',
+                marginMm: 5,
+                gapMm: 5
+              },
+              {
+                name: 'mono',
+                color: false,
+                heightMm: 56,
+                turns: 0,
+                spacing: 'even',
+                marginMm: 5,
+                gapMm: 5
+              }
+            ]
+            if (variant.name === 'original')
+              profiles.push(
+                {
+                  name: '55-horizontal',
+                  color: true,
+                  heightMm: 55,
+                  turns: 1,
+                  spacing: 'even',
+                  marginMm: 7,
+                  gapMm: 3
+                },
+                {
+                  name: '60-flip180',
+                  color: true,
+                  heightMm: 60,
+                  turns: 2,
+                  spacing: 'compact',
+                  marginMm: 5,
+                  gapMm: 5
+                },
+                {
+                  name: '60-horizontal-back',
+                  color: false,
+                  heightMm: 60,
+                  turns: 3,
+                  spacing: 'even',
+                  marginMm: 10,
+                  gapMm: 8,
+                  back: true
+                }
+              )
+            if (variant.name === 'original')
+              profiles.push({
+                name: 'fill8',
+                color: true,
+                heightMm: 56,
+                turns: 0,
+                spacing: 'even',
+                marginMm: 5,
+                gapMm: 5,
+                count: 8
               })
+            for (const profile of geometryOnly ? [] : profiles) {
+              const { color, turns } = profile,
+                settings = { ...DEFAULT_ID_SHEET_SETTINGS, ...profile },
+                size = idPrintedSize(settings.heightMm, turns)
+              const profileCount = profile.count ?? idsPerSheet
+              const layout = idCopiesLayout(
+                'A4',
+                false,
+                [Math.max(settings.heightMm, size.heightMm)],
+                profileCount,
+                {
+                  cellWidthMm: Math.max(90, size.widthMm),
+                  marginMm: settings.marginMm,
+                  gapMm: settings.gapMm,
+                  spacing: settings.spacing
+                }
+              )
+              const sheet = drawIdSheet(
+                oriented,
+                side.crop,
+                { printer: 'Verification only', paper: 'A4', pagesPerSheet: 1, color },
+                300,
+                undefined,
+                {
+                  count: profileCount,
+                  cellHeightMm: layout.cellHeightMm,
+                  layout,
+                  settings,
+                  sheetTurns: turns,
+                  back: profile.back
+                }
+              )
               const pixels = sheet
                 .getContext('2d')
                 .getImageData(0, 0, sheet.width, sheet.height).data
-              let left = sheet.width,
-                top = sheet.height,
-                right = 0,
-                bottom = 0,
-                chromaticPixels = 0
-              for (let y = 0; y < sheet.height; y++)
-                for (let x = 0; x < sheet.width; x++) {
-                  const i = (y * sheet.width + x) * 4,
-                    r = pixels[i],
-                    g = pixels[i + 1],
-                    b = pixels[i + 2]
-                  if (Math.max(r, g, b) - Math.min(r, g, b) > 1) chromaticPixels++
-                  if (Math.min(r, g, b) < 240) {
-                    left = Math.min(left, x)
-                    right = Math.max(right, x)
-                    top = Math.min(top, y)
-                    bottom = Math.max(bottom, y)
-                  }
-                }
               record.proofs.push({
                 color,
-                inkWidthMm: ((right - left + 1) * 25.4) / 300,
-                centerOffsetMm: {
-                  x: (((left + right + 1) / 2 - sheet.width / 2) * 25.4) / 300,
-                  y: (((top + bottom + 1) / 2 - sheet.height / 2) * 25.4) / 300
-                },
-                chromaticPixels,
+                name: profile.name,
+                expectedCount: profileCount,
+                expectedWidthMm: size.widthMm,
+                expectedHeightMm: size.heightMm,
+                ...measureIdProof(
+                  pixels,
+                  sheet.width,
+                  sheet.height,
+                  idCopyCenters(layout, profile.back),
+                  size.heightMm,
+                  300,
+                  4,
+                  size.widthMm
+                ),
                 png: sheet.toDataURL('image/png')
               })
               sheet.width = 0
@@ -252,24 +472,43 @@ if (typeof electron === 'string') {
             results.push(record)
           }
         }
+        analyzer.dispose()
         return results
       }
-      const script = `(${run.toString()})(${JSON.stringify(sources)},${JSON.stringify(annotations)},${JSON.stringify(root.replaceAll('\\', '/'))})`
-      const results = await window.webContents.executeJavaScript(script)
-      for (let i = 0; i < results.length; i++) {
-        const item = results[i],
-          prefix = String(i + 1).padStart(2, '0') + '-' + item.variant
-        await writeFile(
-          join(output, prefix + '-crop.png'),
-          Buffer.from(item.overlay.split(',')[1], 'base64')
-        )
-        delete item.overlay
-        for (const proof of item.proofs) {
+      const results = []
+      for (const source of sources) {
+        const script = `(${run.toString()})(${JSON.stringify([source])},${JSON.stringify(annotations)},${JSON.stringify(root.replaceAll('\\', '/'))},${idsPerSheet},${geometryOnly},${process.env.ID_TEST_VARIANTS || 'null'})`
+        console.log('Checking ' + source.name)
+        let deadline
+        let batch
+        try {
+          batch = await Promise.race([
+            window.webContents.executeJavaScript(script),
+            new Promise((_, reject) => {
+              deadline = setTimeout(
+                () => reject(new Error('ID proof renderer timed out: ' + source.name)),
+                180_000
+              )
+            })
+          ])
+        } finally {
+          clearTimeout(deadline)
+        }
+        for (const item of batch) {
+          const prefix = String(results.length + 1).padStart(2, '0') + '-' + item.variant
           await writeFile(
-            join(output, prefix + (proof.color ? '-color.png' : '-mono.png')),
-            Buffer.from(proof.png.split(',')[1], 'base64')
+            join(output, prefix + '-crop.png'),
+            Buffer.from(item.overlay.split(',')[1], 'base64')
           )
-          delete proof.png
+          delete item.overlay
+          for (const proof of item.proofs) {
+            await writeFile(
+              join(output, prefix + '-' + proof.name + '.png'),
+              Buffer.from(proof.png.split(',')[1], 'base64')
+            )
+            delete proof.png
+          }
+          results.push(item)
         }
       }
       for (const source of sources) {
@@ -281,13 +520,32 @@ if (typeof electron === 'string') {
       await writeFile(
         join(output, 'results.json'),
         JSON.stringify(
-          { sourceFolder, sources: sources.map(({ base64, ...source }) => source), results },
+          {
+            sourceFolder,
+            idsPerSheet,
+            sources: sources.map(({ base64, ...source }) => source),
+            results
+          },
           null,
           2
         )
       )
       for (const item of results) {
         assert.equal(item.widthMm, 90)
+        assert.ok(
+          item.heightMm < item.widthMm,
+          `${item.source} ${item.variant}: ID must be horizontal`
+        )
+        if (!geometryOnly)
+          assert.ok(
+            item.orientationVerified,
+            `${item.source} ${item.variant}: orientation is uncertain`
+          )
+        if (!geometryOnly)
+          assert.ok(
+            item.orientationError < 8,
+            `${item.source} ${item.variant}: card is upside down (${item.orientationError})`
+          )
         if (item.coverage !== null) {
           assert.ok(item.coverage > 0.94, `${item.source} ${item.variant}: crop clips the card`)
           assert.ok(item.precision > 0.8, `${item.source} ${item.variant}: too much background`)
@@ -295,21 +553,33 @@ if (typeof electron === 'string') {
         if (item.variant.includes('plus45')) assert.ok(Math.abs(item.angle - 45) < 3)
         if (item.variant.includes('minus45')) assert.ok(Math.abs(item.angle + 45) < 3)
         for (const proof of item.proofs) {
-          assert.ok(
-            proof.inkWidthMm > 87 && proof.inkWidthMm < 90.3,
-            'Unexpected printed card width'
-          )
-          assert.ok(
-            Math.abs(proof.centerOffsetMm.x) < 1 && Math.abs(proof.centerOffsetMm.y) < 1,
-            'Printed card is not centered'
-          )
+          assert.equal(proof.cells.length, proof.expectedCount)
+          assert.equal(proof.outsideInkPixels, 0, 'Ink appeared outside the planned card slots')
+          for (const cell of proof.cells) {
+            assert.ok(
+              cell.inkWidthMm > proof.expectedWidthMm - 3 &&
+                cell.inkWidthMm < proof.expectedWidthMm + 0.3,
+              'Unexpected printed card width'
+            )
+            assert.ok(
+              cell.inkHeightMm > proof.expectedHeightMm - 3 &&
+                cell.inkHeightMm < proof.expectedHeightMm + 0.3,
+              'Unexpected printed card height'
+            )
+            assert.ok(
+              Math.abs(cell.centerOffsetMm.x) < 1 && Math.abs(cell.centerOffsetMm.y) < 1,
+              'Printed card is not centered'
+            )
+          }
           if (!proof.color) assert.equal(proof.chromaticPixels, 0, 'Grayscale proof contains color')
         }
         console.log(
           `${item.source} / ${item.variant}: ${item.angle.toFixed(1)} degrees, 90 x ${item.heightMm.toFixed(1)} mm, coverage ${item.coverage?.toFixed(3) ?? 'needs review'}`
         )
       }
-      console.log(`ID real-photo verification passed. Original hashes unchanged. Proofs: ${output}`)
+      console.log(
+        `ID real-photo ${geometryOnly ? 'geometry' : 'print-proof and orientation'} verification passed. Original hashes unchanged. Artifacts: ${output}`
+      )
     } catch (error) {
       console.error(error)
       exitCode = 1

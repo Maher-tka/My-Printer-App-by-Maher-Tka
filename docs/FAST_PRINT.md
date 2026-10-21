@@ -15,6 +15,23 @@ select light, dark or the Windows app appearance without changing OS settings.
 There is one Print action, with native Enter/Escape behavior and arrow-key layout selection.
 The language follows the Windows UI culture (English, French and Arabic labels).
 
+General 1/2/4/6/8/9/12/16-up presets use equal-size slots, 5 mm outside margins
+and 3 mm cutting gaps. **Options… > Margins** offers 5/7/10/15/20 mm;
+**Cutting gap** offers 3/5/8/10 mm. Incomplete final sheets and rows are centered
+without enlarging the remaining items, so their slot size stays consistent.
+
+All files begin at the same explicit rotation. **Rotate selected** turns the
+selected file by 90 degrees inside its slot; for PDF/Word, that applies to all
+pages in the file. **Options… > Rotate all** sets 0/90/180/270 degrees for the
+whole batch and keeps that rotation when changing presets. The status reports
+the current slot dimensions and selected file's rotation. Native preview and
+print preparation use matching margins, gaps, positions and rotations.
+
+**Fit to frame** fills equal-size photo slots by cropping to their edges. It
+starts enabled for photo-only selections. Turn it off to keep each complete
+picture within its slot. PDF/Word and mixed selections start with full-page fit;
+turning on Fit to frame explicitly enables cropping for those pages too.
+
 **8 PIC** and **9 PIC** sit directly below the printer selector. They require an
 A4/color-capable printer and lock those settings automatically. Polaroid previews
 show the complete composed sheets from every selected photo, with the exact
@@ -23,6 +40,78 @@ photos fill one sheet; larger selections continue onto additional sheets, leavin
 unused final slots white. Previous/Next moves between sheets, and choosing a file
 shows the sheet containing it. ID retains a source preview and **Review ID…** to
 open the dedicated front/back editor before its separate print confirmation.
+
+Polaroid preparation reports the current photo count in the native loading
+surface and status. Preview composition does not capture or validate vendor driver
+settings. Print reuses the reviewed 300 DPI sheets instead of repeating face
+analysis, checks that the source files are unchanged, and validates the selected
+printer/driver settings before handoff. On a slower PC, wait for the preview and
+enabled Print button; Cancel closes preparation without submitting a print job.
+
+Real-photo validation can use another folder without changing the originals:
+
+```powershell
+$env:POLAROID_TEST_SOURCE = 'C:/Users/Maher/Downloads/Compressed/num937p'
+$env:POLAROID_TEST_OUTPUT = 'output/polaroid-num937p-reliability'
+npm run test:fast-print:polaroid-native
+```
+
+The default folder remains `num216p`. The verification helper stays hidden and
+uses driver validation only. `FAST_PRINT_TEST_SINGLE_CORE=1` restricts only the
+verification process and its children to one available CPU core; it does not
+change Windows or app performance preferences.
+
+In the ID editor, **Printer settings** returns to the native dialog and keeps
+the front/back card corners, sheet rotations, size/layout presets, added artwork and selected side. Change
+the printer, paper, preset or copies, then choose **Review ID…** to resume. Edits
+are also saved before print preparation, so a rejected driver preset does not
+erase the last review. Source images are stored once per session; repeat returns
+write only small edit metadata. Closing Fast Print clears this temporary session,
+while originals and saved projects stay unchanged. Changed original files are
+reported rather than silently applying an old review to new artwork.
+
+Both ID sides use the **same selected card size**: 90 × 55, 90 × 56 (default),
+or 90 × 60 mm. The four selected corners define a perspective correction into
+that rectangle, so differently angled photographs do not create different front
+and back dimensions. Corner adjustment handles straightening; it replaces the
+separate manual-angle control. Source files remain unchanged.
+
+Both ID sides stay horizontal. Each ID preview has a **Rotate 180°** flip, which
+keeps the shared physical size and matching duplex centers. Older quarter-turn
+sheet settings are normalized to horizontal. The general Fast Print 90-degree
+rotation controls do not apply to ID output. Other completed ID settings remain
+available; the current preset improvements focus on general Fast Print.
+
+ID setup respects camera rotation metadata and corrects sideways and upside-down
+cards before editing. Complete outer edges, coherent color changes and recognized
+header markers help distinguish the card from its portrait or text blocks. The
+uniform-background path remains fast; opposite-direction edge checks protect
+faint edges when camera rotation changes scan order.
+
+Orientation first uses a recognized header. When that is inconclusive, the editor
+lazily loads the bundled Arabic/English text reader and compares upright/inverted
+letter evidence. This runs offline in a session worker; it does not store or log
+recognized identity text. A bounded contrast retry helps faded text, without
+changing the print artwork. Weak evidence leaves an orientation-review prompt
+and the Rotate control available. Automatic analysis is cached per source;
+returning from printer settings restores saved edits without reanalyzing them.
+
+When no reliable card is found, the full photo remains available with a
+corner-adjustment prompt. The crop stage adapts to the window height; corner
+handles remain keyboard-adjustable.
+
+**Sheet preset** offers common 1/2/4/6/8 counts, additional counts up to 24,
+and **Fill sheet**. Fill sheet uses the maximum fitting count and updates after
+paper, size, margin, gap or sheet-rotation changes. Fixed counts never shrink the
+cards; an overfull selection reports the issue and disables Print.
+
+**Even spacing** distributes cards symmetrically across the usable page, with
+at least the selected margins and cutting gap. **Compact** keeps the group close
+together and centered. Margins start at 5 mm and can be increased to 7/10/15/20 mm;
+cutting gaps offer 3/5/8/10 mm. An incomplete row stays symmetric. Front and back
+use the same slots, mirrored for long-edge duplex alignment; rotating one side
+reserves enough room on both pages to keep those centers matched. The native
+**Copies** control separately sets the number of physical sheets.
 
 Selecting 8 PIC or 9 PIC starts a hidden preparation worker; it never opens the
 dashboard or calls the Windows print script. Composing a preview does not require
@@ -128,6 +217,28 @@ npm run test:fast-print:audit
 ```
 
 It edits disposable fixtures only and runs driver validation without hardware jobs.
+
+ID geometry and full editor/native-dialog round trips can be checked headlessly:
+
+```powershell
+npm run test:fast-print:id-real
+npm run test:fast-print:id-workflow
+```
+
+The first reads all local ID TEST originals and makes color/grayscale proofs,
+including independently marked off-center, rotated, patterned-background and
+pale-paper placements. The workflow check needs the built main/native helper;
+it uses hidden windows, two returns to settings, added artwork, keyboard crop
+edits, a deliberately missing preset and an A3/five-copy grayscale ValidateOnly
+job. English/dark, French/light and Arabic/low-end cases never submit hardware
+jobs or take desktop input. Workshop photo validation is separate from these
+local fixtures; its connection must be available before claiming it passed.
+
+Generate four-copy real-photo proofs without hardware printing:
+
+```powershell
+node scripts/verify-fast-print-id.mjs --copies 4
+```
 
 ## Printing preferences inside the app
 

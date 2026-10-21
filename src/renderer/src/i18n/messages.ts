@@ -2,6 +2,60 @@ import { printerPreferencesMessages } from './printerPreferencesMessages'
 // App-owned English copy is the stable key. Missing translations fall back to English.
 export const messages: Record<string, { fr: string; ar: string }> = {
   ...printerPreferencesMessages,
+  'Card size': { fr: 'Format de la carte', ar: 'حجم البطاقة' },
+  'Sheet preset': { fr: 'Disposition de la feuille', ar: 'إعداد الورقة' },
+  'Fill sheet': { fr: 'Remplir la feuille', ar: 'ملء الورقة' },
+  'Common presets': { fr: 'Dispositions courantes', ar: 'الإعدادات الشائعة' },
+  'More copies': { fr: 'Autres quantités', ar: 'نسخ أكثر' },
+  Spacing: { fr: 'Espacement', ar: 'التباعد' },
+  'Even spacing': { fr: 'Espacement régulier', ar: 'تباعد متساوٍ' },
+  Compact: { fr: 'Compact', ar: 'متقارب' },
+  'Cutting gap': { fr: 'Espace de coupe', ar: 'مسافة القص' },
+  'Matching front/back size': { fr: 'Recto et verso de même taille', ar: 'نفس الحجم للوجه والظهر' },
+  'Rotate 90°': { fr: 'Tourner à 90°', ar: 'تدوير 90°' },
+  'Rotate front on sheet': { fr: 'Tourner le recto sur la feuille', ar: 'تدوير الوجه داخل الورقة' },
+  'Rotate back on sheet': { fr: 'Tourner le verso sur la feuille', ar: 'تدوير الظهر داخل الورقة' },
+  'Check orientation before printing. Rotate the side in the sheet preview if needed.': {
+    fr: 'Vérifiez le sens avant d’imprimer. Tournez la face dans l’aperçu si nécessaire.',
+    ar: 'تحقق من الاتجاه قبل الطباعة. دوّر الجانب في معاينة الورقة عند الحاجة.'
+  },
+  'Invalid ID sheet settings.': {
+    fr: 'Paramètres de feuille ID non valides.',
+    ar: 'إعدادات ورقة الهوية غير صالحة.'
+  },
+
+  'Rotate 180°': { fr: 'Tourner à 180°', ar: 'تدوير 180°' },
+  'Check orientation before printing. Use Rotate if needed.': {
+    fr: 'Vérifiez le sens avant d’imprimer. Utilisez Rotation si nécessaire.',
+    ar: 'تحقق من اتجاه البطاقة قبل الطباعة. استخدم تدوير عند الحاجة.'
+  },
+  'IDs per sheet': { fr: 'Cartes par feuille', ar: 'البطاقات في الورقة' },
+  '9 cm per ID · Front/back aligned': {
+    fr: '9 cm par carte · Recto et verso alignés',
+    ar: '9 سم لكل بطاقة · محاذاة الوجه والظهر'
+  },
+  'Maximum on this sheet:': { fr: 'Maximum sur cette feuille :', ar: 'الحد الأقصى في هذه الورقة:' },
+  'Choose between 1 and 24 IDs per sheet.': {
+    fr: 'Choisissez entre 1 et 24 cartes par feuille.',
+    ar: 'اختر من 1 إلى 24 بطاقة في الورقة.'
+  },
+  'Choose a photo for each ID side.': {
+    fr: 'Choisissez une photo pour chaque face de la carte.',
+    ar: 'اختر صورة لكل جانب من البطاقة.'
+  },
+  'These IDs do not fit at 9 cm. Choose fewer IDs or larger paper.': {
+    fr: 'Ces cartes ne tiennent pas à 9 cm. Réduisez le nombre ou choisissez un papier plus grand.',
+    ar: 'لا تتسع الورقة لهذه البطاقات بعرض 9 سم. قلّل العدد أو اختر ورقًا أكبر.'
+  },
+  'Fast Print': { fr: 'Impression rapide', ar: 'الطباعة السريعة' },
+  'ID edits restored.': {
+    fr: 'Modifications de la carte restaurées.',
+    ar: 'تمت استعادة تعديلات البطاقة.'
+  },
+  'Check the card outline. Adjust the four corners to remove the background.': {
+    fr: 'Vérifiez le contour de la carte. Ajustez les quatre coins pour retirer l’arrière-plan.',
+    ar: 'تحقق من حدود البطاقة. اضبط الزوايا الأربع لإزالة الخلفية.'
+  },
   'Choose PDF, PNG, JPEG or GIF files.': {
     fr: 'Choisissez des fichiers PDF, PNG, JPEG ou GIF.',
     ar: 'اختر ملفات PDF أو PNG أو JPEG أو GIF.'

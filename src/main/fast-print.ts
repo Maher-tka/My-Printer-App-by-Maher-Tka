@@ -2,6 +2,9 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { nativePrintSession, parseNativePrintRequest } from '../shared/fast-print-native.js'
+import { loadIdDraft, saveIdDraft } from './fast-print-id-draft.js'
+import { loadReviewedPolaroid } from './fast-print-polaroid-cache.js'
+import { MAX_IDS_PER_SHEET } from '../shared/fast-print-id.js'
 import {
   createFastPrintChoices,
   defaultFastPrintStock,
@@ -70,18 +73,23 @@ export async function runFastPrintCommand(): Promise<void> {
         args[args.indexOf(previewOnly ? '--fast-print-preview' : '--fast-print-request') + 1]
       if (!requestPath) throw new Error('Missing native Fast Print request.')
       const directory = nativePrintSession(requestPath, app.getPath('temp'))
+      let returnedToSettings = false
+      let nativeIdSession = false
       try {
         if ((await stat(requestPath)).size > 4 * 1024 * 1024)
           throw new Error('The print request is too large.')
         const request = parseNativePrintRequest(await readFile(requestPath, 'utf8'))
+        nativeIdSession = request.preset.mode === 'id-card'
         if (previewOnly && !request.preset.mode?.startsWith('polaroid-'))
           throw new Error('Only Polaroid sheets use background preparation.')
-        await runJob(request.files, request.preset, {
+        const result = await runJob(request.files, request.preset, {
           toolId: 'fast-print',
           copies: request.copies,
           profileDirectory: directory,
+          preparedPolaroid: !previewOnly && request.preparedPolaroid,
           ...(previewOnly ? { previewDirectory: join(directory, 'preview') } : {})
         })
+        returnedToSettings = result.returnedToSettings === true
       } catch (error) {
         if (previewOnly)
           await writeFile(
@@ -90,7 +98,10 @@ export async function runFastPrintCommand(): Promise<void> {
           )
         throw error
       } finally {
-        if (!previewOnly) await rm(directory, { recursive: true, force: true })
+        // The native ID window owns its snapshots/draft across repeated reviews,
+        // including failed printer validation. It cleans them when finally closed.
+        if (!previewOnly && !returnedToSettings && !nativeIdSession)
+          await rm(directory, { recursive: true, force: true })
       }
     } else if (args.includes('--fast-print-batch')) {
       await assertOnlineProductionAccess('paid-tools', 'fast-print')
@@ -254,12 +265,17 @@ async function runJob(
     copies?: number
     profileDirectory?: string
     previewDirectory?: string
+    preparedPolaroid?: boolean
   } = {
     toolId: 'fast-print'
   }
-): Promise<{ ok: boolean; canceled?: boolean }> {
+): Promise<{ ok: boolean; canceled?: boolean; returnedToSettings?: boolean }> {
   const files = normalizeFastPrintSelection(filePaths)
   await validateSelection(files)
+  const canReturnToSettings = preset.mode === 'id-card' && Boolean(jobOptions.profileDirectory)
+  const idDraft = canReturnToSettings
+    ? await loadIdDraft(jobOptions.profileDirectory!, files)
+    : undefined
   const jobName = files.length === 1 ? basename(files[0]) : `Fast Print - ${files.length} documents`
   const printers = jobOptions.previewDirectory
     ? [{ name: preset.printer, papers: ['A4'], color: true, duplex: false }]
@@ -332,12 +348,32 @@ async function runJob(
   if (preset.mode === 'id-card' && !preset.profileId)
     preset = { ...preset, duplex: printer.duplex === true }
   if (jobOptions.previewDirectory) await mkdir(jobOptions.previewDirectory, { recursive: true })
+  const reviewed = jobOptions.preparedPolaroid
+    ? await loadReviewedPolaroid(
+        jobOptions.profileDirectory!,
+        preset.mode as 'polaroid-8' | 'polaroid-9',
+        files
+      )
+    : undefined
   const temp = await mkdtemp(
     jobOptions.previewDirectory
       ? join(jobOptions.previewDirectory, 'render-')
       : join(app.getPath('temp'), 'maher-fast-print-')
   )
   const sheets: string[] = []
+  if (reviewed) {
+    try {
+      for (const sheet of reviewed.sheets) {
+        const destination = join(temp, basename(sheet))
+        await copyFile(sheet, destination)
+        sheets.push(destination)
+      }
+    } catch (error) {
+      await rm(temp, { recursive: true, force: true })
+      throw error
+    }
+    console.log('[polaroid-reviewed]', sheets.length)
+  }
   const sheetSizes: Array<{ widthMm: number; heightMm: number }> = []
   const backgroundPreparation = Boolean(
     jobOptions.previewDirectory ||
@@ -366,10 +402,11 @@ async function runJob(
     }
   })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  if (!app.isPackaged && process.env.FAST_PRINT_VERIFY_DIR) {
+  if (jobOptions.previewDirectory || (!app.isPackaged && process.env.FAST_PRINT_VERIFY_DIR)) {
     window.webContents.on('console-message', ({ message }) => {
       if (
-        message.startsWith('[polaroid-photo]') ||
+        message.startsWith('[polaroid-progress]') ||
+        (!app.isPackaged && message.startsWith('[polaroid-photo]')) ||
         message.includes('Smart photo analysis unavailable')
       )
         console.log(message)
@@ -377,6 +414,8 @@ async function runJob(
   }
   window.webContents.on('will-navigate', (event) => event.preventDefault())
   let submitted = false
+  let returnedToSettings = false
+  let returningToSettings = false
   let done = false
   let acceptingSheet = false
   let preparedBytes = 0
@@ -406,7 +445,10 @@ async function runJob(
         extension: extname(filePath).toLowerCase()
       })),
       preset,
+      canReturnToSettings,
+      ...(idDraft ? { idDraft } : {}),
       previewOnly: Boolean(jobOptions.previewDirectory),
+      ...(reviewed ? { preparedPolaroid: { photos: reviewed.photos, sheets: sheets.length } } : {}),
       canDuplex: printer.duplex === true,
       canColor: printer.color
     }
@@ -482,6 +524,13 @@ async function runJob(
       if (options.color && !printer.color) throw new Error('This printer does not support color.')
       if (options.duplex && !printer.duplex)
         throw new Error('This printer does not support automatic duplex.')
+      if (
+        options.idsPerSheet !== undefined &&
+        (!Number.isInteger(options.idsPerSheet) ||
+          options.idsPerSheet < 1 ||
+          options.idsPerSheet > MAX_IDS_PER_SHEET)
+      )
+        throw new Error('Choose between 1 and 24 IDs per sheet.')
       const prompt = options.manualDuplexPrompt
       if (
         prompt &&
@@ -506,6 +555,7 @@ async function runJob(
           sheets,
           sheetSizes,
           copies: jobOptions.copies,
+          ...(preset.mode === 'id-card' ? { idsPerSheet: options?.idsPerSheet ?? 1 } : {}),
           manualDuplexPrompt: options?.manualDuplexPrompt
         })
       )
@@ -540,7 +590,8 @@ async function runJob(
             preset,
             sheets: sheets.map((sheet) => join(verifyFolder, basename(sheet))),
             sheetSizes,
-            copies: jobOptions.copies
+            copies: jobOptions.copies,
+            ...(preset.mode === 'id-card' ? { idsPerSheet: options?.idsPerSheet ?? 1 } : {})
           })
         )
         await writeFile(join(verifyFolder, 'driver-settings.json'), result)
@@ -561,8 +612,50 @@ async function runJob(
     if (error) fail(new Error(error))
     else finish()
   })
+  ipcMain.handle('fast-print:back', async (event, draft: unknown) => {
+    authorize(event)
+    if (
+      !canReturnToSettings ||
+      !jobOptions.profileDirectory ||
+      submitted ||
+      acceptingSheet ||
+      sheets.length ||
+      returningToSettings
+    )
+      throw new Error('Cannot change printer settings during print submission.')
+    returningToSettings = true
+    try {
+      await saveIdDraft(jobOptions.profileDirectory, files, draft)
+      authorize(event)
+      await writeFile(join(jobOptions.profileDirectory, 'id-returned.json'), '{"version":1}')
+      returnedToSettings = true
+      done = true
+      finish()
+    } finally {
+      returningToSettings = false
+    }
+  })
+  ipcMain.handle('fast-print:save-id', async (event, draft: unknown) => {
+    authorize(event)
+    if (
+      !canReturnToSettings ||
+      !jobOptions.profileDirectory ||
+      submitted ||
+      acceptingSheet ||
+      sheets.length ||
+      returningToSettings
+    )
+      throw new Error('Cannot save ID edits during print submission.')
+    returningToSettings = true
+    try {
+      await saveIdDraft(jobOptions.profileDirectory, files, draft)
+      authorize(event)
+    } finally {
+      returningToSettings = false
+    }
+  })
   window.on('close', (event) => {
-    if (submitted && !done) event.preventDefault()
+    if ((submitted || returningToSettings) && !done) event.preventDefault()
     else if (!done) {
       done = true
       finish()
@@ -579,11 +672,11 @@ async function runJob(
     await window.loadFile(join(__dirname, '../renderer/fast-print.html'))
     if (!backgroundPreparation) window.show()
     await ready
-    return { ok: submitted, ...(!submitted ? { canceled: true } : {}) }
+    return { ok: submitted, ...(!submitted ? { canceled: true } : {}), returnedToSettings }
   } finally {
     clearTimeout(watchdog)
     done = true
-    for (const channel of ['source', 'file', 'sheet', 'submit', 'finish'])
+    for (const channel of ['source', 'file', 'sheet', 'submit', 'finish', 'back', 'save-id'])
       ipcMain.removeHandler(`fast-print:${channel}`)
     if (!window.isDestroyed()) window.destroy()
     await currentSheetWrite.catch(() => undefined)

@@ -17,6 +17,11 @@ internal sealed class NativeLayout {
   public bool landscape { get; set; }
   internal static readonly NativeLayout[] All=Load();
   static NativeLayout[] Load(){using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("FastPrint.Layouts"))using(var reader=new StreamReader(stream))return NativePrint.Json.Deserialize<NativeLayout[]>(reader.ReadToEnd());}
+  internal RectangleF Cell(int slot,int occupied,float width,float height,float margin,float gap){
+    float cw=(width-2*margin-gap*(columns-1))/columns,ch=(height-2*margin-gap*(rows-1))/rows;
+    int row=slot/columns,rowCount=Math.Min(columns,occupied-row*columns),usedRows=(int)Math.Ceiling((double)occupied/columns);
+    return new RectangleF(margin+(columns-rowCount)*(cw+gap)/2+(slot%columns)*(cw+gap),margin+(rows-usedRows)*(ch+gap)/2+row*(ch+gap),cw,ch);
+  }
   internal static NativeLayout Find(int count){return All.FirstOrDefault(item=>item.count==count)??All[0];}
 }
 internal static class PrintTheme {

@@ -1,5 +1,333 @@
 # UI regression checklist
 
+## 2026-10-21 — v0.2.18 release validation
+
+- Version 0.2.18 is the stable release candidate for the completed Fast Print,
+  ID-review and Polaroid reliability changes documented below.
+- Full `npm run release:check` passed: repository formatting, both TypeScript
+  projects, all automated test suites, Storybook production build and Electron
+  production build. The final native helper compiled successfully to a separate
+  verification executable without closing the user's open Fast Print windows.
+- The final production-build Polaroid check used every one of the fifteen
+  num216p originals in both modes. Preview and print artwork matched exactly,
+  print reused reviewed sheets, preparation did not capture vendor settings,
+  signed-out production printing remained blocked and original hashes stayed
+  unchanged. Earlier 37-photo, exact-eight/exact-nine and single-core checks are
+  retained in the corresponding reliability artifacts.
+- General A4/A3 preview-to-print proofs, printer-state audits, the ID real-photo
+  corpus and horizontal matched-size round trips passed before versioning.
+  No hardware print jobs or interactive desktop control were used.
+- Physical workshop output and vendor finishing, live high-DPI/high-contrast
+  interaction and installer operation on the workshop PC remain pending.
+  Subscriber publication is verified separately after the tagged workflow.
+
+Artifacts: `output/release-0.2.18-check.log`,
+`output/release-0.2.18-polaroid/results.json` and the proof paths recorded below.
+
+## 2026-10-20 — General Fast Print presets (unreleased)
+
+- Scope corrected to the general 1/2/4/6/8/9/12/16-up layouts. Every slot in a
+  preset has the same dimensions, including incomplete final sheets. A 5 mm
+  default outer margin and 3 mm gap replace printing to the edge. Options offers
+  5/7/10/15/20 mm margins and 3/5/8/10 mm gaps. Partial sheets/rows are centered
+  while retaining the preset's slot size.
+- Rotate selected applies a quarter turn to the selected file; PDF/Word use the
+  same turn for all pages of that file. Options > Rotate all applies one rotation
+  to the entire batch and retains it through preset changes. Source indices,
+  camera orientation and PDF page rotation are handled consistently in the native
+  preview and renderer. Status shows slot dimensions and the selected rotation.
+- Photo-only selections start with Fit to frame enabled for equal filled frames.
+  Whole-image/page fitting remains available. PDF/Word and mixed selections start
+  with full-page fit; cropping happens only when that checkbox is enabled.
+  Original files are unchanged; Windows printer defaults are not overwritten.
+- Shared validation checks integer margins/gaps and bounded quarter-turn arrays.
+  Geometry tests cover all counts, A4/A3, every partial-sheet count, centered
+  groups, minimum margins/gaps and matching cell dimensions. Native and renderer
+  use equivalent cell positioning, with the same image/PDF rotations and clips.
+- Hidden integration verified all eight layouts on both A4/A3 using seventeen
+  alternating portrait/landscape images and a five-page mixed-orientation PDF.
+  Sixteen actual driver ValidateOnly jobs matched native previews for first/final
+  image and PDF sheets: 64 raster comparisons, with no ink outside their planned
+  slots, margins or gaps. PDF document boundaries and final blank areas passed.
+  Native checks repeated in English/dark, French/light and Arabic RTL/dark,
+  including individual rotation. The final helper additionally verifies global
+  rotation survives preset changes. No hardware print jobs were sent.
+- Inspected native snapshots at 1366x768, 1920x1080, 1600x900 and the 820x640
+  minimum, using existing native controls and shared tokens. Rotate selected fits
+  with Copies, Fit to frame and Options; Print remains the primary action.
+  Standard native keyboard behavior and existing shared controls are retained.
+  The headless system caption is not proof of live DWM title-bar appearance.
+- The existing English/French/Arabic audit passed printer races, changed-source
+  invalidation, preset guards, navigation, scrolled tiles, copy preservation,
+  grayscale output and unchanged defaults. Fast Print unit, print API/preferences,
+  typecheck, native compilation and development renderer builds passed.
+- ID work is otherwise stopped. Its horizontal-only rule is enforced with a
+  180-degree flip; prior optional quarter-turn sheet settings cannot make an ID
+  portrait. All eight real ID sources and their rotated/off-center/background
+  variants passed again, plus a hidden settings round trip and matched-size A3
+  driver validation. This supersedes the previous ID-only 90-degree entry below.
+- Pending: physical workshop output, actual vendor tray/duplex finishing,
+  high-DPI/high-contrast and live OS focus/menu checks, low-memory workshop
+  measurements and subscriber publishing. No interactive main-PC control was used.
+
+Artifacts: `output/fast-print-general-presets`,
+`output/fast-print-general-presets-final`, `output/fast-print-audit`,
+`output/fast-print-id-horizontal-policy`, and `output/general-presets-*.log`.
+
+## 2026-10-20 — Matched ID sizes, sheet presets and rotation (unreleased)
+
+- The user clarified “same side” as **same size**. Both sides now share one
+  explicit 90 x 55/56/60 mm card preset, defaulting to 90 x 56 mm. Projective
+  correction maps the selected corners into that rectangle, retaining the whole
+  selected card. This supersedes the earlier proportional-height behavior.
+  Source corners now determine straightening, replacing the manual-angle field.
+- Each sheet preview has one Rotate 90-degree command for that side. It changes
+  sheet orientation independently of the source crop and the other side. This
+  supersedes the earlier 180-only command according to the latest request.
+  The selected physical size is retained; a deliberate quarter turn swaps its
+  displayed dimensions. A shared maximum slot width/height preserves duplex
+  centers even when only one side is turned.
+- Sheet presets expose common 1/2/4/6/8 counts and Fill sheet; other supported
+  counts remain available in the same selector. Fill adapts to paper, size,
+  margins and rotations. Even spacing uses the page symmetrically to the selected
+  margins; Compact centers a group. Margins have a 5 mm minimum and cutting gaps
+  a 3 mm minimum. Fixed overfull counts block output without changing card size.
+- Layout checks cover all size presets, A4/A3 portrait/landscape, every paired
+  quarter-turn combination, capacity, incomplete rows, safe gaps/margins and
+  mirrored duplex centers. Projective corner mapping and bilinear pixel sampling
+  have independent geometry/gradient checks. Draft tests preserve size, spacing,
+  margins, fill mode and independent turns and reject invalid values.
+- All eight ID TEST originals and rotated/off-center plus/minus 45-degree,
+  textured/pale-background and legacy-review variants passed: 88 cases and 200
+  raster proofs. Additional original-photo proofs include all three size presets,
+  90/180/270-degree rotations, back mirroring and the real eight-up Fill sheet
+  layout. Together the two runs contain 248 300 dpi proofs and 1,024 card
+  placements, with independently measured width AND height, centers, color/mono
+  and zero ink outside planned slots. Original source hashes are unchanged.
+- Inspected the complete rectified-card proof grid and all eight full eight-up
+  sheets. Native/main/editor checks passed two printer-settings round trips,
+  source imports, keyboard corners, independent 90-degree rotation, saved presets,
+  Fill responding to margins, invalid-preset recovery and overfull-count blocking.
+  Final A3 grayscale output has matching 90 x 60 mm fronts/backs, six IDs per side
+  and five sheet copies through ValidateOnly, without hardware printing.
+- Captured and inspected English/dark, French/light and Arabic RTL/low-end layouts
+  at 1366x768, 1920x1080 and 1600x900. Shared buttons/tokens/header remain in use;
+  sheet rotation has one home per preview and Print remains the primary action.
+  RTL dimension text stays left-to-right. Hidden capture checks compare multiple
+  source pixels after image/font decoding to reject stale compositor frames.
+- Typecheck, development build, Fast Print/draft/geometry and i18n checks passed.
+  No interactive main-PC control was used. Physical workshop duplex/feed, high
+  DPI/high contrast and live OS focus/dropdown/Tab checks remain pending. These
+  changes are local and have not been published to subscribers.
+
+Artifacts: `output/fast-print-id-copies-4`,
+`output/fast-print-id-presets-originals`, `output/fast-print-id-workflow`,
+`output/id-detection-audit/matched-size-all-proofs.png`,
+`output/id-detection-audit/matched-fill8-grid.png`, and `output/id-presets-*.log`.
+
+## 2026-10-20 — Keep both ID sides horizontal (unreleased)
+
+- Corrects the quarter-turn behavior visible in the earlier validation pictures.
+  Rotate is now **Rotate 180°**, using the shared button and translated labels.
+  A flip preserves physical dimensions. Front and back share landscape card
+  placement at 90 mm width, independent of A4/A3 paper orientation. Height remains
+  proportional; repeat capacity, previews and final output use the same rule.
+- Older portrait/quarter-turn review states keep their card outline while being
+  mapped to horizontal. Only migrated reviews recheck upright direction with
+  the local header/text reader; existing horizontal reviews retain their exact
+  angles and corners without reanalysis. Manual angles cannot produce portrait
+  output. Unit checks cover legacy quarter turns, 180-degree flips, A4/A3 in both
+  orientations and exact preservation of existing manual edits.
+- All eight original ID TEST photos, off-center plus/minus 45-degree placements,
+  camera rotations and textured/pale backgrounds passed the 72-case single-card
+  proof run. Four-up regression also includes clockwise and counterclockwise
+  quarter-turn saved reviews for every photo, checking upright orientation,
+  horizontal 90 mm cards, crop coverage, physical centers and unchanged originals.
+- Hidden native/editor checks passed English/dark, French/light and Arabic
+  RTL/low-end at 1366x768, 1920x1080 and 1600x900. Two flips retain both preview
+  dimensions; a six-ID A3 job validates horizontal front and back, matching
+  centers and five sheet copies. Captured previews were inspected with both
+  sides horizontal. A final built-renderer round trip also passed after the
+  legacy-orientation migration was added.
+- Typecheck, development build, Fast Print geometry/drafts and i18n checks passed.
+  Shared controls, primary Print action and keyboard corner editing are retained.
+  No desktop input or hardware printing was used. Workshop hardware, physical
+  duplex/feed, high DPI/high contrast and live OS dropdown/focus checks remain
+  pending. Changes are local and unpublished.
+
+Artifacts: `output/fast-print-id`, `output/fast-print-id-copies-4`,
+`output/fast-print-id-workflow`, `output/fast-print-id-workflow-horizontal-final`,
+`output/id-horizontal-*.log`.
+
+## 2026-10-20 — Polaroid preparation responsiveness (unreleased)
+
+- Found two source-level problems that could explain a long wait on workshop
+  hardware: composing a preview captured vendor printer settings synchronously,
+  and Print repeated the entire face-analysis/composition pass. The reported
+  AccurioPress failure has not been reproduced on its actual driver/hardware.
+- Polaroid previews now compose without a vendor driver snapshot. The existing
+  loading surface and status show per-photo progress; Print stays disabled until
+  the complete batch is ready. Closing prevents queued preparation workers from
+  starting. A4, color, simplex, orientation and driver validation still apply to
+  the actual print handoff.
+- Print reuses the reviewed full-resolution sheets. The handoff validates source
+  identity/size/modification time, mode, complete pagination, safe sequential sheet
+  names and the 300 DPI A4 dimensions. Header checks read only 24 bytes per sheet.
+  Account authorization still gates printing; signed-out preview remains allowed.
+- Both modes passed with every original in num937p (37 photos, five sheets each)
+  and num216p (15 photos, two sheets each), plus 8/9-photo boundary cases. Checked
+  all original/photo proof contact sheets, rotations and protected face framing,
+  intentional sideways groups, final blank slots, unchanged original hashes and
+  byte-for-byte equality between reviewed and print-validation artwork.
+- A separate num937p run restricted the native preparation process and its child
+  worker to one CPU core: both modes passed, with 74 progress events per mode and
+  zero preview driver snapshots. This is a local constrained-CPU check, not a
+  measurement of workshop memory pressure or its AccurioPress driver.
+- Inspected loading/ready native snapshots at 1366×768 and 1920×1080, English dark,
+  French light and Arabic RTL. Additional snapshots cover 1600×900 and 820×640.
+  Hidden native paint checks passed in all three languages and both themes,
+  including retained busy previews and no GDI growth. Existing native controls,
+  design tokens, action placement and primary Print action are reused; no new
+  heading subtitles, duplicate actions or button styles were added.
+- Typecheck, production/native builds, formatting for changed supported files,
+  Fast Print/cache/print-preference regressions, i18n and appearance checks passed.
+  The native audit also passed in English, French and Arabic, covering edited
+  sources, printer-selection races, invalid profiles, navigation and copy handoff.
+  No hardware jobs or desktop input were sent. Local newly opened Fast Print
+  windows use the rebuilt helper; already-open windows were preserved.
+- Pending: interactive keyboard/focus check, actual low-memory workshop behavior,
+  AccurioPress driver/tray/physical-output validation and subscriber publication.
+
+Artifacts: `output/polaroid-num937p-reliability/`,
+`output/polaroid-num216p-reliability/`,
+`output/polaroid-num937p-single-core/results.json`, and
+`output/fast-print-paint/results.json`.
+
+## 2026-10-20 — ID boundaries and upside-down detection (unreleased)
+
+- Tested every one of the eight pictures currently in `C:\Users\Maher\Downloads\ID TEST`.
+  Each has its original, 90/180/270-degree camera rotations, off-center plus/minus
+  45-degree placements, busy fabric, pale handwritten paper and vertical-phone
+  variants: 72 cases. Independent marked edges are in decoded/EXIF coordinates;
+  source hashes confirm all originals stayed unchanged.
+- Complete color-edge/card proposals and header anchors avoid portrait-only and
+  text-only selections. Opposite-direction scanning protects faint outer edges
+  from rotation-dependent peak ties. Uniform backgrounds retain the existing
+  fast path. Median geometry detection was about 128 ms on this PC in the local
+  geometry run; this excludes decoding, OCR and printing.
+- Header evidence corrects 180-degree flips quickly. A lazy bundled Arabic/English
+  worker handles header-free cards, with a bounded faded-text retry. Only letter
+  confidence determines text orientation; numbers cannot vote. Ambiguous evidence
+  shows a translated Rotate reminder. Original artwork is never contrast-filtered.
+  Saved drafts preserve orientation status and manual edits without reanalysis.
+- All 72 cases passed automatic orientation, independent crop coverage and
+  color/grayscale 300 dpi proofs for both one and four IDs per sheet: 288 sheets
+  and 720 individual printed card placements. All cards retain 90 mm layout
+  width, proportional height, expected centers and zero ink outside planned slots.
+  Inspected the complete upright proof grid and all eight four-up original proofs.
+- The actual hidden native/main/editor workflow passed two settings round trips,
+  added artwork, keyboard corner edits, invalid-preset recovery and overfull-sheet
+  blocking, followed by A3 grayscale validation with six IDs per side and five
+  sheet copies. The bundled file renderer also verified automatic orientation of
+  the header-free barcode photo with its offline recognition assets and CSP.
+- English/dark, French/light and Arabic RTL/low-end layouts checked at 1366x768,
+  1920x1080 and 1600x900. The editor now explicitly uses the shared foreground
+  token, fixing unreadable inherited dark text. Capture checks wait for decoded
+  images/fonts and completed animation frames so resized hidden windows cannot
+  reuse a stale compositor frame; the final capture also checks a source pixel
+  against its displayed position. Shared controls and a single Print action stay
+  in place; no explanatory headings or duplicate source commands were added.
+- Typecheck, development build, Fast Print/draft/geometry, print/preferences and
+  i18n checks passed. No desktop input or hardware print jobs were sent. Physical
+  duplex/feed verification, high DPI/high contrast, live OS focus/dropdown/Tab
+  checks and the offline workshop's additional pictures remain pending. This is
+  a local development update, not a subscriber release.
+
+Artifacts: `output/fast-print-id`, `output/fast-print-id-copies-4`,
+`output/fast-print-id-workflow`, `output/fast-print-id-workflow-ocr`,
+`output/id-detection-audit/final-proof-grid.png` and
+`output/id-detection-audit/four-per-sheet-grid.png`.
+
+## 2026-10-20 — Multiple IDs on one sheet (unreleased)
+
+- Added **IDs per sheet** to the existing ID editor settings. Counts run from 1
+  to 24, with unavailable choices disabled according to actual A4/A3, orientation
+  and crop dimensions. Cards stay 90 mm wide, with proportional height and 5 mm
+  gaps. A paper/crop change that makes the chosen count invalid reports an error
+  and disables Print; it does not scale the cards down.
+- Front and back share the taller side's cell height and matching physical
+  centers. Back positions mirror for the existing long-edge duplex workflow
+  ([Windows DEVMODE duplex definitions](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-devmodew)).
+  Incomplete rows are centered; unused areas remain white. Counts persist in the
+  validated ID review draft. Native sheet copies remain a separate setting.
+- Geometry checks cover every fitting count in A4/A3 portrait/landscape, margins,
+  non-overlap, cutting gaps, back alignment and rejection of overfull sheets.
+  Draft checks include count preservation and invalid-count rejection.
+- Real-photo proofs passed for four and five IDs per side using all twelve local
+  original, off-center/rotated, patterned and pale-paper cases in color and
+  grayscale. All 216 individual card copies in those 48 sheets retained the
+  expected physical width/center, with no ink outside their planned slots.
+  Single-card output also passed again; original source hashes were unchanged.
+- The hidden native/editor workflow preserves two IDs per sheet through the
+  first return and six through the second, then validates an A3/five-sheet-copy
+  grayscale job with six correctly placed IDs on each side. An overfull choice
+  disables Print and recovers when changed back to six. English/dark,
+  French/light and Arabic RTL/low-end layouts are checked at 1366×768,
+  1920×1080 and 1600×900. No desktop input or hardware print jobs were sent.
+- Typecheck, development build, Fast Print/draft geometry, print and i18n checks
+  passed. Physical duplex/feed alignment and the unavailable workshop screenshots
+  remain pending. This change has not been published.
+
+Artifacts: `output/fast-print-id-copies-4`, `output/fast-print-id-copies-5`,
+`output/fast-print-id-workflow`, and `output/id-copies-*` check logs.
+
+## 2026-10-20 — Workshop ID report corrections (unreleased)
+
+- Read the workshop chat **Fix ID card processing issues** and its inspection
+  report. The installed workshop app was v0.2.17. Screenshots showed whole-photo
+  fallback crops, sideways cards and excessive retained background. Missing printer
+  selection and lost work on the editor's Back arrow matched the implementation.
+- The editor now returns through **Printer settings** to the native dialog,
+  preserving both sides, corner edits, quarter turns, manual angles, active side
+  and imported artwork. Native printer/paper/copies changes apply on re-entry.
+  A saved review also survives rejected printer validation. The native parent owns
+  the session until closed; the child worker no longer deletes it on ID errors.
+- Review metadata is validated and written atomically after its PNG sources.
+  Identical artwork is cached once across repeated reviews. Invalid side/source
+  references, crossed corners, oversized images, escaped cache paths and changed
+  original inputs are rejected without replacing a prior valid review.
+- Sideways card setup rotates the source before editing. Crop detection first
+  preserves the proven uniform-background path, then tries multiple color
+  contrasts with narrow-pattern removal. Uncertain detection retains the full
+  image with an actionable corner prompt. The stage height adapts to the viewport.
+  Existing shared ToolHeader, PrintButton, buttons, tokens and translations remain
+  in use, with one printer-settings command and one primary Print action.
+- Local ID proof checks passed for both originals plus off-center ±45°, busy
+  fabric, pale handwritten-paper and vertical-phone variants: twelve cases and
+  twenty-four color/grayscale proofs. Every source hash was unchanged; 90 mm
+  width, proportional height, card coverage and matching physical centers passed.
+- The real main/native workflow passed in English/dark, French/light and Arabic
+  RTL/low-end modes. Each case made two settings round trips with keyboard corner
+  edits and an added image, rejected a missing preset while retaining work, then
+  generated two A3 grayscale sheets with five copies through ValidateOnly. No
+  hardware jobs were sent. Draft persistence/validation, Fast Print, print,
+  appearance, i18n, formatting, typecheck, native compilation and development
+  build checks passed.
+- Inspected hidden renderer layouts at 1366×768, 1920×1080 and 1600×900 in both
+  themes and Arabic RTL; corner keyboard edits and absence of horizontal overflow
+  were exercised. Vertical page scrolling is retained at shorter heights. Live
+  Windows focus/dropdown/Tab interaction, high DPI/high contrast and physical
+  workshop printing remain pending.
+- The workshop disconnected before its ten additional ID photos and two
+  screenshots could be copied. The user chose to continue with local tests.
+  Those exact workshop images remain unvalidated; no source was developed on the
+  workshop PC, no originals/settings were changed and no subscriber release was
+  published for this correction. Reopen the main PC's Fast Print to load it.
+
+Artifacts: `output/fast-print-id/results.json`, crop/proof PNGs;
+`output/fast-print-id-workflow/results.json`, hidden layouts, saved review state,
+missing-preset logs and A3 print proofs. `output/id-workshop-*` contains check logs.
+
 ## 2026-10-20 — Fast Print audit for v0.2.17
 
 - Printer settings are generation-checked, with dependent controls and Print

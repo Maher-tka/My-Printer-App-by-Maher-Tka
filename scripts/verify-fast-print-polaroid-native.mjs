@@ -10,8 +10,10 @@ import { polaroidLayout } from '../src/shared/fast-print-polaroid.ts'
 
 // Hidden native forms and production renderers; every driver call is ValidateOnly.
 const root = resolve(import.meta.dirname, '..')
-const output = join(root, 'output/fast-print-polaroid-native')
-const source = 'C:/Users/Maher/Downloads/Compressed/num216p'
+const output = resolve(
+  process.env.POLAROID_TEST_OUTPUT || join(root, 'output/fast-print-polaroid-native')
+)
+const source = process.env.POLAROID_TEST_SOURCE || 'C:/Users/Maher/Downloads/Compressed/num216p'
 const executable = process.env.FAST_PRINT_NATIVE_EXE || join(root, 'out/native/FastPrint.exe')
 const require = createRequire(import.meta.url)
 const electron = require('electron')
@@ -19,7 +21,7 @@ const files = (await readdir(source))
   .filter((name) => /\.(jpe?g|png)$/i.test(name))
   .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
   .map((name) => join(source, name))
-assert.equal(files.length, 15, 'Expected all fifteen real Polaroid test photos.')
+assert.ok(files.length > 9, 'Expected real photos covering multiple sheets in both modes.')
 const hash = async (file) =>
   createHash('sha256')
     .update(await readFile(file))
@@ -70,11 +72,14 @@ const run = (exe, args, env = environment) =>
   })
 const reports = []
 let productionGateVerified = false
-for (const [name, selection, language, appearance] of [
-  ['all-fifteen', files, 'en', 'dark'],
+const selections = [
+  ['all-photos', files, 'en', 'dark'],
   ['eight-one-sheet', files.slice(0, 8), 'fr', 'light'],
   ['nine-one-sheet', files.slice(0, 9), 'ar', 'light']
-]) {
+]
+for (const [name, selection, language, appearance] of process.env.POLAROID_TEST_ALL_ONLY === '1'
+  ? selections.slice(0, 1)
+  : selections) {
   const folder = join(output, name)
   await mkdir(folder, { recursive: true })
   await rm(join(folder, 'error.txt'), { force: true })
@@ -115,6 +120,8 @@ for (const [name, selection, language, appearance] of [
     const capacity = item.mode === 'polaroid-8' ? 8 : 9
     const layout = polaroidLayout(item.mode)
     assert.equal(item.files, selection.length)
+    assert.equal(item.previewDriverSnapshots, 0, 'Preview must not access vendor driver snapshots.')
+    assert.ok(item.progressEvents >= selection.length, 'Every photo needs preparation feedback.')
     assert.equal(item.sheets, Math.ceil(selection.length / capacity))
     assert.equal(item.selectedFileSheet, Math.ceil(selection.length / capacity))
     const worker = join(folder, item.mode, 'worker')
@@ -145,7 +152,9 @@ for (const [name, selection, language, appearance] of [
     assert.equal(driver.color, true)
     assert.equal(driver.landscape, capacity === 8)
     assert.equal(driver.duplex, 'Simplex')
-    const framing = logs
+    assert.match(logs, /\[polaroid-reviewed\]/, 'Print must reuse reviewed sheets.')
+    assert.ok(!logs.includes('[polaroid-photo]'), 'Printing re-ran photo analysis.')
+    const framing = (await readFile(join(folder, item.mode, 'framing.log'), 'utf8'))
       .split(/\r?\n/)
       .filter((line) => line.startsWith('[polaroid-photo] '))
       .map((line) => JSON.parse(line.slice('[polaroid-photo] '.length)))
@@ -288,6 +297,7 @@ for (const [name, selection, language, appearance] of [
     name,
     files: selection.length,
     headless: true,
+    singleCore: result.singleCore,
     cachedSwitchMs: result.cachedSwitchMs,
     cases: result.cases.map(({ request, ...item }) => item)
   })
