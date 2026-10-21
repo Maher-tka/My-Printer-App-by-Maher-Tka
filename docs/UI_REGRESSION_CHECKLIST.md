@@ -1,5 +1,30 @@
 # UI regression checklist
 
+## 2026-10-21 — v0.2.18 published and verified
+
+- Stable tag `v0.2.18` points to release commit `d4bfa07`. The tagged
+  [Windows release workflow](https://github.com/Maher-tka/My-Printer-App-by-Maher-Tka/actions/runs/39555430966)
+  completed successfully, including release checks, native builds, packaging,
+  upload, checksum publication and final release publication.
+- [v0.2.18](https://github.com/Maher-tka/My-Printer-App-by-Maher-Tka/releases/tag/v0.2.18)
+  is public, not a draft or prerelease, and is the repository's latest stable
+  release. Setup, Portable, Setup blockmap, `latest.yml` and the SHA-256 checksum
+  manifest are present with nonzero sizes.
+- Downloaded the 224,322,244-byte Setup installer, updater metadata, blockmap and
+  checksum manifest. Windows reports installer ProductVersion/FileVersion
+  `0.2.18`. Its computed SHA-512 matches both updater entries and the declared
+  byte size. Downloaded files match the SHA-256 manifest; all four package/update
+  assets, including Portable, also match GitHub's published SHA-256 digests.
+  Portable presence/digest was checked through the API rather than downloading
+  a second complete executable.
+- Local development output was restored after production release checks. No
+  saved artwork, projects, printer settings or user desktop windows were changed.
+  Physical workshop installation/output and vendor finishing remain pending.
+
+Artifacts: `output/release-0.2.18-published/verification.json`,
+`installer-version.json`, downloaded updater files and installer;
+`output/release-0.2.18-check.log` and `output/release-0.2.18-polaroid/results.json`.
+
 ## 2026-10-21 — v0.2.18 release validation
 
 - Version 0.2.18 is the stable release candidate for the completed Fast Print,
