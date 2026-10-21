@@ -354,14 +354,18 @@ async function drawArtwork(
   const maskRect = getPlacedMaskRect(placed, piece)
   const hasMask = piece.clippingMaskEnabled ?? piece.mask.enabled
 
-  const rasterized = await rasterizeSourceForPdf(source, {
-    widthCm: artworkRect.widthCm,
-    heightCm: artworkRect.heightCm
-  })
-  const image =
-    rasterized.mimeType === 'image/png'
+  const vector = source.vectorPdfBase64 ? await embedStickerVectorMaster(pdf, source) : undefined
+  const rasterized = vector
+    ? undefined
+    : await rasterizeSourceForPdf(source, {
+        widthCm: artworkRect.widthCm,
+        heightCm: artworkRect.heightCm
+      })
+  const image = rasterized
+    ? rasterized.mimeType === 'image/png'
       ? await pdf.embedPng(rasterized.bytes)
       : await pdf.embedJpg(rasterized.bytes)
+    : undefined
   const pdfRect = toPdfRect(artworkRect, sheetHeightCm)
 
   if (hasMask) {
@@ -385,17 +389,39 @@ async function drawArtwork(
     translate(pdfRect.centerX, pdfRect.centerY),
     rotateDegrees(-artworkRect.rotation)
   )
-  page.drawImage(image, {
+  const placement = {
     x: -pdfRect.width / 2,
     y: -pdfRect.height / 2,
     width: pdfRect.width,
     height: pdfRect.height
-  })
+  }
+  if (vector) page.drawPage(vector, placement)
+  else if (image) page.drawImage(image, placement)
 
   page.pushOperators(popGraphicsState())
   if (hasMask) {
     page.pushOperators(popGraphicsState())
   }
+}
+
+const stickerVectorCache = new WeakMap<
+  PDFDocument,
+  Map<string, Awaited<ReturnType<PDFDocument['embedPdf']>>[number]>
+>()
+async function embedStickerVectorMaster(pdf: PDFDocument, source: PieceSourceFile) {
+  let cache = stickerVectorCache.get(pdf)
+  if (!cache) {
+    cache = new Map()
+    stickerVectorCache.set(pdf, cache)
+  }
+  const existing = cache.get(source.id)
+  if (existing) return existing
+  const bytes = Uint8Array.from(atob(source.vectorPdfBase64!), (character) =>
+    character.charCodeAt(0)
+  )
+  const [embedded] = await pdf.embedPdf(bytes, [0])
+  cache.set(source.id, embedded)
+  return embedded
 }
 
 function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {

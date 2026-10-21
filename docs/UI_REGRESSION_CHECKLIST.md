@@ -1921,3 +1921,39 @@ Artifacts: `output/playwright/printer-settings-*.png`,
 Artifacts: `output/fast-print-native-verification/results.json`, per-case native
 screenshots/layout proofs/driver validation; `output/fast-print-id/` and
 `output/fast-print-num216p-menu/`. Changes remain local and unpublished.
+
+## AI sticker separation and vector export — 2026-10-21
+
+- [x] Shared Button/ActionButton controls; file, processing and output actions are
+      grouped separately, with a primary action appropriate to queue state.
+- [x] One import and one export command; separation settings, output scope/format,
+      queue status and errors remain beside their tasks. No new heading subtitles.
+- [x] Hidden component proofs at 1366×768, 1600×900 and 1920×1080, light/dark,
+      French, Arabic RTL and low-end mode. Inspected captured images after forcing a
+      fresh offscreen paint; no horizontal page overflow. The settings panel scrolls.
+- [x] Keyboard focus stays on visible native controls in the hidden test window.
+- [x] Four representative stickers separated, exported as independent PNGs,
+      processed without a model download, and transferred to Cutter with contours.
+- [x] All ten stickers detected in a compact JPEG copy of the workshop screenshot;
+      inspected the ten cropped PNG proofs and contact sheet. Source files unchanged.
+- [x] Vector PDF crops rendered against original page crops at 0°, 90°, 180° and
+      270°, including a nonzero CropBox; downsampled proof mean pixel error was zero.
+- [x] Native Illustrator script exercised against a document API fixture matching
+      ten complete groups and a locked background; tested source protection, copied
+      coordinate bounds, outlined SVG font options, editable PDFs and failure cleanup.
+- [x] Mock native import through the component retained SVG path content.
+      Multi-sticker PDF regression contains vector Form objects and no raster image
+      streams for the vector fixture; vector masters survive project save/open.
+- [x] Detection tests cover plain gray/transparency, white artwork, thin outer
+      frames, nearby lettering, blank grid cells, limits and export filenames.
+- [x] Typecheck, build, sticker, Cutter, project, export and i18n checks passed.
+- [ ] Actual new app-to-Illustrator COM import remains pending: Illustrator was
+      not running on the main PC. The workshop independently confirmed ten native
+      groups in `Mintech Stickers1.ai` and exported those groups, but that inspection
+      does not validate the new app integration.
+- [ ] Full application-shell visual check and workshop verification of a released
+      build remain pending. Component proofs used isolated hidden windows. No hardware
+      printing or subscriber publication was performed.
+
+Artifacts: `output/sticker-feature-proof/report.json`, size/theme screenshots,
+`workshop-contact.png` and ten `workshop-sticker-*.png` crop proofs.

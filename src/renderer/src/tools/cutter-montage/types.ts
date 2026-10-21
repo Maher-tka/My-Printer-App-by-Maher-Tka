@@ -154,6 +154,8 @@ export interface PieceSourceFile {
   originalFileName?: string
   mimeType: string
   bytes: Uint8Array
+  /** Native sticker PDF master retained alongside SVG for vector production output. */
+  vectorPdfBase64?: string
   previewUrl: string
   previewDataUrl?: string
   pdfPageNumber?: number

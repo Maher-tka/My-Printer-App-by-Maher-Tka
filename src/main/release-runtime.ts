@@ -1,5 +1,6 @@
 import { prepareFineCutJob } from './finecut-handoff.js'
 import { importEpsArtwork } from './eps-import.js'
+import { importStickerVectors } from './sticker-vector-import.js'
 import { exportIllustratorPdf, exportIllustratorPdfBatch } from './illustrator-pdf-export.js'
 import { assertOnlineProductionAccess } from './online-account.js'
 import { writeJsonAtomically } from './atomic-json.js'
@@ -59,6 +60,10 @@ const recentErrors: AppHealthSnapshot['recentErrors'] = []
 const reportedAutosaveIssues = new Set<string>()
 
 export function registerReleaseRuntimeHandlers(): void {
+  ipcMain.handle('runtime:import-sticker-vectors', async (_event, request: unknown) => {
+    await assertOnlineProductionAccess('paid-tools', 'cutter-montage')
+    return importStickerVectors(request, app.getPath('temp'))
+  })
   ipcMain.handle('runtime:import-eps-artwork', async (_event, request: unknown) => {
     await assertOnlineProductionAccess('paid-tools', 'card-montage')
     return importEpsArtwork(request, app.getPath('temp'))

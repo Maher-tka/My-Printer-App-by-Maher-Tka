@@ -157,6 +157,9 @@ declare global {
         files: PrinterAppWriteFileRequest[]
       ) => Promise<PrinterAppWriteFilesResult>
       runtime: {
+        importStickerVectors: (
+          request: import('../../shared/sticker-vector-import').StickerVectorImportRequest
+        ) => Promise<import('../../shared/sticker-vector-import').StickerVectorImportResult>
         importEpsArtwork: (
           request: import('../../shared/eps-import').EpsImportRequest
         ) => Promise<import('../../shared/eps-import').EpsImportResult>

@@ -19,6 +19,7 @@ export interface StickerMakerResult {
   contourWidth: number
   contourHeight: number
   warnings: string[]
+  vectorArtwork?: { svg?: Uint8Array; pdf: Uint8Array }
 }
 
 export type StickerMaskBrushMode = 'erase' | 'restore'
@@ -428,6 +429,7 @@ export async function rebuildStickerFromMask(
   return {
     ...result,
     png: new Uint8Array(await png.arrayBuffer()),
+    vectorArtwork: undefined,
     contourMask: effectiveMask,
     pathData: geometry.pathData,
     widthMm: settings.widthMm,

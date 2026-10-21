@@ -4,7 +4,7 @@ import { createCutterId } from './nesting'
 import { createPiecePresetFromSource } from './piecePresets'
 import { getFinishedPieceSize, resizeFinishedPiece } from './pieceSize'
 import { synchronizePieceEditorModel } from './editorObjects'
-import { bytesToArrayBuffer } from './sourcePreview'
+import { bytesToArrayBuffer, bytesToDataUrl, uint8ToBase64 } from './sourcePreview'
 
 export interface StickerSendOrder {
   result: StickerMakerResult
@@ -17,15 +17,19 @@ export function createStickerCutterAssets(
   existingPieces: PiecePreset[],
   quantity = 1
 ): { source: PieceSourceFile; piece: PiecePreset } {
-  const fileName = `${result.fileName.replace(/\.[^.]+$/, '')}_artwork.png`
+  const vector = result.vectorArtwork
+  const fileName = `${result.fileName.replace(/\.[^.]+$/, '')}_artwork.${vector?.svg ? 'svg' : vector ? 'pdf' : 'png'}`
   const source: PieceSourceFile = {
     id: createCutterId('source'),
-    sourceKind: 'image',
+    sourceKind: vector?.svg ? 'svg' : vector ? 'pdf-page' : 'image',
     fileName,
     originalFileName: result.fileName,
     displayName: result.fileName.replace(/\.[^.]+$/, ''),
-    mimeType: 'image/png',
-    bytes: result.png,
+    mimeType: vector?.svg ? 'image/svg+xml' : vector ? 'application/pdf' : 'image/png',
+    bytes: vector?.svg ?? vector?.pdf ?? result.png,
+    vectorPdfBase64: vector ? uint8ToBase64(vector.pdf) : undefined,
+    pdfPageNumber: vector && !vector.svg ? 1 : undefined,
+    previewDataUrl: vector ? bytesToDataUrl(result.png, 'image/png') : undefined,
     previewUrl: URL.createObjectURL(
       new Blob([bytesToArrayBuffer(result.png)], { type: 'image/png' })
     ),

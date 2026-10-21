@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert'
-import { PDFArray, PDFDict, PDFDocument, PDFName } from 'pdf-lib'
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, rgb } from 'pdf-lib'
 import { createStickerCutterAssets, resizeFinishedStickerWidth } from './stickerCutterAdapter'
 import { makeOffsetPath, type StickerMakerResult } from './stickerMaker'
 import { createPlacedPieceFromPreset } from './piecePresets'
@@ -168,3 +168,59 @@ const saved = createCutterProjectFile({
 const reopened = deserializeCutterProjectPayload(saved.payload)
 assert.equal(reopened.pieces[0].cutline.customPathData, result.pathData)
 assert.deepEqual(reopened.sources[0].bytes, result.png)
+
+const vectorMaster = await PDFDocument.create()
+vectorMaster
+  .addPage([100, 100])
+  .drawRectangle({ x: 5, y: 5, width: 90, height: 90, color: rgb(0, 0.5, 1) })
+const vectorResult = {
+  ...result,
+  vectorArtwork: {
+    svg: new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M5 5H95V95H5Z" fill="blue"/></svg>'
+    ),
+    pdf: await vectorMaster.save()
+  }
+}
+const vectorAssets = createStickerCutterAssets(vectorResult, 2, [], 3)
+assert.equal(vectorAssets.source.sourceKind, 'svg')
+assert.deepEqual(vectorAssets.source.bytes, vectorResult.vectorArtwork.svg)
+const vectorProject = {
+  ...project,
+  sources: [vectorAssets.source],
+  pieces: [vectorAssets.piece],
+  placedPieces: [
+    createPlacedPieceFromPreset(vectorAssets.piece, 2, 2),
+    createPlacedPieceFromPreset(vectorAssets.piece, 10, 2, 90)
+  ]
+}
+const vectorOutput = await PDFDocument.load(
+  await (await exportCutterPdf(vectorProject)).blob.arrayBuffer()
+)
+const imageStreams = vectorOutput.context
+  .enumerateIndirectObjects()
+  .filter(
+    ([, object]) =>
+      object instanceof PDFRawStream &&
+      object.dict.get(PDFName.of('Subtype'))?.toString() === '/Image'
+  )
+assert.equal(
+  imageStreams.length,
+  0,
+  'Multi-sticker PDF preserves the vector master without rasterizing'
+)
+const vectorSaved = createCutterProjectFile({
+  ...vectorProject,
+  mode: 'montage-sheet',
+  activePieceId: vectorAssets.piece.id,
+  selectedPlacedIds: [],
+  selectedEditorObjects: [],
+  keyObject: { object: null }
+})
+const vectorReopened = deserializeCutterProjectPayload(vectorSaved.payload)
+assert.equal(
+  vectorReopened.sources[0].vectorPdfBase64,
+  vectorAssets.source.vectorPdfBase64,
+  'Vector PDF master survives project save/open'
+)
+URL.revokeObjectURL(vectorAssets.source.previewUrl)

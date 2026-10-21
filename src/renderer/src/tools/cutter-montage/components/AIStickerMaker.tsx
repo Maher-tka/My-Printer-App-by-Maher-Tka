@@ -1,9 +1,21 @@
 import { useLanguage } from '@/i18n/useLanguage'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ActionButton } from '@/components/ui/action-button'
 import { ImagePlus, Trash2, ZoomIn, ZoomOut, Scan, Sparkles } from 'lucide-react'
 import { bytesToArrayBuffer } from '../lib/sourcePreview'
 import type { StickerSendOrder } from '../lib/stickerCutterAdapter'
+import {
+  DEFAULT_STICKER_SHEET_SETTINGS,
+  importStickerSheetPages,
+  separateStickerSheet,
+  stickerExportName,
+  stickerPngPdf,
+  resizeStickerVectorPdf,
+  cropStickerVectorPdf,
+  type StickerSheetSettings
+} from '../lib/stickerSheet'
+import { downloadBlob } from '../../booklet-montage/lib/download'
 import {
   paintStickerMaskStroke,
   processSticker,
@@ -29,6 +41,10 @@ interface QueueItem {
   widthMm: number
   quantity: number
   cutOffsetMm?: number
+  isSheet?: boolean
+  keepOriginal?: boolean
+  vectorArtwork?: StickerMakerResult['vectorArtwork']
+  pdfSheet?: { bytes: Uint8Array; pageNumber: number }
 }
 
 type StickerPreviewMode = 'original' | 'result' | 'mask' | 'cut'
@@ -66,6 +82,10 @@ export function AIStickerMaker({
   const [items, setItems] = useState<QueueItem[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [importMode, setImportMode] = useState<'individual' | 'sheet'>('individual')
+  const [sheetSettings, setSheetSettings] = useState(DEFAULT_STICKER_SHEET_SETTINGS)
+  const [exportScope, setExportScope] = useState<'selected' | 'all'>('all')
+  const [exportFormat, setExportFormat] = useState<'png' | 'pdf' | 'svg'>('png')
   const [backgroundMode, setBackgroundMode] = useState<StickerBackgroundMode>('auto')
   const [zoom, setZoom] = useState(1)
   const [previewBackground, setPreviewBackground] = useState('checker')
@@ -75,7 +95,7 @@ export function AIStickerMaker({
   const [brushMode, setBrushMode] = useState<StickerMaskBrushMode>('erase')
   const [brushSize, setBrushSize] = useState(32)
   const [brushHardness, setBrushHardness] = useState(0.8)
-  const [message, setMessage] = useState('Add JPG, PNG, or WebP artwork.')
+  const [message, setMessage] = useState('Add AI, PDF, PNG, JPG, or WebP artwork.')
   const [settings, setSettings] = useState<StickerMakerSettings>({
     offsetMm: 2,
     threshold: 128,
@@ -108,6 +128,7 @@ export function AIStickerMaker({
 
   useEffect(
     () => () => {
+      stopRef.current = true
       for (const item of queueRef.current) {
         if (item.preview) URL.revokeObjectURL(item.preview)
         URL.revokeObjectURL(item.originalPreview)
@@ -116,23 +137,251 @@ export function AIStickerMaker({
     []
   )
 
-  const addFiles = (files: File[]) => {
-    const accepted = files.filter((file) => /\.(png|jpe?g|webp)$/i.test(file.name))
-    const next = accepted.map((file) => ({
-      id: crypto.randomUUID(),
-      file,
-      status: 'Waiting' as const,
-      originalPreview: URL.createObjectURL(file),
-      undoMasks: [],
-      redoMasks: [],
-      widthMm: settings.widthMm,
-      quantity: 1
-    }))
-    setItems((current) => [...current, ...next])
-    if (!selected && next[0]) setSelected(next[0].id)
-    setMessage(
-      `${accepted.length} image(s) added.${accepted.length !== files.length ? ' Unsupported files were skipped.' : ' Choose a background option, then process your images.'}`
+  const addFiles = async (files: File[]) => {
+    if (busy || !files.length) return
+    setBusy(true)
+    stopRef.current = false
+    const errors: string[] = []
+    let added = 0
+    setProgress({ done: 0, total: files.length })
+    try {
+      for (const [index, source] of files.entries()) {
+        if (stopRef.current) break
+        setMessage(`${t('Import artwork')}: ${source.name}`)
+        try {
+          await importStickerSheetPages(
+            source,
+            ({ file, widthMm, vectorArtwork, pdfSheet }) => {
+              if (stopRef.current) return
+              if (items.length + added >= 500)
+                throw new Error(t('Import up to 500 stickers or pages at a time.'))
+              const item: QueueItem = {
+                id: crypto.randomUUID(),
+                file,
+                status: 'Waiting',
+                originalPreview: URL.createObjectURL(file),
+                undoMasks: [],
+                redoMasks: [],
+                widthMm: widthMm ?? settings.widthMm,
+                quantity: 1,
+                isSheet: !vectorArtwork && (widthMm !== undefined || importMode === 'sheet'),
+                keepOriginal: !!vectorArtwork,
+                vectorArtwork,
+                pdfSheet
+              }
+              setItems((current) => [...current, item])
+              setSelected((current) => current ?? item.id)
+              added++
+            },
+            () => stopRef.current
+          )
+        } catch (error) {
+          errors.push(`${source.name}: ${error instanceof Error ? error.message : String(error)}`)
+        }
+        setProgress({ done: index + 1, total: files.length })
+      }
+      setMessage(`${t('Artwork added:')} ${added}. ${errors.join(' ')}`)
+    } finally {
+      setBusy(false)
+      setProgress(null)
+    }
+  }
+
+  const splitSheets = async () => {
+    if (busy) return
+    const targets = items.some((item) => item.isSheet)
+      ? items.filter((item) => item.isSheet && item.status !== 'Sent')
+      : items.filter((item) => item.id === selected && item.status !== 'Sent')
+    if (!targets.length) return
+    setBusy(true)
+    stopRef.current = false
+    setProgress({ done: 0, total: targets.length })
+    let count = 0
+    let vectorBytes = 0
+    let replacedSheets = 0
+    const errors: string[] = []
+    try {
+      for (const [index, item] of targets.entries()) {
+        if (stopRef.current) break
+        setMessage(`${t('Separate stickers')}: ${item.file.name}`)
+        const next: QueueItem[] = []
+        let published = false
+        try {
+          const crops = await separateStickerSheet(item.file, sheetSettings)
+          if (stopRef.current) break
+          if (items.length + count + crops.length - replacedSheets - 1 > 500)
+            throw new Error(t('Import up to 500 stickers or pages at a time.'))
+          for (const { file, widthFraction, bounds } of crops) {
+            if (stopRef.current) break
+            const vectorArtwork = item.pdfSheet
+              ? {
+                  pdf: await cropStickerVectorPdf(
+                    item.pdfSheet.bytes,
+                    item.pdfSheet.pageNumber,
+                    bounds
+                  )
+                }
+              : undefined
+            vectorBytes += vectorArtwork?.pdf.length ?? 0
+            if (vectorBytes > 200 * 1024 * 1024)
+              throw new Error(
+                t('The separated vector artwork exceeds 200 MB. Import fewer groups at a time.')
+              )
+            next.push({
+              id: crypto.randomUUID(),
+              file,
+              status: 'Waiting',
+              originalPreview: URL.createObjectURL(file),
+              undoMasks: [],
+              redoMasks: [],
+              widthMm: Math.max(5, Math.min(920, item.widthMm * widthFraction)),
+              quantity: item.quantity,
+              keepOriginal: true,
+              vectorArtwork
+            })
+          }
+          if (stopRef.current) break
+          setItems((current) => current.flatMap((entry) => (entry.id === item.id ? next : [entry])))
+          setSelected((current) => (current === item.id ? (next[0]?.id ?? null) : current))
+          URL.revokeObjectURL(item.originalPreview)
+          if (item.preview) URL.revokeObjectURL(item.preview)
+          count += next.length
+          replacedSheets++
+          published = true
+        } catch (error) {
+          errors.push(
+            `${item.file.name}: ${error instanceof Error ? error.message : String(error)}`
+          )
+        } finally {
+          if (!published) for (const entry of next) URL.revokeObjectURL(entry.originalPreview)
+        }
+        setProgress({ done: index + 1, total: targets.length })
+      }
+      setMessage(
+        `${t('Stickers separated:')} ${count}. ${t('Review crops before processing or exporting.')} ${errors.join(' ')}`
+      )
+    } finally {
+      setBusy(false)
+      setProgress(null)
+    }
+  }
+
+  const exportStickers = async () => {
+    if (busy) return
+    const targets = items.filter(
+      (item) =>
+        !item.isSheet &&
+        item.status !== 'Processing' &&
+        (exportScope === 'all' || item.id === selected)
     )
+    if (!targets.length) return
+    setBusy(true)
+    setMessage(t('Exporting stickers…'))
+    try {
+      const files: Array<{ fileName: string; bytes: Uint8Array }> = []
+      for (const [index, item] of targets.entries()) {
+        const vector = item.result ? item.result.vectorArtwork : item.vectorArtwork
+        if (exportFormat === 'svg') {
+          if (!vector?.svg)
+            throw new Error(t('SVG export requires unedited vector stickers from AI.'))
+          const source = new DOMParser().parseFromString(
+            new TextDecoder().decode(vector.svg),
+            'image/svg+xml'
+          )
+          const svg = source.documentElement
+          const bitmap = await createImageBitmap(item.file)
+          try {
+            svg.setAttribute('width', `${item.widthMm}mm`)
+            svg.setAttribute('height', `${(item.widthMm * bitmap.height) / bitmap.width}mm`)
+          } finally {
+            bitmap.close()
+          }
+          files.push({
+            fileName: stickerExportName(item.file.name, index, 'svg'),
+            bytes: new TextEncoder().encode(new XMLSerializer().serializeToString(source))
+          })
+          continue
+        }
+        if (exportFormat === 'pdf' && vector) {
+          files.push({
+            fileName: stickerExportName(item.file.name, index, 'pdf'),
+            bytes: await resizeStickerVectorPdf(vector.pdf, item.widthMm)
+          })
+          continue
+        }
+        let bytes = item.result?.png ?? new Uint8Array(await item.file.arrayBuffer())
+        if (!item.result && item.file.type !== 'image/png') {
+          const bitmap = await createImageBitmap(item.file)
+          const canvas = document.createElement('canvas')
+          try {
+            canvas.width = bitmap.width
+            canvas.height = bitmap.height
+            const context = canvas.getContext('2d')
+            if (!context) throw new Error(t('Canvas processing is unavailable.'))
+            context.drawImage(bitmap, 0, 0)
+            const blob = await new Promise<Blob>((resolve, reject) =>
+              canvas.toBlob(
+                (blob) => (blob ? resolve(blob) : reject(new Error(t('PNG encoding failed.')))),
+                'image/png'
+              )
+            )
+            bytes = new Uint8Array(await blob.arrayBuffer())
+          } finally {
+            bitmap.close()
+            canvas.width = canvas.height = 0
+          }
+        }
+        if (exportFormat === 'pdf') {
+          const bitmap = await createImageBitmap(
+            new Blob([bytesToArrayBuffer(bytes)], { type: 'image/png' })
+          )
+          try {
+            bytes = await stickerPngPdf(
+              bytes,
+              item.widthMm,
+              (item.widthMm * bitmap.height) / bitmap.width
+            )
+          } finally {
+            bitmap.close()
+          }
+        }
+        files.push({ fileName: stickerExportName(item.file.name, index, exportFormat), bytes })
+      }
+      const desktop = window.printerApp
+      if (desktop?.selectOutputFolder && desktop.writeFilesToFolder) {
+        const folder = await desktop.selectOutputFolder()
+        if (folder.canceled) {
+          setMessage(t('Sticker export canceled.'))
+          return
+        }
+        if (!folder.ok || !folder.folderPath)
+          throw new Error(folder.error ?? t('Could not choose an output folder.'))
+        const output = `stickers-${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID().slice(0, 8)}`
+        const saved = await desktop.writeFilesToFolder(
+          folder.folderPath,
+          files.map((file) => ({ ...file, fileName: `${output}/${file.fileName}` }))
+        )
+        if (!saved.ok) throw new Error(saved.error ?? t('Could not export stickers.'))
+      } else {
+        for (const file of files)
+          downloadBlob(
+            new Blob([bytesToArrayBuffer(file.bytes)], {
+              type:
+                exportFormat === 'pdf'
+                  ? 'application/pdf'
+                  : exportFormat === 'svg'
+                    ? 'image/svg+xml'
+                    : 'image/png'
+            }),
+            file.fileName
+          )
+      }
+      setMessage(`${t('Stickers exported:')} ${files.length}`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
   }
 
   const removeItem = (id: string) => {
@@ -151,8 +400,8 @@ export function AIStickerMaker({
     if (busy) return
     const targets = items.filter((item) =>
       selectedOnly
-        ? item.id === selected && item.status !== 'Sent'
-        : item.status === 'Waiting' || item.status === 'Failed'
+        ? item.id === selected && item.status !== 'Sent' && !item.isSheet
+        : !item.isSheet && (item.status === 'Waiting' || item.status === 'Failed')
     )
     if (!targets.length) return
     setBusy(true)
@@ -170,12 +419,16 @@ export function AIStickerMaker({
       )
       setMessage(`Processing ${index + 1} / ${targets.length}: ${item.file.name}`)
       try {
-        const result = await processSticker(
+        const processed = await processSticker(
           item.file,
           { ...settings, widthMm: item.widthMm },
           setMessage,
-          backgroundMode
+          item.keepOriginal && backgroundMode === 'auto' ? 'keep' : backgroundMode
         )
+        const result = {
+          ...processed,
+          vectorArtwork: backgroundMode === 'remove' ? undefined : item.vectorArtwork
+        }
         const preview = URL.createObjectURL(
           new Blob([bytesToArrayBuffer(result.png)], { type: 'image/png' })
         )
@@ -506,9 +759,10 @@ export function AIStickerMaker({
     <section
       className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden rounded-lg border bg-card p-3"
       aria-label={t('AI Sticker Maker')}
+      aria-busy={busy}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <div className="mr-auto">
+        <div className="me-auto">
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <Sparkles className="h-5 w-5 text-primary" />
             {t('AI Sticker Maker')}
@@ -517,43 +771,104 @@ export function AIStickerMaker({
         <input
           ref={fileRef}
           type="file"
-          accept=".png,.jpg,.jpeg,.webp"
+          accept=".ai,.pdf,.png,.jpg,.jpeg,.webp"
           multiple
           className="hidden"
           onChange={(event) => {
-            addFiles(Array.from(event.target.files ?? []))
+            void addFiles(Array.from(event.target.files ?? []))
             event.target.value = ''
           }}
         />
-        <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}>
-          <ImagePlus className="mr-2 h-4 w-4" />
-          {t('Add images')}
-        </Button>
-        {progress && (
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label={t('Import artwork')}
+        >
+          <select
+            aria-label={t('Import mode')}
+            value={importMode}
+            disabled={busy}
+            onChange={(event) => setImportMode(event.target.value as typeof importMode)}
+            className="h-9 max-w-48 rounded-md border bg-background px-2 text-sm"
+          >
+            <option value="individual">{t('Individual artwork')}</option>
+            <option value="sheet">{t('Sticker sheets')}</option>
+          </select>
+          <ActionButton
+            action="import"
+            variant={items.length ? 'outline' : 'default'}
+            disabled={busy}
+            onClick={() => fileRef.current?.click()}
+          >
+            {t('Import artwork')}
+          </ActionButton>
+        </div>
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label={t('Process all')}
+        >
+          {progress && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                stopRef.current = true
+                setMessage('Stopping after the current image finishes…')
+              }}
+            >
+              {t('Stop after current')}
+            </Button>
+          )}
           <Button
             type="button"
-            variant="outline"
-            onClick={() => {
-              stopRef.current = true
-              setMessage('Stopping after the current image finishes…')
-            }}
+            disabled={
+              busy ||
+              !items.some(
+                (item) => !item.isSheet && (item.status === 'Waiting' || item.status === 'Failed')
+              )
+            }
+            variant={
+              items.some((item) => !item.isSheet && item.status === 'Waiting')
+                ? 'default'
+                : 'outline'
+            }
+            onClick={() => void processAll()}
           >
-            {t('Stop after current')}
+            {t(busy ? 'Processing…' : 'Process all')}
           </Button>
-        )}
-        <Button
-          type="button"
-          disabled={
-            busy || !items.some((item) => item.status === 'Waiting' || item.status === 'Failed')
-          }
-          onClick={() => void processAll()}
+        </div>
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label={t('Export stickers')}
         >
-          {busy ? 'Processing…' : 'Process all'}
-        </Button>
-        <Button type="button" disabled={!readyCount || busy} onClick={sendReady}>
-          {t('Send')} {readyCount || ''} {t('to Cutter')}
-          {readyCopies > 0 ? ` · ${readyCopies} ${readyCopies === 1 ? 'copy' : 'copies'}` : ''}
-        </Button>
+          <ActionButton
+            action="export"
+            disabled={
+              busy ||
+              !items.some(
+                (item) => !item.isSheet && (exportScope === 'all' || item.id === selected)
+              )
+            }
+            onClick={() => void exportStickers()}
+          >
+            {t('Export stickers')}
+          </ActionButton>
+          <Button
+            type="button"
+            variant={
+              readyCount && !items.some((item) => !item.isSheet && item.status === 'Waiting')
+                ? 'default'
+                : 'outline'
+            }
+            disabled={!readyCount || busy}
+            onClick={sendReady}
+          >
+            {t('Send')} {readyCount || ''} {t('to Cutter')}
+            {readyCopies > 0 ? ` · ${readyCopies} ${readyCopies === 1 ? 'copy' : 'copies'}` : ''}
+          </Button>
+        </div>
         <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>
           {t('Close')}
         </Button>
@@ -563,7 +878,7 @@ export function AIStickerMaker({
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault()
-          addFiles(Array.from(event.dataTransfer.files))
+          void addFiles(Array.from(event.dataTransfer.files))
         }}
       >
         <div className="w-44 shrink-0 space-y-2 overflow-y-auto rounded-md border bg-muted/20 p-2 xl:w-56">
@@ -575,7 +890,7 @@ export function AIStickerMaker({
           </div>
           {items.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              {t('Drop images here or choose Add images.')}
+              {t('Drop AI, PDF, or images here, or choose Import artwork.')}
             </p>
           )}
           {items.map((item) => (
@@ -600,7 +915,7 @@ export function AIStickerMaker({
                   <span
                     className={`block ${item.status === 'Ready' ? 'text-emerald-600 dark:text-emerald-400' : item.status === 'Failed' ? 'text-destructive' : 'text-muted-foreground'}`}
                   >
-                    {item.status}
+                    {item.isSheet ? t('Sticker sheet') : t(item.status)}
                   </span>
                   <span className="text-muted-foreground">
                     {item.widthMm} mm · {item.quantity} {item.quantity === 1 ? 'copy' : 'copies'}
@@ -772,12 +1087,7 @@ export function AIStickerMaker({
                     {t('Drop your artwork here')}
                   </span>
                   <span className="mt-2 block text-sm">
-                    {t('or click to browse JPG, PNG, and WebP images')}
-                  </span>
-                  <span className="mt-3 block text-xs text-slate-500">
-                    {t(
-                      'Transparent artwork is ready in seconds. Photos use local AI background removal.'
-                    )}
+                    {t('or click to browse AI, PDF, PNG, JPG, and WebP artwork')}
                   </span>
                 </button>
               )}
@@ -800,6 +1110,148 @@ export function AIStickerMaker({
         </div>
         <div className="w-48 shrink-0 space-y-3 overflow-y-auto pr-1 text-sm xl:w-56">
           <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+            <h3 className="font-medium">{t('Separate stickers')}</h3>
+            <label className="block">
+              {t('Separation mode')}
+              <select
+                value={sheetSettings.mode}
+                disabled={busy}
+                onChange={(event) =>
+                  setSheetSettings((current) => ({
+                    ...current,
+                    mode: event.target.value as StickerSheetSettings['mode']
+                  }))
+                }
+                className="mt-1 w-full rounded border bg-background p-2"
+              >
+                <option value="auto">{t('Automatic')}</option>
+                <option value="grid">{t('Grid')}</option>
+              </select>
+            </label>
+            {sheetSettings.mode === 'grid' ? (
+              <div className="grid grid-cols-2 gap-2">
+                {(['rows', 'columns'] as const).map((key) => (
+                  <label key={key}>
+                    {t(key === 'rows' ? 'Rows' : 'Columns')}
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      disabled={busy}
+                      value={sheetSettings[key]}
+                      onChange={(event) => {
+                        const value = Number(event.target.value)
+                        if (Number.isSafeInteger(value) && value >= 1 && value <= 50)
+                          setSheetSettings((current) => ({ ...current, [key]: value }))
+                      }}
+                      className="mt-1 w-full rounded border bg-background p-2"
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <>
+                <label className="block">
+                  {t('Join nearby parts (%)')}
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    step="0.1"
+                    value={sheetSettings.joinPercent}
+                    disabled={busy}
+                    onChange={(event) => {
+                      const value = Number(event.target.value)
+                      if (Number.isFinite(value) && value >= 0 && value <= 5)
+                        setSheetSettings((current) => ({ ...current, joinPercent: value }))
+                    }}
+                    className="mt-1 w-full rounded border bg-background p-2"
+                  />
+                </label>
+                <label className="block">
+                  {t('Crop padding (%)')}
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    step="0.1"
+                    value={sheetSettings.paddingPercent}
+                    disabled={busy}
+                    onChange={(event) => {
+                      const value = Number(event.target.value)
+                      if (Number.isFinite(value) && value >= 0 && value <= 5)
+                        setSheetSettings((current) => ({ ...current, paddingPercent: value }))
+                    }}
+                    className="mt-1 w-full rounded border bg-background p-2"
+                  />
+                </label>
+              </>
+            )}
+            <label className="flex items-start gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={sheetSettings.removeBackground}
+                disabled={busy}
+                onChange={(event) =>
+                  setSheetSettings((current) => ({
+                    ...current,
+                    removeBackground: event.target.checked
+                  }))
+                }
+              />
+              {t('Remove sheet background')}
+            </label>
+            <Button
+              type="button"
+              variant={items.some((item) => item.isSheet) ? 'default' : 'outline'}
+              className="w-full whitespace-normal"
+              disabled={
+                busy ||
+                !active ||
+                active.status === 'Sent' ||
+                (!!active.vectorArtwork && !items.some((item) => item.isSheet))
+              }
+              onClick={() => void splitSheets()}
+            >
+              {t(items.some((item) => item.isSheet) ? 'Separate all sheets' : 'Separate selected')}
+            </Button>
+          </div>
+          <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+            <h3 className="font-medium">{t('Export stickers')}</h3>
+            <label className="block">
+              {t('Export scope')}
+              <select
+                value={exportScope}
+                disabled={busy}
+                onChange={(event) => setExportScope(event.target.value as typeof exportScope)}
+                className="mt-1 w-full rounded border bg-background p-2"
+              >
+                <option value="all">{t('All stickers')}</option>
+                <option value="selected">{t('Selected sticker')}</option>
+              </select>
+            </label>
+            <label className="block">
+              {t('Export format')}
+              <select
+                value={exportFormat}
+                disabled={busy}
+                onChange={(event) => setExportFormat(event.target.value as typeof exportFormat)}
+                className="mt-1 w-full rounded border bg-background p-2"
+              >
+                <option value="png">PNG</option>
+                <option value="pdf">PDF</option>
+                <option value="svg">SVG</option>
+              </select>
+            </label>
+            {exportFormat === 'pdf' && (
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  'AI and PDF exports preserve vectors. Image exports retain their original pixels.'
+                )}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2 rounded-md border bg-muted/20 p-3">
             <label className="block font-medium" htmlFor="sticker-background-mode">
               {t('Background')}
             </label>
@@ -810,7 +1262,7 @@ export function AIStickerMaker({
               onChange={(event) => setBackgroundMode(event.target.value as StickerBackgroundMode)}
               className="w-full rounded border bg-background p-2"
             >
-              <option value="auto">{t('Auto detect')}</option>
+              <option value="auto">{t('Automatic')}</option>
               <option value="remove">{t('Remove with AI')}</option>
               <option value="keep">{t('Keep original')}</option>
             </select>
@@ -827,7 +1279,7 @@ export function AIStickerMaker({
                 size="sm"
                 variant="outline"
                 className="w-full"
-                disabled={busy || active.status === 'Sent'}
+                disabled={busy || active.status === 'Sent' || active.isSheet}
                 onClick={() => void processAll(true)}
               >
                 {active.result ? 'Reprocess selected' : 'Process selected'}
@@ -1038,7 +1490,7 @@ export function AIStickerMaker({
         />
       )}
       <p role="status" className="text-xs text-muted-foreground">
-        {message}
+        {t(message)}
       </p>
     </section>
   )

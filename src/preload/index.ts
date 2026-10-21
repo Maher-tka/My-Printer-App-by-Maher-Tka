@@ -168,6 +168,10 @@ contextBridge.exposeInMainWorld('printerApp', {
     )
   },
   runtime: {
+    importStickerVectors: (
+      request: import('../shared/sticker-vector-import.js').StickerVectorImportRequest
+    ): Promise<import('../shared/sticker-vector-import.js').StickerVectorImportResult> =>
+      ipcRenderer.invoke('runtime:import-sticker-vectors', request),
     importEpsArtwork: (
       request: import('../shared/eps-import.js').EpsImportRequest
     ): Promise<import('../shared/eps-import.js').EpsImportResult> =>

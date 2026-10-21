@@ -1,7 +1,9 @@
 import { printerPreferencesMessages } from './printerPreferencesMessages'
+import { stickerSheetMessages } from './stickerSheetMessages'
 // App-owned English copy is the stable key. Missing translations fall back to English.
 export const messages: Record<string, { fr: string; ar: string }> = {
   ...printerPreferencesMessages,
+  ...stickerSheetMessages,
   'Card size': { fr: 'Format de la carte', ar: 'حجم البطاقة' },
   'Sheet preset': { fr: 'Disposition de la feuille', ar: 'إعداد الورقة' },
   'Fill sheet': { fr: 'Remplir la feuille', ar: 'ملء الورقة' },
