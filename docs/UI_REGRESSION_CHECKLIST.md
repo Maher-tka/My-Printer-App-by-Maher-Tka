@@ -1947,13 +1947,18 @@ screenshots/layout proofs/driver validation; `output/fast-print-id/` and
 - [x] Detection tests cover plain gray/transparency, white artwork, thin outer
       frames, nearby lettering, blank grid cells, limits and export filenames.
 - [x] Typecheck, build, sticker, Cutter, project, export and i18n checks passed.
-- [ ] Actual new app-to-Illustrator COM import remains pending: Illustrator was
-      not running on the main PC. The workshop independently confirmed ten native
-      groups in `Mintech Stickers1.ai` and exported those groups, but that inspection
-      does not validate the new app integration.
-- [ ] Full application-shell visual check and workshop verification of a released
-      build remain pending. Component proofs used isolated hidden windows. No hardware
-      printing or subscriber publication was performed.
+- [x] Published v0.2.19-rc.1, verified installer SHA512 against update metadata and
+      SHA256 against release checksums, and installed it on the workshop PC with
+      exit code 0. The installed executable reports FileVersion 0.2.19-rc.1. The
+      original `Mintech Stickers1.ai` SHA256 remained
+      `cca96b4cede12578bc6d7e99e216266869900a89f3da53c53d05550a3477bc36`.
+- [ ] Actual new app-to-Illustrator import, standalone exports and copy-layout
+      verification remain pending: workshop coordinate input was unavailable and
+      window capture timed out. Automatic approval review rejected a debugging-port
+      fallback; it was not retried. Independent Illustrator exports confirmed ten
+      native groups but do not count as new app integration proof.
+- [ ] Full application-shell visual verification remains pending. Component proofs
+      used isolated hidden windows. No hardware print jobs were submitted.
 
 Artifacts: `output/sticker-feature-proof/report.json`, size/theme screenshots,
 `workshop-contact.png` and ten `workshop-sticker-*.png` crop proofs.

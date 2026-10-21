@@ -35,5 +35,4 @@ vector artwork. Original files are preserved. A stopped operation finishes its
 current work before stopping. A timed-out Illustrator job retains its temporary
 files and prevents a competing retry until the native operation has ended.
 
-Validation is recorded in `docs/UI_REGRESSION_CHECKLIST.md`. These changes are
-local until included in a subscriber release.
+Available in v0.2.19. Validation is recorded in `docs/UI_REGRESSION_CHECKLIST.md`.
