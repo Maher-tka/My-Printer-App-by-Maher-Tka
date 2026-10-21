@@ -1962,3 +1962,9 @@ screenshots/layout proofs/driver validation; `output/fast-print-id/` and
 
 Artifacts: `output/sticker-feature-proof/report.json`, size/theme screenshots,
 `workshop-contact.png` and ten `workshop-sticker-*.png` crop proofs.
+
+Stable v0.2.19 was published and verified on 2026-10-21. Windows workflow
+`39617208921` succeeded. Downloaded installer SHA512 matches `latest.yml`, and
+installer/blockmap/metadata SHA256 checks passed. See
+`RELEASE_0.2.19_VERIFICATION.md` for publication evidence and the remaining native
+integration and antivirus-review limitations.
