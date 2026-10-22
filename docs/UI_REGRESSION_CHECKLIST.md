@@ -2210,3 +2210,9 @@ Artifacts: `output/fast-print-direction/results.json`,
 `output/fast-print-stocks-ui/results.json`, and
 `output/presets-final-proof.log`. Repeat with `test:fast-print:direction`,
 `test:fast-print:combined` and `test:fast-print:presets`.
+
+Stable v0.2.21 was published and verified on 2026-10-22. Windows workflow
+`39833632320` succeeded. Downloaded installer version/SHA512, updater size,
+Setup/blockmap/metadata SHA256 and Portable API digest checks passed. See
+`RELEASE_0.2.21_VERIFICATION.md` for publication evidence and remaining device
+validation.
