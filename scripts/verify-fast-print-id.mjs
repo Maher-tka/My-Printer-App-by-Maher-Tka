@@ -352,24 +352,8 @@ if (typeof electron === 'string') {
               proofs: []
             }
             const profiles = [
-              {
-                name: 'color',
-                color: true,
-                heightMm: 56,
-                turns: 0,
-                spacing: 'even',
-                marginMm: 5,
-                gapMm: 5
-              },
-              {
-                name: 'mono',
-                color: false,
-                heightMm: 56,
-                turns: 0,
-                spacing: 'even',
-                marginMm: 5,
-                gapMm: 5
-              }
+              { ...DEFAULT_ID_SHEET_SETTINGS, name: 'color', color: true, turns: 0 },
+              { ...DEFAULT_ID_SHEET_SETTINGS, name: 'mono', color: false, turns: 0 }
             ]
             if (variant.name === 'original')
               profiles.push(

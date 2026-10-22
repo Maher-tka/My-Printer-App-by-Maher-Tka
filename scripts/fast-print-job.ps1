@@ -2,6 +2,7 @@ param([Parameter(Mandatory=$true)][string]$Manifest, [switch]$ValidateOnly, [str
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 Add-Type -AssemblyName System.Drawing
+. (Join-Path $PSScriptRoot 'fast-print-profiles.ps1')
 $job = Get-Content -LiteralPath $Manifest -Raw -Encoding UTF8 | ConvertFrom-Json
 $document = [System.Drawing.Printing.PrintDocument]::new()
 $isDocument = $job.preset.mode -eq 'document'
@@ -19,7 +20,7 @@ try {
   }
   $paper = if ($isDocument -and $profile) { $document.DefaultPageSettings.PaperSize } else { $document.PrinterSettings.PaperSizes | Where-Object { $_.Kind.ToString() -eq $job.preset.paper } | Select-Object -First 1 }
   if (!$paper) { throw "The printer does not support $($job.preset.paper). Choose another paper size." }
-  if ($job.preset.color -and !$document.PrinterSettings.SupportsColor) { throw 'This printer does not support color.' }
+  if ($job.preset.color -and ![FastPrintDriver]::SupportsColor($document.PrinterSettings)) { throw 'This printer does not support color.' }
   if (@($job.sheets).Count -eq 0) { throw 'The document has no printable sheets.' }
   foreach ($sheet in $job.sheets) {
     if (!(Test-Path -LiteralPath $sheet -PathType Leaf)) { throw 'A prepared print sheet is missing.' }
@@ -45,7 +46,8 @@ try {
   }
   $document.DefaultPageSettings.PaperSize = $paper
   $document.DefaultPageSettings.Color = [bool]$job.preset.color
-  $landscape = ($job.preset.pagesPerSheet -in @(2,6,8) -or [bool]$job.preset.landscape -or ($profile -and $profile.landscape))
+  $orientationChoice = if ($null -ne $job.preset.landscape) { [bool]$job.preset.landscape } else { $profile -and $profile.landscape }
+  $landscape = ($job.preset.pagesPerSheet -in @(2,6,8) -or $orientationChoice)
   if ($isPolaroid) { $landscape = $job.preset.mode -eq 'polaroid-8' }
   if ($isDocument) {
     if (!$profile -or @($job.sheetSizes).Count -ne @($job.sheets).Count) { throw 'A saved driver preset and physical page sizes are required.' }
@@ -70,6 +72,20 @@ try {
       throw 'The driver could not keep the selected paper, color, orientation, or tray. Reconfigure this preset before printing.'
     }
   }
+  if (!$isDocument) {
+    $expectedPaper=if($job.preset.paper -eq 'A3'){@(297,420)}else{@(210,297)}
+    $actualPaper=@(($document.DefaultPageSettings.PaperSize.Width*0.254),($document.DefaultPageSettings.PaperSize.Height*0.254)) | Sort-Object
+    if([Math]::Abs($actualPaper[0]-$expectedPaper[0]) -gt 1 -or [Math]::Abs($actualPaper[1]-$expectedPaper[1]) -gt 1){throw 'The driver returned the wrong physical paper size. Refresh its paper settings before printing.'}
+  }
+  $perPageOrientation = $isDocument -or ([bool]$job.preset.autoOrientation -and $job.preset.pagesPerSheet -eq 1 -and !$isId -and !$isPolaroid)
+  if ($perPageOrientation) {
+    if (@($job.sheetSizes).Count -ne @($job.sheets).Count) { throw 'Physical sizes are missing for the prepared pages.' }
+    foreach($size in $job.sheetSizes){
+      $actual=@([double]$size.widthMm,[double]$size.heightMm) | Sort-Object
+      $expected=@(($paper.Width*0.254),($paper.Height*0.254)) | Sort-Object
+      if([Math]::Abs($actual[0]-$expected[0]) -gt 1 -or [Math]::Abs($actual[1]-$expected[1]) -gt 1){throw 'A prepared page does not match the selected paper size.'}
+    }
+  }
   if ($isId -and $document.PrinterSettings.CanDuplex -and
       $document.PrinterSettings.Duplex -ne $(if ($job.preset.duplex) { [Drawing.Printing.Duplex]::Vertical } else { [Drawing.Printing.Duplex]::Simplex })) {
     throw 'The driver could not keep the selected duplex mode. Reconfigure this preset before printing.'
@@ -83,7 +99,7 @@ try {
     exit 0
   }
   $script:sheetIndex = 0
-  if ($isDocument) {
+  if ($perPageOrientation) {
     $document.add_QueryPageSettings({ param($sender,$eventArgs)
       $size=$job.sheetSizes[$script:sheetIndex]
       $eventArgs.PageSettings.Landscape=(($size.widthMm -gt $size.heightMm) -ne ($paper.Width -gt $paper.Height))
@@ -97,30 +113,19 @@ try {
     param($sender, $eventArgs)
     $image = [System.Drawing.Image]::FromFile($job.sheets[$script:sheetIndex])
     try {
-      if ($isDocument) {
+      if ($perPageOrientation) {
         $size=$job.sheetSizes[$script:sheetIndex]
-        $eventArgs.Graphics.DrawImage($image,[single](-$eventArgs.PageSettings.HardMarginX),[single](-$eventArgs.PageSettings.HardMarginY),[single]($size.widthMm*100/25.4),[single]($size.heightMm*100/25.4))
-      } elseif ($isId -or $isPolaroid) {
-        # ID and Polaroid rasters already include full-page physical placement.
-        # Fitting to margins would shrink the measured artwork.
+        $bounds=[FastPrintDriver]::RasterPageBounds($size.widthMm,$size.heightMm,$eventArgs.PageSettings.HardMarginX,$eventArgs.PageSettings.HardMarginY)
+        $eventArgs.Graphics.DrawImage($image,$bounds)
+      } else {
+        # Every composed raster already includes its layout margins. Draw at the
+        # selected physical size; stale A4 PrintableArea/MarginBounds must never
+        # shrink or offset a prepared A3 page a second time.
         $paperWidthMm = if ($job.preset.paper -eq 'A3') { 297 } else { 210 }
         $paperHeightMm = if ($job.preset.paper -eq 'A3') { 420 } else { 297 }
         if ($eventArgs.PageSettings.Landscape) { $swap = $paperWidthMm; $paperWidthMm = $paperHeightMm; $paperHeightMm = $swap }
-        $eventArgs.Graphics.DrawImage($image, [single](-$eventArgs.PageSettings.HardMarginX), [single](-$eventArgs.PageSettings.HardMarginY), [single]($paperWidthMm*100/25.4), [single]($paperHeightMm*100/25.4))
-      } else {
-      # Fit inside both the requested margins and the driver's printable region.
-      $printable = $eventArgs.PageSettings.PrintableArea
-      $left = [Math]::Max($eventArgs.MarginBounds.Left, $printable.Left)
-      $top = [Math]::Max($eventArgs.MarginBounds.Top, $printable.Top)
-      $right = [Math]::Min($eventArgs.MarginBounds.Right, $printable.Right)
-      $bottom = [Math]::Min($eventArgs.MarginBounds.Bottom, $printable.Bottom)
-      $scale = [Math]::Min(($right-$left)/$image.Width, ($bottom-$top)/$image.Height)
-      if ($scale -le 0) { throw 'The printer reported an invalid printable area.' }
-      $width = $image.Width*$scale
-      $height = $image.Height*$scale
-      $x = $left + (($right-$left)-$width)/2 - $eventArgs.PageSettings.HardMarginX
-      $y = $top + (($bottom-$top)-$height)/2 - $eventArgs.PageSettings.HardMarginY
-      $eventArgs.Graphics.DrawImage($image, [single]$x, [single]$y, [single]$width, [single]$height)
+        $bounds=[FastPrintDriver]::RasterPageBounds($paperWidthMm,$paperHeightMm,$eventArgs.PageSettings.HardMarginX,$eventArgs.PageSettings.HardMarginY)
+        $eventArgs.Graphics.DrawImage($image,$bounds)
       }
     } finally { $image.Dispose() }
     $script:sheetIndex++

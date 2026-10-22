@@ -1,9 +1,11 @@
 import {
   fastPrintLayout,
+  fastPrintSourceLayout,
   fastPrintCell,
   type FastPrintSource,
   type FastPrintBatchSource,
-  type FastPrintSubmitOptions
+  type FastPrintSubmitOptions,
+  type IdPrinterSelection
 } from '../../../shared/fast-print'
 import { FAST_PRINT_MAX_PAGES, needsBatchBlankBack } from '../../../shared/fast-print-batch'
 import type { IdPrintDraft } from '../../../shared/fast-print-id'
@@ -25,6 +27,7 @@ declare global {
       finish(error?: string): Promise<void>
       back(draft: IdPrintDraft): Promise<void>
       saveIdDraft(draft: IdPrintDraft): Promise<void>
+      selectIdPrinter(printer: string, draft: IdPrintDraft): Promise<IdPrinterSelection>
     }
   }
 }
@@ -59,7 +62,7 @@ async function run(): Promise<void> {
       'preset',
       `${preset.printer}${preset.profileName ? ` · ${preset.profileName}` : ''} · ${preset.paper} · ${preset.color ? 'Color' : 'Black & white'} · ${preset.pagesPerSheet} per sheet`
     )
-    const layout = fastPrintLayout(preset)
+    let layout = fastPrintLayout(preset)
     canvas.width = layout.width
     canvas.height = layout.height
     const context = canvas.getContext('2d')!
@@ -94,11 +97,34 @@ async function run(): Promise<void> {
         // Reset n-up at each document boundary; never fill a document's final sheet
         // with pages from the next document.
         for (let first = 0; first < pageCount; first += preset.pagesPerSheet) {
+          if (preset.autoOrientation && preset.pagesPerSheet === 1) {
+            if (imageGroup && first > 0) {
+              image?.close()
+              const next = await window.fastPrint.file(documentIndex + first)
+              image = await createImageBitmap(new Blob([new Uint8Array(next.bytes)]))
+            }
+            const sourcePage = pdf ? await pdf.getPage(first + 1) : undefined
+            const turns =
+              preset.sourceRotations?.[imageGroup ? documentIndex + first : documentIndex] ?? 0
+            const view = sourcePage?.getViewport({
+              scale: 1,
+              rotation: (sourcePage.rotate + turns * 90) % 360
+            })
+            const width = view?.width ?? (turns % 2 ? image!.height : image!.width)
+            const height = view?.height ?? (turns % 2 ? image!.width : image!.height)
+            layout = fastPrintSourceLayout(preset, width, height)
+            canvas.width = layout.width
+            canvas.height = layout.height
+          }
           context.filter = 'none'
           context.fillStyle = '#ffffff'
           context.fillRect(0, 0, canvas.width, canvas.height)
           for (let slot = 0; slot < preset.pagesPerSheet && first + slot < pageCount; slot++) {
-            if (imageGroup && first + slot > 0) {
+            if (
+              imageGroup &&
+              first + slot > 0 &&
+              !(preset.autoOrientation && preset.pagesPerSheet === 1)
+            ) {
               image?.close()
               const next = await window.fastPrint.file(documentIndex + first + slot)
               image = await createImageBitmap(new Blob([new Uint8Array(next.bytes)]))
@@ -181,7 +207,10 @@ async function run(): Promise<void> {
             }
             context.restore()
           }
-          await window.fastPrint.sheet(canvas.toDataURL('image/png'))
+          await window.fastPrint.sheet(canvas.toDataURL('image/png'), {
+            widthMm: (layout.width / 200) * 25.4,
+            heightMm: (layout.height / 200) * 25.4
+          })
           totalSheets++
           const count = Math.floor(first / preset.pagesPerSheet) + 1
           progress.value = documentIndex + ((groupEnd - documentIndex + 1) * count) / documentSheets
@@ -196,7 +225,10 @@ async function run(): Promise<void> {
           context.filter = 'none'
           context.fillStyle = '#ffffff'
           context.fillRect(0, 0, canvas.width, canvas.height)
-          await window.fastPrint.sheet(canvas.toDataURL('image/png'))
+          await window.fastPrint.sheet(canvas.toDataURL('image/png'), {
+            widthMm: (layout.width / 200) * 25.4,
+            heightMm: (layout.height / 200) * 25.4
+          })
           totalSheets++
         }
         documentIndex = groupEnd

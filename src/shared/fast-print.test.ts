@@ -4,6 +4,7 @@ import {
   FAST_PRINT_LAYOUTS,
   fastPrintLayout,
   fastPrintCell,
+  fastPrintSourceLayout,
   validateFastPrintPreset
 } from './fast-print.js'
 import { polaroidLayout, polaroidCoverCrop } from './fast-print-polaroid.js'
@@ -59,6 +60,33 @@ for (const invalid of [
   assert.throws(() => validateFastPrintPreset(invalid), /Invalid Fast Print/)
 }
 console.log('Fast Print preset and layout tests passed.')
+for (const paper of ['A4', 'A3'] as const) {
+  const original = {
+    printer: 'Test',
+    paper,
+    color: true,
+    pagesPerSheet: 1 as const,
+    autoOrientation: true,
+    landscape: false
+  }
+  assert.ok(
+    fastPrintSourceLayout(original, 900, 500).width >
+      fastPrintSourceLayout(original, 900, 500).height
+  )
+  assert.ok(
+    fastPrintSourceLayout(original, 500, 900).width <
+      fastPrintSourceLayout(original, 500, 900).height
+  )
+  assert.ok(
+    fastPrintSourceLayout({ ...original, autoOrientation: false }, 900, 500).width <
+      fastPrintSourceLayout({ ...original, autoOrientation: false }, 900, 500).height
+  )
+  assert.equal(validateFastPrintPreset(original).autoOrientation, true)
+  assert.throws(
+    () => validateFastPrintPreset({ ...original, autoOrientation: 'yes' }),
+    /Invalid Fast Print/
+  )
+}
 
 for (const mode of ['polaroid-8', 'polaroid-9'] as const) {
   const layout = polaroidLayout(mode)

@@ -3,6 +3,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { loadIdDraft, saveIdDraft, validateIdDraft } from './fast-print-id-draft.js'
+import { LastFastPrintPrinter } from './fast-print-last-printer.js'
 import {
   fullIdCrop,
   DEFAULT_ID_SHEET_SETTINGS,
@@ -11,6 +12,20 @@ import {
 
 const folder = await mkdtemp(join(tmpdir(), 'id-draft-test-'))
 try {
+  const remembered = new LastFastPrintPrinter(join(folder, 'settings', 'last-printer.json'))
+  assert.equal(await remembered.read(), undefined)
+  await remembered.save('Workshop printer')
+  assert.equal(await new LastFastPrintPrinter(remembered.path).read(), 'Workshop printer')
+  await assert.rejects(remembered.save('bad\nprinter'), /Invalid printer/)
+  assert.equal(await remembered.read(), 'Workshop printer')
+  await remembered.save('Second printer')
+  assert.equal(await new LastFastPrintPrinter(remembered.path).read(), 'Second printer')
+  await writeFile(remembered.path, 'incomplete optional preference')
+  assert.equal(
+    await remembered.read(),
+    undefined,
+    'Corrupt recent-printer data must allow fallback'
+  )
   const original = join(folder, 'original.jpg')
   await writeFile(original, 'original artwork remains unchanged')
   const draft: IdPrintDraft = {

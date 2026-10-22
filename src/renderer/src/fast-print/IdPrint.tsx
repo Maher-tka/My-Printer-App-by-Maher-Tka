@@ -39,6 +39,11 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
   const [active, setActive] = useState(0)
   const [color, setColor] = useState(batch.preset.color)
   const [duplex, setDuplex] = useState(batch.canDuplex === true && batch.preset.duplex === true)
+  const [printerSelection, setPrinterSelection] = useState({
+    preset: batch.preset,
+    canColor: batch.canColor === true,
+    canDuplex: batch.canDuplex === true
+  })
   const [busy, setBusy] = useState(true)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
@@ -50,7 +55,7 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
   const input = useRef<HTMLInputElement>(null)
   const stage = useRef<HTMLDivElement>(null)
   const drag = useRef<number | null>(null)
-  const preset: FastPrintPreset = { ...batch.preset, color, duplex }
+  const preset: FastPrintPreset = { ...printerSelection.preset, color, duplex }
   const names = ['Front', 'Back']
   const corners = [
     'Top left corner',
@@ -366,6 +371,22 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
     }
   }
 
+  async function selectPrinter(name: string) {
+    if (busy || sent || name === preset.printer) return
+    setBusy(true)
+    setError('')
+    try {
+      const selection = await window.fastPrint.selectIdPrinter(name, reviewDraft())
+      setPrinterSelection(selection)
+      setColor(selection.preset.color)
+      setDuplex(selection.preset.duplex === true)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <main
       className="mx-auto flex min-h-screen max-w-[1600px] flex-col gap-4 p-4 text-foreground"
@@ -373,7 +394,7 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
     >
       <ToolHeader
         title="ID card — 9 cm"
-        projectName={`${batch.preset.printer} · ${batch.preset.paper}${batch.preset.profileName ? ` · ${batch.preset.profileName}` : ''}`}
+        projectName={`${preset.printer} · ${preset.paper}${preset.profileName ? ` · ${preset.profileName}` : ''}`}
         onBack={() => void returnToSettings()}
         backDisabled={busy || sent}
         backLabel={batch.canReturnToSettings ? 'Printer settings' : 'Cancel'}
@@ -403,6 +424,31 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
         onChange={(event) => void addFiles(event.target.files)}
       />
       <div className="flex flex-wrap items-center gap-4 rounded-[var(--ui-radius-lg)] border bg-card p-4">
+        {batch.printers && (
+          <label
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-2"
+            htmlFor="id-printer"
+          >
+            {t('Printer')}
+            <select
+              id="id-printer"
+              className="h-9 min-w-0 max-w-full rounded-[var(--ui-radius-md)] border bg-background px-3 sm:max-w-80"
+              value={preset.printer}
+              disabled={busy || sent}
+              onChange={(event) => void selectPrinter(event.target.value)}
+            >
+              {batch.printers.map((device) => (
+                <option
+                  key={device.name}
+                  value={device.name}
+                  disabled={!device.papers.some((paper) => paper === 'A4' || paper === 'A3')}
+                >
+                  {device.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div className="flex flex-wrap gap-2" role="group" aria-label={t('Color mode')}>
           {[false, true].map((value) => (
             <Button
@@ -410,7 +456,7 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
               type="button"
               variant={color === value ? 'selected' : 'outline'}
               aria-pressed={color === value}
-              disabled={busy || sent || (value && batch.canColor !== true)}
+              disabled={busy || sent || (value && !printerSelection.canColor)}
               onClick={() => setColor(value)}
             >
               {t(value ? 'Color' : 'Black & white')}
@@ -425,7 +471,7 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
             disabled={busy || sent}
             onChange={(event) => setDuplex(event.target.value === 'auto')}
           >
-            {batch.canDuplex && <option value="auto">{t('Automatic duplex')}</option>}
+            {printerSelection.canDuplex && <option value="auto">{t('Automatic duplex')}</option>}
             <option value="manual">{t('Two pages (manual duplex)')}</option>
           </select>
         </label>
@@ -799,7 +845,7 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
           {!duplex && (
             <p className="mt-4 text-xs text-muted-foreground">
               {t(
-                /pdf|xps/i.test(batch.preset.printer)
+                /pdf|xps/i.test(preset.printer)
                   ? 'Saves front and back as two pages in one document.'
                   : 'Front prints first. Reinsert the same sheet when prompted to print the back.'
               )}

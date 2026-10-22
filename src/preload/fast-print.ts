@@ -10,5 +10,7 @@ contextBridge.exposeInMainWorld('fastPrint', {
   submit: (options?: FastPrintSubmitOptions) => ipcRenderer.invoke('fast-print:submit', options),
   finish: (error?: string) => ipcRenderer.invoke('fast-print:finish', error),
   back: (draft: IdPrintDraft) => ipcRenderer.invoke('fast-print:back', draft),
-  saveIdDraft: (draft: IdPrintDraft) => ipcRenderer.invoke('fast-print:save-id', draft)
+  saveIdDraft: (draft: IdPrintDraft) => ipcRenderer.invoke('fast-print:save-id', draft),
+  selectIdPrinter: (printer: string, draft: IdPrintDraft) =>
+    ipcRenderer.invoke('fast-print:id-printer', printer, draft)
 })

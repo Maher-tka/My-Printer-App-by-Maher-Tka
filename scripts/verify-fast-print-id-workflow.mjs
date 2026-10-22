@@ -101,6 +101,12 @@ async function exerciseEditor(stage, expected, labels) {
     )
   }
   if (stage === 1) {
+    check(
+      document.getElementById('id-sheet-spacing').value === 'compact' &&
+        document.getElementById('id-sheet-margin').value === '10' &&
+        document.getElementById('id-sheet-gap').value === '10',
+      'New ID reviews must default to Compact with 10 mm margins and spacing'
+    )
     button(labels.back).click()
     await pause()
     const copies = document.getElementById('id-copies-per-sheet')
@@ -214,6 +220,109 @@ async function exerciseEditor(stage, expected, labels) {
         return { x, y }
       })
   }
+  const printer = document.getElementById('id-printer')
+  check(
+    printer && printer.value === batch.preset.printer,
+    'ID printer selector is missing or stale'
+  )
+  const switchTo = async (name) => {
+    const sheetControls = [
+      'id-card-size',
+      'id-copies-per-sheet',
+      'id-sheet-spacing',
+      'id-sheet-margin',
+      'id-sheet-gap'
+    ].map((id) => document.getElementById(id).value)
+    printer.value = name
+    printer.dispatchEvent(new Event('change', { bubbles: true }))
+    await pause()
+    await wait(() => !printer.disabled, 'ID printer switch did not finish')
+    check(printer.value === name, 'The selected ID printer did not update')
+    check(
+      document.querySelector('[data-tool-header]').textContent.includes(name),
+      'Header kept the old printer'
+    )
+    check(
+      JSON.stringify(sheetControls) ===
+        JSON.stringify(
+          [
+            'id-card-size',
+            'id-copies-per-sheet',
+            'id-sheet-spacing',
+            'id-sheet-margin',
+            'id-sheet-gap'
+          ].map((id) => document.getElementById(id).value)
+        ),
+      'Printer switching lost sheet settings'
+    )
+    check(
+      cropSection.querySelector('select').value === snapshot.sourceId,
+      'Printer switching changed the source'
+    )
+    const crop = cropSection
+      .querySelector('polygon')
+      .getAttribute('points')
+      .split(' ')
+      .map((value) => {
+        const [x, y] = value.split(',').map(Number)
+        return { x, y }
+      })
+    check(
+      JSON.stringify(crop) === JSON.stringify(snapshot.crop),
+      'Printer switching changed crop corners'
+    )
+  }
+  if (stage === 1) {
+    const alternate = batch.printers.find(
+      (device) =>
+        device.name !== batch.preset.printer &&
+        device.papers.includes('A4') &&
+        device.papers.includes('A3')
+    )
+    check(alternate, 'Install a second A4/A3 printer for the ID switch test')
+    await switchTo(alternate.name)
+    check(
+      button(labels.color).disabled === !alternate.color,
+      'Color control must match the selected printer capability'
+    )
+    check(
+      (await window.fastPrint.source()).preset.profileId === undefined,
+      'Another printer’s driver snapshot leaked into this selection'
+    )
+    await switchTo(batch.preset.printer)
+    check(!button(labels.color).disabled, 'Color was not re-enabled for a color printer')
+    check(
+      (await window.fastPrint.source()).preset.profileId === batch.preset.profileId,
+      'Returning to the original printer lost its captured driver settings'
+    )
+    await switchTo(alternate.name)
+  } else if (stage === 3) {
+    await switchTo('Microsoft Print to PDF')
+  }
+  const current = await window.fastPrint.source()
+  if (stage > 1) check(current.preset.paper === 'A3', 'Switching printers lost the paper size')
+  const review = {
+    version: 1,
+    sources: batch.idDraft?.sources ?? [],
+    sides: batch.idDraft?.sides ?? [null, null],
+    active: 0,
+    color: false,
+    duplex: false
+  }
+  if (stage > 1) {
+    let rejected = false
+    try {
+      await window.fastPrint.selectIdPrinter('missing-printer-for-regression', review)
+    } catch {
+      rejected = true
+    }
+    check(rejected, 'An unknown printer was accepted')
+    check(
+      (await window.fastPrint.source()).preset.printer === current.preset.printer,
+      'A failed switch replaced the printer'
+    )
+  }
+  snapshot.printer = printer.value
   check(document.documentElement.scrollWidth <= innerWidth + 1, 'ID editor overflows horizontally')
   check(
     !document.querySelector('[data-tool-header] button[aria-describedby]').disabled,
@@ -289,9 +398,24 @@ async function screenshotMatchesSource(png) {
 
 const reports = []
 for (const [language, theme, performance, labels] of [
-  ['en', 'dark', 'balanced', { front: 'Front', back: 'Back', rotate: 'Rotate 180°' }],
-  ['fr', 'light', 'balanced', { front: 'Recto', back: 'Verso', rotate: 'Tourner à 180°' }],
-  ['ar', 'dark', 'low-end', { front: 'الأمام', back: 'الخلف', rotate: 'تدوير 180°' }]
+  [
+    'en',
+    'dark',
+    'balanced',
+    { front: 'Front', back: 'Back', rotate: 'Rotate 180°', color: 'Color' }
+  ],
+  [
+    'fr',
+    'light',
+    'balanced',
+    { front: 'Recto', back: 'Verso', rotate: 'Tourner à 180°', color: 'Couleur' }
+  ],
+  [
+    'ar',
+    'dark',
+    'low-end',
+    { front: 'الأمام', back: 'الخلف', rotate: 'تدوير 180°', color: 'اللون' }
+  ]
 ]) {
   if (
     process.env.ID_WORKFLOW_LANGUAGES &&
@@ -393,6 +517,7 @@ await import(${JSON.stringify(pathToFileURL(join(root, 'out/main/index.js')).hre
   assert.equal(native.headless, true)
   assert.equal(native.roundTrips, 2)
   assert.equal(native.failedPrinterPreservedReview, true)
+  assert.equal(native.lastPrinterRestored, true)
   for (const stage of [1, 2]) {
     const saved = JSON.parse(await readFile(join(folder, 'expected-' + stage + '.json'), 'utf8'))
     const visible = JSON.parse(await readFile(join(folder, 'ui-state-' + stage + '.json'), 'utf8'))
@@ -405,7 +530,7 @@ await import(${JSON.stringify(pathToFileURL(join(root, 'out/main/index.js')).hre
     assert.equal(saved.idsPerSheet, stage === 1 ? 2 : 6)
     assert.equal(saved.sheetSettings.heightMm, stage === 1 ? 56 : 60)
     assert.equal(saved.sheetSettings.marginMm, stage === 1 ? 7 : 10)
-    assert.equal(saved.sheetSettings.spacing, stage === 1 ? 'even' : 'compact')
+    assert.equal(saved.sheetSettings.spacing, 'compact')
     assert.equal(saved.sides[1].sheetTurns, stage === 1 ? 2 : 0)
     assert.deepEqual(
       saved.sides[saved.active].crop,
@@ -425,6 +550,11 @@ await import(${JSON.stringify(pathToFileURL(join(root, 'out/main/index.js')).hre
   assert.equal(driver.paper, 'A3')
   assert.equal(driver.copies, 5)
   assert.equal(driver.outputColor, false)
+  assert.equal(driver.printer, 'Microsoft Print to PDF')
+  assert.equal(
+    JSON.parse(await readFile(join(folder, 'settings/last-printer.json'), 'utf8')).printer,
+    driver.printer
+  )
   const job = JSON.parse(await readFile(join(folder, 'proof/job.json'), 'utf8'))
   assert.equal(job.idsPerSheet, 6)
   const draft = JSON.parse(await readFile(join(folder, 'expected-2.json'), 'utf8'))
@@ -486,6 +616,8 @@ await import(${JSON.stringify(pathToFileURL(join(root, 'out/main/index.js')).hre
     theme,
     performance,
     roundTrips: 2,
+    printerSwitchPreservedEdits: true,
+    lastPrinterRestored: true,
     addedArtworkPreserved: true,
     keyboardCropPreserved: true,
     paper: 'A3',

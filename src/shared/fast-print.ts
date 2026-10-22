@@ -18,6 +18,7 @@ export interface FastPrintPreset {
   profileId?: string
   profileName?: string
   landscape?: boolean
+  autoOrientation?: boolean
   duplex?: boolean
   mode?: 'id-card' | 'polaroid-8' | 'polaroid-9' | 'document'
   paperWidthMm?: number
@@ -30,6 +31,7 @@ export interface FastPrintPreset {
 }
 
 export interface FastPrintBatchSource {
+  printers?: FastPrintPrinter[]
   canReturnToSettings?: boolean
   idDraft?: IdPrintDraft
   previewOnly?: boolean
@@ -39,6 +41,19 @@ export interface FastPrintBatchSource {
   preset: FastPrintPreset
   canDuplex?: boolean
   canColor?: boolean
+}
+
+export interface FastPrintPrinter {
+  name: string
+  papers: string[]
+  color: boolean
+  duplex?: boolean
+}
+
+export interface IdPrinterSelection {
+  preset: FastPrintPreset
+  canColor: boolean
+  canDuplex: boolean
 }
 
 export interface FastPrintSource {
@@ -68,6 +83,7 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     (p.profileId !== undefined &&
       (typeof p.profileId !== 'string' || !/^[a-f0-9]{32}$/.test(p.profileId))) ||
     (p.landscape !== undefined && typeof p.landscape !== 'boolean') ||
+    (p.autoOrientation !== undefined && typeof p.autoOrientation !== 'boolean') ||
     (p.duplex !== undefined && typeof p.duplex !== 'boolean') ||
     (p.fitToFrame !== undefined && typeof p.fitToFrame !== 'boolean') ||
     (p.combineImages !== undefined && typeof p.combineImages !== 'boolean') ||
@@ -93,6 +109,7 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     pagesPerSheet: p.pagesPerSheet!,
     ...(p.profileId ? { profileId: p.profileId } : {}),
     ...(p.landscape !== undefined ? { landscape: p.landscape } : {}),
+    ...(p.autoOrientation !== undefined ? { autoOrientation: p.autoOrientation } : {}),
     ...(p.duplex !== undefined ? { duplex: p.duplex } : {}),
     ...(p.fitToFrame !== undefined ? { fitToFrame: p.fitToFrame } : {}),
     ...(p.combineImages !== undefined ? { combineImages: p.combineImages } : {}),
@@ -123,6 +140,21 @@ export function fastPrintLayout(preset: FastPrintPreset, dpi = 200) {
     cellWidth: (width - 2 * margin - gap * (columns - 1)) / columns,
     cellHeight: (height - 2 * margin - gap * (rows - 1)) / rows
   }
+}
+
+/** Full-page original orientation follows the visible PDF/image dimensions. */
+export function fastPrintSourceLayout(
+  preset: FastPrintPreset,
+  width: number,
+  height: number,
+  dpi = 200
+) {
+  return fastPrintLayout(
+    preset.autoOrientation && preset.pagesPerSheet === 1 && !preset.mode
+      ? { ...preset, landscape: width > height }
+      : preset,
+    dpi
+  )
 }
 
 /** Keep cell sizes fixed while centering an incomplete final sheet and row. */

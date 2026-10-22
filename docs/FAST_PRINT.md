@@ -15,6 +15,50 @@ select light, dark or the Windows app appearance without changing OS settings.
 There is one Print action, with native Enter/Escape behavior and arrow-key layout selection.
 The language follows the Windows UI culture (English, French and Arabic labels).
 
+Fast Print remembers the last selected printer, including a selection followed by
+Cancel, and selects it on the next launch while it remains installed. A stale
+printer hint from the Explorer command does not replace that choice. Printer
+snapshots are used only for the device that owns them; Windows defaults are not
+changed.
+
+General Fast Print defaults to **Original orientation** and **Fit to frame off**.
+For Full page, each image or PDF page retains its visible portrait/landscape
+orientation, including EXIF and PDF rotation metadata. Mixed-orientation PDFs
+carry a physical size for each prepared page through print submission. Explicit
+Portrait/Landscape and rotation commands remain available. N-up grids and
+Polaroid retain their template orientations, and ID cards remain horizontal.
+
+Prepared A4/A3 pages are drawn once at their selected physical dimensions,
+compensating for the hardware origin. They are not fitted a second time into
+`PrintableArea`: the Epson WF-C879R driver can return portrait-shaped printable
+bounds for landscape A3, which previously restricted the artwork to an A4-like
+area on the side of the sheet. Existing layout margins remain in the artwork.
+The driver handoff rejects a mismatched physical paper size.
+
+The file selector shows each document's page count before its filename. The
+summary above Print shows the number of selected files and **total source pages**,
+plus output pages/sheets for the current layout and the sheet total across
+copies. PDFs keep separate final sheets; consecutive images share n-up sheets.
+Duplex estimates include blank backs between documents. ID mode shows source
+totals here; its output is configured in ID verification.
+
+Page counts use PDF metadata (or the prepared Word PDF), without rendering every
+page. While loading, the summary says **Counting pages…**; a missing or unreadable
+document reports unavailable totals. Changed files invalidate cached counts when
+the preview refreshes. This is the selected job's estimate, not print-queue or
+historical usage accounting. Hidden local checks: `npm run test:fast-print:counts`.
+
+Color availability uses Windows' `DC_COLORDEVICE` capability query in the native
+dialog, printer list and final print validation. The older .NET Framework
+`SupportsColor` result can incorrectly hide Color and disable 8 PIC / 9 PIC for
+a color driver. A genuine monochrome result stays monochrome; a query failure
+falls back to the legacy capability. The selected job's current black-and-white
+setting is not used to decide whether the device can print color. See Microsoft's
+[color-capability guidance](https://learn.microsoft.com/en-us/windows-hardware/drivers/print/identifying-a-printer-s-color-capability).
+
+For a read-only Windows PowerShell diagnostic (no UI or print jobs), run
+`powershell -NoProfile -STA -File scripts/diagnose-fast-print-color.ps1`.
+
 General 1/2/4/6/8/9/12/16-up presets use equal-size slots, 5 mm outside margins
 and 3 mm cutting gaps. **Options… > Margins** offers 5/7/10/15/20 mm;
 **Cutting gap** offers 3/5/8/10 mm. Incomplete final sheets and rows are centered
@@ -28,9 +72,8 @@ the current slot dimensions and selected file's rotation. Native preview and
 print preparation use matching margins, gaps, positions and rotations.
 
 **Fit to frame** fills equal-size photo slots by cropping to their edges. It
-starts enabled for photo-only selections. Turn it off to keep each complete
-picture within its slot. PDF/Word and mixed selections start with full-page fit;
-turning on Fit to frame explicitly enables cropping for those pages too.
+starts off so the complete source remains visible. Turning it on explicitly
+enables cropping for photos or PDF/Word pages.
 
 **8 PIC** and **9 PIC** sit directly below the printer selector. They require an
 A4/color-capable printer and lock those settings automatically. Polaroid previews
@@ -100,10 +143,27 @@ When no reliable card is found, the full photo remains available with a
 corner-adjustment prompt. The crop stage adapts to the window height; corner
 handles remain keyboard-adjustable.
 
+The ID verification window includes a **Printer** selector. Switching keeps the
+selected sources, crop corners, flips, card size, copy count, margins and spacing.
+Color and automatic-duplex choices follow the selected printer's capabilities;
+unsupported color falls back to black and white, and unsupported duplex to manual.
+For a newly selected printer, paper stays the same when supported; otherwise
+A4/A3 is selected and previewed.
+Each printer retains its own session snapshot; a newly selected printer uses its
+driver defaults. **Printer settings** still returns to the native options window
+with the selected printer and saved ID edits for tray/finishing changes.
+
+ID verification shares Fast Print's remembered printer, stored separately from
+app preferences and Windows defaults. An unavailable remembered printer falls
+back to the launch hint or app/Windows default.
+
 **Sheet preset** offers common 1/2/4/6/8 counts, additional counts up to 24,
 and **Fill sheet**. Fill sheet uses the maximum fitting count and updates after
 paper, size, margin, gap or sheet-rotation changes. Fixed counts never shrink the
 cards; an overfull selection reports the issue and disables Print.
+
+New ID reviews default to **Compact**, **10 mm margins** and a **10 mm cutting
+gap**. Restoring an existing review keeps its saved choices.
 
 **Even spacing** distributes cards symmetrically across the usable page, with
 at least the selected margins and cutting gap. **Compact** keeps the group close
@@ -468,8 +528,9 @@ Recapture a preset after changing drivers. Live acquisition of the printer's tra
 contents is vendor-specific and is not automatically invoked on every print job.
 
 Saved presets retain duplex and vendor options; per-job color, paper orientation,
-explicit copy requests, and fitted page placement are merged through the owning driver. Two-up
-uses landscape; one-up/four-up keep the captured orientation. Generic presets keep
+explicit copy requests and physical page placement are merged through the owning driver. Two-, six-
+and eight-up use landscape. Full page defaults to source orientation; other grids
+use the selected sheet orientation. Generic presets keep
 the original simplex behavior. Fast Print cannot verify that the physical stock in
 a tray matches a preset name.
 

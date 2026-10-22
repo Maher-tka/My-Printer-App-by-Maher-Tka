@@ -1,5 +1,194 @@
 # UI regression checklist
 
+## 2026-10-22 — v0.2.20 release validation
+
+- Prepared in an isolated checkout based on stable v0.2.19, containing the
+  completed Fast Print changes only. Uncommitted sticker-review work remains in
+  the primary checkout. Package and both lockfile versions match 0.2.20.
+- Full `npm run release:check` succeeded: formatting, both TypeScript projects,
+  automated suites, Storybook and production Electron build. The optional
+  local hardcover source fixture was absent in this checkout and reported its
+  existing skip; no hardcover behavior changed.
+- Native Explorer extensions/dialog built. Driver/profile and physical A3
+  bounds checks passed. Final production-build source and counts workflows
+  passed in English/French/Arabic, including mixed page orientations, A4/A3,
+  last-printer restoration, all n-up counts, copies and changed/missing PDFs.
+- ID review survived printer changes and both native settings round trips in
+  English dark, French light and Arabic RTL dark/low-end. Final grayscale A3
+  proofs contained six IDs per side and five sheet copies. Both Polaroid modes
+  passed every num216p original, reviewed/print equality and blank final slots;
+  signed-out production printing stayed blocked. Original hashes were unchanged.
+- No hardware print jobs or main-PC desktop input were sent. Physical Epson and
+  press output, trays/finishing and live high-DPI checks remain pending.
+
+Artifacts in the primary workspace: `output/release-0.2.20-{check,native,driver,page-size,source,counts,id-workflow,polaroid}.log`,
+`output/release-0.2.20-id-workflow`, `output/release-0.2.20-polaroid`.
+
+## 2026-10-22 — Last printer, original orientation and full A3 output
+
+- Successful printer selection now atomically records the last device even when
+  the dialog is canceled. A launch hint cannot override an installed remembered
+  queue, and a snapshot from another queue is not applied. A fresh hidden native
+  window restored the last selected alternate printer in all three language runs.
+- General full-page jobs default to Original orientation with Fit to frame off.
+  Per-page sizes carry image EXIF/PDF rotation through native preview, compositor
+  and QueryPageSettings. Explicit portrait/landscape and manual rotations remain;
+  n-up templates, Polaroid orientation and horizontal ID output stay separate.
+- Read-only workshop diagnostics on EPSON WF-C879R confirmed that A3 survives
+  DEVMODE normalization (2970×4200 tenths of a millimeter), but PrintableArea
+  remains portrait-shaped for landscape A3. The old second fit intersected that
+  narrow area with landscape bounds. All composed rasters now draw at the chosen
+  physical page size with hardware-origin compensation, using the layout margins
+  already in the artwork. Physical paper dimensions are validated before printing.
+  Epson defaults remained byte-identical; no hardware jobs were sent.
+- Hidden source tests passed in English dark, French light and Arabic RTL dark:
+  landscape/portrait images, EXIF-rotated JPEG and a four-page PDF with intrinsic
+  rotations all matched native/worker placement on A4 and A3. Seven source pages
+  produced seven output pages and 14 sheets at two copies. Counts checks also
+  passed all eight n-up templates, mixed document boundaries, copy changes and
+  changed/missing inputs. Native captures at 1366×768, 1920×1080, 1600×900 and
+  820×640 reuse the existing controls, shared theme and single Print action;
+  inspected representative captures with the new Original choice and totals.
+- A virtual Microsoft Print to PDF proof (no hardware) produced all seven pages
+  at 297×420 mm with the expected per-page orientation. Rendered every page with
+  Poppler and inspected the contact sheet. Separate GDI bitmap proofs verified
+  full A3 portrait/landscape coverage and hard-margin compensation.
+- All eight ID TEST originals and 88 rotated/off-center cases passed, with
+  unchanged hashes and 90 mm widths/paired centers. Both Polaroid modes passed
+  all 15 num216p photos, matching preview/print artwork, pagination and blank
+  slots with unchanged originals. Typecheck, Fast Print unit checks, native and
+  production builds passed. Physical Epson output, duplex/trays and live high-DPI,
+  keyboard/low-end-PC interaction remain pending. Changes are local/unpublished.
+
+Artifacts: `output/fast-print-source`, `output/source-verification.log`,
+`output/source-spool.log`, `output/source-counts.log`, `output/source-id-real`,
+`output/source-polaroid`, `output/source-unit.log`,
+`output/fast-print-2026-10-22-types.log`, `output/source-production-build.log`.
+
+## 2026-10-21 — Fast Print document page totals
+
+- Added each file's source-page count before its filename and a dedicated job
+  summary above Print. It distinguishes total source pages from output pages,
+  sheets per copy and sheets across copies. Ordinary n-up estimates preserve PDF
+  boundaries, group adjacent images and include inter-document duplex blanks.
+  Polaroid uses its continuous 8/9-page grouping; native ID mode shows input
+  totals while its output remains configured in ID verification.
+- Counts use cached PDF metadata/prepared Word PDFs, not a render of every page.
+  Startup stays asynchronous. Loading/unavailable states replace stale totals;
+  changed and missing inputs clear cached filename captions. Closing stops the
+  count scan before it starts another document. Existing status errors, shared
+  native controls/tokens, keyboard navigation and the single Print remain.
+- Hidden counts checks passed in English dark, French light and Arabic RTL dark
+  at 1366×768, 1920×1080, 1600×900 and 820×640. Inspected representative captures;
+  the summary's measured text fits. Verified all 1/2/4/6/8/9/12/16-up layouts,
+  one/three copies, duplex arithmetic, preserved file selection, page labels,
+  a PDF changing from five to seven pages and an unavailable/missing PDF.
+- Mixed five-/three-/one-page PDFs plus images correctly totaled 12 source
+  pages. Actual renderer/driver ValidateOnly output matched the six output pages
+  shown for four-up, with three copies (18 total sheets). Typecheck, Fast Print
+  unit checks and native compilation passed. No hardware jobs or desktop input
+  were sent. Physical duplex, live keyboard/high-DPI and low-end-PC interaction
+  remain pending; no Electron renderer appearance or motion changed.
+- Local update only; subscriber publication has not been requested for this change.
+
+Artifacts: `output/fast-print-counts`, `output/fast-print-counts.log`,
+`output/counts-types.log`, `output/counts-unit.log`.
+
+## 2026-10-21 — Color capability and Konica Polaroid availability
+
+- Reproduced the .NET Framework color-capability bug locally: three color PDF
+  queues reported `SupportsColor=false` in Windows PowerShell 5.1, while native
+  `DC_COLORDEVICE` returned 1. The same queues reported true under PowerShell 7.
+  Native dialog discovery, the printer list and final print validation now share
+  the driver's dedicated color-capability query. Monochrome (0) stays false;
+  query failure falls back to the legacy flag. No model-name override or dmColor
+  inference is used.
+- Workshop read-only inspection confirmed installed version 0.2.18.0 and queues
+  `KONICA MINOLTA C4080Series PS` / `KONICA MINOLTA`, both using the C4080Series PS
+  driver. Both reported native color capability 1 and Color in PrintCapabilities.
+  A follow-up in Windows PowerShell 5.1 / CLR 4.0 / x64 / STA reproduced
+  `SupportsColor=false` both before and after applying the current DEVMODE on
+  disposable documents. Native queries with both null and real ports returned 1
+  for both presses and Epson controls. The SHARP control exposed the opposite
+  Framework error (true), while native capability correctly returned 0 with both
+  port arguments. No workshop source,
+  defaults, saved settings or print jobs were changed; patched-build installation
+  and physical press output remain pending.
+- Local driver/profile tests passed for Microsoft PDF and Wondershare PDF,
+  including color-policy edge cases and unchanged printer defaults. Production
+  Polaroid proofs used the formerly misclassified Wondershare queue: all 15
+  num216p photos in 8 PIC and 9 PIC, plus exact eight/nine selections, passed.
+  Color, A4, simplex, orientation, all-photo coverage, blank final slots and
+  byte-identical reviewed/print artwork passed. Original hashes stayed unchanged.
+  Signed-out production print denial remained intact. An initial attempt against
+  development output did not exercise that production gate; the complete final
+  run used a production build and passed.
+- Inspected native Color / 8 PIC / 9 PIC captures at 1366×768 and 1920×1080 in
+  English dark, French light and Arabic RTL light, plus the four full-sheet
+  proof contact images. Additional captures cover 1600×900 and 820×640.
+  Existing UI geometry, command placement and styles are unchanged. ID printer
+  round trips passed in English/French/Arabic, including low-end mode and keyboard
+  crop edits, with the corrected device list. Typecheck, Fast Print/printing unit
+  checks, native compilation and production/development builds passed. Restored
+  development output and updated the local native helper. No hardware jobs were
+  sent. Live keyboard/high-DPI checks and physical finishing remain pending.
+- Local fix only; not yet published to subscribers or installed on the workshop PC.
+
+Artifacts: `output/color-detection.json`, `output/color-workshop-verification.json`, `output/color-id-workflow`,
+`output/color-polaroid-final`, `output/color-{types,unit,print}.log`,
+`output/color-{production,development}-build.log`.
+
+## 2026-10-21 — Switch and remember printers in ID verification
+
+- Added a labeled Printer selector using existing control tokens. Changing it
+  retains source choices, crop corners, horizontal flips, shared card size,
+  repeat count, margins and spacing. Color/duplex controls follow the selected
+  device. The header and actual print manifest use that same printer.
+- Hidden workflows passed in English dark, French light and Arabic RTL
+  dark/low-end. Switched between installed Microsoft PDF and a PDF driver then
+  reported as monochrome, checked independent driver snapshots, preserved native sheet copies,
+  returned twice through printer settings and restored the choice in a fresh
+  native window. Unknown-printer rejection retained the selected device and
+  missing-profile validation retained ID edits. Final ValidateOnly output used
+  the changed printer, A3, six IDs per side, five sheet copies and grayscale.
+- Captured 1366×768, 1920×1080 and 1600×900 without horizontal overflow; inspected
+  representative English/French/Arabic captures. Keyboard crop changes survived.
+  One primary Print, shared header/actions, existing labels and control styles
+  remain in place; no additional subtitles or duplicate commands were added.
+- All eight ID TEST originals and their rotations/off-center variants passed
+  88 cases with unchanged original hashes. Inspected the print-proof contact
+  sheet and final A3 sheet; 90 mm widths and matching front/back centers passed.
+  Typecheck, Fast Print unit checks, development build and native compile passed.
+- Last-printer data is saved atomically, separately from explicit app settings
+  and Windows defaults. Restart persistence and invalid-data fallback were
+  checked locally. The development helper was updated without desktop control.
+  No hardware jobs were sent. Physical printer switching, duplex/finishing and
+  live high-DPI checks remain pending. Changes are local and unpublished.
+
+Artifacts: `output/id-printer-workflow`, `output/id-printer-real`,
+`output/id-printer-{types,unit,build,workflow,real}.log` and the final English
+round-trip check in `output/id-printer-final` / `output/id-printer-final.log`.
+
+## 2026-10-21 — ID defaults: Compact, 10 mm margins and gap
+
+- New reviews now select Compact with 10 mm margins and a 10 mm cutting gap.
+  Existing reviews retain saved settings. The editor workflow asserts the actual
+  default controls before exercising saved overrides and printer-setting returns.
+- Typecheck, Fast Print unit checks and the development build passed. All eight
+  ID TEST originals and their rotated/off-center variants passed 88 real-photo
+  cases, including 90 mm width and matching front/back centers. Inspected the
+  full-sheet proof and the contact sheet of all 88 color outputs; originals were
+  unchanged and no hardware print jobs were sent.
+- English dark, French light and Arabic RTL dark/low-end workflows passed,
+  including keyboard corner adjustment and saved settings. Captured 1366×768,
+  1600×900 and 1920×1080 layouts; inspected representative English/French/Arabic
+  captures. Shared components, action placement and UI structure are unchanged.
+  Physical workshop output and live high-DPI interaction remain pending.
+- Local change only; not included in the already published v0.2.18 release.
+
+Artifacts: `output/id-defaults-real`, `output/id-defaults-workflow` and
+`output/id-defaults-{types,unit,build,real,workflow}.log`.
+
 ## 2026-10-21 — v0.2.18 published and verified
 
 - Stable tag `v0.2.18` points to release commit `d4bfa07`. The tagged

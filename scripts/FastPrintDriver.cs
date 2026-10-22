@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Drawing;
 using System.Drawing.Printing;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -15,6 +16,8 @@ public static class FastPrintDriver {
   [DllImport("winspool.drv")] static extern bool ClosePrinter(IntPtr printer);
   [DllImport("winspool.drv", CharSet=CharSet.Unicode)]
   static extern int DocumentProperties(IntPtr owner, IntPtr printer, string name, IntPtr output, IntPtr input, int mode);
+  [DllImport("winspool.drv", CharSet=CharSet.Unicode, EntryPoint="DeviceCapabilitiesW")]
+  static extern int DeviceCapabilities(string printerName, string port, short capability, IntPtr output, IntPtr devmode);
   [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
   static extern bool GetPrinterDriver(IntPtr printer, string environment, uint level, IntPtr buffer, uint size, out uint needed);
   [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr GlobalAlloc(uint flags, UIntPtr bytes);
@@ -35,6 +38,21 @@ public static class FastPrintDriver {
     IntPtr printer;
     if (!OpenPrinter(name, out printer, IntPtr.Zero)) throw new Win32Exception(Marshal.GetLastWin32Error());
     return printer;
+  }
+  // .NET Framework's SupportsColor can misclassify a color driver. DC_COLORDEVICE
+  // is the driver's explicit device capability, independent of the current job's
+  // dmColor/default color choice. Keep unknown/error distinct from monochrome.
+  public static bool ColorCapabilitySupported(int colorDevice, bool legacyColor) {
+    return colorDevice == 1 || (colorDevice < 0 && legacyColor);
+  }
+  public static bool SupportsColor(PrinterSettings settings) {
+    if (settings == null || !settings.IsValid) return false;
+    int colorDevice = DeviceCapabilities(settings.PrinterName, null, 32, IntPtr.Zero, IntPtr.Zero);
+    return ColorCapabilitySupported(colorDevice, colorDevice < 0 && settings.SupportsColor);
+  }
+  public static RectangleF RasterPageBounds(double widthMm,double heightMm,float hardMarginX,float hardMarginY){
+    if(double.IsNaN(widthMm)||double.IsNaN(heightMm)||double.IsInfinity(widthMm)||double.IsInfinity(heightMm)||widthMm<=0||heightMm<=0||widthMm>10000||heightMm>10000)throw new ArgumentException("Invalid physical page size.");
+    return new RectangleF(-hardMarginX,-hardMarginY,(float)(widthMm*100/25.4),(float)(heightMm*100/25.4));
   }
   public static void Validate(byte[] bytes) {
     if (bytes == null || bytes.Length < 102 || bytes.Length > 16 * 1024 * 1024) throw new ArgumentException("Invalid driver settings buffer.");

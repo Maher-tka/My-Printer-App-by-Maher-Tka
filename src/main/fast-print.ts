@@ -2,7 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { nativePrintSession, parseNativePrintRequest } from '../shared/fast-print-native.js'
-import { loadIdDraft, saveIdDraft } from './fast-print-id-draft.js'
+import { loadIdDraft, saveIdDraft, validateIdDraft } from './fast-print-id-draft.js'
+import { LastFastPrintPrinter } from './fast-print-last-printer.js'
 import { loadReviewedPolaroid } from './fast-print-polaroid-cache.js'
 import { MAX_IDS_PER_SHEET } from '../shared/fast-print-id.js'
 import {
@@ -12,7 +13,7 @@ import {
   type FastPrintSavedStock
 } from '../shared/fast-print-menu.js'
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile, copyFile } from 'node:fs/promises'
-import { basename, extname, join, resolve } from 'node:path'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import { runPrinterScript as powershell } from './printer-driver-runtime.js'
 import { printerPreferencesStore } from './printer-preferences.js'
 import { fastPrintOptionId, preferredProfile } from '../shared/printer-preferences.js'
@@ -20,6 +21,7 @@ import { assertOnlineProductionAccess } from './online-account.js'
 import {
   validateFastPrintPreset,
   type FastPrintPreset,
+  type FastPrintPrinter,
   type FastPrintSubmitOptions
 } from '../shared/fast-print.js'
 import {
@@ -279,12 +281,9 @@ async function runJob(
   const jobName = files.length === 1 ? basename(files[0]) : `Fast Print - ${files.length} documents`
   const printers = jobOptions.previewDirectory
     ? [{ name: preset.printer, papers: ['A4'], color: true, duplex: false }]
-    : (JSON.parse(await powershell('fast-print-menu.ps1', ['-Action', 'List'])) as Array<{
-        name: string
-        papers: string[]
-        color: boolean
-        duplex?: boolean
-      }>)
+    : (JSON.parse(
+        await powershell('fast-print-menu.ps1', ['-Action', 'List'])
+      ) as FastPrintPrinter[])
   if (!preset.profileId) {
     const preferences = await printerPreferencesStore().read()
     const stocks = JSON.parse(
@@ -322,7 +321,8 @@ async function runJob(
     }
     preset = {
       ...preset,
-      landscape: profile.landscape,
+      landscape:
+        preset.mode === 'document' ? profile.landscape : (preset.landscape ?? profile.landscape),
       profileName: profile.name,
       duplex: ['Vertical', 'Horizontal'].includes(profile.duplex),
       ...(preset.mode === 'document'
@@ -334,7 +334,7 @@ async function runJob(
         : {})
     }
   }
-  const printer = printers.find((item) => item.name === preset.printer)
+  let printer = printers.find((item) => item.name === preset.printer)
   if (preset.mode === 'polaroid-8' || preset.mode === 'polaroid-9') {
     preset = { ...preset, landscape: preset.mode === 'polaroid-8', duplex: false }
   }
@@ -347,6 +347,14 @@ async function runJob(
   if (preset.color && !printer.color) throw new Error('This printer does not support color.')
   if (preset.mode === 'id-card' && !preset.profileId)
     preset = { ...preset, duplex: printer.duplex === true }
+  const settingsRoot =
+    !app.isPackaged &&
+    process.env.FAST_PRINT_NONINTERACTIVE === '1' &&
+    process.env.FAST_PRINT_TEST_SETTINGS
+      ? process.env.FAST_PRINT_TEST_SETTINGS
+      : dirname(printerPreferencesStore().path)
+  const lastPrinter = new LastFastPrintPrinter(join(settingsRoot, 'last-printer.json'))
+  const printerPresets = new Map([[preset.printer, preset]])
   if (jobOptions.previewDirectory) await mkdir(jobOptions.previewDirectory, { recursive: true })
   const reviewed = jobOptions.preparedPolaroid
     ? await loadReviewedPolaroid(
@@ -445,12 +453,13 @@ async function runJob(
         extension: extname(filePath).toLowerCase()
       })),
       preset,
+      ...(preset.mode === 'id-card' ? { printers } : {}),
       canReturnToSettings,
       ...(idDraft ? { idDraft } : {}),
       previewOnly: Boolean(jobOptions.previewDirectory),
       ...(reviewed ? { preparedPolaroid: { photos: reviewed.photos, sheets: sheets.length } } : {}),
-      canDuplex: printer.duplex === true,
-      canColor: printer.color
+      canDuplex: printer!.duplex === true,
+      canColor: printer!.color
     }
   })
   ipcMain.handle('fast-print:file', async (event, index: number) => {
@@ -471,6 +480,7 @@ async function runJob(
       authorize(event)
       if (
         submitted ||
+        returningToSettings ||
         acceptingSheet ||
         typeof png !== 'string' ||
         png.length > 64 * 1024 * 1024 ||
@@ -478,7 +488,7 @@ async function runJob(
       )
         throw new Error('Invalid prepared sheet.')
       if (
-        preset.mode === 'document' &&
+        (preset.mode === 'document' || pageSize !== undefined || preset.autoOrientation === true) &&
         (!pageSize ||
           !Number.isFinite(pageSize.widthMm) ||
           !Number.isFinite(pageSize.heightMm) ||
@@ -511,7 +521,7 @@ async function runJob(
     if (!jobOptions.previewDirectory)
       await assertOnlineProductionAccess('paid-tools', jobOptions.toolId)
     authorize(event)
-    if (submitted || acceptingSheet || !sheets.length)
+    if (submitted || returningToSettings || acceptingSheet || !sheets.length)
       throw new Error('No complete print job is ready.')
     if (preset.mode === 'id-card') {
       if (
@@ -521,8 +531,8 @@ async function runJob(
         typeof options.duplex !== 'boolean'
       )
         throw new Error('Prepare both ID sides before printing.')
-      if (options.color && !printer.color) throw new Error('This printer does not support color.')
-      if (options.duplex && !printer.duplex)
+      if (options.color && !printer!.color) throw new Error('This printer does not support color.')
+      if (options.duplex && !printer!.duplex)
         throw new Error('This printer does not support automatic duplex.')
       if (
         options.idsPerSheet !== undefined &&
@@ -547,6 +557,7 @@ async function runJob(
     clearTimeout(watchdog)
     const manifest = join(temp, 'job.json')
     try {
+      if (!jobOptions.previewDirectory) await lastPrinter.save(preset.printer)
       await writeFile(
         manifest,
         JSON.stringify({
@@ -627,7 +638,15 @@ async function runJob(
     try {
       await saveIdDraft(jobOptions.profileDirectory, files, draft)
       authorize(event)
-      await writeFile(join(jobOptions.profileDirectory, 'id-returned.json'), '{"version":1}')
+      await writeFile(
+        join(jobOptions.profileDirectory, 'id-returned.json'),
+        JSON.stringify({
+          version: 1,
+          printer: preset.printer,
+          paper: preset.paper,
+          landscape: preset.landscape === true
+        })
+      )
       returnedToSettings = true
       done = true
       finish()
@@ -654,6 +673,89 @@ async function runJob(
       returningToSettings = false
     }
   })
+  ipcMain.handle('fast-print:id-printer', async (event, name: unknown, value: unknown) => {
+    authorize(event)
+    if (
+      preset.mode !== 'id-card' ||
+      submitted ||
+      acceptingSheet ||
+      sheets.length ||
+      returningToSettings
+    )
+      throw new Error('Cannot change printers during print submission.')
+    const draft = validateIdDraft(value)
+    if (
+      typeof name !== 'string' ||
+      !printers.some(
+        (item) =>
+          item.name === name && item.papers.some((paper) => paper === 'A4' || paper === 'A3')
+      )
+    )
+      throw new Error('The selected printer is no longer available.')
+    returningToSettings = true
+    try {
+      if (jobOptions.profileDirectory) await saveIdDraft(jobOptions.profileDirectory, files, draft)
+      const available = JSON.parse(
+        await powershell('fast-print-menu.ps1', ['-Action', 'List'])
+      ) as FastPrintPrinter[]
+      const device = available.find((item) => item.name === name)
+      if (!device || !device.papers.some((paper) => paper === 'A4' || paper === 'A3'))
+        throw new Error('The selected printer is no longer available.')
+      let next: FastPrintPreset = printerPresets.get(name) ?? {
+        printer: name,
+        paper: device.papers.includes(preset.paper)
+          ? preset.paper
+          : device.papers.includes('A4')
+            ? 'A4'
+            : 'A3',
+        mode: 'id-card',
+        pagesPerSheet: 1,
+        landscape: preset.landscape === true,
+        color: draft.color && device.color,
+        duplex: draft.duplex && device.duplex === true
+      }
+      next = {
+        ...next,
+        color: draft.color && device.color,
+        duplex: draft.duplex && device.duplex === true
+      }
+      if (!device.papers.includes(next.paper))
+        throw new Error(`This printer does not support ${next.paper}.`)
+      // Keep each device's own snapshot. Never send another printer's driver data.
+      if (next.profileId) {
+        const profile = JSON.parse(
+          await powershell('fast-print-settings.ps1', [
+            '-Action',
+            'Resolve',
+            '-ProfileId',
+            next.profileId,
+            ...(jobOptions.profileDirectory
+              ? ['-ProfileDirectory', jobOptions.profileDirectory]
+              : [])
+          ])
+        )
+        if (profile.printer !== name || profile.paper !== next.paper)
+          throw new Error('This preset has changed. Refresh the printer list and choose it again.')
+        next = { ...next, landscape: profile.landscape, profileName: profile.name }
+      }
+      authorize(event)
+      if (jobOptions.profileDirectory)
+        await saveIdDraft(jobOptions.profileDirectory, files, {
+          ...draft,
+          color: next.color,
+          duplex: next.duplex === true
+        })
+      await lastPrinter.save(name)
+      authorize(event)
+      printerPresets.set(preset.printer, preset)
+      printerPresets.set(name, next)
+      printer = device
+      preset = next
+      return { preset, canColor: device.color, canDuplex: device.duplex === true }
+    } finally {
+      returningToSettings = false
+    }
+  })
   window.on('close', (event) => {
     if ((submitted || returningToSettings) && !done) event.preventDefault()
     else if (!done) {
@@ -676,7 +778,16 @@ async function runJob(
   } finally {
     clearTimeout(watchdog)
     done = true
-    for (const channel of ['source', 'file', 'sheet', 'submit', 'finish', 'back', 'save-id'])
+    for (const channel of [
+      'source',
+      'file',
+      'sheet',
+      'submit',
+      'finish',
+      'back',
+      'save-id',
+      'id-printer'
+    ])
       ipcMain.removeHandler(`fast-print:${channel}`)
     if (!window.isDestroyed()) window.destroy()
     await currentSheetWrite.catch(() => undefined)

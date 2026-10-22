@@ -1,3 +1,4 @@
+param([string]$Printer='Microsoft Print to PDF')
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'fast-print-profiles.ps1')
 function Assert([bool]$Condition, [string]$Message) { if (!$Condition) { throw $Message } }
@@ -6,7 +7,12 @@ function Assert-Fails([scriptblock]$Action, [string]$Pattern) {
   try { & $Action | Out-Null } catch { $failed=$_.Exception.Message -match $Pattern }
   Assert $failed "Expected failure matching: $Pattern"
 }
-$printer='Microsoft Print to PDF'
+Assert ([FastPrintDriver]::ColorCapabilitySupported(1,$false)) 'DC_COLORDEVICE must enable color even when .NET Framework reports false.'
+Assert (![FastPrintDriver]::ColorCapabilitySupported(0,$true)) 'A current monochrome capability must not be overridden by a stale legacy result.'
+Assert (![FastPrintDriver]::ColorCapabilitySupported(0,$false)) 'Monochrome devices must stay monochrome.'
+Assert ([FastPrintDriver]::ColorCapabilitySupported(-1,$true)) 'An unsupported capability query must preserve a positive legacy result.'
+Assert (![FastPrintDriver]::ColorCapabilitySupported(-1,$false)) 'Unknown color capability must not invent color support.'
+Assert (![FastPrintDriver]::ColorCapabilitySupported(2,$false)) 'An undocumented capability result must not invent color support.'
 $folder=Join-Path (Split-Path $PSScriptRoot -Parent) ('tmp\fast-print-profile-test-' + [Guid]::NewGuid().ToString('N'))
 $document=[Drawing.Printing.PrintDocument]::new()
 try {

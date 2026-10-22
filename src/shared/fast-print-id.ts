@@ -56,9 +56,9 @@ export interface IdSheetSettings {
 }
 export const DEFAULT_ID_SHEET_SETTINGS: IdSheetSettings = {
   heightMm: 56,
-  marginMm: 5,
-  gapMm: 5,
-  spacing: 'even',
+  marginMm: 10,
+  gapMm: 10,
+  spacing: 'compact',
   fillSheet: false
 }
 export function validateIdSheetSettings(value: unknown): IdSheetSettings {

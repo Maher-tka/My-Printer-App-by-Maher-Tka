@@ -4,6 +4,10 @@ import { stickerSheetMessages } from './stickerSheetMessages'
 export const messages: Record<string, { fr: string; ar: string }> = {
   ...printerPreferencesMessages,
   ...stickerSheetMessages,
+  'The selected printer is no longer available.': {
+    fr: 'L’imprimante sélectionnée n’est plus disponible.',
+    ar: 'الطابعة المحددة لم تعد متاحة.'
+  },
   'Card size': { fr: 'Format de la carte', ar: 'حجم البطاقة' },
   'Sheet preset': { fr: 'Disposition de la feuille', ar: 'إعداد الورقة' },
   'Fill sheet': { fr: 'Remplir la feuille', ar: 'ملء الورقة' },

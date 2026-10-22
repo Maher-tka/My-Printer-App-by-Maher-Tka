@@ -15,6 +15,7 @@ const output = resolve(
 )
 const source = process.env.POLAROID_TEST_SOURCE || 'C:/Users/Maher/Downloads/Compressed/num216p'
 const executable = process.env.FAST_PRINT_NATIVE_EXE || join(root, 'out/native/FastPrint.exe')
+const printerName = process.env.POLAROID_TEST_PRINTER || 'Microsoft Print to PDF'
 const require = createRequire(import.meta.url)
 const electron = require('electron')
 const files = (await readdir(source))
@@ -43,6 +44,7 @@ await writeFile(
   accessBootstrap,
   `const { app } = require('electron');
 app.setPath('userData', ${JSON.stringify(signedOutData)});
+app.setAppPath(${JSON.stringify(root)});
 import(${JSON.stringify(pathToFileURL(join(root, 'out/main/index.js')).href)}).catch(error => { console.error(error.message); app.exit(1); });
 `
 )
@@ -99,7 +101,7 @@ for (const [name, selection, language, appearance] of process.env.POLAROID_TEST_
     '--preset',
     Buffer.from(
       JSON.stringify({
-        printer: 'Microsoft Print to PDF',
+        printer: printerName,
         paper: 'A4',
         color: true,
         pagesPerSheet: 1
@@ -148,6 +150,7 @@ for (const [name, selection, language, appearance] of process.env.POLAROID_TEST_
     await writeFile(join(folder, item.mode, 'worker.log'), logs)
     const driver = JSON.parse(await readFile(join(worker, 'driver-settings.json'), 'utf8'))
     assert.equal(driver.sheets, item.sheets)
+    assert.equal(driver.printer, printerName)
     assert.equal(driver.paper, 'A4')
     assert.equal(driver.color, true)
     assert.equal(driver.landscape, capacity === 8)

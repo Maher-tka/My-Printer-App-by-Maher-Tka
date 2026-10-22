@@ -5,7 +5,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-Add-Type -AssemblyName System.Drawing
+. (Join-Path $PSScriptRoot 'fast-print-profiles.ps1')
 $extensions = @('.pdf', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tif', '.tiff', '.docx')
 $menuRoot = 'Software\Classes\MaherTka.FastPrint'
 $classes = [Microsoft.Win32.Registry]::CurrentUser
@@ -65,7 +65,7 @@ $printers = @(foreach ($name in [System.Drawing.Printing.PrinterSettings]::Insta
   if (!$settings.IsValid) { continue }
   $papers = @($settings.PaperSizes | Where-Object { $_.Kind.ToString() -in @('A4','A3') } |
     ForEach-Object { $_.Kind.ToString() } | Sort-Object -Unique)
-  [PSCustomObject]@{ name = $name; color = $settings.SupportsColor; papers = $papers; isDefault = $settings.IsDefaultPrinter; duplex = $settings.CanDuplex }
+  [PSCustomObject]@{ name = $name; color = [FastPrintDriver]::SupportsColor($settings); papers = $papers; isDefault = $settings.IsDefaultPrinter; duplex = $settings.CanDuplex }
 })
 if ($Action -eq 'List') { ConvertTo-Json -InputObject $printers -Depth 5 -Compress; exit 0 }
 if (!(Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Fast Print executable is missing. Build the app first.' }
