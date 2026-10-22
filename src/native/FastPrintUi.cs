@@ -23,6 +23,8 @@ internal sealed class NativeLayout {
     return new RectangleF(margin+(columns-rowCount)*(cw+gap)/2+(slot%columns)*(cw+gap),margin+(rows-usedRows)*(ch+gap)/2+row*(ch+gap),cw,ch);
   }
   internal static NativeLayout Find(int count){return All.FirstOrDefault(item=>item.count==count)??All[0];}
+  internal static NativeLayout ForSheet(int count,bool landscape){var grid=Find(count);return count>1&&grid.landscape!=landscape?new NativeLayout{count=count,columns=grid.rows,rows=grid.columns,landscape=landscape}:grid;}
+  internal static int ContentTurns(int count,bool align,int width,int height,float cellWidth,float cellHeight,int manual){return ((count>1&&align&&width!=height&&(width>height)!=(cellWidth>cellHeight)?1:0)+manual)%4;}
 }
 internal static class PrintTheme {
   internal static bool Dark;

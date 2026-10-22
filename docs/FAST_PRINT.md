@@ -8,7 +8,8 @@ show ordinary PDF/image previews. A legacy Electron command delegates to the sam
 The compact Windows dialog has printer, A4/A3 paper, driver quality, color,
 saved preset, orientation, file selection, preview navigation, copies and Fit to
 frame controls. Choose 1, 2, 4, 6, 8, 9, 12 or 16 pages per sheet on A4 or A3,
-or ID in the scrolling layout tiles. Two-, six- and eight-up use landscape sheets.
+or ID in the scrolling layout tiles. Two-, six- and eight-up start with landscape
+sheets; Portrait/Landscape can be selected for every ordinary layout.
 The native controls use the app's shared color, spacing and radius tokens, with
 rounded buttons, layout thumbnails and light/dark appearance. **Options…** can
 select light, dark or the Windows app appearance without changing OS settings.
@@ -21,12 +22,15 @@ printer hint from the Explorer command does not replace that choice. Printer
 snapshots are used only for the device that owns them; Windows defaults are not
 changed.
 
-General Fast Print defaults to **Original orientation** and **Fit to frame off**.
+Full page defaults to **Original orientation** and **Fit to frame off**.
 For Full page, each image or PDF page retains its visible portrait/landscape
 orientation, including EXIF and PDF rotation metadata. Mixed-orientation PDFs
 carry a physical size for each prepared page through print submission. Explicit
-Portrait/Landscape and rotation commands remain available. N-up grids and
-Polaroid retain their template orientations, and ID cards remain horizontal.
+Portrait/Landscape and rotation commands remain available. Multi-up uses **Preset
+direction** and **Same direction** by default: each source is aligned to its slot
+before the independent manual rotation. Portrait/Landscape transposes the grid.
+Turning Same direction off preserves individual source directions. ID cards remain
+horizontal; Polaroid retains its dedicated composition rules.
 
 Prepared A4/A3 pages are drawn once at their selected physical dimensions,
 compensating for the hardware origin. They are not fitted a second time into
@@ -38,8 +42,12 @@ The driver handoff rejects a mismatched physical paper size.
 The file selector shows each document's page count before its filename. The
 summary above Print shows the number of selected files and **total source pages**,
 plus output pages/sheets for the current layout and the sheet total across
-copies. PDFs keep separate final sheets; consecutive images share n-up sheets.
-Duplex estimates include blank backs between documents. ID mode shows source
+copies. PDFs keep separate final sheets by default; consecutive images share n-up
+sheets. Enable **Combine files on sheets** to put pages from several PDFs (and
+selected photos or prepared Word documents) into the same ordered stream, filling
+the remaining slots before starting another sheet. The original files stay separate.
+Preview navigation and output/copy totals follow the combined stream. Duplex
+estimates add document-boundary blank backs only when combining is off. ID mode shows source
 totals here; its output is configured in ID verification.
 
 Page counts use PDF metadata (or the prepared Word PDF), without rendering every
@@ -64,7 +72,7 @@ and 3 mm cutting gaps. **Options… > Margins** offers 5/7/10/15/20 mm;
 **Cutting gap** offers 3/5/8/10 mm. Incomplete final sheets and rows are centered
 without enlarging the remaining items, so their slot size stays consistent.
 
-All files begin at the same explicit rotation. **Rotate selected** turns the
+Multi-up aligns each source to the slot direction before applying manual rotation. **Rotate selected** turns the
 selected file by 90 degrees inside its slot; for PDF/Word, that applies to all
 pages in the file. **Options… > Rotate all** sets 0/90/180/270 degrees for the
 whole batch and keeps that rotation when changing presets. The status reports
@@ -72,8 +80,22 @@ the current slot dimensions and selected file's rotation. Native preview and
 print preparation use matching margins, gaps, positions and rotations.
 
 **Fit to frame** fills equal-size photo slots by cropping to their edges. It
-starts off so the complete source remains visible. Turning it on explicitly
-enables cropping for photos or PDF/Word pages.
+starts on for photo-only multi-up selections to give equal filled frames, and off
+for Full page or PDF/Word selections so the complete source remains visible. An
+explicit choice is kept while changing layouts. Turning it on for documents crops
+their pages too.
+
+The **Saved preset** list shows all saved A4/A3 stocks for the selected printer,
+including their paper and tray. Selecting one restores its paper size, color,
+tray, duplex and complete vendor driver settings. Paper-size filtering no longer
+hides an A3 stock while A4 is selected. **Save printer preset…** in this same list
+opens a named preset dialog; **Printer properties…** there configures the actual
+tray/magazine, paper weight, bypass size and output bin/finishing before saving.
+For example, save `A4 - 80 gsm - Magazine 1`, `A3 - 80 gsm - Magazine 2`, and a
+separate bypass preset for each paper size/stock. A name alone does not configure
+the printer. Presets are private to the Windows account and driver version;
+Windows printer defaults remain unchanged. **Manage saved presets…** retains
+rename/delete and the existing operator notes/default-stock controls.
 
 **8 PIC** and **9 PIC** sit directly below the printer selector. They require an
 A4/color-capable printer and lock those settings automatically. Polaroid previews
@@ -185,7 +207,7 @@ settings. Closing the native dialog removes its temporary prepared sheets.
 
 **Options… > Printer properties…** opens the real vendor driver dialog for tray,
 stock, duplex, quality and finishing. Changes apply only to this print session.
-**Options… > Manage saved presets…** opens preset management and refreshes the
+**Saved preset > Manage saved presets…** opens preset management and refreshes the
 printer list afterwards. Automatic selection uses the existing per-option and
 bypass defaults; explicit preset selections take precedence. Copies initially
 use the captured driver count and can be changed from 1 to 999. An explicit copy
@@ -371,7 +393,7 @@ Windows security policies are unchanged.
 - Up to 512 MB per file and 2,000 PDF pages. Password-protected PDFs are unsupported.
 - Jobs without a driver preset use one copy and simplex. Saved presets retain
   their preferred copy count and duplex settings, subject to layout constraints.
-- Two-up uses landscape; four-up reads left to right, top to bottom. Images count
+- Two-up starts in landscape; sheet orientation remains editable. Four-up reads left to right, top to bottom. Images count
   as one source page and are not duplicated to fill empty cells.
 - Pages render at 200 DPI and fit inside the printer's printable margins.
 - Closing the progress window during preparation cancels. Once submission starts,
@@ -506,7 +528,7 @@ npx electron-vite build --mode development
 node scripts/verify-fast-print-polaroid.mjs
 ```
 
-Open **Fast Print > Options… > Manage saved presets…**, or run
+Open **Fast Print > Saved preset > Manage saved presets…**, or run
 `npm run fast-print:settings` in this development checkout. This opens a separate
 setup window; the main app is not required.
 
@@ -529,7 +551,7 @@ contents is vendor-specific and is not automatically invoked on every print job.
 
 Saved presets retain duplex and vendor options; per-job color, paper orientation,
 explicit copy requests and physical page placement are merged through the owning driver. Two-, six-
-and eight-up use landscape. Full page defaults to source orientation; other grids
+and eight-up start in landscape, with manual Portrait/Landscape available. Full page defaults to source orientation; other grids
 use the selected sheet orientation. Generic presets keep
 the original simplex behavior. Fast Print cannot verify that the physical stock in
 a tray matches a preset name.

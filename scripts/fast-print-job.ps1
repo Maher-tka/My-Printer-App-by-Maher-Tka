@@ -46,8 +46,7 @@ try {
   }
   $document.DefaultPageSettings.PaperSize = $paper
   $document.DefaultPageSettings.Color = [bool]$job.preset.color
-  $orientationChoice = if ($null -ne $job.preset.landscape) { [bool]$job.preset.landscape } else { $profile -and $profile.landscape }
-  $landscape = ($job.preset.pagesPerSheet -in @(2,6,8) -or $orientationChoice)
+  $landscape = if ($null -ne $job.preset.landscape) { [bool]$job.preset.landscape } elseif ($profile) { [bool]$profile.landscape } else { $job.preset.pagesPerSheet -in @(2,6,8) }
   if ($isPolaroid) { $landscape = $job.preset.mode -eq 'polaroid-8' }
   if ($isDocument) {
     if (!$profile -or @($job.sheetSizes).Count -ne @($job.sheets).Count) { throw 'A saved driver preset and physical page sizes are required.' }

@@ -1,6 +1,6 @@
 {
   "name": "my-printer-app-by-maher-tka",
-  "version": "0.2.20",
+  "version": "0.2.21",
   "description": "Local-first printer-shop hub desktop app by Maher Tka.",
   "author": "Maher Tka",
   "private": true,
@@ -50,6 +50,8 @@
     "test:fast-print:native": "node scripts/verify-fast-print-native.mjs",
     "test:fast-print:polaroid-native": "tsx scripts/verify-fast-print-polaroid-native.mjs",
     "test:fast-print:paint": "node scripts/verify-fast-print-paint.mjs",
+    "test:fast-print:direction": "tsx scripts/verify-fast-print-direction.mjs",
+    "test:fast-print:combined": "tsx scripts/verify-fast-print-combined.mjs",
     "test:fast-print:presets": "tsx scripts/verify-fast-print-presets.mjs",
     "test:fast-print:audit": "node scripts/verify-fast-print-audit.mjs",
     "test:fast-print:id-real": "node scripts/verify-fast-print-id.mjs",

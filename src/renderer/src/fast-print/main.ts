@@ -1,6 +1,7 @@
 import {
   fastPrintLayout,
   fastPrintSourceLayout,
+  fastPrintContentTurns,
   fastPrintCell,
   type FastPrintSource,
   type FastPrintBatchSource,
@@ -73,11 +74,11 @@ async function run(): Promise<void> {
     for (let documentIndex = 0; documentIndex < batch.files.length; documentIndex++) {
       const source = await window.fastPrint.file(documentIndex)
       let groupEnd = documentIndex
-      if (preset.combineImages && source.extension !== '.pdf') {
+      if (preset.combineFiles) groupEnd = batch.files.length - 1
+      else if (preset.combineImages && source.extension !== '.pdf') {
         while (groupEnd + 1 < batch.files.length && batch.files[groupEnd + 1].extension !== '.pdf')
           groupEnd++
       }
-      const imageGroup = source.extension !== '.pdf' && groupEnd > documentIndex
       label(
         'file',
         batch.files.length === 1
@@ -85,27 +86,39 @@ async function run(): Promise<void> {
           : `${documentIndex + 1} of ${batch.files.length} · ${source.name}`
       )
       try {
-        if (source.extension === '.pdf') pdf = await loadPdfDocument(new Uint8Array(source.bytes))
-        else image = await createImageBitmap(new Blob([new Uint8Array(source.bytes)]))
-        const pageCount = pdf?.numPages ?? groupEnd - documentIndex + 1
+        let loadedIndex = -1
+        const load = async (index: number): Promise<void> => {
+          if (loadedIndex === index) return
+          image?.close()
+          image = undefined
+          await destroyPdfDocument(pdf)
+          pdf = undefined
+          const file = index === documentIndex ? source : await window.fastPrint.file(index)
+          if (file.extension === '.pdf') pdf = await loadPdfDocument(new Uint8Array(file.bytes))
+          else image = await createImageBitmap(new Blob([new Uint8Array(file.bytes)]))
+          loadedIndex = index
+        }
+        const pages: Array<{ file: number; page: number }> = []
+        for (let file = documentIndex; file <= groupEnd; file++) {
+          const isPdf = batch.files[file].extension === '.pdf'
+          if (isPdf) await load(file)
+          for (let page = 0; page < (isPdf ? pdf!.numPages : 1); page++) pages.push({ file, page })
+          if (totalPages + pages.length > FAST_PRINT_MAX_PAGES)
+            throw new Error(`Fast Print supports up to ${FAST_PRINT_MAX_PAGES} pages in one job.`)
+        }
+        const pageCount = pages.length
         totalPages += pageCount
         if (totalPages > FAST_PRINT_MAX_PAGES)
           throw new Error(
             `Fast Print supports up to ${FAST_PRINT_MAX_PAGES} pages in one job. Split this batch first.`
           )
         const documentSheets = Math.ceil(pageCount / preset.pagesPerSheet)
-        // Reset n-up at each document boundary; never fill a document's final sheet
-        // with pages from the next document.
+        // Each group starts a fresh sheet; combined files share one ordered page stream.
         for (let first = 0; first < pageCount; first += preset.pagesPerSheet) {
           if (preset.autoOrientation && preset.pagesPerSheet === 1) {
-            if (imageGroup && first > 0) {
-              image?.close()
-              const next = await window.fastPrint.file(documentIndex + first)
-              image = await createImageBitmap(new Blob([new Uint8Array(next.bytes)]))
-            }
-            const sourcePage = pdf ? await pdf.getPage(first + 1) : undefined
-            const turns =
-              preset.sourceRotations?.[imageGroup ? documentIndex + first : documentIndex] ?? 0
+            await load(pages[first].file)
+            const sourcePage = pdf ? await pdf.getPage(pages[first].page + 1) : undefined
+            const turns = preset.sourceRotations?.[pages[first].file] ?? 0
             const view = sourcePage?.getViewport({
               scale: 1,
               rotation: (sourcePage.rotate + turns * 90) % 360
@@ -120,19 +133,22 @@ async function run(): Promise<void> {
           context.fillStyle = '#ffffff'
           context.fillRect(0, 0, canvas.width, canvas.height)
           for (let slot = 0; slot < preset.pagesPerSheet && first + slot < pageCount; slot++) {
-            if (
-              imageGroup &&
-              first + slot > 0 &&
-              !(preset.autoOrientation && preset.pagesPerSheet === 1)
-            ) {
-              image?.close()
-              const next = await window.fastPrint.file(documentIndex + first + slot)
-              image = await createImageBitmap(new Blob([new Uint8Array(next.bytes)]))
-            }
-            const page = pdf ? await pdf.getPage(first + slot + 1) : undefined
-            const turns =
-              preset.sourceRotations?.[imageGroup ? documentIndex + first + slot : documentIndex] ??
-              0
+            const ref = pages[first + slot]
+            label(
+              'file',
+              `${ref.file + 1} of ${batch.files.length} · ${batch.files[ref.file].name}`
+            )
+            await load(ref.file)
+            const page = pdf ? await pdf.getPage(ref.page + 1) : undefined
+            const manualTurns = preset.sourceRotations?.[ref.file] ?? 0
+            const originalView = page?.getViewport({ scale: 1, rotation: page.rotate })
+            const turns = fastPrintContentTurns(
+              preset,
+              layout,
+              originalView?.width ?? image!.width,
+              originalView?.height ?? image!.height,
+              manualTurns
+            )
             const rotation = page ? (page.rotate + turns * 90) % 360 : 0
             const viewport = page?.getViewport({ scale: 1, rotation })
             const sourceWidth = viewport?.width ?? image!.width
@@ -216,7 +232,7 @@ async function run(): Promise<void> {
           progress.value = documentIndex + ((groupEnd - documentIndex + 1) * count) / documentSheets
           label(
             'status',
-            `File ${documentIndex + 1} of ${batch.files.length} · Sheet ${count} of ${documentSheets}. Close to cancel.`
+            `File ${pages[Math.min(first + preset.pagesPerSheet, pageCount) - 1].file + 1} of ${batch.files.length} · Sheet ${count} of ${documentSheets}. Close to cancel.`
           )
         }
         if (

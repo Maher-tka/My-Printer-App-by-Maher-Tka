@@ -105,7 +105,11 @@ const compare = async (actualFile, expectedFile) => {
 }
 const verifyMargins = async (file, preset, occupied) => {
   const { data, info } = await sharp(file).removeAlpha().raw().toBuffer({ resolveWithObject: true })
-  const layout = fastPrintLayout(preset),
+  const layout = fastPrintLayout(
+      preset.autoOrientation && preset.pagesPerSheet === 1
+        ? { ...preset, landscape: info.width > info.height }
+        : preset
+    ),
     cells = Array.from({ length: occupied }, (_, i) => fastPrintCell(layout, i, occupied))
   assert.equal(info.width, layout.width)
   assert.equal(info.height, layout.height)

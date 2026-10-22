@@ -2170,3 +2170,43 @@ Stable v0.2.19 was published and verified on 2026-10-21. Windows workflow
 installer/blockmap/metadata SHA256 checks passed. See
 `RELEASE_0.2.19_VERIFICATION.md` for publication evidence and the remaining native
 integration and antivirus-review limitations.
+
+## Fast Print direction, named printer stocks and combined PDFs — 2026-10-22
+
+- [x] Full page restores Original orientation. All 2/4/6/8/9/12/16-up layouts
+      accept Portrait/Landscape and independent 90-degree file rotations. Same
+      direction aligns to the slot before applying the manual override; photo-only
+      multi-up starts with equal filled frames. PDF/Word and Full page start with fit.
+- [x] Hidden native direction checks: 30 cases each in English dark, French light
+      and Arabic RTL dark. English cases compare native sheets to production output
+      and validate the Windows driver handoff, including portrait 2/6/8-up.
+- [x] Combine files on sheets is optional and defaults off. A mixed selection of
+      5-page/3-page/1-page PDFs and three photos covers 12 ordered source pages.
+      All seven multi-up counts on A4/A3 were checked both combined and separate
+      (28 cases per language), including copy totals and duplex boundary padding.
+      English production output matches native previews; each occupied slot's
+      center color independently verifies page identity/order across PDF boundaries.
+- [x] Saved preset shows all stocks for the selected printer. A4/A3 stock selection
+      restores paper/color and full DPAPI-protected vendor DEVMODE. Save printer
+      preset uses the existing native themed buttons and real Printer properties;
+      names alone do not set tray/weight. No Windows defaults are changed.
+- [x] Preset-saving dialog and stock switching checked with isolated test profiles
+      in EN/FR/AR, restricted to one CPU core. Hidden native captures reviewed at
+      1366×768, 1920×1080, 1600×900 and 820×640. At the minimum width, the editing
+      row scrolls horizontally while totals and Print remain available. One primary
+      Print, one preset-management entry, no heading subtitles or duplicate actions.
+- [x] The general mixed-image/PDF regression passed all 16 A4/A3 layouts, including
+      one-up orientation, margins/gaps, rotation, incomplete sheets and boundaries.
+      Typecheck, Fast Print behavior tests, native compile and targeted formatting
+      passed. No hardware print jobs or interactive main-PC control were used.
+- [ ] Live desktop DPI/keyboard traversal and vendor property-dialog appearance
+      remain unverified. Actual magazine, bypass stock/weight and output-bin
+      operation require verification on the workshop printers after release.
+      Release 0.2.21 includes these changes. ID and Polaroid composition rules
+      were not changed.
+
+Artifacts: `output/fast-print-direction/results.json`,
+`output/fast-print-combined/results.json`, `proof-order.json`,
+`output/fast-print-stocks-ui/results.json`, and
+`output/presets-final-proof.log`. Repeat with `test:fast-print:direction`,
+`test:fast-print:combined` and `test:fast-print:presets`.

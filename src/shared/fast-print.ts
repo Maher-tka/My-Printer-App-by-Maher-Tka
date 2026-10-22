@@ -19,12 +19,14 @@ export interface FastPrintPreset {
   profileName?: string
   landscape?: boolean
   autoOrientation?: boolean
+  matchLayoutOrientation?: boolean
   duplex?: boolean
   mode?: 'id-card' | 'polaroid-8' | 'polaroid-9' | 'document'
   paperWidthMm?: number
   paperHeightMm?: number
   fitToFrame?: boolean
   combineImages?: boolean
+  combineFiles?: boolean
   marginMm?: number
   gapMm?: number
   sourceRotations?: number[]
@@ -84,9 +86,11 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
       (typeof p.profileId !== 'string' || !/^[a-f0-9]{32}$/.test(p.profileId))) ||
     (p.landscape !== undefined && typeof p.landscape !== 'boolean') ||
     (p.autoOrientation !== undefined && typeof p.autoOrientation !== 'boolean') ||
+    (p.matchLayoutOrientation !== undefined && typeof p.matchLayoutOrientation !== 'boolean') ||
     (p.duplex !== undefined && typeof p.duplex !== 'boolean') ||
     (p.fitToFrame !== undefined && typeof p.fitToFrame !== 'boolean') ||
     (p.combineImages !== undefined && typeof p.combineImages !== 'boolean') ||
+    (p.combineFiles !== undefined && typeof p.combineFiles !== 'boolean') ||
     (p.marginMm !== undefined &&
       (!Number.isInteger(p.marginMm) || p.marginMm < 5 || p.marginMm > 20)) ||
     (p.gapMm !== undefined && (!Number.isInteger(p.gapMm) || p.gapMm < 3 || p.gapMm > 10)) ||
@@ -110,9 +114,13 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     ...(p.profileId ? { profileId: p.profileId } : {}),
     ...(p.landscape !== undefined ? { landscape: p.landscape } : {}),
     ...(p.autoOrientation !== undefined ? { autoOrientation: p.autoOrientation } : {}),
+    ...(p.matchLayoutOrientation !== undefined
+      ? { matchLayoutOrientation: p.matchLayoutOrientation }
+      : {}),
     ...(p.duplex !== undefined ? { duplex: p.duplex } : {}),
     ...(p.fitToFrame !== undefined ? { fitToFrame: p.fitToFrame } : {}),
     ...(p.combineImages !== undefined ? { combineImages: p.combineImages } : {}),
+    ...(p.combineFiles !== undefined ? { combineFiles: p.combineFiles } : {}),
     ...(p.marginMm !== undefined ? { marginMm: p.marginMm } : {}),
     ...(p.gapMm !== undefined ? { gapMm: p.gapMm } : {}),
     ...(p.sourceRotations !== undefined ? { sourceRotations: [...p.sourceRotations] } : {}),
@@ -124,10 +132,12 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
 export function fastPrintLayout(preset: FastPrintPreset, dpi = 200) {
   const paper = preset.paper === 'A3' ? [297, 420] : [210, 297]
   const grid = FAST_PRINT_LAYOUTS.find((layout) => layout.count === preset.pagesPerSheet)!
-  const landscape = grid.landscape || preset.landscape === true
+  const landscape = preset.landscape ?? grid.landscape
   const width = Math.round(((landscape ? paper[1] : paper[0]) / 25.4) * dpi)
   const height = Math.round(((landscape ? paper[0] : paper[1]) / 25.4) * dpi)
-  const { columns, rows } = grid
+  const transpose = preset.pagesPerSheet > 1 && landscape !== grid.landscape
+  const columns = transpose ? grid.rows : grid.columns
+  const rows = transpose ? grid.columns : grid.rows
   const gap = Math.round(((preset.gapMm ?? 3) / 25.4) * dpi)
   const margin = Math.round(((preset.marginMm ?? 5) / 25.4) * dpi)
   return {
@@ -140,6 +150,25 @@ export function fastPrintLayout(preset: FastPrintPreset, dpi = 200) {
     cellWidth: (width - 2 * margin - gap * (columns - 1)) / columns,
     cellHeight: (height - 2 * margin - gap * (rows - 1)) / rows
   }
+}
+
+/** Align to the preset first; manual quarter-turns remain an independent override. */
+export function fastPrintContentTurns(
+  preset: FastPrintPreset,
+  layout: ReturnType<typeof fastPrintLayout>,
+  width: number,
+  height: number,
+  manualTurns: number
+) {
+  const align =
+    preset.matchLayoutOrientation &&
+    preset.pagesPerSheet > 1 &&
+    !preset.mode &&
+    width !== height &&
+    width > height !== layout.cellWidth > layout.cellHeight
+      ? 1
+      : 0
+  return (align + manualTurns) % 4
 }
 
 /** Full-page original orientation follows the visible PDF/image dimensions. */

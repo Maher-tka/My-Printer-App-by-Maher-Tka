@@ -5,6 +5,7 @@ import {
   fastPrintLayout,
   fastPrintCell,
   fastPrintSourceLayout,
+  fastPrintContentTurns,
   validateFastPrintPreset
 } from './fast-print.js'
 import { polaroidLayout, polaroidCoverCrop } from './fast-print-polaroid.js'
@@ -60,6 +61,50 @@ for (const invalid of [
   assert.throws(() => validateFastPrintPreset(invalid), /Invalid Fast Print/)
 }
 console.log('Fast Print preset and layout tests passed.')
+for (const count of FAST_PRINT_COUNTS.filter((count) => count > 1)) {
+  for (const landscape of [true, false]) {
+    const preset = {
+      printer: 'Test',
+      paper: 'A4' as const,
+      color: true,
+      pagesPerSheet: count,
+      landscape,
+      matchLayoutOrientation: true
+    }
+    const layout = fastPrintLayout(preset)
+    assert.equal(
+      layout.width > layout.height,
+      landscape,
+      'Every preset must accept sheet orientation overrides'
+    )
+    for (const [width, height] of [
+      [900, 500],
+      [500, 900]
+    ]) {
+      const turns = fastPrintContentTurns(preset, layout, width, height, 0)
+      assert.equal(
+        turns % 2 ? height > width : width > height,
+        layout.cellWidth > layout.cellHeight,
+        'Default n-up photos must follow one slot direction'
+      )
+      assert.equal(
+        fastPrintContentTurns(preset, layout, width, height, 1),
+        (turns + 1) % 4,
+        'A manual click must rotate the displayed photo by 90 degrees'
+      )
+      assert.equal(
+        fastPrintContentTurns(
+          { ...preset, matchLayoutOrientation: false },
+          layout,
+          width,
+          height,
+          1
+        ),
+        1
+      )
+    }
+  }
+}
 for (const paper of ['A4', 'A3'] as const) {
   const original = {
     printer: 'Test',
@@ -202,4 +247,36 @@ for (const extra of [
   )
 console.log(
   'General Fast Print equal-cell margins, gaps, rotation validation and centered final sheets passed.'
+)
+
+assert.equal(
+  validateFastPrintPreset({
+    printer: 'Test',
+    paper: 'A4',
+    color: true,
+    pagesPerSheet: 4,
+    combineFiles: true
+  }).combineFiles,
+  true
+)
+assert.equal(
+  validateFastPrintPreset({
+    printer: 'Test',
+    paper: 'A4',
+    color: true,
+    pagesPerSheet: 4,
+    combineFiles: false
+  }).combineFiles,
+  false
+)
+assert.throws(
+  () =>
+    validateFastPrintPreset({
+      printer: 'Test',
+      paper: 'A4',
+      color: true,
+      pagesPerSheet: 4,
+      combineFiles: 'yes'
+    }),
+  /Invalid/
 )
