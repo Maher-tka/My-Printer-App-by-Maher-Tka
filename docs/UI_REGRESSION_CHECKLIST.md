@@ -1,5 +1,18 @@
 # UI regression checklist
 
+## 2026-10-22 — v0.2.20 published and verified
+
+- Stable/latest v0.2.20 is published at release commit `931ed02`; Windows workflow
+  `39768582582` completed successfully. Setup, Portable, blockmap, `latest.yml`
+  and the checksum manifest are present.
+- Downloaded Setup is 224,352,927 bytes and reports version 0.2.20. Its SHA512
+  matches both automatic-update references and declared size. Downloaded assets
+  match SHA256 checksums and GitHub digests; Portable presence/API digest also
+  matches its manifest entry. See `RELEASE_0.2.20_VERIFICATION.md`.
+- Unrelated sticker-review work was preserved and excluded. Primary development
+  output is restored. Physical Epson/press output and workshop installation
+  remain pending; no hardware jobs were sent.
+
 ## 2026-10-22 — v0.2.20 release validation
 
 - Prepared in an isolated checkout based on stable v0.2.19, containing the
