@@ -12,5 +12,7 @@ contextBridge.exposeInMainWorld('fastPrint', {
   back: (draft: IdPrintDraft) => ipcRenderer.invoke('fast-print:back', draft),
   saveIdDraft: (draft: IdPrintDraft) => ipcRenderer.invoke('fast-print:save-id', draft),
   selectIdPrinter: (printer: string, draft: IdPrintDraft) =>
-    ipcRenderer.invoke('fast-print:id-printer', printer, draft)
+    ipcRenderer.invoke('fast-print:id-printer', printer, draft),
+  selectIdPreset: (id: string, draft: IdPrintDraft) =>
+    ipcRenderer.invoke('fast-print:id-preset', id, draft)
 })

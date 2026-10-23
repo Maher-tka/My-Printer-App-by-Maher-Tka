@@ -6,6 +6,7 @@ import { loadIdDraft, saveIdDraft, validateIdDraft } from './fast-print-id-draft
 import { LastFastPrintPrinter } from './fast-print-last-printer.js'
 import { loadReviewedPolaroid } from './fast-print-polaroid-cache.js'
 import { MAX_IDS_PER_SHEET } from '../shared/fast-print-id.js'
+import { selectIdDriverPreset } from '../shared/fast-print-id-preset.js'
 import {
   createFastPrintChoices,
   defaultFastPrintStock,
@@ -16,7 +17,11 @@ import { mkdtemp, mkdir, readFile, rm, stat, writeFile, copyFile } from 'node:fs
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { runPrinterScript as powershell } from './printer-driver-runtime.js'
 import { printerPreferencesStore } from './printer-preferences.js'
-import { fastPrintOptionId, preferredProfile } from '../shared/printer-preferences.js'
+import {
+  fastPrintOptionId,
+  preferredProfile,
+  type DriverPresetSummary
+} from '../shared/printer-preferences.js'
 import { assertOnlineProductionAccess } from './online-account.js'
 import {
   validateFastPrintPreset,
@@ -354,6 +359,16 @@ async function runJob(
       ? process.env.FAST_PRINT_TEST_SETTINGS
       : dirname(printerPreferencesStore().path)
   const lastPrinter = new LastFastPrintPrinter(join(settingsRoot, 'last-printer.json'))
+  const driverPresets = canReturnToSettings
+    ? (JSON.parse(
+        await powershell('printer-preferences.ps1', [
+          '-Action',
+          'List',
+          '-ProfileDirectory',
+          join(settingsRoot, 'profiles')
+        ])
+      ) as DriverPresetSummary[])
+    : undefined
   const printerPresets = new Map([[preset.printer, preset]])
   if (jobOptions.previewDirectory) await mkdir(jobOptions.previewDirectory, { recursive: true })
   const reviewed = jobOptions.preparedPolaroid
@@ -454,6 +469,7 @@ async function runJob(
       })),
       preset,
       ...(preset.mode === 'id-card' ? { printers } : {}),
+      ...(driverPresets ? { driverPresets } : {}),
       canReturnToSettings,
       ...(idDraft ? { idDraft } : {}),
       previewOnly: Boolean(jobOptions.previewDirectory),
@@ -644,7 +660,8 @@ async function runJob(
           version: 1,
           printer: preset.printer,
           paper: preset.paper,
-          landscape: preset.landscape === true
+          landscape: preset.landscape === true,
+          profileId: preset.profileId
         })
       )
       returnedToSettings = true
@@ -669,6 +686,63 @@ async function runJob(
     try {
       await saveIdDraft(jobOptions.profileDirectory, files, draft)
       authorize(event)
+    } finally {
+      returningToSettings = false
+    }
+  })
+  ipcMain.handle('fast-print:id-preset', async (event, id: unknown, value: unknown) => {
+    authorize(event)
+    if (
+      !canReturnToSettings ||
+      !jobOptions.profileDirectory ||
+      submitted ||
+      acceptingSheet ||
+      sheets.length ||
+      returningToSettings
+    )
+      throw new Error('Cannot change printer settings during print submission.')
+    if (
+      typeof id !== 'string' ||
+      !/^[a-f0-9]{32}$/.test(id) ||
+      !driverPresets?.some((profile) => profile.id === id && profile.printer === preset.printer)
+    )
+      throw new Error('The selected driver preset is no longer available.')
+    const draft = validateIdDraft(value)
+    returningToSettings = true
+    try {
+      await saveIdDraft(jobOptions.profileDirectory, files, draft)
+      const candidate = await mkdtemp(join(temp, 'preset-'))
+      const name = id + '.json'
+      await copyFile(join(settingsRoot, 'profiles', name), join(candidate, name))
+      const profile = JSON.parse(
+        await powershell('fast-print-settings.ps1', [
+          '-Action',
+          'Resolve',
+          '-ProfileId',
+          id,
+          '-ProfileDirectory',
+          candidate
+        ])
+      ) as DriverPresetSummary
+      const available = JSON.parse(
+        await powershell('fast-print-menu.ps1', ['-Action', 'List'])
+      ) as FastPrintPrinter[]
+      const device = available.find((item) => item.name === preset.printer)
+      if (!device || profile.id !== id)
+        throw new Error('The selected printer or preset is no longer available.')
+      const selection = selectIdDriverPreset(preset, profile, device)
+      authorize(event)
+      await copyFile(join(candidate, name), join(jobOptions.profileDirectory, name))
+      await saveIdDraft(jobOptions.profileDirectory, files, {
+        ...draft,
+        color: selection.preset.color,
+        duplex: selection.preset.duplex === true
+      })
+      authorize(event)
+      preset = selection.preset
+      printer = device
+      printerPresets.set(preset.printer, preset)
+      return selection
     } finally {
       returningToSettings = false
     }
@@ -786,7 +860,8 @@ async function runJob(
       'finish',
       'back',
       'save-id',
-      'id-printer'
+      'id-printer',
+      'id-preset'
     ])
       ipcMain.removeHandler(`fast-print:${channel}`)
     if (!window.isDestroyed()) window.destroy()

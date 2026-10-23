@@ -11,7 +11,7 @@ import { idCopiesLayout, idCopyCenters, idPrintedSize } from '../src/shared/fast
 import { measureIdProof } from './id-proof-metrics.mjs'
 
 const root = resolve(import.meta.dirname, '..'),
-  output = process.env.ID_WORKFLOW_OUTPUT || join(root, 'output/fast-print-id-workflow')
+  output = resolve(root, process.env.ID_WORKFLOW_OUTPUT || 'output/fast-print-id-workflow')
 const electron = createRequire(import.meta.url)('electron')
 const executable = process.env.FAST_PRINT_NATIVE_EXE || join(root, 'out/native/FastPrint.exe')
 const files = (
@@ -219,6 +219,46 @@ async function exerciseEditor(stage, expected, labels) {
         const [x, y] = value.split(',').map(Number)
         return { x, y }
       })
+  }
+  if (stage < 3) {
+    const selector = document.getElementById('id-driver-preset')
+    const saved = batch.driverPresets?.find(
+      (profile) =>
+        profile.printer === batch.preset.printer &&
+        profile.name.startsWith('Saved ID black and white')
+    )
+    check(
+      selector && saved && saved.usable,
+      'Settings driver presets are missing from the ID editor'
+    )
+    const before = cropSection.querySelector('polygon').getAttribute('points')
+    selector.value = saved.id
+    selector.dispatchEvent(new Event('change', { bubbles: true }))
+    await pause()
+    await wait(() => !selector.disabled, 'Saved ID preset selection did not finish')
+    const selected = await window.fastPrint.source()
+    check(
+      selected.preset.profileId === saved.id &&
+        selected.preset.color === false &&
+        selected.preset.duplex === false,
+      'Saved preset settings did not reach the ID session'
+    )
+    check(
+      cropSection.querySelector('polygon').getAttribute('points') === before,
+      'Preset selection changed the crop'
+    )
+    check(selector.value === saved.id, 'Saved preset selector did not retain the choice')
+    let rejected = false
+    try {
+      await window.fastPrint.selectIdPreset('f'.repeat(32), {})
+    } catch {
+      rejected = true
+    }
+    check(
+      rejected && (await window.fastPrint.source()).preset.profileId === saved.id,
+      'An invalid preset replaced the reviewed settings'
+    )
+    batch.preset = selected.preset
   }
   const printer = document.getElementById('id-printer')
   check(
@@ -617,6 +657,7 @@ await import(${JSON.stringify(pathToFileURL(join(root, 'out/main/index.js')).hre
     performance,
     roundTrips: 2,
     printerSwitchPreservedEdits: true,
+    savedPresetSelection: true,
     lastPrinterRestored: true,
     addedArtworkPreserved: true,
     keyboardCropPreserved: true,
@@ -628,7 +669,7 @@ await import(${JSON.stringify(pathToFileURL(join(root, 'out/main/index.js')).hre
   })
   console.log(
     language +
-      ': ID edits and repeat counts survived settings changes; six 9 cm IDs per side on A3, five sheet copies, grayscale proof passed.'
+      ': saved driver presets, ID edits and repeat counts survived settings changes; six 9 cm IDs per side on A3, five sheet copies, grayscale proof passed.'
   )
 }
 assert.deepEqual(await Promise.all(files.map(hash)), originals)

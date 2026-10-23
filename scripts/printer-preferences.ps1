@@ -1,4 +1,4 @@
-param([ValidateSet('List','Capture','Delete')][string]$Action='List',[string]$RequestPath)
+param([ValidateSet('List','Capture','Delete')][string]$Action='List',[string]$RequestPath,[string]$ProfileDirectory)
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 . (Join-Path $PSScriptRoot 'fast-print-profiles.ps1')
@@ -8,7 +8,7 @@ function Get-SafeProfile($profile) {
   $profile | Select-Object id,name,printer,paper,color,landscape,tray,duplex,paperWidthMm,paperHeightMm,copies,savedAt,@{Name='usable';Expression={$usable}},@{Name='error';Expression={$failure}}
 }
 if ($Action -eq 'List') {
-  $profiles=@(Get-FastPrintProfiles | ForEach-Object { Get-SafeProfile $_ })
+  $profiles=@($(if ($ProfileDirectory) { Get-FastPrintProfiles -Directory $ProfileDirectory } else { Get-FastPrintProfiles }) | ForEach-Object { Get-SafeProfile $_ })
   ConvertTo-Json -InputObject $profiles -Depth 5 -Compress
   exit 0
 }

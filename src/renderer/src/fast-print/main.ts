@@ -29,6 +29,7 @@ declare global {
       back(draft: IdPrintDraft): Promise<void>
       saveIdDraft(draft: IdPrintDraft): Promise<void>
       selectIdPrinter(printer: string, draft: IdPrintDraft): Promise<IdPrinterSelection>
+      selectIdPreset(id: string, draft: IdPrintDraft): Promise<IdPrinterSelection>
     }
   }
 }
@@ -58,6 +59,8 @@ async function run(): Promise<void> {
       return
     }
     const { preset } = batch
+    if (preset.sourcePages && preset.sourcePages.length !== batch.files.length)
+      throw new Error('Page selections do not match the selected files.')
     label('file', batch.name)
     label(
       'preset',
@@ -102,7 +105,12 @@ async function run(): Promise<void> {
         for (let file = documentIndex; file <= groupEnd; file++) {
           const isPdf = batch.files[file].extension === '.pdf'
           if (isPdf) await load(file)
-          for (let page = 0; page < (isPdf ? pdf!.numPages : 1); page++) pages.push({ file, page })
+          const count = isPdf ? pdf!.numPages : 1
+          const selected = preset.sourcePages?.[file]
+          if (selected?.some((page) => page >= count))
+            throw new Error('The selected pages no longer exist. Review the page selection.')
+          for (const page of selected ?? Array.from({ length: count }, (_, index) => index))
+            pages.push({ file, page })
           if (totalPages + pages.length > FAST_PRINT_MAX_PAGES)
             throw new Error(`Fast Print supports up to ${FAST_PRINT_MAX_PAGES} pages in one job.`)
         }
@@ -235,8 +243,13 @@ async function run(): Promise<void> {
             `File ${pages[Math.min(first + preset.pagesPerSheet, pageCount) - 1].file + 1} of ${batch.files.length} · Sheet ${count} of ${documentSheets}. Close to cancel.`
           )
         }
+        const hasFollowingPages = preset.sourcePages
+          ? preset.sourcePages.slice(groupEnd + 1).some((pages) => pages.length > 0)
+          : groupEnd < batch.files.length - 1
         if (
-          needsBatchBlankBack(documentSheets, groupEnd, batch.files.length, preset.duplex === true)
+          documentSheets > 0 &&
+          hasFollowingPages &&
+          needsBatchBlankBack(documentSheets, 0, 2, preset.duplex === true)
         ) {
           context.filter = 'none'
           context.fillStyle = '#ffffff'
@@ -261,6 +274,7 @@ async function run(): Promise<void> {
     }
     canvas.width = 0
     canvas.height = 0
+    if (totalSheets === 0) throw new Error('Select at least one page to print.')
     label('heading', 'Sending to your printer')
     label('status', 'Applying your settings. A PDF printer may ask where to save.')
     const result = await window.fastPrint.submit()

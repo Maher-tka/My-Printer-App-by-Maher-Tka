@@ -1,4 +1,32 @@
 export const printerPreferencesMessages: Record<string, { fr: string; ar: string }> = {
+  'The selected driver preset is no longer available.': {
+    fr: 'Le préréglage sélectionné n’est plus disponible.',
+    ar: 'إعداد الطابعة المحدد لم يعد متاحًا.'
+  },
+  'The selected printer or preset is no longer available.': {
+    fr: 'L’imprimante ou le préréglage sélectionné n’est plus disponible.',
+    ar: 'الطابعة أو الإعداد المحدد لم يعد متاحًا.'
+  },
+  'This preset belongs to another printer.': {
+    fr: 'Ce préréglage appartient à une autre imprimante.',
+    ar: 'هذا الإعداد يخص طابعة أخرى.'
+  },
+  'This printer does not support the preset paper.': {
+    fr: 'Cette imprimante ne prend pas en charge le papier du préréglage.',
+    ar: 'هذه الطابعة لا تدعم ورق الإعداد المحفوظ.'
+  },
+  'This printer does not support automatic duplex.': {
+    fr: 'Cette imprimante ne prend pas en charge le recto verso automatique.',
+    ar: 'هذه الطابعة لا تدعم الطباعة التلقائية على الوجهين.'
+  },
+  'Current printer options': {
+    fr: 'Options actuelles de l’imprimante',
+    ar: 'خيارات الطابعة الحالية'
+  },
+  'No saved presets for this printer.': {
+    fr: 'Aucun préréglage pour cette imprimante.',
+    ar: 'لا توجد إعدادات محفوظة لهذه الطابعة.'
+  },
   'Saved driver presets print PDFs at actual size, up to 300 DPI. The PDF and preset paper sizes must match.':
     {
       fr: 'Les préréglages impriment les PDF à taille réelle, jusqu’à 300 DPI. Le format du PDF doit correspondre au papier enregistré.',

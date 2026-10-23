@@ -40,7 +40,24 @@ area on the side of the sheet. Existing layout margins remain in the artwork.
 The driver handoff rejects a mismatched physical paper size.
 
 The file selector shows each document's page count before its filename. The
-summary above Print shows the number of selected files and **total source pages**,
+**Pages in this file** controls select All pages, Odd pages, Even pages, or a
+Page range such as `1-5, 8, 12`. Selections belong to each file and are kept when
+switching files, printers, or layouts. Ranges use original one-based page numbers;
+overlaps are printed once in document order. Arabic digits, Arabic commas and
+en/em dashes are accepted. Invalid, reversed or out-of-bounds ranges disable Print
+and identify the file to fix. An even-page selection on a one-page file skips it;
+the job must retain at least one page. These controls apply to ordinary document
+printing; ID and Polaroid keep their dedicated workflows.
+
+Preview navigation, the selected-page total, n-up grouping, duplex sheet estimates
+and production output all use the filtered source pages. Combining files packs
+only selected pages. Skipped files do not add sheets or trailing blank backs.
+Hidden verification: build the helper with
+`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-fast-print-native.ps1 -OutputName FastPrint-page-selection.exe`,
+then run `npm run test:fast-print:page-selection`. It creates synthetic PDF/image
+proofs and never submits a hardware job.
+
+The summary above Print shows the number of selected files and **total source pages**,
 plus output pages/sheets for the current layout and the sheet total across
 copies. PDFs keep separate final sheets by default; consecutive images share n-up
 sheets. Enable **Combine files on sheets** to put pages from several PDFs (and
@@ -174,6 +191,17 @@ A4/A3 is selected and previewed.
 Each printer retains its own session snapshot; a newly selected printer uses its
 driver defaults. **Printer settings** still returns to the native options window
 with the selected printer and saved ID edits for tray/finishing changes.
+
+The ID review also includes **Saved driver preset**, using the same presets as
+**Settings > Driver presets** and the native Fast Print **Saved preset** list.
+Choose a preset for the selected printer to apply its paper, color, automatic
+duplex and captured tray/vendor settings. For example, select an Epson WF preset
+saved for black-and-white, two-sided IDs. Card crops, front/back assignments,
+card size, spacing and sheet copy quantity stay with the current job.
+Returning to **Printer settings** carries the selected driver snapshot back too.
+Missing, incompatible or outdated presets cannot silently use another printer's
+settings; update or recapture them in Settings. No saved presets shows a disabled
+selection for that printer.
 
 ID verification shares Fast Print's remembered printer, stored separately from
 app preferences and Windows defaults. An unavailable remembered printer falls
@@ -654,3 +682,28 @@ node scripts/verify-fast-print-batch.mjs
 The native test verifies a 122-file selection, exact order, Unicode, ampersands,
 and the selection limit. The renderer/driver test checks a mixed PDF/image batch,
 fresh sheet boundaries, one job, and rejection of unsupported inputs before printing.
+
+## Preview performance
+
+Native photo decoding and printer-document preparation run off the UI thread.
+Unchanged printer snapshots are reused until the device, saved profile or current
+options change; print preparation still captures and validates the full driver
+configuration. Repeated refreshes reuse the displayed sheet only when source
+versions, layout, paper, orientation, rotations, fit, color, spacing and preview
+size match. Page-total refreshes are coalesced while controls are changing.
+
+This does not lower preview dimensions, final raster DPI, artwork quality or
+printer quality. The ordinary print renderer and Windows raster-placement code
+are unchanged. Polaroid retains its separate 300 DPI reviewed-sheet cache.
+
+A local one-CPU-core comparison with six 24-megapixel JPEGs (including EXIF
+rotation) measured startup at 3.179 s before / 1.491 s after, and the longest UI
+pause at 1.673 s / 0.098 s. All 19 A4/A3, rotation, fit and grayscale previews were
+pixel-identical. Eight unchanged refreshes across 16 layouts performed 128 fewer
+sheet compositions. These are local stress measurements, not workshop timings.
+
+Evidence: `output/fast-print-performance/results.json` and the before/after PNGs.
+`node scripts/verify-fast-print-performance.mjs` compares the preserved
+instrumented `FastPrint-Performance-Before.exe` and candidate
+`FastPrint-Performance-After.exe` in `out/native/`. The baseline was compiled from
+the pre-optimization implementation with the same measurement harness.

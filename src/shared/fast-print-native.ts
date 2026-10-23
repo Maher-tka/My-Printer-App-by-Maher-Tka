@@ -41,9 +41,12 @@ export function parseNativePrintRequest(text: string): NativePrintRequest {
     throw new Error('Invalid prepared Polaroid request.')
   if (!preset.profileId || preset.mode === 'document')
     throw new Error('Missing native printer settings.')
+  const files = normalizeFastPrintSelection(data.files)
+  if (preset.sourcePages && preset.sourcePages.length !== files.length)
+    throw new Error('Page selections do not match the selected files.')
   return {
     version: 1,
-    files: normalizeFastPrintSelection(data.files),
+    files,
     preset,
     copies: data.copies,
     ...(data.preparedPolaroid ? { preparedPolaroid: true } : {})

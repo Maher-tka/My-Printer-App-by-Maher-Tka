@@ -56,6 +56,7 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
   const stage = useRef<HTMLDivElement>(null)
   const drag = useRef<number | null>(null)
   const preset: FastPrintPreset = { ...printerSelection.preset, color, duplex }
+  const driverPresets = batch.driverPresets?.filter((profile) => profile.printer === preset.printer)
   const names = ['Front', 'Back']
   const corners = [
     'Top left corner',
@@ -386,6 +387,21 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
       setBusy(false)
     }
   }
+  async function selectDriverPreset(id: string) {
+    if (busy || sent) return
+    setBusy(true)
+    setError('')
+    try {
+      const selection = await window.fastPrint.selectIdPreset(id, reviewDraft())
+      setPrinterSelection(selection)
+      setColor(selection.preset.color)
+      setDuplex(selection.preset.duplex === true)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <main
@@ -444,6 +460,51 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
                   disabled={!device.papers.some((paper) => paper === 'A4' || paper === 'A3')}
                 >
                   {device.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {driverPresets && (
+          <label
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-2"
+            htmlFor="id-driver-preset"
+          >
+            {t('Saved driver preset')}
+            <select
+              id="id-driver-preset"
+              className="h-9 min-w-0 max-w-full rounded-[var(--ui-radius-md)] border bg-background px-3 sm:max-w-80"
+              value={
+                driverPresets.some((profile) => profile.id === preset.profileId)
+                  ? preset.profileId
+                  : 'current'
+              }
+              disabled={
+                busy ||
+                sent ||
+                !driverPresets.some(
+                  (profile) => profile.usable && ['A4', 'A3'].includes(profile.paper)
+                )
+              }
+              onChange={(event) => void selectDriverPreset(event.target.value)}
+            >
+              {!driverPresets.some((profile) => profile.id === preset.profileId) && (
+                <option value="current" disabled>
+                  {t(
+                    driverPresets.length
+                      ? 'Current printer options'
+                      : 'No saved presets for this printer.'
+                  )}
+                </option>
+              )}
+              {driverPresets.map((profile) => (
+                <option
+                  key={profile.id}
+                  value={profile.id}
+                  disabled={!profile.usable || !['A4', 'A3'].includes(profile.paper)}
+                  title={profile.error}
+                >
+                  {profile.name} · {profile.paper} · {t(profile.color ? 'Color' : 'Black & white')}
                 </option>
               ))}
             </select>

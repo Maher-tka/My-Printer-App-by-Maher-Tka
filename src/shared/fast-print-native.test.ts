@@ -27,10 +27,45 @@ const request = {
 }
 assert.equal(parseNativePrintRequest(JSON.stringify(request)).preset.fitToFrame, true)
 assert.equal(parseNativePrintRequest(JSON.stringify(request)).copies, 3)
+const selected = { ...request, preset: { ...request.preset, sourcePages: [[0, 2, 4]] } }
+assert.deepEqual(parseNativePrintRequest(JSON.stringify(selected)).preset.sourcePages, [[0, 2, 4]])
+for (const sourcePages of [
+  null,
+  [],
+  [[]],
+  [[-1]],
+  [[0.5]],
+  [[2, 1]],
+  [[0, 0]],
+  [['1']],
+  [[0], [1]],
+  [Array.from({ length: 2001 }, (_, i) => i)]
+])
+  assert.throws(() =>
+    parseNativePrintRequest(
+      JSON.stringify({ ...request, preset: { ...request.preset, sourcePages } })
+    )
+  )
+assert.deepEqual(
+  parseNativePrintRequest(
+    JSON.stringify({
+      ...request,
+      files: ['a.pdf', 'b.pdf'],
+      preset: { ...request.preset, sourcePages: [[0], []] }
+    })
+  ).preset.sourcePages,
+  [[0], []]
+)
 const polaroid = {
   ...request,
   preset: { ...request.preset, pagesPerSheet: 1, mode: 'polaroid-8' }
 }
+for (const mode of ['id-card', 'polaroid-8', 'polaroid-9'])
+  assert.throws(() =>
+    parseNativePrintRequest(
+      JSON.stringify({ ...selected, preset: { ...selected.preset, pagesPerSheet: 1, mode } })
+    )
+  )
 assert.equal(
   parseNativePrintRequest(JSON.stringify({ ...polaroid, preparedPolaroid: true })).preparedPolaroid,
   true

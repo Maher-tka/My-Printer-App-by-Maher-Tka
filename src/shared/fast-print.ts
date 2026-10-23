@@ -1,5 +1,6 @@
 import layoutDefinitions from './fast-print-layouts.json' with { type: 'json' }
 import type { IdPrintDraft } from './fast-print-id.js'
+import type { DriverPresetSummary } from './printer-preferences.js'
 
 export type FastPrintPagesPerSheet = 1 | 2 | 4 | 6 | 8 | 9 | 12 | 16
 export const FAST_PRINT_LAYOUTS = layoutDefinitions as Array<{
@@ -30,10 +31,13 @@ export interface FastPrintPreset {
   marginMm?: number
   gapMm?: number
   sourceRotations?: number[]
+  /** Zero-based source page indices per file, in document order. Empty lists skip a file. */
+  sourcePages?: number[][]
 }
 
 export interface FastPrintBatchSource {
   printers?: FastPrintPrinter[]
+  driverPresets?: DriverPresetSummary[]
   canReturnToSettings?: boolean
   idDraft?: IdPrintDraft
   previewOnly?: boolean
@@ -98,6 +102,25 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
       (!Array.isArray(p.sourceRotations) ||
         p.sourceRotations.length > 1000 ||
         p.sourceRotations.some((turn) => !Number.isInteger(turn) || turn < 0 || turn > 3))) ||
+    (p.sourcePages !== undefined &&
+      (p.mode !== undefined ||
+        !Array.isArray(p.sourcePages) ||
+        p.sourcePages.length < 1 ||
+        p.sourcePages.length > 1000 ||
+        p.sourcePages.some(
+          (pages) =>
+            !Array.isArray(pages) ||
+            pages.length > 2000 ||
+            pages.some(
+              (page, index) =>
+                !Number.isInteger(page) ||
+                page < 0 ||
+                page > 2147483646 ||
+                (index > 0 && page <= pages[index - 1])
+            )
+        ) ||
+        p.sourcePages.reduce((sum, pages) => sum + pages.length, 0) < 1 ||
+        p.sourcePages.reduce((sum, pages) => sum + pages.length, 0) > 2000)) ||
     (p.mode !== undefined &&
       !['id-card', 'polaroid-8', 'polaroid-9', 'document'].includes(p.mode)) ||
     (p.mode === 'document' && (!p.profileId || p.pagesPerSheet !== 1)) ||
@@ -124,6 +147,9 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     ...(p.marginMm !== undefined ? { marginMm: p.marginMm } : {}),
     ...(p.gapMm !== undefined ? { gapMm: p.gapMm } : {}),
     ...(p.sourceRotations !== undefined ? { sourceRotations: [...p.sourceRotations] } : {}),
+    ...(p.sourcePages !== undefined
+      ? { sourcePages: p.sourcePages.map((pages) => [...pages]) }
+      : {}),
     ...(p.mode ? { mode: p.mode } : {})
   }
 }

@@ -2216,3 +2216,114 @@ Stable v0.2.21 was published and verified on 2026-10-22. Windows workflow
 Setup/blockmap/metadata SHA256 and Portable API digest checks passed. See
 `RELEASE_0.2.21_VERIFICATION.md` for publication evidence and remaining device
 validation.
+
+## Fast Print preview responsiveness — 2026-10-22
+
+- [x] Background photo decoding and printer-document setup remove synchronous
+      loading from the UI thread. The prepared driver document is reused rather
+      than rebuilt on the UI thread. Repeated application of unchanged driver
+      snapshots is avoided; explicit stock selection and print preparation
+      invalidate that state, and failed profiles clear it before recovery.
+- [x] An unchanged completed preview is retained without additional bitmap memory.
+      Its key includes source versions, layout/selection, paper, orientation,
+      rotations, fit, color, spacing, profile state and available preview size.
+      Special-mode previews invalidate the normal-preview fast path.
+- [x] Local single-core before/after: startup 3179 → 1491 ms; longest UI pause
+      1673 → 98 ms. All 19 preview images were pixel-identical. Eight identical
+      refreshes across all 16 A4/A3 layouts avoided 128 sheet compositions.
+      Synthetic original-file hashes were unchanged.
+- [x] All 28 combined/separate multipage PDF/photo cases on A4/A3 passed with the
+      production compositor and Windows ValidateOnly handoff. Named stock presets
+      restored full encrypted driver bytes. Driver tests and Fast Print behavior
+      checks passed; Windows printer defaults were unchanged.
+- [x] ID verification round trips passed in EN/FR/AR, preserving adjustments,
+      repeated IDs, 90 mm size, copies and grayscale A3 output.
+- [x] All 15 original photos in num216p passed native 8 PIC / 9 PIC preparation,
+      two-sheet pagination, A4/color driver snapshots, progress and cached-mode
+      switching. Original hashes were unchanged. No hardware jobs were submitted.
+- [x] Native paint checks passed in both themes and EN/FR/AR with all four existing
+      window sizes, no GDI growth, legacy corners or blank-preview replacements.
+      Existing controls and layout were retained. Typecheck and formatting passed.
+- [ ] Workshop host was unavailable. Actual low-end PC timings, live desktop
+      keyboard/DPI behavior and physical printer output remain pending. This
+      performance update is local and unpublished; the open pre-update native
+      window was preserved, and the faster helper is staged for subsequent opens.
+
+Evidence: `output/fast-print-performance/`, `output/performance-combined-proof.log`,
+`output/performance-id-workflow.log`, `output/performance-paint.log`,
+`output/performance-driver.log`, `output/performance-polaroid/verification.json`.
+
+## Fast Print page selection — 2026-10-23
+
+- [x] One per-file Pages control offers All, Odd, Even and a custom range.
+      Existing file, editing and output groups retain their actions and hierarchy.
+      The native dialog reuses PrintComboBox, standard text entry and PrintTheme
+      tokens; React components are not available in this Windows Forms helper.
+- [x] Original one-based ranges are sorted/deduplicated; Arabic digits/commas and
+      en/em dashes work. Invalid, reversed and out-of-range input disables Print.
+      Switching files restores their own mode/range. ID/Polaroid disable these
+      controls and retain their dedicated production paths.
+- [x] Native filtered preview/count checks passed for 36 A4/A3 cases across
+      EN/FR/AR: 1/2/4-up, combined/separate files, two copies, skipped one-page
+      files, duplex estimates, invalid input, odd/all restoration and ID return.
+      The 12 English cases also passed production composition, ValidateOnly
+      driver handoff, selected-page order and preview/output pixel comparison.
+- [x] Existing page-count regression passed in EN/FR/AR for all eight layouts,
+      copies, duplex document boundaries and edited/missing PDFs. Explicit
+      summary refresh now cancels obsolete scheduled refreshes so edited-file
+      totals and labels finish together.
+- [x] Hidden screenshots cover light/dark and EN/FR/Arabic RTL at 1366x768,
+      1920x1080, 1600x900 and 820x640. Required-size page controls and footers
+      were visually inspected; minimum field widths and summary height were
+      checked automatically. Accessible field names and native text/combobox
+      keyboard behavior are retained. Native selection checks ran on one CPU core.
+- [x] Typecheck, application build, native compilation, Fast Print behavior tests,
+      changed-file formatting and diff whitespace checks passed. No hardware
+      jobs were submitted. Existing unrelated working changes were preserved.
+- [x] The validated helper is staged at out/native/FastPrint.exe for subsequent
+      local launches. The running earlier helper was preserved under a backup
+      filename; its window was not closed. This is unpublished local work.
+- [ ] Live desktop keyboard/focus/high-DPI checks and actual workshop low-end
+      timings remain pending; the main desktop was not controlled.
+
+Evidence: output/fast-print-page-selection/results.json,
+output/fast-print-page-selection/native-recheck/results.json,
+output/fast-print-page-selection/controls-1366.png,
+output/fast-print-page-selection/controls-1920.png,
+output/fast-print-counts/results.json. Re-run the focused suite with
+npm run test:fast-print:page-selection (or -- --native-only for native checks).
+
+## Fast Print saved ID driver presets — 2026-10-23
+
+- [x] ID review now has one Saved driver preset selector beside Printer, using
+      the same per-account preset files as Settings and native Fast Print.
+      Choices are scoped to the current printer; stale and non-A4/A3 entries
+      are disabled. An empty list retains the current printer options.
+- [x] Selecting a preset validates a private snapshot against the installed
+      driver and capabilities, then applies paper, color, duplex and vendor/tray
+      data without replacing crops, source assignments, size, layout or quantity.
+      Main-process guards reject unknown or cross-printer selections and prevent
+      changes during submission. Preset files in Settings remain unchanged.
+- [x] Returning to native Printer settings restores the selected driver snapshot,
+      then preserves the edited ID color/duplex controls and sheet copy quantity.
+      Original artwork and settings survive failed selections and return trips.
+- [x] Full hidden workflow passed in EN dark, FR light and Arabic RTL dark with
+      low-end mode. Settings presets were selected on two printers, invalid IDs
+      were rejected, and printer switching, two return trips, keyboard crop edits,
+      added artwork, ID repeat counts and final grayscale production passed.
+      Layouts were captured at 1366x768, 1920x1080 and 1600x900. Required-size
+      control areas were visually inspected with long preset/printer names.
+- [x] All eight original photos in Downloads/ID TEST passed original and off-center
+      +45/-45-degree checks (24 cases). Crop overlays and monochrome proofs were
+      visually reviewed. 90 mm widths, shared heights, matching front/back centers,
+      grayscale pixels and unchanged original hashes passed; no hardware jobs ran.
+- [x] Typecheck, app build, native compilation, Fast Print, print preferences,
+      language and focused preset capability tests passed. Epson WF mono/duplex
+      behavior is covered by capability tests; integration uses local PDF drivers.
+- [ ] The actual Epson WF driver is not installed on the main PC. Physical-device
+      driver verification, workshop testing and live desktop keyboard/DPI checks
+      remain pending. No unreleased code was installed on the workshop PC.
+
+Evidence: output/fast-print-id-presets-real/results.json and review.png;
+output/fast-print-id-presets-workflow/results.json, preset-controls.png and
+EN/FR/AR stage screenshots. The change is local and unpublished.

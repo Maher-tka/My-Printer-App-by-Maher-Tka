@@ -1,6 +1,6 @@
 {
   "name": "my-printer-app-by-maher-tka",
-  "version": "0.2.21",
+  "version": "0.2.22",
   "description": "Local-first printer-shop hub desktop app by Maher Tka.",
   "author": "Maher Tka",
   "private": true,
@@ -43,7 +43,7 @@
     "test:sequential": "tsx --tsconfig tsconfig.web.json src/renderer/src/tools/sequential-number/lib/layout.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/tools/sequential-number/lib/exportPdf.test.ts",
     "fast-print:install": "npm run build && npm run build:fast-print-shell && node scripts/fast-print-control.mjs install",
     "fast-print:remove": "node scripts/fast-print-control.mjs remove",
-    "test:fast-print": "tsx src/shared/fast-print-native.test.ts && tsx src/shared/fast-print.test.ts && tsx src/shared/fast-print-menu.test.ts && tsx src/shared/fast-print-batch.test.ts && tsx src/shared/fast-print-id.test.ts && tsx src/main/fast-print-id-draft.test.ts && tsx src/main/fast-print-polaroid-cache.test.ts && tsx src/shared/polaroid-framing.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/fast-print/polaroidImage.test.ts",
+    "test:fast-print": "tsx src/shared/fast-print-id-preset.test.ts && tsx src/shared/fast-print-native.test.ts && tsx src/shared/fast-print.test.ts && tsx src/shared/fast-print-menu.test.ts && tsx src/shared/fast-print-batch.test.ts && tsx src/shared/fast-print-id.test.ts && tsx src/main/fast-print-id-draft.test.ts && tsx src/main/fast-print-polaroid-cache.test.ts && tsx src/shared/polaroid-framing.test.ts && tsx --tsconfig tsconfig.web.json src/renderer/src/fast-print/polaroidImage.test.ts",
     "build:fast-print-shell": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-fast-print-shell.ps1",
     "fast-print:settings": "node scripts/fast-print-control.mjs manage",
     "test:fast-print:driver": "powershell -NoProfile -STA -ExecutionPolicy Bypass -File scripts/test-fast-print-profiles.ps1",
@@ -58,7 +58,9 @@
     "test:fast-print:id-workflow": "tsx scripts/verify-fast-print-id-workflow.mjs",
     "test:fast-print:counts": "node scripts/verify-fast-print-counts.mjs",
     "test:fast-print:source": "node scripts/verify-fast-print-source.mjs",
-    "test:fast-print:page-size": "powershell -NoProfile -STA -ExecutionPolicy Bypass -File scripts/test-fast-print-page-size.ps1"
+    "test:fast-print:page-size": "powershell -NoProfile -STA -ExecutionPolicy Bypass -File scripts/test-fast-print-page-size.ps1",
+    "test:fast-print:page-selection": "tsx scripts/verify-fast-print-page-selection.mjs",
+    "test:fast-print:id-presets": "tsx src/shared/fast-print-id-preset.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
