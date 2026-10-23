@@ -5,7 +5,7 @@ $ErrorActionPreference='Stop'
 function Get-SafeProfile($profile) {
   $usable=$true; $failure=$null
   try { $null=Get-FastPrintProfileBytes $profile $profile.printer } catch { $usable=$false; $failure=$_.Exception.Message }
-  $profile | Select-Object id,name,printer,paper,color,landscape,tray,duplex,paperWidthMm,paperHeightMm,copies,savedAt,@{Name='usable';Expression={$usable}},@{Name='error';Expression={$failure}}
+  $profile | Select-Object id,name,printer,paper,color,landscape,tray,duplex,paperWidthMm,paperHeightMm,copies,savedAt,sortOrder,@{Name='usable';Expression={$usable}},@{Name='error';Expression={$failure}}
 }
 if ($Action -eq 'List') {
   $profiles=@($(if ($ProfileDirectory) { Get-FastPrintProfiles -Directory $ProfileDirectory } else { Get-FastPrintProfiles }) | ForEach-Object { Get-SafeProfile $_ })

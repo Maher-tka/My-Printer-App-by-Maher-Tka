@@ -31,6 +31,7 @@ import {
   type IdSide
 } from './idArtwork'
 import '@/styles.css'
+import { compareDriverPresets } from '../../../shared/printer-preferences'
 
 function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
   const { t, direction } = useLanguage()
@@ -56,7 +57,9 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
   const stage = useRef<HTMLDivElement>(null)
   const drag = useRef<number | null>(null)
   const preset: FastPrintPreset = { ...printerSelection.preset, color, duplex }
-  const driverPresets = batch.driverPresets?.filter((profile) => profile.printer === preset.printer)
+  const driverPresets = batch.driverPresets
+    ?.filter((profile) => profile.printer === preset.printer)
+    .sort(compareDriverPresets)
   const names = ['Front', 'Back']
   const corners = [
     'Top left corner',

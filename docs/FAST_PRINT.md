@@ -1,5 +1,13 @@
 # Explorer Fast Print
 
+In the app's **Settings > Printing settings**, **Driver presets** shows saved
+presets from every printer in a visible list, with paper, color, duplex and tray
+details. Choose **Edit** to load a preset, change its name, then choose **Update
+driver preset** to open its existing driver settings and confirm the update.
+Updating retains the same preset ID and print-option assignments. **New preset**
+creates a separate entry. Missing drivers and presets needing attention stay
+visible; install or recapture their driver settings before using them.
+
 Select PDFs, images, or Word documents in Explorer and choose **Show more options >
 Fast Print**. Explorer launches the small native Windows **FastPrint.exe** directly.
 The app dashboard, Electron, and a browser are not needed to open the dialog or
@@ -113,6 +121,19 @@ separate bypass preset for each paper size/stock. A name alone does not configur
 the printer. Presets are private to the Windows account and driver version;
 Windows printer defaults remain unchanged. **Manage saved presets…** retains
 rename/delete and the existing operator notes/default-stock controls.
+
+To choose a preset for printing, open **Saved preset** (**Préréglage enregistré**
+in French), beside Polaroid. The dropdown starts at **Automatic / Automatique**.
+Select the named preset, then choose Print or Review ID.
+
+**Saved preset > Arrange presets…** opens the selected printer's ordering dialog.
+Select an entry, use **Move up / Move down** (or Alt+Up / Alt+Down), then **Save**.
+Cancel leaves the previous order intact. Each printer keeps its own order across
+launches. New presets follow the arranged entries; renaming keeps their position.
+The app settings, ID review and saved-stock menu use the same ordering after
+refreshing or reopening. Order is stored separately in `preset-order.json` beside
+the private profiles folder; driver snapshots and print-option assignments do not
+change. Without a saved order, presets use their names.
 
 **8 PIC** and **9 PIC** sit directly below the printer selector. They require an
 A4/color-capable printer and lock those settings automatically. Polaroid previews

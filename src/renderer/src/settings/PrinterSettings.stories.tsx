@@ -52,13 +52,13 @@ export function printerSettingsFixture(empty = false): PrinterPreferencesApi {
           },
           {
             id: 'c'.repeat(32),
-            name: 'A4 — Photo paper — Rear tray',
+            name: 'ID — A4 — Both sides — Black and white',
             printer: epson,
             paper: 'A4',
-            color: true,
+            color: false,
             landscape: false,
             tray: 'Rear tray',
-            duplex: 'Simplex',
+            duplex: 'Vertical',
             copies: 1,
             paperWidthMm: 210,
             paperHeightMm: 297,
@@ -67,6 +67,7 @@ export function printerSettingsFixture(empty = false): PrinterPreferencesApi {
           }
         ]
   }
+  if (!empty) snapshot.preferences.profiles[epson] = { 'id:A4:mono': 'c'.repeat(32) }
   return {
     get: async () => structuredClone(snapshot),
     save: async (preferences) => {
@@ -75,7 +76,7 @@ export function printerSettingsFixture(empty = false): PrinterPreferencesApi {
     },
     capture: async (request) => {
       const item = {
-        ...snapshot.presets[0],
+        ...(snapshot.presets.find((p) => p.id === request.id) ?? snapshot.presets[0]),
         id: request.id ?? crypto.randomUUID().replace(/-/g, ''),
         printer: request.printer,
         name: request.name,
@@ -111,6 +112,35 @@ export default meta
 type Story = StoryObj<typeof meta>
 export const Populated: Story = { args: { api: populated } }
 export const Empty: Story = { args: { api: empty } }
+export const NeedsAttention: Story = {
+  args: {
+    api: {
+      ...populated,
+      get: async () => {
+        const next = await populated.get()
+        next.presets[2] = {
+          ...next.presets[2],
+          usable: false,
+          error:
+            'The assigned driver preset needs attention. Recapture it or choose another preset.'
+        }
+        return next
+      }
+    }
+  }
+}
+export const PrinterUnavailable: Story = {
+  args: {
+    api: {
+      ...populated,
+      get: async () => {
+        const next = await populated.get()
+        next.devices = next.devices.filter((p) => p.name !== epson)
+        return next
+      }
+    }
+  }
+}
 export const Loading: Story = { args: { api: { ...empty, get: () => new Promise(() => {}) } } }
 export const Unavailable: Story = {
   args: {

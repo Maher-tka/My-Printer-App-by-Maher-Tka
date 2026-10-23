@@ -65,7 +65,7 @@ internal static class NativePrint {
           using(var context=new ApplicationContext()){
             form.FormClosed+=delegate{context.ExitThread();};
             var handle=form.Handle;
-            form.BeginInvoke(new Action(async delegate{if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SELECTION")=="1")await form.VerifyPageSelection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PERFORMANCE")=="1")await form.VerifyPerformance();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_COMBINED")=="1")await form.VerifyCombined();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_DIRECTION")=="1")await form.VerifyDirection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SOURCE")=="1")await form.VerifySource();else if(options.VerifyCounts)await form.VerifyPageCounts();else if(options.VerifyId)await form.VerifyId();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PRESETS")=="1")await form.VerifyPresets();else if(options.VerifyAudit)await form.VerifyAudit();else if(options.VerifyPaint)await form.VerifyPaint();else await form.VerifyPolaroid();}));
+            form.BeginInvoke(new Action(async delegate{if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_ORDER")=="1")await form.VerifyPresetOrder();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SELECTION")=="1")await form.VerifyPageSelection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PERFORMANCE")=="1")await form.VerifyPerformance();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_COMBINED")=="1")await form.VerifyCombined();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_DIRECTION")=="1")await form.VerifyDirection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SOURCE")=="1")await form.VerifySource();else if(options.VerifyCounts)await form.VerifyPageCounts();else if(options.VerifyId)await form.VerifyId();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PRESETS")=="1")await form.VerifyPresets();else if(options.VerifyAudit)await form.VerifyAudit();else if(options.VerifyPaint)await form.VerifyPaint();else await form.VerifyPolaroid();}));
             Application.Run(context);
           }
         }else Application.Run(form);
@@ -343,6 +343,11 @@ internal sealed class PrintWindow : Form {
     ,{"selected page",new[]{"page sélectionnée","صفحة محددة"}}
     ,{"Page selection changed. Review the preview before printing.",new[]{"La sélection de pages a changé. Vérifiez l’aperçu avant d’imprimer.","تغير تحديد الصفحات. راجع المعاينة قبل الطباعة."}}
     ,{"Fast Print supports up to 2000 selected pages.",new[]{"L’impression rapide accepte jusqu’à 2000 pages sélectionnées.","تدعم الطباعة السريعة حتى 2000 صفحة محددة."}}
+    ,{"Arrange presets…",new[]{"Organiser les préréglages…","ترتيب الإعدادات…"}}
+    ,{"Move up",new[]{"Monter","نقل للأعلى"}}
+    ,{"Move down",new[]{"Descendre","نقل للأسفل"}}
+    ,{"Saved preset order could not be read.",new[]{"Impossible de lire l’ordre des préréglages enregistrés.","تعذرت قراءة ترتيب الإعدادات المحفوظة."}}
+    ,{"Invalid preset order.",new[]{"Ordre de préréglages invalide.","ترتيب الإعدادات غير صالح."}}
   };
   string L(string key) { string[] values; return (args.Language == "ar" || args.Language == "fr") && translations.TryGetValue(key, out values) ? values[args.Language == "ar" ? 1 : 0] : key; }
   string Quantity(long value,string singular,string plural){return value+" "+L(value==1?singular:plural);}
@@ -442,7 +447,7 @@ internal sealed class PrintWindow : Form {
     orientation.Items.AddRange(new object[] {new Entry("auto",L("Original orientation")), new Entry("portrait", L("Portrait")), new Entry("landscape", L("Landscape")) }); orientation.SelectedIndex = 0;
     printer.SelectedIndexChanged += async delegate { if (!updating) await SelectPrinter(); };
     paper.SelectedIndexChanged += delegate { if (!updating) { explicitProfile = null; UpdateProfiles(); ApplyAutomaticProfile(); Changed(); } };
-    profiles.SelectedIndexChanged += async delegate { if (!updating) { string id=Selected(profiles);if(id=="manage"){UpdateProfiles();await ManagePresets();return;}if(id=="save"){UpdateProfiles();SavePrinterPreset();return;}SelectSavedProfile(id); } };
+    profiles.SelectedIndexChanged += async delegate { if (!updating) { string id=Selected(profiles);if(id=="manage"){UpdateProfiles();await ManagePresets();return;}if(id=="arrange"){UpdateProfiles();ArrangePresets();return;}if(id=="save"){UpdateProfiles();SavePrinterPreset();return;}SelectSavedProfile(id); } };
     color.SelectedIndexChanged += delegate { if (!updating) { ApplyAutomaticProfile(); Changed(); } };
     orientation.SelectedIndexChanged += delegate { if (!updating) Changed(); }; fill.CheckedChanged += delegate { if (!updating) {if(!Special){generalFill=fill.Checked;fillEdited=true;}Changed();} };
     combineFiles.CheckedChanged+=delegate{if(!updating){sheetIndex=0;Changed();}};
@@ -543,10 +548,19 @@ internal sealed class PrintWindow : Form {
   void UpdateProfiles() {
     updating = true; profiles.Items.Clear(); profiles.Items.Add(new Entry("auto", L("Automatic")));
     if(explicitProfile=="current")profiles.Items.Add(new Entry("current",L("Current printer options")));
-    foreach (var profile in saved.Where(p => NativePrint.Text(p, "printer") == Selected(printer) && (!IsPolaroid || NativePrint.Text(p,"paper")=="A4"&&NativePrint.Flag(p,"color"))).OrderBy(p=>NativePrint.Text(p,"name"))) profiles.Items.Add(new Entry(NativePrint.Text(profile, "id"), NativePrint.Text(profile, "name")+" · "+NativePrint.Text(profile,"paper")+" · "+NativePrint.Text(profile,"tray")));
-    profiles.Items.Add(new Entry("save",L("Save printer preset…")));profiles.Items.Add(new Entry("manage",L("Manage saved presets…")));
+    var positions=NativePresetOrder.Positions(Selected(printer));
+    foreach (var profile in saved.Where(p => NativePrint.Text(p, "printer") == Selected(printer) && (!IsPolaroid || NativePrint.Text(p,"paper")=="A4"&&NativePrint.Flag(p,"color"))).OrderBy(p=>positions.ContainsKey(NativePrint.Text(p,"id"))?positions[NativePrint.Text(p,"id")]:int.MaxValue).ThenBy(p=>NativePrint.Text(p,"name")).ThenBy(p=>NativePrint.Text(p,"id"),StringComparer.Ordinal)) profiles.Items.Add(new Entry(NativePrint.Text(profile, "id"), NativePrint.Text(profile, "name")+" · "+NativePrint.Text(profile,"paper")+" · "+NativePrint.Text(profile,"tray")));
+    profiles.Items.Add(new Entry("save",L("Save printer preset…")));profiles.Items.Add(new Entry("arrange",L("Arrange presets…")));profiles.Items.Add(new Entry("manage",L("Manage saved presets…")));
     profiles.SelectedIndex = 0; if (explicitProfile != null) for (int i = 1; i < profiles.Items.Count; i++) if (((Entry)profiles.Items[i]).Id == explicitProfile) profiles.SelectedIndex = i;
     updating = false;
+  }
+  void ArrangePresets(){
+    try{
+      NativePresetOrder.Positions(Selected(printer),true);
+      var positions=NativePresetOrder.Positions(Selected(printer));
+      var entries=saved.Where(item=>NativePrint.Text(item,"printer")==Selected(printer)).OrderBy(item=>positions.ContainsKey(NativePrint.Text(item,"id"))?positions[NativePrint.Text(item,"id")]:int.MaxValue).ThenBy(item=>NativePrint.Text(item,"name")).Select(item=>new Entry(NativePrint.Text(item,"id"),NativePrint.Text(item,"name")+" · "+NativePrint.Text(item,"paper")+" · "+NativePrint.Text(item,"tray"))).ToArray();
+      using(var dialog=new PresetOrderDialog(Selected(printer),entries,L,Font,args.Language=="ar",explicitProfile)){if(dialog.ShowDialog(this)==DialogResult.OK)UpdateProfiles();}
+    }catch(Exception error){MessageBox.Show(this,L(error.Message),L("Fast Print"),MessageBoxButtons.OK,MessageBoxIcon.Error);}
   }
   void SelectSavedProfile(string id){
     var profile=saved.FirstOrDefault(item=>NativePrint.Text(item,"id")==id);
@@ -1155,6 +1169,41 @@ internal sealed class PrintWindow : Form {
         File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,coldMs=cold.ElapsedMilliseconds,workingMiB=Process.GetCurrentProcess().WorkingSet64/1048576.0,maxUiPauseMs=Math.Max(maxPause,startupPause),startupPauseMs=startupPause,interactionPauseMs=maxPause,uiTicks=beats,photoDecodeOffUi=photoDecodeThread!=uiThread,compositions=previewCompositions,reuses=previewReuses,states=states,cleanupDirectory=session}),new UTF8Encoding(false));
       }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
     }
+  }
+  internal async Task VerifyPresetOrder(){
+    Directory.CreateDirectory(args.Verify);
+    try{
+      AuditCheck(Path.GetFullPath(NativePrint.LocalRoot)==Path.GetFullPath(Path.Combine(args.Verify,"settings")),"Preset order verification requires an isolated settings folder.");
+      Directory.CreateDirectory(NativePrint.LocalRoot);string orderFile=Path.Combine(NativePrint.LocalRoot,"preset-order.json");if(File.Exists(orderFile))File.Delete(orderFile);
+      string owner="EPSON WF — verification",other="Other printer";var ids=new[]{new string('a',32),new string('b',32),new string('c',32),new string('d',32)};
+      var names=new[]{"ID — two sides — black and white","A4 — photo paper — rear tray","A3 — 80 gsm — cassette","Other preset"};
+      string profileDirectory=Path.Combine(NativePrint.LocalRoot,"profiles");Directory.CreateDirectory(profileDirectory);var originals=new Dictionary<string,string>();
+      for(int index=0;index<ids.Length;index++){
+        var profile=new Dictionary<string,object>{{"version",1},{"id",ids[index]},{"name",names[index]},{"printer",index==3?other:owner},{"paper","A4"},{"color",true},{"landscape",false},{"tray","Rear tray"},{"driverSettings","unchanged-private-driver-snapshot"}};
+        string path=Path.Combine(profileDirectory,ids[index]+".json");File.WriteAllText(path,NativePrint.Json.Serialize(profile),new UTF8Encoding(false));originals[path]=File.ReadAllText(path);saved.Add(profile);
+      }
+      string preferencesFile=Path.Combine(NativePrint.LocalRoot,"preferences.json"),preferenceText="{\"version\":1,\"defaultPrinter\":\"Keep my choice\",\"profiles\":{},\"optionPrinters\":{}}";File.WriteAllText(preferencesFile,preferenceText);
+      NativePresetOrder.Save(other,new[]{ids[3]});var expected=new[]{ids[0],ids[2],ids[1]};
+      updating=true;printer.Items.Add(new Entry(owner,owner));printer.SelectedIndex=0;explicitProfile=ids[0];updating=false;UpdateProfiles();
+      Func<Entry[]> entries=()=>profiles.Items.Cast<Entry>().Where(item=>System.Text.RegularExpressions.Regex.IsMatch(item.Id,@"^[a-f0-9]{32}$")).ToArray();
+      AuditCheck(entries().Select(item=>item.Id).SequenceEqual(new[]{ids[2],ids[1],ids[0]}),"Unordered presets must use their names.");
+      using(var dialog=new PresetOrderDialog(owner,entries(),L,Font,args.Language=="ar",ids[0])){
+        AuditCheck(!dialog.Down.Enabled&&!dialog.SaveButton.Enabled,"Order buttons ignored list boundaries or unchanged state.");dialog.MoveSelected(-1);dialog.MoveSelected(-1);AuditCheck(!dialog.Up.Enabled&&dialog.SaveButton.Enabled,"Move up did not reach the first position.");dialog.SaveOrder();
+      }
+      UpdateProfiles();AuditCheck(entries().Select(item=>item.Id).SequenceEqual(expected),"Native preset list ignored the saved order.");AuditCheck(Selected(profiles)==ids[0],"Reordering replaced the selected preset.");
+      string savedOrder=File.ReadAllText(orderFile);
+      using(var canceled=new PresetOrderDialog(owner,entries(),L,Font,args.Language=="ar",ids[0])){canceled.MoveSelected(1);canceled.Close();}
+      AuditCheck(File.ReadAllText(orderFile)==savedOrder,"Cancel saved an unfinished order.");
+      bool rejected=false;try{NativePresetOrder.Save(owner,new[]{ids[0],ids[0]});}catch{rejected=true;}AuditCheck(rejected&&File.ReadAllText(orderFile)==savedOrder,"An invalid order changed saved data.");
+      using(var reopened=new PrintWindow(new Options(new[]{"--"}.Concat(args.Files).ToArray()))){reopened.updating=true;reopened.printer.Items.Add(new Entry(owner,owner));reopened.printer.SelectedIndex=0;reopened.saved.AddRange(saved);reopened.explicitProfile=ids[0];reopened.updating=false;reopened.UpdateProfiles();AuditCheck(reopened.profiles.Items.Cast<Entry>().Where(item=>System.Text.RegularExpressions.Regex.IsMatch(item.Id,@"^[a-f0-9]{32}$")).Select(item=>item.Id).SequenceEqual(expected),"A fresh window lost the saved order.");reopened.Close();}
+      saved[0]["name"]="Renamed preset";UpdateProfiles();AuditCheck(entries()[0].Id==ids[0],"Renaming changed the saved order.");
+      string addedId=new string('e',32);var added=new Dictionary<string,object>(saved[0]);added["id"]=addedId;added["name"]="AAA new preset";saved.Add(added);File.WriteAllText(Path.Combine(profileDirectory,addedId+".json"),NativePrint.Json.Serialize(added));UpdateProfiles();AuditCheck(entries().Last().Id==addedId,"A new preset displaced the arranged presets.");
+      var captures=new List<object>();
+      foreach(bool dark in new[]{false,true}){PrintTheme.Initialize(dark);PrintTheme.Apply(this);foreach(var size in new[]{new Size(1366,768),new Size(1920,1080)}){Size=size;using(var dialog=new PresetOrderDialog(owner,entries(),L,Font,args.Language=="ar",ids[1])){dialog.MoveSelected(1);await Task.Delay(20);NativePrint.Capture(dialog,Path.Combine(args.Verify,(dark?"dark":"light")+"-"+size.Width+"x"+size.Height+".png"));AuditCheck(dialog.Width<size.Width&&dialog.Height<size.Height,"Arrange dialog exceeds the screen.");AuditCheck(dialog.SaveButton.Right<=dialog.SaveButton.Parent.ClientSize.Width,"Save action is clipped.");captures.Add(new{dark=dark,screenWidth=size.Width,screenHeight=size.Height,width=dialog.Width,height=dialog.Height});}}}
+      AuditCheck(NativePresetOrder.Positions(other,true)[ids[3]]==0,"Reordering changed another printer's order.");
+      AuditCheck(File.ReadAllText(preferencesFile)==preferenceText&&originals.All(item=>File.ReadAllText(item.Key)==item.Value),"Reordering modified driver snapshots or printing preferences.");
+      File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,printer=owner,ids=expected.Concat(new[]{addedId}).ToArray(),captures=captures,cancelPreserved=true,selectionPreserved=true,settingsUnchanged=true,restartPreserved=true,cleanupDirectory=session}),new UTF8Encoding(false));
+    }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
   }
   internal async Task VerifyPageSelection(){
     Directory.CreateDirectory(args.Verify);

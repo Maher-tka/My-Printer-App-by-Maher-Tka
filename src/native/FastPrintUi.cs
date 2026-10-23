@@ -51,7 +51,7 @@ internal static class PrintTheme {
     if(root is Form || root is TableLayoutPanel || root is FlowLayoutPanel || root is LayoutPicker)root.BackColor=Background;
     if(root is PreviewSurface)root.BackColor=Stage;
     if(root is PrintButtonControl)root.BackColor=Background;
-    if(root is ComboBox || root is NumericUpDown || root is TextBoxBase){root.BackColor=Surface;root.ForeColor=Text;}
+    if(root is ComboBox || root is NumericUpDown || root is TextBoxBase || root is ListBox){root.BackColor=Surface;root.ForeColor=Text;}
     if(root is Label || root is CheckBox)root.BackColor=Color.Transparent;
     var combo=root as ComboBox;if(combo!=null){combo.FlatStyle=FlatStyle.Standard;combo.IntegralHeight=false;combo.MaxDropDownItems=12;}
     foreach(Control child in root.Controls)Apply(child);

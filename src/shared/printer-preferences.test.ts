@@ -5,10 +5,27 @@ import {
   preferredProfile,
   preferredPrinter,
   fastPrintOptionId,
-  PRINTING_OPTIONS
+  PRINTING_OPTIONS,
+  compareDriverPresets
 } from './printer-preferences.js'
 import { createFastPrintChoices, type FastPrintChoice } from './fast-print-menu.js'
 const preferences = emptyPrinterPreferences()
+const orderedProfiles = [
+  { id: 'c', name: 'Alpha new', printer: 'Epson' },
+  { id: 'b', name: 'Alpha', printer: 'Epson', sortOrder: 1 },
+  { id: 'a', name: 'Zebra', printer: 'Epson', sortOrder: 0 }
+]
+assert.deepEqual(
+  orderedProfiles.sort(compareDriverPresets).map((p) => p.id),
+  ['a', 'b', 'c']
+)
+assert.deepEqual(
+  [...orderedProfiles]
+    .map((p) => ({ ...p, sortOrder: undefined }))
+    .sort(compareDriverPresets)
+    .map((p) => p.id),
+  ['b', 'c', 'a']
+)
 assert.equal(PRINTING_OPTIONS.length, new Set(PRINTING_OPTIONS.map((o) => o.id)).size)
 preferences.defaultPrinter = 'Epson'
 preferences.optionPrinters['tool:booklet-montage'] = 'Konica'

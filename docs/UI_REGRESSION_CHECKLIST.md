@@ -2327,3 +2327,68 @@ npm run test:fast-print:page-selection (or -- --native-only for native checks).
 Evidence: output/fast-print-id-presets-real/results.json and review.png;
 output/fast-print-id-presets-workflow/results.json, preset-controls.png and
 EN/FR/AR stage screenshots. The change is local and unpublished.
+
+## Printing settings preset list and editor — 2026-10-23
+
+- [x] Saved presets are visible across every printer in one bounded, scrolling
+      list. Each row shows its name, printer, paper, color, duplex and tray, with
+      one Edit button. The former filtered preset dropdown was removed.
+- [x] Edit selects the existing ID, its owning printer and name, highlights the
+      row and focuses the name field. The owning printer remains fixed while
+      editing. Update driver preset reuses the existing capture/update API and
+      loads the prior driver snapshot. New preset has one visible home.
+- [x] Shared Button, Input, Field and Select components, spacing, semantic colors
+      and selected states are reused. No heading subtitles or duplicate edit,
+      new, capture or delete commands were added. Driver errors and missing
+      printer states remain visible and actionable.
+- [x] Headless mock-driver checks cover all-printer visibility, existing-ID update,
+      print-option assignment retention, mono/duplex/tray retention, cancellation,
+      failure, busy guards, separate new entries, missing drivers and attention
+      states. User preset files were not edited and no driver dialogs or hardware
+      print jobs were started during these checks.
+- [x] Captures cover 1366x768, 1920x1080 and 1600x900 in English light/dark,
+      French light and Arabic RTL dark/low-end mode, with long printer/preset
+      names. Required-size representative captures were visually inspected;
+      horizontal overflow, selection semantics and edit-to-name focus passed.
+- [x] Typecheck, print/preference tests, translation tests, app build, Storybook
+      build and changed-file formatting passed. Stories include populated,
+      empty, loading, failure, attention and unavailable-printer states.
+- [ ] Live desktop keyboard traversal, high-DPI and vendor driver-dialog checks
+      remain pending. This is a local change for the next release.
+
+Evidence: output/printer-settings-proof/results.json and EN/FR/AR captures;
+output/printer-settings-build.log and output/printer-settings-storybook.log.
+Re-run the UI checks with node scripts/verify-printer-settings.mjs. They use an
+isolated hidden Electron window and mock printer API.
+
+## Fast Print preset ordering — 2026-10-23
+
+- [x] Saved preset > Arrange presets opens a native dialog for the current printer.
+      Move up/down and Alt+Up/Down arrange entries; Save commits and Cancel leaves
+      the previous order intact. Automatic and management commands retain their
+      fixed positions. Reordering preserves the selected print preset.
+- [x] Ordering is stored per printer in a separate versioned preset-order.json,
+      with atomic replacement and a backup. Writers are serialized. Duplicate or
+      invalid IDs, excessive counts and oversized order files are rejected.
+      Ordering never rewrites driver snapshots, printer preferences or assignments.
+- [x] Native Fast Print, PowerShell menu/setup lists, the app settings list and ID
+      review share the saved order. Fresh windows retain it; renamed presets keep
+      their ID position and new presets follow arranged ones. Missing saved order
+      falls back to names, and malformed order data does not replace driver data.
+- [x] Hidden EN/FR/AR checks passed for boundaries, save/cancel, independent
+      printers, a fresh window, rename/new entries and selected-preset retention.
+      Original profile-file and printing-preference bytes remained unchanged.
+      PowerShell ordering matched the native list and TypeScript comparator.
+- [x] The dialog was captured in light/dark appearance with 1366x768 and 1920x1080
+      parent windows in EN/FR/Arabic RTL. Dialog and footer bounds fit; representative
+      captures were visually inspected. It reuses native shared buttons, panels
+      and theme tokens. Tests ran on one CPU core and submitted no hardware jobs.
+- [x] Typecheck, print-preference tests, Fast Print behavior tests, the prior app
+      settings UI regression, app build, native compilation and formatting passed.
+      Existing user work and the current native window were preserved.
+- [ ] Live desktop keyboard traversal, high-DPI and workshop-device checks remain
+      pending. This is local work for the next release.
+
+Evidence: output/fast-print-preset-order/results.json and EN/FR/AR captures;
+output/fast-print-preset-order-build.log. Re-run with
+npm run test:fast-print:preset-order after building FastPrint-preset-order.exe.

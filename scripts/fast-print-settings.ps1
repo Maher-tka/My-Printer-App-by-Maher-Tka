@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'fast-print-profiles.ps1')
 
 if ($Action -eq 'List') {
-  $profiles=@(Get-FastPrintProfiles | Select-Object id,name,printer,paper,defaultBypassFaceUp,savedAt)
+  $profiles=@(Get-FastPrintProfiles | Select-Object id,name,printer,paper,defaultBypassFaceUp,savedAt,sortOrder)
   ConvertTo-Json -InputObject $profiles -Compress
   exit 0
 }
@@ -81,7 +81,7 @@ function Refresh-FastPrintList {
   $script:fpState.loading=$true
   try {
     $list.Items.Clear()
-    foreach ($profile in @(Get-FastPrintProfiles | Sort-Object printer,name)) {
+    foreach ($profile in @(Get-FastPrintProfiles)) {
       $list.Items.Add([PSCustomObject]@{ display=($profile.name + '  |  ' + $profile.printer); profile=$profile }) | Out-Null
     }
   } finally { $script:fpState.loading=$false }

@@ -1,4 +1,19 @@
 export const printerPreferencesMessages: Record<string, { fr: string; ar: string }> = {
+  'Saved driver presets': {
+    fr: 'Préréglages du pilote enregistrés',
+    ar: 'إعدادات برنامج التشغيل المحفوظة'
+  },
+  'Edit preset': { fr: 'Modifier le préréglage', ar: 'تعديل الإعداد' },
+  'Preset needs attention': { fr: 'Préréglage à vérifier', ar: 'الإعداد يحتاج إلى مراجعة' },
+  'Update driver preset': { fr: 'Mettre à jour le préréglage', ar: 'تحديث إعداد برنامج التشغيل' },
+  'No saved driver presets. Choose New preset to create one.': {
+    fr: 'Aucun préréglage enregistré. Choisissez Nouveau préréglage pour en créer un.',
+    ar: 'لا توجد إعدادات محفوظة. اختر إعدادًا جديدًا لإنشاء إعداد.'
+  },
+  'This printer is unavailable. Install its driver, then refresh.': {
+    fr: 'Cette imprimante est indisponible. Installez son pilote, puis actualisez.',
+    ar: 'هذه الطابعة غير متاحة. ثبّت برنامج التشغيل ثم حدّث القائمة.'
+  },
   'The selected driver preset is no longer available.': {
     fr: 'Le préréglage sélectionné n’est plus disponible.',
     ar: 'إعداد الطابعة المحدد لم يعد متاحًا.'

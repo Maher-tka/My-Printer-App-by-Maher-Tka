@@ -102,6 +102,22 @@ export interface DriverPresetSummary {
   savedAt: string
   usable: boolean
   error?: string
+  sortOrder?: number
+}
+export function compareDriverPresets(
+  a: Pick<DriverPresetSummary, 'id' | 'name' | 'printer' | 'sortOrder'>,
+  b: Pick<DriverPresetSummary, 'id' | 'name' | 'printer' | 'sortOrder'>
+): number {
+  const rank = (value?: number) =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 0
+      ? value
+      : Number.MAX_SAFE_INTEGER
+  return (
+    a.printer.localeCompare(b.printer) ||
+    rank(a.sortOrder) - rank(b.sortOrder) ||
+    a.name.localeCompare(b.name) ||
+    a.id.localeCompare(b.id)
+  )
 }
 export interface PrinterDevice {
   name: string

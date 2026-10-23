@@ -23,10 +23,40 @@ function Read-FastPrintProfile([string]$Id, [string]$Directory = (Get-FastPrintP
 }
 function Get-FastPrintProfiles([string]$Directory = (Get-FastPrintProfileDirectory)) {
   if (!(Test-Path -LiteralPath $Directory)) { return }
+  $orders=$null
+  $orderFile=Join-Path (Split-Path -Parent $Directory) 'preset-order.json'
+  if (Test-Path -LiteralPath $orderFile) {
+    try {
+      if ((Get-Item -LiteralPath $orderFile).Length -gt 4MB) { throw 'Invalid saved preset order.' }
+      $data=Get-Content -LiteralPath $orderFile -Raw -Encoding UTF8 | ConvertFrom-Json
+      if ($data.version -ne 1 -or $data.printers -isnot [pscustomobject] -or @($data.printers.PSObject.Properties).Count -gt 200) { throw 'Invalid saved preset order.' }
+      foreach ($property in $data.printers.PSObject.Properties) {
+        $ids=@($property.Value)
+        if ([string]::IsNullOrWhiteSpace($property.Name) -or $property.Name.Length -gt 512 -or $property.Name -match '[\x00-\x1f\x7f-\x9f]' -or $property.Value -isnot [Array] -or $ids.Count -gt 1000 -or @($ids | Where-Object { $_ -isnot [string] -or $_ -cnotmatch '^[a-f0-9]{32}$' }).Count -gt 0 -or @($ids | Select-Object -Unique).Count -ne $ids.Count) { throw 'Invalid saved preset order.' }
+      }
+      $orders=$data.printers
+    } catch { [Console]::Error.WriteLine('Saved preset order could not be read; using names.'); $orders=$null }
+  }
+  $profiles=@(
   foreach ($file in Get-ChildItem -LiteralPath $Directory -Filter '*.json' -File) {
-    try { Read-FastPrintProfile $file.BaseName $Directory }
+    try {
+      $profile=Read-FastPrintProfile $file.BaseName $Directory
+      $rank=[int]::MaxValue
+      if ($orders) {
+        $property=$orders.PSObject.Properties | Where-Object { $_.Name -ceq $profile.printer } | Select-Object -First 1
+        if ($property) {
+          $ids=@($property.Value)
+          $index=[Array]::IndexOf($ids,$profile.id)
+          if ($index -ge 0) { $rank=$index }
+        }
+      }
+      $profile | Add-Member -NotePropertyName sortOrder -NotePropertyValue $rank -Force
+      $profile
+    }
     catch { [Console]::Error.WriteLine("Skipped unreadable Fast Print profile: $($file.Name)") }
   }
+  )
+  $profiles | Sort-Object printer,sortOrder,name,id
 }
 function Get-FastPrintProfileBytes($Profile, [string]$Printer) {
   if ($Profile.printer -cne $Printer) { throw 'This preset belongs to a different printer. Capture one for the selected printer.' }

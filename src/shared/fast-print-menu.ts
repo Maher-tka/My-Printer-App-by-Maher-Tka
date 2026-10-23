@@ -7,6 +7,7 @@ import {
   emptyPrinterPreferences,
   fastPrintOptionId,
   preferredProfile,
+  compareDriverPresets,
   type PrinterPreferences
 } from './printer-preferences.js'
 
@@ -24,6 +25,7 @@ export interface FastPrintSavedStock {
   paper: 'A4' | 'A3'
   defaultBypassFaceUp?: boolean
   savedAt?: string
+  sortOrder?: number
 }
 
 export function defaultFastPrintStock(
@@ -105,9 +107,9 @@ export function createFastPrintChoices(
     )
     .filter((device) => device.papers.some((paper) => paper === 'A4' || paper === 'A3'))
     .map((device) => {
-      const saved = stocks.filter(
-        (stock) => stock.printer === device.name && device.papers.includes(stock.paper)
-      )
+      const saved = stocks
+        .filter((stock) => stock.printer === device.name && device.papers.includes(stock.paper))
+        .sort(compareDriverPresets)
       const children: FastPrintChoice[] = saved.length
         ? [
             {
