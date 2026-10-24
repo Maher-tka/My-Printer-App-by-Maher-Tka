@@ -26,6 +26,7 @@ internal static class NativePrint {
   internal static string VerificationSettingsRoot;
   [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
   [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr window,int index);
+  internal static bool ControlVisible(Control control){return (GetWindowLong(control.Handle,-16)&0x10000000)!=0;}
   internal static void Capture(Form form,string path){
     if(!form.Visible){CaptureHandles(form);CaptureLayout(form);}
     form.PerformLayout();form.Refresh();
@@ -38,6 +39,14 @@ internal static class NativePrint {
       image.Save(path,ImageFormat.Png);
     }
   }
+  internal static void CaptureContent(Control control,string path){
+    CaptureHandles(control);CaptureLayout(control);control.Refresh();
+    using(var bitmap=new Bitmap(control.Width,control.Height)){
+      control.DrawToBitmap(bitmap,new Rectangle(Point.Empty,control.Size));
+      using(var graphics=Graphics.FromImage(bitmap))CaptureChildren(control,graphics);
+      bitmap.Save(path,ImageFormat.Png);
+    }
+  }
   static void CaptureHandles(Control parent){var handle=parent.Handle;foreach(Control child in parent.Controls)CaptureHandles(child);}
   static void CaptureLayout(Control parent){parent.PerformLayout();foreach(Control child in parent.Controls)CaptureLayout(child);parent.PerformLayout();}
   static void CaptureChildren(Control parent,Graphics graphics){
@@ -45,7 +54,8 @@ internal static class NativePrint {
       if(child.Width<1||child.Height<1||(GetWindowLong(child.Handle,-16)&0x10000000)==0)continue;
       using(var bitmap=new Bitmap(child.Width,child.Height)){
         var handle=child.Handle;child.DrawToBitmap(bitmap,new Rectangle(Point.Empty,child.Size));
-        var state=graphics.Save();graphics.TranslateTransform(child.Left,child.Top);graphics.SetClip(new Rectangle(Point.Empty,child.Size),CombineMode.Intersect);
+        int inset=parent is ScrollableControl&&parent.RightToLeft==RightToLeft.Yes?Math.Max(0,parent.Width-parent.ClientSize.Width):0;
+        var state=graphics.Save();graphics.TranslateTransform(child.Left+inset,child.Top);graphics.SetClip(new Rectangle(Point.Empty,child.Size),CombineMode.Intersect);
         graphics.DrawImageUnscaled(bitmap,Point.Empty);CaptureChildren(child,graphics);graphics.Restore(state);
       }
     }
@@ -65,7 +75,7 @@ internal static class NativePrint {
           using(var context=new ApplicationContext()){
             form.FormClosed+=delegate{context.ExitThread();};
             var handle=form.Handle;
-            form.BeginInvoke(new Action(async delegate{if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_ORDER")=="1")await form.VerifyPresetOrder();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SELECTION")=="1")await form.VerifyPageSelection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PERFORMANCE")=="1")await form.VerifyPerformance();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_COMBINED")=="1")await form.VerifyCombined();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_DIRECTION")=="1")await form.VerifyDirection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SOURCE")=="1")await form.VerifySource();else if(options.VerifyCounts)await form.VerifyPageCounts();else if(options.VerifyId)await form.VerifyId();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PRESETS")=="1")await form.VerifyPresets();else if(options.VerifyAudit)await form.VerifyAudit();else if(options.VerifyPaint)await form.VerifyPaint();else await form.VerifyPolaroid();}));
+            form.BeginInvoke(new Action(async delegate{if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PICKER")=="1")await form.VerifyPresetPicker();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_ORDER")=="1")await form.VerifyPresetOrder();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SELECTION")=="1")await form.VerifyPageSelection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PERFORMANCE")=="1")await form.VerifyPerformance();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_COMBINED")=="1")await form.VerifyCombined();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_DIRECTION")=="1")await form.VerifyDirection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SOURCE")=="1")await form.VerifySource();else if(options.VerifyCounts)await form.VerifyPageCounts();else if(options.VerifyId)await form.VerifyId();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PRESETS")=="1")await form.VerifyPresets();else if(options.VerifyAudit)await form.VerifyAudit();else if(options.VerifyPaint)await form.VerifyPaint();else await form.VerifyPolaroid();}));
             Application.Run(context);
           }
         }else Application.Run(form);
@@ -181,10 +191,22 @@ internal sealed class Entry {
   public override string ToString() { return Label; }
 }
 internal sealed class PreviewSurface : Control {
+  internal sealed class Item { internal RectangleF Bounds;internal int Source,Page,Turns;internal string Name; }
+  internal Item[] Items=new Item[0];internal int SelectedItem=-1;internal bool Interactive;
+  internal event Action<int> ItemSelected;internal event Action RotateRequested;
   internal Bitmap Sheet;
   string busyText;
   internal int BlankReplacements;
-  internal PreviewSurface() { SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw,true); BackColor = PrintTheme.Stage; AccessibleName = "Print preview"; }
+  internal PreviewSurface() { SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw|ControlStyles.Selectable,true); BackColor = PrintTheme.Stage; AccessibleName = "Print preview";TabStop=true; }
+  internal RectangleF SheetBounds(){if(Sheet==null)return RectangleF.Empty;float scale=Math.Min((ClientSize.Width-32f)/Sheet.Width,(ClientSize.Height-32f)/Sheet.Height);return scale<=0?RectangleF.Empty:new RectangleF((ClientSize.Width-Sheet.Width*scale)/2,(ClientSize.Height-Sheet.Height*scale)/2,Sheet.Width*scale,Sheet.Height*scale);}
+  internal int HitItem(Point point){var sheet=SheetBounds();if(!Interactive||!string.IsNullOrEmpty(busyText)||sheet.IsEmpty||!sheet.Contains(point))return -1;var p=new PointF((point.X-sheet.X)*Sheet.Width/sheet.Width,(point.Y-sheet.Y)*Sheet.Height/sheet.Height);return Array.FindIndex(Items,item=>item.Bounds.Contains(p));}
+  internal void SelectItem(int index){if(!Interactive||index<0||index>=Items.Length)return;SelectedItem=index;Invalidate();if(ItemSelected!=null)ItemSelected(index);}
+  protected override void OnMouseDown(MouseEventArgs e){base.OnMouseDown(e);if(e.Button==MouseButtons.Left){int index=HitItem(e.Location);if(index>=0){Focus();SelectItem(index);}}}
+  protected override void OnMouseMove(MouseEventArgs e){base.OnMouseMove(e);Cursor=HitItem(e.Location)>=0?Cursors.Hand:Cursors.Default;}
+  protected override bool IsInputKey(Keys keyData){Keys key=keyData&Keys.KeyCode;return key==Keys.Left||key==Keys.Right||key==Keys.Up||key==Keys.Down||key==Keys.Enter||key==Keys.Space||base.IsInputKey(keyData);}
+  protected override void OnKeyDown(KeyEventArgs e){if(Interactive&&Items.Length>0&&(e.KeyCode==Keys.Left||e.KeyCode==Keys.Up||e.KeyCode==Keys.Right||e.KeyCode==Keys.Down)){SelectItem((Math.Max(0,SelectedItem)+(e.KeyCode==Keys.Left||e.KeyCode==Keys.Up?Items.Length-1:1))%Items.Length);e.Handled=e.SuppressKeyPress=true;}else if(Interactive&&SelectedItem>=0&&(e.KeyCode==Keys.Enter||e.KeyCode==Keys.Space||e.KeyCode==Keys.R)){if(RotateRequested!=null)RotateRequested();e.Handled=e.SuppressKeyPress=true;}base.OnKeyDown(e);}
+  protected override void OnGotFocus(EventArgs e){base.OnGotFocus(e);Invalidate();}
+  protected override void OnLostFocus(EventArgs e){base.OnLostFocus(e);Invalidate();}
   internal void Busy(string text){if(busyText==text)return;busyText=text;Invalidate();}
   protected override void OnPaintBackground(PaintEventArgs e){}
   protected override void OnPaint(PaintEventArgs e) {
@@ -204,6 +226,7 @@ internal sealed class PreviewSurface : Control {
     using(var shadow=new SolidBrush(PrintTheme.Blend(PrintTheme.Text,PrintTheme.Stage,.10f)))graphics.FillRectangle(shadow,rect.X+3,rect.Y+4,rect.Width,rect.Height);
     graphics.InterpolationMode=InterpolationMode.HighQualityBicubic;graphics.DrawImage(Sheet,rect);
     using(var border=new Pen(PrintTheme.Border))graphics.DrawRectangle(border,rect.X,rect.Y,rect.Width,rect.Height);
+    if(Interactive&&SelectedItem>=0&&SelectedItem<Items.Length){var cell=Items[SelectedItem].Bounds;var selected=new RectangleF(rect.X+cell.X*scale,rect.Y+cell.Y*scale,cell.Width*scale,cell.Height*scale);selected.Inflate(-2,-2);using(var outline=new Pen(PrintTheme.Accent,3)){graphics.DrawRectangle(outline,selected.X,selected.Y,selected.Width,selected.Height);}if(Focused)ControlPaint.DrawFocusRectangle(graphics,Rectangle.Round(selected),PrintTheme.Text,Color.White);}
   }
   internal void Replace(Bitmap next) { if(next==null&&Sheet!=null)BlankReplacements++;var old = Sheet; Sheet = next;busyText=null; if (old != null) old.Dispose(); Invalidate(); }
   protected override void Dispose(bool disposing) { if (disposing && Sheet != null) { Sheet.Dispose(); Sheet = null; } base.Dispose(disposing); }
@@ -222,6 +245,7 @@ internal sealed class PrintWindow : Form {
   readonly CheckBox combineFiles = new CheckBox();
   readonly Button rotateSelected = new PrintButtonControl();
   readonly int[] sourceRotations;
+  readonly Dictionary<Tuple<int,int>,int> pageRotations=new Dictionary<Tuple<int,int>,int>();
   int marginMm=5,gapMm=3;
   bool generalFill;
   bool fillEdited;int orientationLayout;
@@ -232,6 +256,8 @@ internal sealed class PrintWindow : Form {
   readonly Dictionary<string, string> converted = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
   readonly Dictionary<string, Task<string>> preparing = new Dictionary<string, Task<string>>(StringComparer.OrdinalIgnoreCase);
   readonly Dictionary<string,Task<string>> pdfSnapshots=new Dictionary<string,Task<string>>(StringComparer.OrdinalIgnoreCase);
+  readonly Dictionary<string,Task<PdfDocument>> pdfDocuments=new Dictionary<string,Task<PdfDocument>>(StringComparer.OrdinalIgnoreCase);
+  readonly LinkedList<string> pdfDocumentOrder=new LinkedList<string>();int pdfDocumentLoads,selectionReuses;
   readonly List<Dictionary<string, object>> saved = new List<Dictionary<string, object>>();
   readonly Dictionary<string, byte[]> driverCache = new Dictionary<string, byte[]>();
   readonly Dictionary<string,string> fingerprints=new Dictionary<string,string>();
@@ -286,8 +312,9 @@ internal sealed class PrintWindow : Form {
     ,{"Current printer options",new[]{"Options actuelles de l’imprimante","خيارات الطابعة الحالية"}}
     ,{"per sheet",new[]{"par feuille","في الورقة"}}
     ,{"Layout",new[]{"Mise en page","التخطيط"}}
-    ,{"Rotate selected",new[]{"Tourner le fichier","تدوير الملف المحدد"}}
-    ,{"Rotate this file. For PDF and Word, all its pages rotate.",new[]{"Tourne ce fichier. Pour PDF et Word, toutes ses pages tournent.","تدوير هذا الملف. في PDF وWord يتم تدوير جميع صفحاته."}}
+    ,{"Rotate selected",new[]{"Tourner la sélection","تدوير المحدد"}}
+    ,{"Select an image, then rotate it. Use arrow keys to select and R to rotate.",new[]{"Sélectionnez une image, puis tournez-la. Utilisez les flèches pour sélectionner et R pour tourner.","حدد صورة ثم دوّرها. استخدم الأسهم للتحديد وR للتدوير."}}
+    ,{"Rotate only the selected page or image.",new[]{"Tourne uniquement la page ou l’image sélectionnée.","تدوير الصفحة أو الصورة المحددة فقط."}}
     ,{"Rotate all",new[]{"Tout tourner","تدوير الكل"}}
     ,{"Margins",new[]{"Marges","الهوامش"}}
     ,{"Cutting gap",new[]{"Espace de coupe","مسافة القص"}}
@@ -348,6 +375,9 @@ internal sealed class PrintWindow : Form {
     ,{"Move down",new[]{"Descendre","نقل للأسفل"}}
     ,{"Saved preset order could not be read.",new[]{"Impossible de lire l’ordre des préréglages enregistrés.","تعذرت قراءة ترتيب الإعدادات المحفوظة."}}
     ,{"Invalid preset order.",new[]{"Ordre de préréglages invalide.","ترتيب الإعدادات غير صالح."}}
+    ,{"No saved printer presets",new[]{"Aucun préréglage enregistré","لا توجد إعدادات طابعة محفوظة"}}
+    ,{"The saved preset changed. Choose a preset again.",new[]{"Le préréglage a changé. Choisissez à nouveau un préréglage.","تغير الإعداد المحفوظ. اختر إعدادًا مرة أخرى."}}
+    ,{"This preset's printer is unavailable. Install it, then refresh printers.",new[]{"L’imprimante de ce préréglage est indisponible. Installez-la, puis actualisez les imprimantes.","طابعة هذا الإعداد غير متاحة. ثبّتها ثم حدّث قائمة الطابعات."}}
   };
   string L(string key) { string[] values; return (args.Language == "ar" || args.Language == "fr") && translations.TryGetValue(key, out values) ? values[args.Language == "ar" ? 1 : 0] : key; }
   string Quantity(long value,string singular,string plural){return value+" "+L(value==1?singular:plural);}
@@ -371,6 +401,7 @@ internal sealed class PrintWindow : Form {
       if(args.Initial.ContainsKey("combineFiles"))combineFiles.Checked=NativePrint.Flag(args.Initial,"combineFiles");
       if(args.Initial.ContainsKey("matchLayoutOrientation"))sameDirection.Checked=NativePrint.Flag(args.Initial,"matchLayoutOrientation");
       object rotations;if(args.Initial.TryGetValue("sourceRotations",out rotations)){var values=rotations as System.Collections.IEnumerable;if(values==null)throw new InvalidOperationException("Invalid Fast Print rotations.");int i=0;foreach(object item in values){if(i>=sourceRotations.Length||!int.TryParse(Convert.ToString(item,CultureInfo.InvariantCulture),out value)||value<0||value>3)throw new InvalidOperationException("Invalid Fast Print rotations.");sourceRotations[i++]=value;}}
+      object pageTurns;if(args.Initial.TryGetValue("pageRotations",out pageTurns)){var values=pageTurns as System.Collections.IEnumerable;if(values==null)throw new InvalidOperationException("Invalid Fast Print page rotations.");foreach(object entry in values){var item=entry as Dictionary<string,object>;int file,page,turns;if(item==null||!int.TryParse(NativePrint.Text(item,"file"),out file)||file<0||file>=args.Files.Count||!int.TryParse(NativePrint.Text(item,"page"),out page)||page<0||page==int.MaxValue||!int.TryParse(NativePrint.Text(item,"turns"),out turns)||turns<0||turns>3||pageRotations.Count>=2000||pageRotations.ContainsKey(Tuple.Create(file,page)))throw new InvalidOperationException("Invalid Fast Print page rotations.");pageRotations.Add(Tuple.Create(file,page),turns);}}
     }
     fill.Checked=generalFill;
     Text = L("Fast Print"); Font = new Font("Segoe UI", 9.75f); StartPosition = FormStartPosition.CenterScreen;
@@ -379,47 +410,53 @@ internal sealed class PrintWindow : Form {
     if (args.Language == "ar") { RightToLeft = RightToLeft.Yes; RightToLeftLayout = true; }
     var root = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(16) };
     root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-    root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
+    root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
     Controls.Add(root);
-    root.Controls.Add(new Label { Text = L("Fast Print"), Font = new Font(Font.FontFamily, 16f,FontStyle.Bold), Dock = DockStyle.Fill, AutoEllipsis = true }, 0, 0);
-    var top = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1 };
-    top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40)); top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 18)); top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23)); top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 19));
-    top.Controls.Add(Field("Printer", printer), 0, 0); top.Controls.Add(Field("Paper size", paper), 1, 0); top.Controls.Add(Field("Quality", quality), 2, 0); top.Controls.Add(Field("Color", color), 3, 0); root.Controls.Add(top, 0, 1);
-    var middle = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
-    middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40)); middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38)); middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
+    var header=new PrintTableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,TabIndex=9};header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+    header.Controls.Add(new Label { Text = L("Fast Print"), Font = new Font(Font.FontFamily, 16f,FontStyle.Bold), Dock = DockStyle.Fill, AutoEllipsis = true },0,0);root.Controls.Add(header,0,0);
+    var top = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,TabIndex=0 };
+    top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,60));
+    top.Controls.Add(Field("Printer", printer), 0, 0); top.Controls.Add(Field("Saved preset", profiles), 1, 0); root.Controls.Add(top, 0, 1);
+    var middle = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,TabIndex=1 };
+    middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,60));
     var photos = new PrintFlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true }; photos.Controls.Add(new Label { Text = L("Polaroid"), AutoSize = true, Margin = new Padding(0, 8, 8, 0) });
     SetButton(polaroid8, "8 PIC", delegate { ChoosePolaroid(8); }); SetButton(polaroid9, "9 PIC", delegate { ChoosePolaroid(9); }); photos.Controls.Add(polaroid8); photos.Controls.Add(polaroid9);
-    middle.Controls.Add(photos, 0, 0); middle.Controls.Add(Field("Saved preset", profiles), 1, 0); middle.Controls.Add(Field("Orientation", orientation), 2, 0); root.Controls.Add(middle, 0, 2);
+    var sheetSettings=new PrintTableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=1};foreach(int width in new[]{22,20,32,26})sheetSettings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,width));
+    sheetSettings.Controls.Add(Field("Paper size",paper),0,0);sheetSettings.Controls.Add(Field("Color",color),1,0);sheetSettings.Controls.Add(Field("Orientation",orientation),2,0);sheetSettings.Controls.Add(Field("Quality",quality),3,0);
+    middle.Controls.Add(photos, 0, 0);middle.Controls.Add(sheetSettings,1,0);root.Controls.Add(middle,0,2);
     fileList.Dock = DockStyle.Fill; fileList.DropDownStyle = ComboBoxStyle.DropDownList; fileList.AccessibleName = L("Selected files");
     for (int i = 0; i < args.Files.Count; i++) fileList.Items.Add(new Entry(i.ToString(), (i + 1) + " / " + args.Files.Count + " · " + Path.GetFileName(args.Files[i])));
     fileList.SelectedIndex = 0;
-    var sources = new PrintTableLayoutPanel { Dock=DockStyle.Fill,ColumnCount=1,RowCount=2 };
-    sources.RowStyles.Add(new RowStyle(SizeType.Absolute,44));sources.RowStyles.Add(new RowStyle(SizeType.Absolute,44));sources.Controls.Add(fileList,0,0);
+    var sources = new PrintTableLayoutPanel { Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,TabIndex=2 };
+    sources.RowStyles.Add(new RowStyle(SizeType.Absolute,44));sources.RowStyles.Add(new RowStyle(SizeType.Absolute,44));
+    var sourceRow=new PrintTableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1};sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));sourceRow.Controls.Add(fileList,0,0);
+    combineFiles.Text=L("Combine files on sheets");combineFiles.AutoSize=true;combineFiles.Visible=false;combineFiles.Margin=new Padding(12,8,0,0);sourceRow.Controls.Add(combineFiles,1,0);sources.Controls.Add(sourceRow,0,0);
     var pageControls = new PrintTableLayoutPanel { Dock=DockStyle.Fill,ColumnCount=4,RowCount=1 };
     pageControls.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));pageControls.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));pageControls.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));pageControls.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,65));
     pageControls.Controls.Add(new Label { Text=L("Pages in this file"),AutoSize=true,Margin=new Padding(0,8,8,0) },0,0);
     pageFilter.DropDownStyle=ComboBoxStyle.DropDownList;pageFilter.Dock=DockStyle.Fill;pageFilter.AccessibleName=L("Pages in this file");
     pageFilter.Items.AddRange(new object[]{new Entry("all",L("All pages")),new Entry("odd",L("Odd pages")),new Entry("even",L("Even pages")),new Entry("range",L("Page range"))});pageFilter.SelectedIndex=0;pageControls.Controls.Add(pageFilter,1,0);
-    pageRangeLabel.Text=L("Range (1-5, 8, 12)");pageRangeLabel.AutoSize=true;pageRangeLabel.Margin=new Padding(12,8,8,0);pageControls.Controls.Add(pageRangeLabel,2,0);
-    pageRange.Dock=DockStyle.Fill;pageRange.Margin=new Padding(0,6,0,0);pageRange.RightToLeft=RightToLeft.No;pageRange.AccessibleName=L("Range (1-5, 8, 12)");pageRange.Enabled=false;pageControls.Controls.Add(pageRange,3,0);tips.SetToolTip(pageRange,L("Enter pages such as 1-5, 8, 12."));
+    pageRangeLabel.Text=L("Range (1-5, 8, 12)");pageRangeLabel.AutoSize=true;pageRangeLabel.Visible=false;pageRangeLabel.Margin=new Padding(12,8,8,0);pageControls.Controls.Add(pageRangeLabel,2,0);
+    pageRange.Dock=DockStyle.Fill;pageRange.Margin=new Padding(0,6,0,0);pageRange.RightToLeft=RightToLeft.No;pageRange.AccessibleName=L("Range (1-5, 8, 12)");pageRange.Enabled=false;pageRange.Visible=false;pageControls.Controls.Add(pageRange,3,0);tips.SetToolTip(pageRange,L("Enter pages such as 1-5, 8, 12."));
     sources.Controls.Add(pageControls,0,1);root.Controls.Add(sources,0,3);
-    var work = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2 };
-    work.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); work.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 264)); work.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); work.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+    var work = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2,TabIndex=3 };
+    work.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); work.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 264)); work.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); work.RowStyles.Add(new RowStyle(SizeType.AutoSize));
     preview.Dock = DockStyle.Fill; work.Controls.Add(preview, 0, 0);
+    preview.AccessibleName=L("Source preview");preview.AccessibleDescription=L("Select an image, then rotate it. Use arrow keys to select and R to rotate.");tips.SetToolTip(preview,preview.AccessibleDescription);
+    preview.ItemSelected+=SelectPreviewItem;preview.RotateRequested+=delegate{if(rotateSelected.Enabled)RotateSelectedSource(rotateSelected,EventArgs.Empty);};
     layouts.Dock = DockStyle.Fill;
     layouts.Items.AddRange(NativeLayout.All.Select(item=>new Entry(item.count.ToString(),item.count==1?L("Full page"):item.count+" "+L("per sheet"))));
     layouts.Items.Add(new Entry("id-card",L("ID card — 9 cm")));layouts.Reload();layouts.SelectedIndex = 0;
     layouts.AccessibleName = L("Layout"); work.Controls.Add(layouts, 1, 0);work.SetRowSpan(layouts,2);
-    var navigation = new PrintFlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+    var navigation = new PrintFlowLayoutPanel { Dock=DockStyle.Fill,WrapContents=true,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Margin=new Padding(0,8,0,0) };
     SetButton(previous, "◀", delegate { if (sheetIndex > 0) { sheetIndex--; QueuePreview(); } }); SetButton(next, "▶", delegate { if ((sheetIndex + 1) * (Special ? 1 : PerSheet) < pageCount) { sheetIndex++; QueuePreview(); } }); previous.AccessibleName = L("Previous sheet"); next.AccessibleName = L("Next sheet"); previous.MinimumSize = next.MinimumSize = new Size(40, 28); previous.Width = next.Width = 40;
     count.AutoSize = true; count.Margin = new Padding(8); navigation.Controls.Add(count); navigation.Controls.Add(previous); navigation.Controls.Add(next); work.Controls.Add(navigation, 0, 1); root.Controls.Add(work, 0, 4);
-    var bottom = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 }; bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 48)); bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); bottom.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-    var controls = new PrintFlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true };
-    controls.Controls.Add(new Label { Text = L("Copies"), AutoSize = true, Margin = new Padding(0, 6, 8, 0) }); copies.Minimum = 1; copies.Maximum = 999; copies.Value = 1; copies.Width = 64; copies.AccessibleName = L("Copies"); controls.Controls.Add(copies);
-    fill.Text = L("Fit to frame"); fill.AutoSize = true; controls.Controls.Add(fill);
-    combineFiles.Text=L("Combine files on sheets");combineFiles.AutoSize=true;combineFiles.Visible=false;controls.Controls.Add(combineFiles);
-    sameDirection.Text=L("Same direction");sameDirection.AutoSize=true;sameDirection.Visible=false;controls.Controls.Add(sameDirection);
-    SetButton(rotateSelected,L("Rotate selected"),RotateSelectedSource);controls.Controls.Add(rotateSelected);tips.SetToolTip(rotateSelected,L("Rotate this file. For PDF and Word, all its pages rotate."));
+    var bottom = new PrintTableLayoutPanel { Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,TabIndex=4 };bottom.RowStyles.Add(new RowStyle(SizeType.Absolute,48));bottom.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+    var totalsRow=new PrintTableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1};totalsRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));totalsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    var copiesGroup=new PrintFlowLayoutPanel{Dock=DockStyle.Fill,AutoSize=true,WrapContents=false,Margin=new Padding(0,8,24,0)};copiesGroup.Controls.Add(new Label{Text=L("Copies"),AutoSize=true,Margin=new Padding(0,6,8,0)});copies.Minimum=1;copies.Maximum=999;copies.Value=1;copies.Width=64;copies.AccessibleName=L("Copies");copiesGroup.Controls.Add(copies);totalsRow.Controls.Add(copiesGroup,0,0);
+    SetButton(rotateSelected,L("Rotate selected"),RotateSelectedSource);navigation.Controls.Add(rotateSelected);tips.SetToolTip(rotateSelected,L("Rotate only the selected page or image."));
+    fill.Text=L("Fit to frame");fill.AutoSize=true;fill.Margin=new Padding(8,8,8,0);navigation.Controls.Add(fill);
+    sameDirection.Text=L("Same direction");sameDirection.AutoSize=true;sameDirection.Visible=false;sameDirection.Margin=new Padding(8,8,8,0);navigation.Controls.Add(sameDirection);
     var driver = new PrintButtonControl();
     var menu = new PrintContextMenu();
     menu.Items.Add(L("Printer properties…"), null, DriverOptions);
@@ -429,17 +466,17 @@ internal sealed class PrintWindow : Form {
     foreach(int size in new[]{5,7,10,15,20}){int selectedSize=size;var item=new ToolStripMenuItem(size+" mm");item.Click+=delegate{marginMm=selectedSize;Changed();};margins.DropDownItems.Add(item);}
     var gaps=new ToolStripMenuItem(L("Cutting gap"));menu.Items.Add(gaps);
     foreach(int size in new[]{3,5,8,10}){int selectedSize=size;var item=new ToolStripMenuItem(size+" mm");item.Click+=delegate{gapMm=selectedSize;Changed();};gaps.DropDownItems.Add(item);}
-    menu.Opening+=delegate{rotateAll.Enabled=margins.Enabled=gaps.Enabled=settingsReady&&!Special;foreach(ToolStripMenuItem item in rotateAll.DropDownItems)item.Checked=sourceRotations.All(turn=>item.Text==(turn*90)+"°");foreach(ToolStripMenuItem item in margins.DropDownItems)item.Checked=item.Text==marginMm+" mm";foreach(ToolStripMenuItem item in gaps.DropDownItems)item.Checked=item.Text==gapMm+" mm";};
+    menu.Opening+=delegate{rotateAll.Enabled=margins.Enabled=gaps.Enabled=settingsReady&&!Special;foreach(ToolStripMenuItem item in rotateAll.DropDownItems)item.Checked=sourceRotations.All(turn=>item.Text==(turn*90)+"°")&&pageRotations.Values.All(turn=>item.Text==(turn*90)+"°");foreach(ToolStripMenuItem item in margins.DropDownItems)item.Checked=item.Text==marginMm+" mm";foreach(ToolStripMenuItem item in gaps.DropDownItems)item.Checked=item.Text==gapMm+" mm";};
     menu.Items.Add(L("Light appearance"),null,delegate{PrintTheme.Initialize(false);PrintTheme.Apply(this);});
     menu.Items.Add(L("Dark appearance"),null,delegate{PrintTheme.Initialize(true);PrintTheme.Apply(this);});
     menu.Items.Add(L("System appearance"),null,delegate{PrintTheme.Initialize();PrintTheme.Apply(this);});
-    SetButton(driver, L("Options…"), delegate { menu.Show(driver, new Point(0,driver.Height)); }); controls.Controls.Add(driver);
-    var refresh = new PrintButtonControl{Quiet=true}; SetButton(refresh, L("Refresh printers"), async delegate { await LoadPrinters(true); }); controls.Controls.Add(refresh); bottom.Controls.Add(controls, 0, 0);
-    jobSummary.Dock=DockStyle.Fill;jobSummary.UseMnemonic=false;jobSummary.AccessibleRole=AccessibleRole.StaticText;jobSummary.AccessibleName=L("Page totals");jobSummary.Text=L("Counting pages…");bottom.Controls.Add(jobSummary,0,1);
+    SetButton(driver, L("Options…"), delegate { menu.Show(driver, new Point(0,driver.Height)); });header.Controls.Add(driver,1,0);
+    var refresh = new PrintButtonControl{Quiet=true}; SetButton(refresh, L("Refresh printers"), async delegate { await LoadPrinters(true); });header.Controls.Add(refresh,2,0);
+    jobSummary.Dock=DockStyle.Fill;jobSummary.UseMnemonic=false;jobSummary.AccessibleRole=AccessibleRole.StaticText;jobSummary.AccessibleName=L("Page totals");jobSummary.Text=L("Counting pages…");jobSummary.Margin=new Padding(0,8,0,0);totalsRow.Controls.Add(jobSummary,1,0);bottom.Controls.Add(totalsRow,0,0);
     var footer = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 }; footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
     status.Dock = DockStyle.Fill; status.AutoEllipsis = true;status.UseMnemonic=false; status.AccessibleRole = AccessibleRole.StaticText; footer.Controls.Add(status, 0, 0);
     SetButton(print, L("Print"), async delegate { await Submit(); });((PrintButtonControl)print).Primary=true; print.Enabled = false; var cancel = new PrintButtonControl{Quiet=true}; SetButton(cancel, L("Cancel"), delegate { Close(); }); cancel.DialogResult = DialogResult.Cancel;
-    footer.Controls.Add(cancel, 1, 0); footer.Controls.Add(print, 2, 0); bottom.Controls.Add(footer, 0, 2); root.Controls.Add(bottom, 0, 5);
+    footer.Controls.Add(cancel, 1, 0); footer.Controls.Add(print, 2, 0); bottom.Controls.Add(footer, 0, 1); root.Controls.Add(bottom, 0, 5);
     AcceptButton = print; CancelButton = cancel;
     count.RightToLeft=RightToLeft.No;copies.RightToLeft=RightToLeft.No;polaroid8.RightToLeft=polaroid9.RightToLeft=RightToLeft.No;
     copies.ValueChanged += delegate { if (!updating) {copiesEdited = true;QueuePageSummary();} };
@@ -447,12 +484,13 @@ internal sealed class PrintWindow : Form {
     orientation.Items.AddRange(new object[] {new Entry("auto",L("Original orientation")), new Entry("portrait", L("Portrait")), new Entry("landscape", L("Landscape")) }); orientation.SelectedIndex = 0;
     printer.SelectedIndexChanged += async delegate { if (!updating) await SelectPrinter(); };
     paper.SelectedIndexChanged += delegate { if (!updating) { explicitProfile = null; UpdateProfiles(); ApplyAutomaticProfile(); Changed(); } };
-    profiles.SelectedIndexChanged += async delegate { if (!updating) { string id=Selected(profiles);if(id=="manage"){UpdateProfiles();await ManagePresets();return;}if(id=="arrange"){UpdateProfiles();ArrangePresets();return;}if(id=="save"){UpdateProfiles();SavePrinterPreset();return;}SelectSavedProfile(id); } };
+    profiles.SelectedIndexChanged += async delegate { if (!updating) { string id=Selected(profiles);if(id=="manage"){UpdateProfiles();await ManagePresets();return;}if(id=="arrange"){UpdateProfiles();ArrangePresets();return;}if(id=="save"){UpdateProfiles();SavePrinterPreset();return;}await ChooseSavedProfile(id); } };
+    profiles.DropDown+=delegate{if(settingsReady&&!updating)RefreshSavedPresetChoices();};
     color.SelectedIndexChanged += delegate { if (!updating) { ApplyAutomaticProfile(); Changed(); } };
     orientation.SelectedIndexChanged += delegate { if (!updating) Changed(); }; fill.CheckedChanged += delegate { if (!updating) {if(!Special){generalFill=fill.Checked;fillEdited=true;}Changed();} };
     combineFiles.CheckedChanged+=delegate{if(!updating){sheetIndex=0;Changed();}};
     sameDirection.CheckedChanged+=delegate{if(!updating)Changed();};
-    pageFilter.SelectedIndexChanged+=delegate{if(!updating){pageFilters[fileList.SelectedIndex]=Selected(pageFilter);pageRange.Enabled=!Special&&Selected(pageFilter)=="range";pageRangeLabel.Enabled=pageRange.Enabled;sheetIndex=0;QueuePreview();}};
+    pageFilter.SelectedIndexChanged+=delegate{if(!updating){pageFilters[fileList.SelectedIndex]=Selected(pageFilter);SyncPageControls();sheetIndex=0;QueuePreview();}};
     pageRange.TextChanged+=delegate{if(!updating){pageRanges[fileList.SelectedIndex]=pageRange.Text;sheetIndex=0;QueuePreview();}};
     layouts.SelectedIndexChanged += delegate { if (!updating) {mode = SelectedLayout == "id-card" ? "id-card" : ""; if(!Special){updating=true;fill.Checked=generalFill;orientation.SelectedIndex=0;updating=false;}sheetIndex = 0; ApplyAutomaticProfile(); Changed(); } };
     layouts.RefreshRequested += delegate { if(!updating)QueuePreview(); };
@@ -467,6 +505,7 @@ internal sealed class PrintWindow : Form {
   }
   Control Field(string name, ComboBox combo) {
     var field = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0, 0, 12, 0) };
+    field.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     field.RowStyles.Add(new RowStyle(SizeType.Absolute, 22)); field.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
     field.Controls.Add(new Label { Text = L(name), Dock = DockStyle.Fill, AutoEllipsis = true }, 0, 0);
     combo.Dock = DockStyle.Top; combo.DropDownStyle = ComboBoxStyle.DropDownList; combo.AccessibleName = L(name); combo.DropDownWidth = 340; combo.Margin=new Padding(0,4,0,0);field.Controls.Add(combo, 0, 1); return field;
@@ -485,8 +524,7 @@ internal sealed class PrintWindow : Form {
       string wanted = Selected(printer); var names = await Task.Run(() => PrinterSettings.InstalledPrinters.Cast<string>().ToList()); if (closing||refreshGeneration!=printerRefreshGeneration) return;
       try { preferences = File.Exists(Path.Combine(NativePrint.LocalRoot, "preferences.json")) ? NativePrint.Read(Path.Combine(NativePrint.LocalRoot, "preferences.json")) : new Dictionary<string, object>(); }
       catch { preferences = new Dictionary<string, object>(); }
-      saved.Clear(); string directory = Path.Combine(NativePrint.LocalRoot, "profiles");
-      if (Directory.Exists(directory)) foreach (string file in Directory.GetFiles(directory, "*.json")) { try { var value = NativePrint.Read(file); if (NativePrint.Text(value, "version") == "1") saved.Add(value); } catch { } }
+      ReloadSavedProfiles();
       string preferred = NativePrint.Text(preferences, "defaultPrinter");
       string last="";try{var remembered=NativePrint.Read(Path.Combine(NativePrint.LocalRoot,"last-printer.json"));if(NativePrint.Text(remembered,"version")=="1")last=NativePrint.Text(remembered,"printer");}catch{}
       updating = true; printer.Items.Clear(); foreach (string name in names.OrderBy(n => n == preferred ? 0 : 1).ThenBy(n => n)) printer.Items.Add(new Entry(name, name));
@@ -545,14 +583,50 @@ internal sealed class PrintWindow : Form {
     } catch (Exception error) { if(!closing&&selection==printerGeneration){settingsReady=false;updating = false;status.Text = error.Message;preview.Busy(error.Message);print.Enabled=false;} }
   }
   void SetPrinterControlsEnabled(bool enabled){paper.Enabled=quality.Enabled=color.Enabled=profiles.Enabled=orientation.Enabled=fill.Enabled=rotateSelected.Enabled=sameDirection.Enabled=combineFiles.Enabled=enabled;layouts.Enabled=enabled;polaroid8.Enabled=polaroid9.Enabled=enabled;}
+  void ReloadSavedProfiles(){
+    var loaded=new List<Dictionary<string,object>>();string directory=Path.Combine(NativePrint.LocalRoot,"profiles");
+    if(Directory.Exists(directory))foreach(string file in Directory.GetFiles(directory,"*.json"))try{
+      var value=NativePrint.Read(file);string id=NativePrint.Text(value,"id");
+      if(NativePrint.Text(value,"version")=="1"&&System.Text.RegularExpressions.Regex.IsMatch(id,@"^[a-f0-9]{32}$")&&Path.GetFileNameWithoutExtension(file)==id&&NativePrint.Text(value,"name")!=""&&NativePrint.Text(value,"printer")!="")loaded.Add(value);
+    }catch{}
+    saved.Clear();saved.AddRange(loaded);
+  }
+  void RefreshSavedPresetChoices(){
+    var active=saved.FirstOrDefault(item=>NativePrint.Text(item,"id")==explicitProfile);string previous=active==null?null:NativePrint.Json.Serialize(active);
+    ReloadSavedProfiles();UpdateProfiles();
+    if(previous!=null){
+      var next=saved.FirstOrDefault(item=>NativePrint.Text(item,"id")==explicitProfile);
+      if(next==null||NativePrint.Text(next,"printer")!=Selected(printer)){
+        explicitProfile="current";appliedProfile="invalid";profileError=L("The saved preset changed. Choose a preset again.");print.Enabled=false;status.Text=profileError;UpdateProfiles();
+      }else if(previous!=NativePrint.Json.Serialize(next))SelectSavedProfile(explicitProfile);
+    }
+  }
   void UpdateProfiles() {
-    updating = true; profiles.Items.Clear(); profiles.Items.Add(new Entry("auto", L("Automatic")));
+    updating = true; profiles.Items.Clear(); profiles.Items.Add(new Entry("auto", saved.Count==0?L("Automatic")+" — "+L("No saved printer presets"):L("Automatic")));
     if(explicitProfile=="current")profiles.Items.Add(new Entry("current",L("Current printer options")));
-    var positions=NativePresetOrder.Positions(Selected(printer));
-    foreach (var profile in saved.Where(p => NativePrint.Text(p, "printer") == Selected(printer) && (!IsPolaroid || NativePrint.Text(p,"paper")=="A4"&&NativePrint.Flag(p,"color"))).OrderBy(p=>positions.ContainsKey(NativePrint.Text(p,"id"))?positions[NativePrint.Text(p,"id")]:int.MaxValue).ThenBy(p=>NativePrint.Text(p,"name")).ThenBy(p=>NativePrint.Text(p,"id"),StringComparer.Ordinal)) profiles.Items.Add(new Entry(NativePrint.Text(profile, "id"), NativePrint.Text(profile, "name")+" · "+NativePrint.Text(profile,"paper")+" · "+NativePrint.Text(profile,"tray")));
+    var positions=NativePresetOrder.AllPositions();
+    Func<Dictionary<string,object>,int> rank=profile=>{Dictionary<string,int> order;int index;return positions.TryGetValue(NativePrint.Text(profile,"printer"),out order)&&order.TryGetValue(NativePrint.Text(profile,"id"),out index)?index:int.MaxValue;};
+    foreach (var profile in saved.Where(p => !IsPolaroid || NativePrint.Text(p,"paper")=="A4"&&NativePrint.Flag(p,"color")).OrderBy(p=>NativePrint.Text(p,"printer")==Selected(printer)?0:1).ThenBy(p=>NativePrint.Text(p,"printer")).ThenBy(rank).ThenBy(p=>NativePrint.Text(p,"name")).ThenBy(p=>NativePrint.Text(p,"id"),StringComparer.Ordinal)) profiles.Items.Add(new Entry(NativePrint.Text(profile, "id"), NativePrint.Text(profile, "name")+" · "+NativePrint.Text(profile,"printer")+" · "+NativePrint.Text(profile,"paper")+" · "+NativePrint.Text(profile,"tray")));
+    profiles.DropDownWidth=Math.Max(520,profiles.Width);
     profiles.Items.Add(new Entry("save",L("Save printer preset…")));profiles.Items.Add(new Entry("arrange",L("Arrange presets…")));profiles.Items.Add(new Entry("manage",L("Manage saved presets…")));
     profiles.SelectedIndex = 0; if (explicitProfile != null) for (int i = 1; i < profiles.Items.Count; i++) if (((Entry)profiles.Items[i]).Id == explicitProfile) profiles.SelectedIndex = i;
     updating = false;
+  }
+  async Task ChooseSavedProfile(string id){
+    try{
+      var profile=saved.FirstOrDefault(item=>NativePrint.Text(item,"id")==id);
+      if(profile!=null&&NativePrint.Text(profile,"printer")!=Selected(printer)){
+        string owner=NativePrint.Text(profile,"printer");int target=printer.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==owner);
+        if(target<0)throw new InvalidOperationException(L("This preset's printer is unavailable. Install it, then refresh printers."));
+        string keptMode=mode,keptOrientation=Selected(orientation);int keptLayout=layouts.SelectedIndex;decimal keptCopies=copies.Value;
+        bool keptFill=fill.Checked,keptGeneralFill=generalFill,keptFillEdited=fillEdited;int keptDirection=orientationLayout;
+        updating=true;printer.SelectedIndex=target;updating=false;int generation=printerGeneration+1;await SelectPrinter();
+        if(closing||generation!=printerGeneration||Selected(printer)!=owner||!settingsReady)return;
+        updating=true;mode=keptMode;layouts.SelectedIndex=keptLayout;orientation.SelectedIndex=orientation.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==keptOrientation);copies.Value=keptCopies;fill.Checked=keptFill;generalFill=keptGeneralFill;fillEdited=keptFillEdited;orientationLayout=keptDirection;updating=false;
+        if(IsPolaroid&&!canColor)throw new InvalidOperationException(L("Polaroid requires A4 and color. Keep these settings in printer properties."));
+      }
+      SelectSavedProfile(id);UpdateProfiles();
+    }catch(Exception error){updating=false;explicitProfile=id;appliedProfile="invalid";profileError=error.Message;print.Enabled=false;status.Text=error.Message;retainedPreviewKey=null;UpdateProfiles();}
   }
   void ArrangePresets(){
     try{
@@ -618,8 +692,33 @@ internal sealed class PrintWindow : Form {
     for (int i = 0; i < paper.Items.Count; i++) if (((Entry)paper.Items[i]).Id == "A4") paper.SelectedIndex = i;
     color.SelectedIndex = 0; fill.Checked = false; updating = false; explicitProfile = null; UpdateProfiles(); ApplyAutomaticProfile(); sheetIndex = 0; Changed();
   }
-  void RotateAllSources(int turns){for(int i=0;i<sourceRotations.Length;i++)sourceRotations[i]=turns;Changed();}
-  void RotateSelectedSource(object sender,EventArgs e){if(Special)return;int index=fileList.SelectedIndex;sourceRotations[index]=(sourceRotations[index]+1)%4;Changed();}
+  int PageTurns(int source,int page){int turns;return pageRotations.TryGetValue(Tuple.Create(source,page),out turns)?turns:sourceRotations[source];}
+  string RotationKey(){return string.Join(",",sourceRotations)+"|"+string.Join(";",pageRotations.OrderBy(item=>item.Key.Item1).ThenBy(item=>item.Key.Item2).Select(item=>item.Key.Item1+":"+item.Key.Item2+":"+item.Value));}
+  void RotateAllSources(int turns){pageRotations.Clear();for(int i=0;i<sourceRotations.Length;i++)sourceRotations[i]=turns;Changed();}
+  void RotateSelectedSource(object sender,EventArgs e){
+    if(Special)return;int index=fileList.SelectedIndex;
+    if(IsImage(args.Files[index])){if(pageRotations.ContainsKey(Tuple.Create(index,0)))pageRotations[Tuple.Create(index,0)]=(PageTurns(index,0)+1)%4;else sourceRotations[index]=(sourceRotations[index]+1)%4;}
+    else{if(!preview.Interactive||preview.SelectedItem<0||preview.SelectedItem>=preview.Items.Length)return;var selected=preview.Items[preview.SelectedItem];if(selected.Source!=index)return;pageRotations[Tuple.Create(index,selected.Page)]=(PageTurns(index,selected.Page)+1)%4;}
+    Changed();
+  }
+  void SelectPreviewItem(int item){
+    if(Special||!settingsReady||!preview.Interactive||item<0||item>=preview.Items.Length)return;
+    try{if(visibleSourceVersion!=SourceVersion()){QueuePreview();return;}}catch(Exception error){preview.Interactive=false;print.Enabled=false;status.Text=error.Message;return;}
+    int source=preview.Items[item].Source;
+    updating=true;fileList.SelectedIndex=source;updating=false;SyncPageControls();
+    preview.AccessibleName=L("Source preview")+" · "+preview.Items[item].Name;
+    UpdateSelectionStatus();retainedPreviewKey=PreviewKey(visibleSourceVersion);retainedPreviewStatus=status.Text;selectionReuses++;preview.Invalidate();
+  }
+  void UpdateSelectionStatus(){
+    if(Special||preview.Sheet==null||preview.SelectedItem<0||preview.SelectedItem>=preview.Items.Length)return;
+    var item=preview.Items[preview.SelectedItem];status.Text=appliedProfile=="invalid"?profileError:Path.GetFileName(args.Files[item.Source]);
+    if(appliedProfile!="invalid"){
+      if(!IsImage(args.Files[item.Source]))status.Text+=" · "+L("page")+" "+(item.Page+1);
+      float physicalWidth=Selected(paper)=="A3"?(Landscape?420:297):(Landscape?297:210);
+      status.Text+=" · "+L("Slot size")+": "+(item.Bounds.Width*physicalWidth/preview.Sheet.Width).ToString("0.0",CultureInfo.InvariantCulture)+" × "+(item.Bounds.Height*physicalWidth/preview.Sheet.Width).ToString("0.0",CultureInfo.InvariantCulture)+" mm · "+L("Rotation")+": "+(item.Turns*90)+"°";
+    }
+    tips.SetToolTip(status,status.Text);
+  }
   void Changed() {
     SyncPageControls();
     if(!Special&&orientationLayout!=PerSheet){
@@ -675,7 +774,15 @@ internal sealed class PrintWindow : Form {
     var task=Task.Run(()=>{Directory.CreateDirectory(directory);File.Copy(path,snapshot);if(SourceVersion(path)!=version)throw new InvalidOperationException(L("Files changed while preparing. Refresh the preview."));return snapshot;});
     pdfSnapshots[version]=task;return task;
   }
-  async Task<int> PdfPages(string path){var document=await PdfDocument.LoadFromFileAsync(await StorageFile.GetFileFromPathAsync(await PdfSnapshot(path)));return (int)document.PageCount;}
+  async Task<PdfDocument> OpenPdfDocument(string path){pdfDocumentLoads++;return await PdfDocument.LoadFromFileAsync(await StorageFile.GetFileFromPathAsync(await PdfSnapshot(path)));}
+  Task<PdfDocument> CachedPdfDocument(string path){
+    string key=SourceVersion(path);Task<PdfDocument> document;
+    if(!pdfDocuments.TryGetValue(key,out document)||document.IsFaulted||document.IsCanceled){document=OpenPdfDocument(path);pdfDocuments[key]=document;}
+    pdfDocumentOrder.Remove(key);pdfDocumentOrder.AddLast(key);
+    while(pdfDocumentOrder.Count>4){string oldest=pdfDocumentOrder.First.Value;pdfDocumentOrder.RemoveFirst();pdfDocuments.Remove(oldest);}
+    return document;
+  }
+  async Task<int> PdfPages(string path){return (int)(await CachedPdfDocument(path)).PageCount;}
   async Task<int> CountSourcePages(string file,string version){
     if(closing)throw new OperationCanceledException();
     string extension=Path.GetExtension(file).ToLowerInvariant();if(extension==".tif"||extension==".tiff")await PreparedFile(file);
@@ -701,7 +808,7 @@ internal sealed class PrintWindow : Form {
   }
   void SyncPageControls(){
     bool wasUpdating=updating;updating=true;
-    try{int file=fileList.SelectedIndex;pageFilter.SelectedIndex=pageFilter.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==pageFilters[file]);pageRange.Text=pageRanges[file]??"";pageFilter.Enabled=!Special;pageRangeLabel.Enabled=pageRange.Enabled=!Special&&pageFilters[file]=="range";}
+    try{int file=fileList.SelectedIndex;pageFilter.SelectedIndex=pageFilter.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==pageFilters[file]);pageRange.Text=pageRanges[file]??"";pageFilter.Enabled=!Special;pageRangeLabel.Visible=pageRange.Visible=pageRangeLabel.Enabled=pageRange.Enabled=!Special&&pageFilters[file]=="range";}
     finally{updating=wasUpdating;}
   }
   string PageSelectionKey(){return string.Join(";",pageFilters.Zip(pageRanges,(filter,range)=>filter+":"+range));}
@@ -797,7 +904,7 @@ internal sealed class PrintWindow : Form {
   async Task<Bitmap> DecodePage(string path, int index, int width) {
     if (Path.GetExtension(path).Equals(".pdf", StringComparison.OrdinalIgnoreCase)) {
       string version=SourceVersion(path);
-      if (loadedFile != version) { pdf = await PdfDocument.LoadFromFileAsync(await StorageFile.GetFileFromPathAsync(await PdfSnapshot(path))); loadedFile = version; }
+      if (loadedFile != version) { pdf = await CachedPdfDocument(path); loadedFile = version; }
       pageCount = (int)pdf.PageCount;
       using (var page = pdf.GetPage((uint)index)) using (var stream = new InMemoryRandomAccessStream()) {
         await page.RenderToStreamAsync(stream, new PdfPageRenderOptions { DestinationWidth = (uint)width });
@@ -890,16 +997,17 @@ internal sealed class PrintWindow : Form {
     print.Enabled=appliedProfile!="invalid";if(previewReady==0)previewReady=NativePrint.Clock.ElapsedMilliseconds;
   }
   string PreviewKey(string sources){
-    return PageSelectionKey()+"|"+sources+"|"+Selected(printer)+"|"+Selected(paper)+"|"+Selected(color)+"|"+Selected(orientation)+"|"+PerSheet+"|"+fileList.SelectedIndex+"|"+sheetIndex+"|"+preview.ClientSize+"|"+fill.Checked+"|"+sameDirection.Checked+"|"+combineFiles.Checked+"|"+marginMm+"|"+gapMm+"|"+string.Join(",",sourceRotations)+"|"+appliedProfile+"|"+profileError;
+    int selectedPage=preview.SelectedItem>=0&&preview.SelectedItem<preview.Items.Length?preview.Items[preview.SelectedItem].Page:-1;
+    return PageSelectionKey()+"|"+sources+"|"+Selected(printer)+"|"+Selected(paper)+"|"+Selected(color)+"|"+Selected(orientation)+"|"+PerSheet+"|"+fileList.SelectedIndex+"|"+selectedPage+"|"+sheetIndex+"|"+preview.ClientSize+"|"+fill.Checked+"|"+sameDirection.Checked+"|"+combineFiles.Checked+"|"+marginMm+"|"+gapMm+"|"+RotationKey()+"|"+appliedProfile+"|"+profileError;
   }
   async Task RenderPreview() {
-    QueuePageSummary();
-    int generation=++rendering;print.Enabled=false;
-    await Task.Delay(35);var renderClock=Stopwatch.StartNew();
+    int generation=++rendering;print.Enabled=false;preview.Interactive=false;preview.Invalidate();
+    var renderClock=Stopwatch.StartNew();
     if(generation!=rendering||!settingsReady||settings==null||Selected(paper)==""||closing)return;
     string sources=SourceVersion();
     if(Special)retainedPreviewKey=null;
-    if(!Special&&preview.Sheet!=null&&retainedPreviewKey==PreviewKey(sources)){previewReuses++;preview.Busy(null);status.Text=retainedPreviewStatus;tips.SetToolTip(status,status.Text);print.Enabled=appliedProfile!="invalid";lastRenderMs=renderClock.ElapsedMilliseconds;return;}
+    if(!Special&&preview.Sheet!=null&&retainedPreviewKey==PreviewKey(sources)){previewReuses++;preview.Interactive=true;preview.Invalidate();preview.Busy(null);status.Text=retainedPreviewStatus;tips.SetToolTip(status,status.Text);print.Enabled=appliedProfile!="invalid";lastRenderMs=renderClock.ElapsedMilliseconds;return;}
+    QueuePageSummary();await Task.Delay(35);if(generation!=rendering||!settingsReady||closing)return;sources=SourceVersion();
     if(IsPolaroid){
       try{
         var pending=PolaroidPreview();if(!pending.IsCompleted){status.Text=L("Preparing Polaroid sheets…");preview.Busy(status.Text);}
@@ -931,14 +1039,14 @@ internal sealed class PrintWindow : Form {
       if(SourceOrientation){
         int index=refs[sheetIndex].Item1;
         using(var current=await Page(await PreparedFile(args.Files[index]),refs[sheetIndex].Item2,decodeWidth)){
-          originalLandscape=sourceRotations[index]%2==0?current.Width>current.Height:current.Height>current.Width;
+          originalLandscape=PageTurns(index,refs[sheetIndex].Item2)%2==0?current.Width>current.Height:current.Height>current.Width;
         }
       }
       double paperRatio=Selected(paper)=="A3"?420.0/297:297.0/210;
       int h=Math.Min(1000,Math.Max(480,(int)(preview.ClientSize.Height*1.35)));int w=(int)Math.Round(h/paperRatio);if(Landscape){int swap=w;w=h;h=swap;}
       var canvas = new Bitmap(w, h);previewCompositions++;
+      var previewItems=new List<PreviewSurface.Item>();
       try{
-      int displayedTurns=Special?0:sourceRotations[fileList.SelectedIndex];
       using (var g = Graphics.FromImage(canvas)) {
         g.Clear(Color.White); g.InterpolationMode = InterpolationMode.HighQualityBicubic; var grid=NativeLayout.ForSheet(per,Landscape);int cols=grid.columns,rows=grid.rows;
         float physicalWidth=Selected(paper)=="A3"?(Landscape?420:297):(Landscape?297:210);
@@ -950,8 +1058,8 @@ internal sealed class PrintWindow : Form {
           using (var image = Special?(number==0?new Bitmap(first):await Page(path,number,decodeWidth)):await Page(await PreparedFile(args.Files[sourceIndex]),refs[number].Item2,decodeWidth)) {
             if (generation != rendering || closing) return;
             var cell=grid.Cell(slot,occupied,w,h,margin,gap);float cw=cell.Width,ch=cell.Height;
-            int turns=Special?0:NativeLayout.ContentTurns(per,sameDirection.Checked,image.Width,image.Height,cw,ch,sourceRotations[sourceIndex]);
-            if(!Special&&(merged||imageGroup?sourceIndex==fileList.SelectedIndex:slot==0))displayedTurns=turns;
+            int turns=Special?0:NativeLayout.ContentTurns(per,sameDirection.Checked,image.Width,image.Height,cw,ch,PageTurns(sourceIndex,refs[number].Item2));
+            if(!Special)previewItems.Add(new PreviewSurface.Item{Bounds=cell,Source=sourceIndex,Page=refs[number].Item2,Turns=turns,Name=Path.GetFileName(args.Files[sourceIndex])+" · "+(refs[number].Item2+1)});
             if(turns!=0)image.RotateFlip(turns==1?RotateFlipType.Rotate90FlipNone:turns==2?RotateFlipType.Rotate180FlipNone:RotateFlipType.Rotate270FlipNone);
             float scale = fill.Checked && !Special ? Math.Max(cw / image.Width, ch / image.Height) : Math.Min(cw / image.Width, ch / image.Height);
             var state = g.Save(); g.SetClip(cell);
@@ -967,9 +1075,13 @@ internal sealed class PrintWindow : Form {
       if(SourceVersion()!=sources)throw new InvalidOperationException(L("Files changed while preparing. Refresh the preview."));
       if(!Special&&(merged||imageGroup)&&selectedMap[fileList.SelectedIndex].Length>0){int firstFile=refs[sheetIndex*per].Item1,lastFile=refs[Math.Min(pages-1,(sheetIndex+1)*per-1)].Item1;if(fileList.SelectedIndex<firstFile||fileList.SelectedIndex>lastFile){updating=true;fileList.SelectedIndex=firstFile;updating=false;SyncPageControls();}}
       pageCount=pages;preview.Replace(canvas);canvas=null;visibleSourceVersion=sources; count.Text = (Special ? L("Source preview") + " · " : "") + (sheetIndex + 1) + " / " + Math.Ceiling((double)pages / per);
+      int previousItem=preview.SelectedItem;var previousItems=preview.Items;
+      preview.Items=previewItems.ToArray();preview.SelectedItem=Array.FindIndex(preview.Items,item=>item.Source==fileList.SelectedIndex);
+      if(previousItem>=0&&previousItem<previousItems.Length&&previousItems[previousItem].Source==fileList.SelectedIndex){var previousSelection=previousItems[previousItem];int retained=Array.FindIndex(preview.Items,item=>item.Source==previousSelection.Source&&item.Page==previousSelection.Page);if(retained>=0)preview.SelectedItem=retained;}
+      preview.Interactive=!Special;preview.AccessibleName=L("Source preview")+(preview.SelectedItem>=0?" · "+preview.Items[preview.SelectedItem].Name:"");preview.Invalidate();
       previous.Enabled = sheetIndex > 0; next.Enabled = (sheetIndex + 1) * per < pages;
       status.Text = appliedProfile=="invalid"?profileError:mode == "id-card" ? L("Choose a back image in the ID editor before printing.") : Path.GetFileName(args.Files[fileList.SelectedIndex]);
-      if(!Special&&appliedProfile!="invalid"){float physicalWidth=Selected(paper)=="A3"?(Landscape?420:297):(Landscape?297:210);var cell=NativeLayout.ForSheet(per,Landscape).Cell(0,per,w,h,w*marginMm/physicalWidth,w*gapMm/physicalWidth);status.Text+=" · "+L("Slot size")+": "+(cell.Width*physicalWidth/w).ToString("0.0",CultureInfo.InvariantCulture)+" × "+(cell.Height*physicalWidth/w).ToString("0.0",CultureInfo.InvariantCulture)+" mm · "+L("Rotation")+": "+(displayedTurns*90)+"°";}
+      if(!Special)UpdateSelectionStatus();
       tips.SetToolTip(status, status.Text); print.Enabled = appliedProfile != "invalid"; if(previewReady==0)previewReady = NativePrint.Clock.ElapsedMilliseconds;
       if(!Special){retainedPreviewKey=PreviewKey(sources);retainedPreviewStatus=status.Text;}
       lastRenderMs=renderClock.ElapsedMilliseconds;
@@ -1035,6 +1147,7 @@ internal sealed class PrintWindow : Form {
     // Grayscale is rendered into the artwork even when a color-only driver resets dmColor.
     var preset = new Dictionary<string, object> { {"printer",Selected(printer)},{"paper",Selected(paper)},{"color",outputColor},{"pagesPerSheet",Special?1:PerSheet},{"profileId",id},{"landscape",Landscape},{"duplex",canDuplex && (settings.PrinterSettings.Duplex == Duplex.Vertical || settings.PrinterSettings.Duplex == Duplex.Horizontal)},{"fitToFrame",fill.Checked && !Special},{"combineImages",!Special} }; if (Special) preset["mode"]=mode; else {preset["combineFiles"]=combineFiles.Checked;preset["marginMm"]=marginMm;preset["gapMm"]=gapMm;preset["sourceRotations"]=sourceRotations;preset["autoOrientation"]=SourceOrientation;preset["matchLayoutOrientation"]=sameDirection.Checked&&PerSheet>1;}
     if(!Special){
+      preset["pageRotations"]=pageRotations.OrderBy(item=>item.Key.Item1).ThenBy(item=>item.Key.Item2).Select(item=>new{file=item.Key.Item1,page=item.Key.Item2,turns=item.Value}).ToArray();
       var selected=SelectedPageMap(await Inventory());if(!selected.Any(pages=>pages.Length>0))throw new InvalidOperationException(L("Select at least one page to print."));preset["sourcePages"]=selected;
     }
     int selectedCopies=(int)copies.Value;
@@ -1065,7 +1178,7 @@ internal sealed class PrintWindow : Form {
       if (args.Verify != null) { File.WriteAllText(Path.Combine(args.Verify,"request-path.txt"),request); return; }
       if (string.IsNullOrEmpty(args.App) || !File.Exists(args.App)) throw new InvalidOperationException("Fast Print worker is missing. Repair the app installation.");
       var arguments = new List<string>(); if (!string.IsNullOrEmpty(args.AppPath)) arguments.Add(args.AppPath); arguments.Add("--fast-print-request"); arguments.Add(request);
-      pdf=null;loadedFile=null;GC.Collect();GC.WaitForPendingFinalizers();
+      pdf=null;loadedFile=null;pdfDocuments.Clear();pdfDocumentOrder.Clear();GC.Collect();GC.WaitForPendingFinalizers();
       using (var process = NativePrint.Start(args.App,arguments)) { Hide(); await Task.Run(()=>process.WaitForExit()); if(process.ExitCode!=0) { Show(); status.Text="Print preparation failed. Check the print queue before retrying."; return; } }
       if(await RestoreIdReview())return;
       submitting=false; Close();
@@ -1165,10 +1278,48 @@ internal sealed class PrintWindow : Form {
         layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id=="4");await PresetReady();RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();preview.Sheet.Save(Path.Combine(args.Verify,"rotated.png"),ImageFormat.Png);
         fill.Checked=!fill.Checked;await PresetReady();preview.Sheet.Save(Path.Combine(args.Verify,"fit.png"),ImageFormat.Png);
         if(color.Items.Count>1){color.SelectedIndex=color.Items.Count-1;await PresetReady();preview.Sheet.Save(Path.Combine(args.Verify,"mono.png"),ImageFormat.Png);}
+        int selectionCompositions=previewCompositions;var selectedSheet=preview.Sheet;bool selectionReady=true;var selectionClock=Stopwatch.StartNew();
+        for(int i=0;i<200;i++){preview.SelectItem(i%preview.Items.Length);selectionReady&=print.Enabled&&preview.Interactive;}
+        selectionClock.Stop();selectionCompositions=previewCompositions-selectionCompositions;
+        AuditCheck(selectionCompositions==0&&object.ReferenceEquals(selectedSheet,preview.Sheet)&&selectionReady,"Selecting a visible image recomposed the sheet or disabled Print.");
         await Task.Delay(80);timer.Stop();
-        File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,coldMs=cold.ElapsedMilliseconds,workingMiB=Process.GetCurrentProcess().WorkingSet64/1048576.0,maxUiPauseMs=Math.Max(maxPause,startupPause),startupPauseMs=startupPause,interactionPauseMs=maxPause,uiTicks=beats,photoDecodeOffUi=photoDecodeThread!=uiThread,compositions=previewCompositions,reuses=previewReuses,states=states,cleanupDirectory=session}),new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,coldMs=cold.ElapsedMilliseconds,workingMiB=Process.GetCurrentProcess().WorkingSet64/1048576.0,maxUiPauseMs=Math.Max(maxPause,startupPause),startupPauseMs=startupPause,interactionPauseMs=maxPause,uiTicks=beats,photoDecodeOffUi=photoDecodeThread!=uiThread,compositions=previewCompositions,reuses=previewReuses,selectionReuses=selectionReuses,selectionCompositions=selectionCompositions,selectionMs=selectionClock.ElapsedMilliseconds,selectionReady=selectionReady,pdfDocumentLoads=pdfDocumentLoads,pdfDocumentsRetained=pdfDocuments.Count,states=states,cleanupDirectory=session}),new UTF8Encoding(false));
       }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
     }
+  }
+  internal async Task VerifyPresetPicker(){
+    Directory.CreateDirectory(args.Verify);
+    try{
+      AuditCheck(Path.GetFullPath(NativePrint.LocalRoot)==Path.GetFullPath(Path.Combine(args.Verify,"settings")),"Preset picker checks require an isolated settings folder.");
+      await LoadPrinters();await PresetReady();
+      var pdfPrinter=printer.Items.Cast<Entry>().First(item=>item.Id=="Microsoft Print to PDF");
+      updating=true;printer.SelectedItem=pdfPrinter;updating=false;await SelectPrinter();await PresetReady();
+      AuditCheck(profiles.Items.Cast<Entry>().First().Label.Contains(L("No saved printer presets")),"Empty preset list has no explanation.");
+      var alternate=printer.Items.Cast<Entry>().First(item=>item.Id!="Microsoft Print to PDF");
+      updating=true;printer.SelectedItem=alternate;updating=false;await SelectPrinter();await PresetReady();
+      color.SelectedIndex=color.Items.Count-1;await PresetReady();ApplyControls();var profile=StorePrinterPreset("A4 Noir blanc R-V — fixture",FastPrintDriver.FromDocument(settings));string id=NativePrint.Text(profile,"id");
+      string profilePath=Path.Combine(NativePrint.LocalRoot,"profiles",id+".json"),original=File.ReadAllText(profilePath);
+      updating=true;printer.SelectedItem=pdfPrinter;updating=false;await SelectPrinter();await PresetReady();
+      saved.Clear();RefreshSavedPresetChoices();
+      var choice=profiles.Items.Cast<Entry>().Single(item=>item.Id==id);AuditCheck(choice.Label.Contains(alternate.Id)&&Selected(printer)==pdfPrinter.Id,"Another printer's saved preset is hidden or silently switches the queue.");
+      updating=true;layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id=="4");SetOrientation(true);fill.Checked=true;generalFill=true;fillEdited=true;copies.Value=5;copiesEdited=true;sourceRotations[0]=1;updating=false;Changed();await PresetReady();
+      await ChooseSavedProfile(id);await PresetReady();
+      AuditCheck(Selected(printer)==alternate.Id&&Selected(profiles)==id&&appliedProfile==id,"Choosing the preset did not select its owning printer and driver snapshot.");
+      AuditCheck(PerSheet==4&&Landscape&&fill.Checked&&copies.Value==5&&sourceRotations[0]==1,"Preset queue switching lost job layout, orientation, fill, copies or manual rotation.");
+      AuditCheck(Selected(color)==(NativePrint.Flag(profile,"color")?"color":"mono")&&Selected(paper)==NativePrint.Text(profile,"paper"),"Saved paper or color was lost.");
+      AuditCheck(File.ReadAllText(profilePath)==original&&settings.PrinterSettings.Duplex.ToString()==NativePrint.Text(profile,"duplex")&&settings.DefaultPageSettings.PaperSource.SourceName==NativePrint.Text(profile,"tray"),"Preset selection rewrote saved data or lost tray/duplex settings.");
+      updating=true;printer.SelectedItem=pdfPrinter;updating=false;await SelectPrinter();await PresetReady();layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id=="id-card");await PresetReady();await ChooseSavedProfile(id);await PresetReady();AuditCheck(mode=="id-card"&&SelectedLayout=="id-card"&&print.Text==L("Review ID…"),"Choosing a preset for another printer left the ID workflow.");layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id=="4");await PresetReady();
+      string missingId=new string('f',32);var missing=new Dictionary<string,object>(profile);missing["id"]=missingId;missing["printer"]="Unavailable preset printer";missing["name"]="Unavailable fixture";saved.Add(missing);UpdateProfiles();await ChooseSavedProfile(missingId);AuditCheck(!print.Enabled&&Selected(printer)==alternate.Id,"An unavailable preset printer enabled Print or changed the queue.");
+      await ChooseSavedProfile(id);await PresetReady();
+      ApplyControls();var added=StorePrinterPreset("New preset saved while Fast Print is open",FastPrintDriver.FromDocument(settings));string addedId=NativePrint.Text(added,"id");saved.Remove(added);RefreshSavedPresetChoices();AuditCheck(profiles.Items.Cast<Entry>().Any(item=>item.Id==addedId),"A newly saved preset requires restarting Fast Print.");
+      profile["name"]="Updated saved preset name";File.WriteAllText(profilePath,NativePrint.Json.Serialize(profile));RefreshSavedPresetChoices();await PresetReady();AuditCheck(Selected(profiles)==id&&profiles.SelectedItem.ToString().Contains("Updated saved preset name"),"Refreshing an edited preset lost its identity.");
+      var surface=Controls[0];surface.Dock=DockStyle.None;surface.Location=Point.Empty;var captures=new List<object>();
+      foreach(bool dark in new[]{false,true}){PrintTheme.Initialize(dark);PrintTheme.Apply(this);foreach(var size in new[]{new Size(1366,768),new Size(1920,1080)}){surface.Size=size;surface.PerformLayout();await RenderPreview();await PresetReady();NativePrint.CaptureContent(surface,Path.Combine(args.Verify,(dark?"dark":"light")+"-"+size.Width+"x"+size.Height+".png"));captures.Add(new{dark=dark,width=surface.Width,height=surface.Height,requestedWidth=size.Width,requestedHeight=size.Height,contentSurface=true});}}
+      var choices=profiles.Items.Cast<Entry>().Where(item=>System.Text.RegularExpressions.Regex.IsMatch(item.Id,@"^[a-f0-9]{32}$")).Select(item=>new{id=item.Id,label=item.Label}).ToArray();
+      File.Delete(profilePath);RefreshSavedPresetChoices();AuditCheck(!print.Enabled,"Deleting the active preset left Print enabled with stale settings.");await ChooseSavedProfile("auto");await PresetReady();
+      AuditCheck(driverSnapshotRequests==0,"Preset selection submitted a print request.");
+      File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,initialPrinter=pdfPrinter.Id,presetPrinter=alternate.Id,crossPrinterSelection=true,liveReload=true,jobSettingsPreserved=true,missingPrinterGuarded=true,deletedPresetGuarded=true,captures=captures,choices=choices,cleanupDirectory=session}),new UTF8Encoding(false));
+    }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
   }
   internal async Task VerifyPresetOrder(){
     Directory.CreateDirectory(args.Verify);
@@ -1185,7 +1336,7 @@ internal sealed class PrintWindow : Form {
       string preferencesFile=Path.Combine(NativePrint.LocalRoot,"preferences.json"),preferenceText="{\"version\":1,\"defaultPrinter\":\"Keep my choice\",\"profiles\":{},\"optionPrinters\":{}}";File.WriteAllText(preferencesFile,preferenceText);
       NativePresetOrder.Save(other,new[]{ids[3]});var expected=new[]{ids[0],ids[2],ids[1]};
       updating=true;printer.Items.Add(new Entry(owner,owner));printer.SelectedIndex=0;explicitProfile=ids[0];updating=false;UpdateProfiles();
-      Func<Entry[]> entries=()=>profiles.Items.Cast<Entry>().Where(item=>System.Text.RegularExpressions.Regex.IsMatch(item.Id,@"^[a-f0-9]{32}$")).ToArray();
+      Func<Entry[]> entries=()=>profiles.Items.Cast<Entry>().Where(item=>saved.Any(profile=>NativePrint.Text(profile,"id")==item.Id&&NativePrint.Text(profile,"printer")==owner)).ToArray();
       AuditCheck(entries().Select(item=>item.Id).SequenceEqual(new[]{ids[2],ids[1],ids[0]}),"Unordered presets must use their names.");
       using(var dialog=new PresetOrderDialog(owner,entries(),L,Font,args.Language=="ar",ids[0])){
         AuditCheck(!dialog.Down.Enabled&&!dialog.SaveButton.Enabled,"Order buttons ignored list boundaries or unchanged state.");dialog.MoveSelected(-1);dialog.MoveSelected(-1);AuditCheck(!dialog.Up.Enabled&&dialog.SaveButton.Enabled,"Move up did not reach the first position.");dialog.SaveOrder();
@@ -1195,7 +1346,7 @@ internal sealed class PrintWindow : Form {
       using(var canceled=new PresetOrderDialog(owner,entries(),L,Font,args.Language=="ar",ids[0])){canceled.MoveSelected(1);canceled.Close();}
       AuditCheck(File.ReadAllText(orderFile)==savedOrder,"Cancel saved an unfinished order.");
       bool rejected=false;try{NativePresetOrder.Save(owner,new[]{ids[0],ids[0]});}catch{rejected=true;}AuditCheck(rejected&&File.ReadAllText(orderFile)==savedOrder,"An invalid order changed saved data.");
-      using(var reopened=new PrintWindow(new Options(new[]{"--"}.Concat(args.Files).ToArray()))){reopened.updating=true;reopened.printer.Items.Add(new Entry(owner,owner));reopened.printer.SelectedIndex=0;reopened.saved.AddRange(saved);reopened.explicitProfile=ids[0];reopened.updating=false;reopened.UpdateProfiles();AuditCheck(reopened.profiles.Items.Cast<Entry>().Where(item=>System.Text.RegularExpressions.Regex.IsMatch(item.Id,@"^[a-f0-9]{32}$")).Select(item=>item.Id).SequenceEqual(expected),"A fresh window lost the saved order.");reopened.Close();}
+      using(var reopened=new PrintWindow(new Options(new[]{"--"}.Concat(args.Files).ToArray()))){reopened.updating=true;reopened.printer.Items.Add(new Entry(owner,owner));reopened.printer.SelectedIndex=0;reopened.saved.AddRange(saved);reopened.explicitProfile=ids[0];reopened.updating=false;reopened.UpdateProfiles();AuditCheck(reopened.profiles.Items.Cast<Entry>().Where(item=>saved.Any(profile=>NativePrint.Text(profile,"id")==item.Id&&NativePrint.Text(profile,"printer")==owner)).Select(item=>item.Id).SequenceEqual(expected),"A fresh window lost the saved order.");reopened.Close();}
       saved[0]["name"]="Renamed preset";UpdateProfiles();AuditCheck(entries()[0].Id==ids[0],"Renaming changed the saved order.");
       string addedId=new string('e',32);var added=new Dictionary<string,object>(saved[0]);added["id"]=addedId;added["name"]="AAA new preset";saved.Add(added);File.WriteAllText(Path.Combine(profileDirectory,addedId+".json"),NativePrint.Json.Serialize(added));UpdateProfiles();AuditCheck(entries().Last().Id==addedId,"A new preset displaced the arranged presets.");
       var captures=new List<object>();
@@ -1269,6 +1420,9 @@ internal sealed class PrintWindow : Form {
     }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
   }
   internal async Task VerifyDirection(){
+    if(Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_UI")=="1"){await VerifyFastPrintUi();return;}
+    if(Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PAGE_ROTATION")=="1"){await VerifyPageRotation();return;}
+    if(Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SHEET_IMAGES")=="1"){await VerifySheetImageSelection();return;}
     Directory.CreateDirectory(args.Verify);
     try{
       await LoadPrinters();await PresetReady();AuditCheck(SourceOrientation&&!fill.Checked,"One-up must keep original orientation by default.");
@@ -1287,6 +1441,95 @@ internal sealed class PrintWindow : Form {
       foreach(var size in new[]{new Size(1366,768),new Size(1920,1080),new Size(1600,900),new Size(820,640)}){Size=size;sheetIndex=0;fileList.SelectedIndex=0;await RenderPreview();NativePrint.Capture(this,Path.Combine(args.Verify,"native-"+Width+"x"+Height+".png"));}
       layouts.SelectedIndex=0;await PresetReady();AuditCheck(SourceOrientation&&!fill.Checked,"Returning to one-up must restore original direction and complete-photo fit.");
       File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,reports=reports,manualRotationEnabled=true,oneUpOriginalRestored=true,cleanupDirectory=session}),new UTF8Encoding(false));
+    }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
+  }
+  internal async Task VerifyFastPrintUi(){
+    Directory.CreateDirectory(args.Verify);
+    try{
+      await LoadPrinters();await PresetReady();layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id=="4");await PresetReady();
+      ApplyControls();var profile=StorePrinterPreset("A4 — Noir et blanc — محفوظ — My saved printer preset",FastPrintDriver.FromDocument(settings));UpdateProfiles();await ChooseSavedProfile(NativePrint.Text(profile,"id"));await PresetReady();
+      var surface=Controls[0];surface.Dock=DockStyle.None;surface.Location=Point.Empty;var captures=new List<object>();
+      foreach(bool dark in new[]{false,true}){PrintTheme.Initialize(dark);PrintTheme.Apply(this);foreach(var size in new[]{new Size(1366,768),new Size(1600,900),new Size(1920,1080),new Size(820,640)}){
+        surface.Size=size;surface.PerformLayout();await RenderPreview();await PresetReady();
+        foreach(var control in new Control[]{printer,profiles,paper,color,orientation,quality,fileList,pageFilter,rotateSelected,fill,sameDirection,combineFiles,copies,print,previous,next}){
+          AuditCheck(control.Parent.ClientRectangle.Contains(control.Bounds),"Control clipped: "+control.AccessibleName+" / "+control.Text+" at "+size+" bounds "+control.Bounds+" parent "+control.Parent.ClientRectangle);
+        }
+        AuditCheck(preview.Width>=300&&preview.Height>=140,"Preview lost its working area.");
+        AuditCheck(profiles.Parent.Top==printer.Parent.Top&&profiles.Parent.Parent==printer.Parent.Parent,"Printer and saved preset are not grouped together.");
+        AuditCheck(rotateSelected.Parent==previous.Parent&&fill.Parent==rotateSelected.Parent,"Preview editing commands are not grouped together.");
+        AuditCheck(!NativePrint.ControlVisible(pageRange),"The unused range entry should be hidden.");
+        var before=preview.Sheet;int compositions=previewCompositions;bool ready=print.Enabled;preview.SelectItem(1);AuditCheck(previewCompositions==compositions&&object.ReferenceEquals(before,preview.Sheet)&&print.Enabled==ready,"Selection recomposed the preview or changed print readiness.");
+        string name=(dark?"dark":"light")+"-"+size.Width+"x"+size.Height;NativePrint.CaptureContent(surface,Path.Combine(args.Verify,name+".png"));captures.Add(new{dark=dark,width=size.Width,height=size.Height,previewWidth=preview.Width,previewHeight=preview.Height});
+      }}
+      pageFilter.SelectedIndex=3;pageRange.Text="1";await PresetReady();AuditCheck(NativePrint.ControlVisible(pageRange)&&pageRange.Enabled,"Choosing Page range did not reveal its editor.");pageFilter.SelectedIndex=0;await PresetReady();
+      // The native cache holds at most four documents and keeps a warm document
+      // across an intervening photo decode, without retaining original files.
+      string sample=args.Files.FirstOrDefault(file=>Path.GetExtension(file).Equals(".pdf",StringComparison.OrdinalIgnoreCase));
+      if(sample!=null){string last=null;for(int i=0;i<6;i++){last=Path.Combine(args.Verify,"cache-"+i+".pdf");File.Copy(sample,last,true);await CachedPdfDocument(last);AuditCheck(pdfDocuments.Count<=4,"PDF document cache exceeded its bound.");}int loads=pdfDocumentLoads;await CachedPdfDocument(last);AuditCheck(pdfDocumentLoads==loads,"Warm PDF was reopened.");}
+      File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,captures=captures,selectionReuses=selectionReuses,pdfCacheBounded=true,pdfDocumentLoads=pdfDocumentLoads,cleanupDirectory=session}),new UTF8Encoding(false));
+    }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
+  }
+  internal async Task VerifyPageRotation(){
+    Directory.CreateDirectory(args.Verify);
+    try{
+      await LoadPrinters();await PresetReady();var reports=new List<object>();
+      Action<int> click=slot=>{var sheet=preview.SheetBounds();var cell=preview.Items[slot].Bounds;var point=new Point((int)(sheet.X+(cell.X+cell.Width/2)*sheet.Width/preview.Sheet.Width),(int)(sheet.Y+(cell.Y+cell.Height/2)*sheet.Height/preview.Sheet.Height));AuditCheck(preview.HitItem(point)==slot,"Page hit testing failed.");typeof(PreviewSurface).GetMethod("OnMouseDown",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(preview,new object[]{new MouseEventArgs(MouseButtons.Left,1,point.X,point.Y,0)});};
+      foreach(string test in new[]{"A4-4-portrait-combined","A4-4-landscape-combined","A3-4-portrait-combined","A3-8-landscape-combined","A4-4-portrait-separate","A4-1-auto-combined"}){
+        var parts=test.Split('-');int per=int.Parse(parts[1]);bool merged=parts[3]=="combined";
+        updating=true;pageRotations.Clear();Array.Clear(sourceRotations,0,sourceRotations.Length);paper.SelectedIndex=paper.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==parts[0]);layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id==per.ToString());orientation.SelectedIndex=parts[2]=="auto"?0:orientation.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==parts[2]);fileList.SelectedIndex=0;sheetIndex=per==1?1:0;combineFiles.Checked=merged;fill.Checked=generalFill=false;sameDirection.Checked=false;updating=false;await RenderPreview();await PresetReady();
+        int slot=Array.FindIndex(preview.Items,item=>item.Source==0&&item.Page==1);AuditCheck(slot>=0,"Second page missing from preview.");click(slot);await PresetReady();RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();
+        AuditCheck(PageTurns(0,1)==1&&PageTurns(0,0)==0&&sourceRotations.All(turn=>turn==0)&&pageRotations.Count==1,"Rotating the second page changed its sibling or another file.");AuditCheck(preview.Items[preview.SelectedItem].Page==1,"Rotation moved selection to the document's first page.");
+        var active=preview.Items[preview.SelectedItem];AuditCheck(active.Turns==1,"Preview did not apply the selected page's rotation.");
+        if(per>1){click(Array.FindIndex(preview.Items,item=>item.Source==0&&item.Page==0));await PresetReady();AuditCheck(status.Text.Contains(L("page")+" 1")&&status.Text.Contains(L("Rotation")+": 0°"),"Selecting another page kept the previous page's status.");RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();AuditCheck(PageTurns(0,0)==2&&PageTurns(0,1)==1,"Selecting the first page overwrote the second page's rotation.");
+          updating=true;pageFilters[0]="even";sheetIndex=0;updating=false;await RenderPreview();await PresetReady();AuditCheck(preview.Items[0].Source==0&&preview.Items[0].Page==1&&preview.Items[0].Turns==1,"Filtering renumbered page rotations.");
+          updating=true;pageFilters[0]="all";sheetIndex=0;updating=false;await RenderPreview();await PresetReady();
+        }
+        string folder=Path.Combine(args.Verify,test);Directory.CreateDirectory(folder);var sheets=new List<string>();
+        for(int file=0;file<(merged?1:args.Files.Count);file++){
+          updating=true;fileList.SelectedIndex=file;sheetIndex=0;updating=false;SyncPageControls();await RenderPreview();await PresetReady();int total=(pageCount+per-1)/per;
+          for(int page=0;page<total;page++){sheetIndex=page;await RenderPreview();await PresetReady();string name=Path.Combine(folder,"sheet-"+sheets.Count+".png");preview.Sheet.Save(name,ImageFormat.Png);sheets.Add(name);}
+        }
+        if(merged){var final=preview.Items.Last();click(preview.Items.Length-1);await PresetReady();int before=PageTurns(final.Source,final.Page);RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();AuditCheck(PageTurns(final.Source,final.Page)==(before+1)%4&&PageTurns(0,1)==1,"Last-sheet rotation changed the two-page PDF.");RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();}
+        string request=await Request(Path.Combine(Path.GetTempPath(),"maher-fast-print-native",Guid.NewGuid().ToString("N")));reports.Add(new{name=test,request=request,sheets=sheets.ToArray(),per=per,merged=merged});
+      }
+      // Global rotation deliberately resets every page, including prior overrides.
+      RotateAllSources(3);await PresetReady();AuditCheck(pageRotations.Count==0&&PageTurns(0,0)==3&&PageTurns(0,1)==3,"Rotate all did not reset page overrides.");RotateAllSources(0);await PresetReady();
+      updating=true;layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id=="4");SetOrientation(false);combineFiles.Checked=true;fileList.SelectedIndex=0;sheetIndex=0;updating=false;await RenderPreview();await PresetReady();click(1);await PresetReady();RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();
+      var surface=Controls[0];surface.Dock=DockStyle.None;surface.Location=Point.Empty;
+      foreach(bool dark in new[]{false,true}){PrintTheme.Initialize(dark);PrintTheme.Apply(this);foreach(var size in new[]{new Size(1366,768),new Size(1920,1080)}){surface.Size=size;surface.PerformLayout();await RenderPreview();await PresetReady();AuditCheck(preview.Items[preview.SelectedItem].Page==1,"Resize lost page selection.");NativePrint.CaptureContent(surface,Path.Combine(args.Verify,(dark?"dark":"light")+"-"+size.Width+"x"+size.Height+".png"));}}
+      File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,pageRotationIsolated=true,selectionRetained=true,filtersUseOriginalPages=true,globalRotationResetsOverrides=true,reports=reports,cleanupDirectory=session}),new UTF8Encoding(false));
+    }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
+  }
+  internal async Task VerifySheetImageSelection(){
+    Directory.CreateDirectory(args.Verify);
+    try{
+      await LoadPrinters();await PresetReady();var reports=new List<object>();
+      Action<int> click=slot=>{var bounds=preview.SheetBounds();var cell=preview.Items[slot].Bounds;var point=new Point((int)(bounds.X+(cell.X+cell.Width/2)*bounds.Width/preview.Sheet.Width),(int)(bounds.Y+(cell.Y+cell.Height/2)*bounds.Height/preview.Sheet.Height));AuditCheck(preview.HitItem(point)==slot,"Hit testing chose a different sheet slot.");typeof(PreviewSurface).GetMethod("OnMouseDown",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(preview,new object[]{new MouseEventArgs(MouseButtons.Left,1,point.X,point.Y,0)});};
+      Action<Keys> key=code=>{var e=new KeyEventArgs(code);typeof(PreviewSurface).GetMethod("OnKeyDown",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(preview,new object[]{e});AuditCheck(e.Handled&&e.SuppressKeyPress,"Preview keys could reach the default Print button.");};
+      foreach(string stock in new[]{"A4","A3"})foreach(int per in new[]{4,8,9,16})foreach(bool landscape in new[]{false,true}){
+        updating=true;paper.SelectedIndex=paper.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==stock);layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id==per.ToString());SetOrientation(landscape);fileList.SelectedIndex=0;sheetIndex=0;Array.Clear(sourceRotations,0,sourceRotations.Length);updating=false;Changed();await PresetReady();
+        AuditCheck(preview.Items.Length==Math.Min(per,args.Files.Count),"Preview targets include empty slots or omit images.");
+        AuditCheck(preview.HitItem(Point.Empty)==-1,"The area outside the sheet selected an image.");
+        byte[] original;using(var stream=new MemoryStream()){preview.Sheet.Save(stream,ImageFormat.Png);original=stream.ToArray();}
+        click(1);await PresetReady();AuditCheck(fileList.SelectedIndex==1&&sheetIndex==0&&preview.SelectedItem==1,"Clicking an image changed the sheet or selected the wrong source.");
+        using(var stream=new MemoryStream()){preview.Sheet.Save(stream,ImageFormat.Png);AuditCheck(original.SequenceEqual(stream.ToArray()),"The selection outline changed printable artwork.");}
+        RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();AuditCheck(sourceRotations[1]==1&&sourceRotations.Where((turn,index)=>index!=1).All(turn=>turn==0),"Rotate selected changed another image.");
+        key(Keys.Right);await PresetReady();AuditCheck(fileList.SelectedIndex==2&&preview.SelectedItem==2,"Arrow key did not select the next visible image.");
+        key(Keys.R);await PresetReady();AuditCheck(sourceRotations[2]==1&&sourceRotations[1]==1,"Keyboard rotation did not preserve the other image.");
+        if(stock=="A4"&&per==4&&!landscape){int snapshots=driverSnapshotRequests;key(Keys.Enter);await PresetReady();key(Keys.Space);await PresetReady();key(Keys.R);await PresetReady();key(Keys.R);await PresetReady();AuditCheck(sourceRotations[2]==1&&driverSnapshotRequests==snapshots,"Preview Enter/Space submitted a print request or rotated the wrong source.");}
+        reports.Add(await DirectionProof(stock+"-"+per+"-"+(landscape?"landscape":"portrait")));
+      }
+      updating=true;layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id=="4");fileList.SelectedIndex=0;sheetIndex=1;updating=false;await RenderPreview();await PresetReady();
+      AuditCheck(preview.Items.Length==2,"Final sheet should have two selectable photos.");click(1);await PresetReady();AuditCheck(fileList.SelectedIndex==5&&sheetIndex==1,"Selection on the final sheet jumped to another sheet.");
+      var sheet=preview.SheetBounds();var blankPoint=new Point((int)(sheet.X+sheet.Width/2),(int)(sheet.Y+sheet.Height*.05f));AuditCheck(sheet.Contains(blankPoint)&&preview.HitItem(blankPoint)==-1,"An empty area inside the final sheet selected an image.");
+      preview.Interactive=false;AuditCheck(preview.HitItem(new Point((int)sheet.X+20,(int)sheet.Y+20))==-1,"A stale preview accepted selection.");await RenderPreview();await PresetReady();
+      // Filtering an earlier image must not change the source chosen from visible slots.
+      updating=true;combineFiles.Checked=true;pageFilters[0]="even";sheetIndex=0;updating=false;await RenderPreview();await PresetReady();click(1);await PresetReady();AuditCheck(fileList.SelectedIndex==2,"Filtered combined sheet selection used the slot number as the source index.");
+      updating=true;pageFilters[0]="all";sheetIndex=0;updating=false;await RenderPreview();await PresetReady();
+      var surface=Controls[0];surface.Dock=DockStyle.None;surface.Location=Point.Empty;var captures=new List<object>();
+      foreach(bool dark in new[]{false,true}){PrintTheme.Initialize(dark);PrintTheme.Apply(this);foreach(var size in new[]{new Size(1366,768),new Size(1600,900),new Size(1920,1080)}){surface.Size=size;surface.PerformLayout();await RenderPreview();await PresetReady();click(1);await PresetReady();string name=(dark?"dark":"light")+"-"+size.Width+"x"+size.Height;NativePrint.CaptureContent(surface,Path.Combine(args.Verify,name+".png"));using(var image=new Bitmap(preview.Width,preview.Height)){preview.DrawToBitmap(image,preview.ClientRectangle);image.Save(Path.Combine(args.Verify,name+"-preview.png"),ImageFormat.Png);}captures.Add(new{width=size.Width,height=size.Height,dark=dark});}}
+      updating=true;mode="id-card";updating=false;await RenderPreview();await PresetReady();AuditCheck(!preview.Interactive&&preview.Items.Length==0,"ID source preview should use its dedicated editor.");
+      File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,reports=reports,captures=captures,mouseSelection=true,keyboardSelection=true,rotationIsolated=true,finalSheetSelection=true,filteredSelection=true,blankSlotsIgnored=true,cleanupDirectory=session}),new UTF8Encoding(false));
     }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
   }
   internal async Task VerifySource(){
@@ -1580,7 +1823,7 @@ internal sealed class PrintWindow : Form {
     await Task.FromResult(0);
   }
   protected override void Dispose(bool disposing) {
-    if(disposing){closing=true;rendering++;foreach(var worker in previewWorkers.ToArray())try{if(!worker.HasExited){worker.Kill();worker.WaitForExit(3000);}}catch{}pdf=null;foreach(var cached in pageCache.Values)cached.Dispose();pageCache.Clear();foreach(var thumbnail in polaroidThumbnails.Values)thumbnail.Dispose();polaroidThumbnails.Clear(); if(settings!=null)settings.Dispose();tips.Dispose();GC.Collect();GC.WaitForPendingFinalizers();if(args.Verify==null)foreach(string directory in previewSessions.Concat(new[]{session}))try{Directory.Delete(directory,true);}catch{} }
+    if(disposing){closing=true;rendering++;foreach(var worker in previewWorkers.ToArray())try{if(!worker.HasExited){worker.Kill();worker.WaitForExit(3000);}}catch{}pdf=null;pdfDocuments.Clear();pdfDocumentOrder.Clear();foreach(var cached in pageCache.Values)cached.Dispose();pageCache.Clear();foreach(var thumbnail in polaroidThumbnails.Values)thumbnail.Dispose();polaroidThumbnails.Clear(); if(settings!=null)settings.Dispose();tips.Dispose();GC.Collect();GC.WaitForPendingFinalizers();if(args.Verify==null)foreach(string directory in previewSessions.Concat(new[]{session}))try{Directory.Delete(directory,true);}catch{} }
     base.Dispose(disposing);
   }
 }

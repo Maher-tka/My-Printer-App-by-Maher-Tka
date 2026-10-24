@@ -184,8 +184,8 @@ internal sealed class LayoutPicker : ScrollableControl {
   }
   protected override void OnResize(EventArgs e){base.OnResize(e);Arrange();}
   bool arranging;
-  internal Rectangle TileBounds(int index,Point offset){int width=Math.Max(85,(ClientSize.Width-SystemInformation.VerticalScrollBarWidth-16)/2);return new Rectangle(offset.X+4+(Items[index].Id=="id-card"?0:RightToLeft==RightToLeft.Yes?1-index%2:index%2)*(width+8),offset.Y+4+(index/2)*90,Items[index].Id=="id-card"?width*2+8:width,82);}
-  void Arrange(){if(tiles==null||arranging)return;arranging=true;SuspendLayout();try{AutoScrollMinSize=new Size(0,((tiles.Count+1)/2)*90+8);var offset=AutoScrollPosition;for(int i=0;i<tiles.Count;i++)tiles[i].Bounds=TileBounds(i,offset);}finally{ResumeLayout(true);arranging=false;}}
+  internal Rectangle TileBounds(int index,Point offset){int width=Math.Max(85,(ClientSize.Width-SystemInformation.VerticalScrollBarWidth-16)/2);return new Rectangle(offset.X+4+(Items[index].Id=="id-card"?0:RightToLeft==RightToLeft.Yes?1-index%2:index%2)*(width+8),offset.Y+4+(index/2)*72,Items[index].Id=="id-card"?width*2+8:width,64);}
+  void Arrange(){if(tiles==null||arranging)return;arranging=true;SuspendLayout();try{AutoScrollMinSize=new Size(0,((tiles.Count+1)/2)*72);var offset=AutoScrollPosition;for(int i=0;i<tiles.Count;i++)tiles[i].Bounds=TileBounds(i,offset);}finally{ResumeLayout(true);arranging=false;}}
   internal sealed class LayoutTile : PrintButtonControlBase {
     internal LayoutTile(Entry entry):base(entry){}
   }
@@ -193,7 +193,7 @@ internal sealed class LayoutPicker : ScrollableControl {
 // A Button-derived tile keeps native UI Automation, focus, Space and Enter support.
 internal class PrintButtonControlBase : PrintButtonControl {
   readonly Entry entry;
-  internal PrintButtonControlBase(Entry value){entry=value;Text=value.Label;MinimumSize=new Size(80,82);AccessibleRole=AccessibleRole.RadioButton;}
+  internal PrintButtonControlBase(Entry value){entry=value;Text=value.Label;MinimumSize=new Size(80,64);AccessibleRole=AccessibleRole.RadioButton;}
   protected override AccessibleObject CreateAccessibilityInstance(){return new TileAccessibility(this);}
   sealed class TileAccessibility : Control.ControlAccessibleObject {
     readonly PrintButtonControlBase tile;
@@ -203,11 +203,11 @@ internal class PrintButtonControlBase : PrintButtonControl {
     public override void DoDefaultAction(){tile.PerformClick();}
   }
   protected override void PaintContent(Graphics graphics,Color foreground){
-    int count;int.TryParse(entry.Id,out count);var layout=NativeLayout.Find(count);var box=new Rectangle(Width/2-19,10,38,40);
+    int count;int.TryParse(entry.Id,out count);var layout=NativeLayout.Find(count);var box=new Rectangle(Width/2-15,6,30,30);
     using(var paper=new SolidBrush(PrintTheme.Surface))using(var pen=new Pen(PrintTheme.Border)){graphics.FillRectangle(paper,box);graphics.DrawRectangle(pen,box);}
-    int columns=layout.columns,rows=layout.rows;float cellW=30f/columns,cellH=32f/rows;
+    int columns=layout.columns,rows=layout.rows;float cellW=22f/columns,cellH=22f/rows;
     using(var ink=new SolidBrush(PrintTheme.Blend(PrintTheme.Accent,PrintTheme.Surface,Selected?.65f:.30f)))
       for(int i=0;i<layout.count;i++)graphics.FillRectangle(ink,box.X+4+(i%columns)*cellW,box.Y+4+(i/columns)*cellH,Math.Max(1,cellW-2),Math.Max(1,cellH-2));
-    TextRenderer.DrawText(graphics,entry.Label,Font,new Rectangle(4,55,Width-8,22),foreground,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+    TextRenderer.DrawText(graphics,entry.Label,Font,new Rectangle(4,39,Width-8,22),foreground,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
   }
 }

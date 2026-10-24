@@ -24,6 +24,13 @@ select light, dark or the Windows app appearance without changing OS settings.
 There is one Print action, with native Enter/Escape behavior and arrow-key layout selection.
 The language follows the Windows UI culture (English, French and Arabic labels).
 
+Printer and Saved preset share the first settings row, with Polaroid directly
+under the printer. Paper, color, orientation and quality are grouped together.
+Combine files is beside the file selector; the range editor appears when Page
+range is chosen. Navigation and image-editing controls wrap beneath the preview,
+while Copies stays with output totals. Options and Refresh printers are in the
+header. Layout tiles use compact thumbnails with unchanged text sizes.
+
 Fast Print remembers the last selected printer, including a selection followed by
 Cancel, and selects it on the next launch while it remains installed. A stale
 printer hint from the Explorer command does not replace that choice. Printer
@@ -97,12 +104,44 @@ and 3 mm cutting gaps. **Options… > Margins** offers 5/7/10/15/20 mm;
 **Cutting gap** offers 3/5/8/10 mm. Incomplete final sheets and rows are centered
 without enlarging the remaining items, so their slot size stays consistent.
 
-Multi-up aligns each source to the slot direction before applying manual rotation. **Rotate selected** turns the
-selected file by 90 degrees inside its slot; for PDF/Word, that applies to all
-pages in the file. **Options… > Rotate all** sets 0/90/180/270 degrees for the
+Multi-up aligns each source to the slot direction before applying manual rotation. **Rotate selected** turns only the
+selected page or image by 90 degrees inside its slot. PDF/Word pages rotate
+independently, including when several pages from the same file share a sheet.
+**Options… > Rotate all** sets 0/90/180/270 degrees for the
 whole batch and keeps that rotation when changing presets. The status reports
-the current slot dimensions and selected file's rotation. Native preview and
+the current slot dimensions, selected document page and its rotation. Native preview and
 print preparation use matching margins, gaps, positions and rotations.
+
+In ordinary sheet previews, click an image to select it, then choose **Rotate
+selected**. The outline identifies the selection and the filename selector follows
+it without changing sheets. Tab into the preview and use arrow keys to select
+another visible image; **R**, **Space**, or **Enter** rotates the selection by 90°.
+These keys do not trigger Print while the preview has focus. Empty slots and
+previews being refreshed cannot be selected. The outline is a preview overlay;
+it is absent from printed artwork. Page filtering and centered final sheets keep
+the same source-to-slot mapping. Rotations belong to original source pages, so
+filtering or navigating sheets does not transfer rotation to another page.
+ID and Polaroid retain their dedicated workflows.
+
+Hidden checks: build `FastPrint-sheet-selection.exe` with the native build script,
+then run `npm run test:fast-print:sheet-images`. The checks exercise hidden native
+mouse/key handlers and compare rendered print proofs without hardware jobs.
+For mixed-file PDF page rotation proofs, build `FastPrint-page-rotation.exe` and
+run `npm run test:fast-print:page-rotation`.
+
+Selecting a visible page updates the outline, selected-page status and accessible
+name without rebuilding the sheet or disabling Print. Unchanged refreshes reuse
+the current sheet without waiting for the edit debounce. File-version checks
+still force a refresh when artwork changes. Inventory and preview share a bounded
+four-document PDF cache across mixed PDF/photo selections; it is cleared before
+submission and when the dialog is disposed. Photo decoding remains outside the
+UI thread and the bitmap cache remains bounded.
+
+Hidden UI checks: build `FastPrint-ui-performance.exe` and run
+`npm run test:fast-print:ui`. For a before/after timing comparison, preserve the
+pre-change helper as `FastPrint-ui-baseline.exe`, then run
+`npm run test:fast-print:preview-performance` with the updated helper. These
+checks use hidden native forms and synthetic fixtures without hardware jobs.
 
 **Fit to frame** fills equal-size photo slots by cropping to their edges. It
 starts on for photo-only multi-up selections to give equal filled frames, and off
@@ -110,9 +149,10 @@ for Full page or PDF/Word selections so the complete source remains visible. An
 explicit choice is kept while changing layouts. Turning it on for documents crops
 their pages too.
 
-The **Saved preset** list shows all saved A4/A3 stocks for the selected printer,
-including their paper and tray. Selecting one restores its paper size, color,
-tray, duplex and complete vendor driver settings. Paper-size filtering no longer
+The **Saved preset** list shows saved stocks from all printers, with the current
+printer's entries first. Each name includes its owning printer, paper and tray.
+Selecting another printer's preset switches to that exact queue, then restores
+its paper size, color, tray, duplex and complete vendor driver settings. Paper-size filtering no longer
 hides an A3 stock while A4 is selected. **Save printer preset…** in this same list
 opens a named preset dialog; **Printer properties…** there configures the actual
 tray/magazine, paper weight, bypass size and output bin/finishing before saving.
@@ -125,6 +165,10 @@ rename/delete and the existing operator notes/default-stock controls.
 To choose a preset for printing, open **Saved preset** (**Préréglage enregistré**
 in French), beside Polaroid. The dropdown starts at **Automatic / Automatique**.
 Select the named preset, then choose Print or Review ID.
+Opening the dropdown reloads saved preset files, so newly created or edited
+presets appear without restarting Fast Print. Switching through a preset keeps
+the job layout, ID mode, rotation and explicitly chosen copy quantity. Unavailable
+printers and deleted active presets block Print until a valid choice is made.
 
 **Saved preset > Arrange presets…** opens the selected printer's ordering dialog.
 Select an entry, use **Move up / Move down** (or Alt+Up / Alt+Down), then **Save**.

@@ -1,5 +1,6 @@
 import {
   fastPrintLayout,
+  fastPrintPageTurns,
   fastPrintSourceLayout,
   fastPrintContentTurns,
   fastPrintCell,
@@ -106,6 +107,8 @@ async function run(): Promise<void> {
           const isPdf = batch.files[file].extension === '.pdf'
           if (isPdf) await load(file)
           const count = isPdf ? pdf!.numPages : 1
+          if (preset.pageRotations?.some((entry) => entry.file === file && entry.page >= count))
+            throw new Error('The rotated pages no longer exist. Review the page selection.')
           const selected = preset.sourcePages?.[file]
           if (selected?.some((page) => page >= count))
             throw new Error('The selected pages no longer exist. Review the page selection.')
@@ -126,7 +129,7 @@ async function run(): Promise<void> {
           if (preset.autoOrientation && preset.pagesPerSheet === 1) {
             await load(pages[first].file)
             const sourcePage = pdf ? await pdf.getPage(pages[first].page + 1) : undefined
-            const turns = preset.sourceRotations?.[pages[first].file] ?? 0
+            const turns = fastPrintPageTurns(preset, pages[first].file, pages[first].page)
             const view = sourcePage?.getViewport({
               scale: 1,
               rotation: (sourcePage.rotate + turns * 90) % 360
@@ -148,7 +151,7 @@ async function run(): Promise<void> {
             )
             await load(ref.file)
             const page = pdf ? await pdf.getPage(ref.page + 1) : undefined
-            const manualTurns = preset.sourceRotations?.[ref.file] ?? 0
+            const manualTurns = fastPrintPageTurns(preset, ref.file, ref.page)
             const originalView = page?.getViewport({ scale: 1, rotation: page.rotate })
             const turns = fastPrintContentTurns(
               preset,

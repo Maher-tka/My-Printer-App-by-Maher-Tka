@@ -6,9 +6,34 @@ import {
   fastPrintCell,
   fastPrintSourceLayout,
   fastPrintContentTurns,
+  fastPrintPageTurns,
   validateFastPrintPreset
 } from './fast-print.js'
 import { polaroidLayout, polaroidCoverCrop } from './fast-print-polaroid.js'
+
+const rotations = {
+  printer: 'P',
+  paper: 'A4' as const,
+  color: true,
+  pagesPerSheet: 4 as const,
+  sourceRotations: [2, 3],
+  pageRotations: [
+    { file: 0, page: 1, turns: 1 },
+    { file: 1, page: 0, turns: 0 }
+  ]
+}
+const validatedRotations = validateFastPrintPreset(rotations)
+assert.equal(fastPrintPageTurns(validatedRotations, 0, 0), 2)
+assert.equal(fastPrintPageTurns(validatedRotations, 0, 1), 1)
+assert.equal(fastPrintPageTurns(validatedRotations, 1, 0), 0)
+assert.equal(fastPrintPageTurns(validatedRotations, 1, 1), 3)
+assert.equal(fastPrintPageTurns(validatedRotations, 2, 0), 0)
+rotations.pageRotations[0].turns = 3
+assert.equal(
+  fastPrintPageTurns(validatedRotations, 0, 1),
+  1,
+  'Validated page rotations must be independent copies'
+)
 
 for (const paper of ['A4', 'A3'] as const) {
   for (const pagesPerSheet of FAST_PRINT_COUNTS) {

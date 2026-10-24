@@ -44,6 +44,8 @@ export function parseNativePrintRequest(text: string): NativePrintRequest {
   const files = normalizeFastPrintSelection(data.files)
   if (preset.sourcePages && preset.sourcePages.length !== files.length)
     throw new Error('Page selections do not match the selected files.')
+  if (preset.pageRotations?.some((entry) => entry.file >= files.length))
+    throw new Error('Page rotations do not match the selected files.')
   return {
     version: 1,
     files,

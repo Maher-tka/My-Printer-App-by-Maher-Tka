@@ -2392,3 +2392,161 @@ isolated hidden Electron window and mock printer API.
 Evidence: output/fast-print-preset-order/results.json and EN/FR/AR captures;
 output/fast-print-preset-order-build.log. Re-run with
 npm run test:fast-print:preset-order after building FastPrint-preset-order.exe.
+
+## Fast Print preset discovery and cross-printer selection — 2026-10-23
+
+- [x] Read-only workshop inspection of released v0.2.23 confirmed six app-saved
+      presets: four for EPSON WF-C879R Series and two for KONICA MINOLTA. None
+      belongs to Microsoft Print to PDF, which was selected in the user's photo.
+      The previous queue filter hid all six. No workshop settings, presets,
+      artwork, source code or print jobs were changed.
+- [x] The native Saved preset dropdown now shows presets from other printers too,
+      labels each with its owning queue, and keeps the current printer's entries
+      first. Choosing a preset selects its exact queue before applying its own
+      driver snapshot. A missing queue blocks Print instead of using another one.
+- [x] Opening the dropdown reloads preset files. New and edited presets appear
+      without restarting. Removing the active preset blocks stale submission and
+      leaves a recoverable choice of current options or another valid preset.
+- [x] Hidden EN/FR/AR checks start on Microsoft Print to PDF with a preset belonging
+      to another installed virtual printer. They verify visibility before Print,
+      queue/profile selection, original preset bytes, tray/duplex/paper/color,
+      layout, copies, rotation, ID mode, live reload and missing/deleted guards.
+      No Submit calls or hardware jobs were made. Checks ran on one CPU core.
+- [x] Native content surfaces were rendered and visually inspected at actual
+      1366x768 and 1920x1080 in both themes and EN/FR/Arabic RTL. The hidden form's
+      host desktop limits top-level sizes, so a detached content surface provides
+      exact-size proofs without controlling or resizing the desktop. Screenshot
+      dimensions and reported surface dimensions are asserted.
+- [x] All eight ID photos passed original and off-center +/-45-degree crop and
+      print proofs with 90 mm width, matching front/back centers and unchanged
+      original hashes. Crop/monochrome proofs were visually inspected.
+- [x] Native compilation, typecheck, Fast Print behavior and preset-order regression
+      checks passed. Existing selection order is preserved, and no ID/Polaroid
+      compositor or print-submission code changed.
+- [ ] Actual Epson queue/preset switching on the workshop PC, live desktop keyboard
+      traversal and high-DPI checks remain pending for a released build. The new
+      chooser behavior is local work for the next update.
+
+Evidence: output/fast-print-preset-picker/results.json and controls.png;
+output/preset-list-id-check/results.json and review.png. Re-run with
+npm run test:fast-print:preset-picker after building FastPrint-preset-list.exe.
+
+## Fast Print image selection in the sheet preview — 2026-10-23
+
+- Ordinary sheet previews now select an image by clicking its occupied slot, show
+  an outline, and synchronize the filename selector without changing the sheet.
+  The existing Rotate selected command applies a 90-degree rotation to that
+  source. PDF/Word keeps the existing whole-file rotation behavior; ID and
+  Polaroid retain their dedicated editors/composition rules.
+- Arrow keys select visible images in the focused preview. R, Space and Enter
+  rotate the selected source and suppress the default Print action. Empty sheet
+  areas and stale/loading previews cannot be selected. Selection is drawn over
+  the preview and never added to print artwork.
+- Passed native compilation, typecheck, the Fast Print regression suite and
+  formatting/diff checks. `npm run test:fast-print:sheet-images` passed 16
+  A4/A3, portrait/landscape, 4/8/9/16-up cases in EN/FR/AR. Hidden native mouse/key
+  handlers checked source mapping, isolated rotations, final-sheet selection,
+  filtered/combined streams, blank areas and Enter/Space submission guards.
+  Production renderer proofs matched the English native previews in every case.
+  The final helper also passed the saved-preset picker checks in all languages.
+- Inspected native content captures at 1366×768, 1600×900 and 1920×1080 in both
+  themes and EN/FR/AR, including Arabic RTL and the selected-image outline. Tests
+  ran on one CPU core; this native control has no animation or browser dependency.
+  Shared native controls and theme tokens are reused; Rotate selected has one
+  visible home. Print remains the sole primary output action. No subtitles,
+  duplicate commands, hardware jobs or original-image changes were introduced.
+- Evidence: `output/fast-print-sheet-images/results.json`, the run folders
+  and `final-native/` proofs. These are hidden content-surface checks; live
+  keyboard/focus traversal, screen-reader output and high-DPI desktop checks
+  remain pending. No interactive desktop control was used. The changes are local
+  and have not been published as a subscriber release.
+
+## Fast Print independent PDF page rotation — 2026-10-23
+
+- Fixes Rotate selected affecting every page of the selected PDF/Word file.
+  Preview targets now retain the original file and page index. Each page keeps
+  its own rotation through selection, filtering, sheet navigation and output.
+  Rotate all intentionally resets every page and clears individual overrides.
+- The selected page number and rotation appear in the existing status area.
+  Selection remains on the same original page after rerendering. The preview
+  cache includes the selected page, so changing between two pages of one file
+  refreshes the status. The tooltip describes page-only rotation in EN/FR/AR.
+- Added validated sparse page overrides to native requests and production
+  rendering, including original-orientation single-page sheets. Older file-wide
+  rotation requests still work. Invalid, duplicate or excessive overrides and
+  missing files/pages are rejected before output.
+- Passed native compilation, npm run build (including typecheck), Fast Print
+  regression tests, request validation tests and formatting checks. Mixed-file
+  proofs use two two-page PDFs plus a photo: six A4/A3, portrait/landscape,
+  combined/separate and original-orientation cases in EN/FR/AR. English production
+  proofs match native previews. Checks cover selecting both pages independently,
+  last-sheet selection, even-page filters, global rotation reset and sibling-page
+  isolation. No hardware jobs were sent and no original customer files changed.
+- Evidence: output/fast-print-page-rotation/results.json and native-results.json.
+  Inspected native content captures at 1366×768 and 1920×1080, both themes,
+  English/French/Arabic RTL, on one CPU core. Existing native controls and semantic
+  colors are reused, with one Rotate selected command and one primary Print
+  action. No explanatory subtitles or duplicate controls were added.
+- Live keyboard/focus, screen-reader and high-DPI desktop checks remain pending;
+  validation used hidden forms without interactive desktop control. This entry
+  supersedes the whole-file PDF rotation behavior documented in the earlier
+  image-selection entry. The fix is local and has not been published.
+
+## Fast Print UI grouping and preview performance — 2026-10-23
+
+- Printer and Saved preset now share the first settings row. Polaroid remains
+  directly below the printer. Paper, color, orientation and quality share the
+  next row. Combine files belongs beside the file selector. Page-range entry
+  appears when Page range is selected.
+- Compact layout tiles expose more layouts without reducing label size. Preview
+  navigation, Rotate selected, Fit to frame and Same direction form a wrapping
+  toolbar below the preview. Copies and output totals are grouped above the
+  single primary Print action. Options and Refresh printers are in the header.
+  Shared native theme tokens and controls are retained; no new visual framework,
+  fonts, explanatory subtitles or duplicate commands were introduced.
+- Clicking an already prepared page updates only its selection outline, accessible
+  name and status. It preserves print readiness and the sheet bitmap. Unchanged
+  preview refreshes bypass the debounce delay; artwork changes still invalidate
+  the preview. Source-version checks remain on selection and rendering.
+- Added a four-document PDF cache shared by inventory and preview decoding.
+  Repeated PDF/photo switching reuses open snapshots, while source changes use
+  new keys. Cache entries are released on submission and disposal. The existing
+  bounded bitmap cache and photo decoding outside the UI thread remain in place.
+- The frozen pre-change helper and updated helper were benchmarked on the same
+  six synthetic 24 MP JPEG fixtures, 16 A4/A3 layouts, and one CPU core. Across
+  128 unchanged-preview calls, measured waiting fell from 5,973 ms to 10 ms.
+  Two hundred selection changes took 111 ms with zero sheet compositions and
+  unchanged print readiness. Cold setup was 1,972/1,666 ms and working memory
+  77.5/78.6 MiB in this single run; those are observations, not general guarantees.
+  The maximum timer gap increased from 88 to 206 ms in a run including the tight
+  200-selection burst, so these results do not establish lower worst-case UI
+  latency under continuous input.
+- Passed typecheck, Fast Print regression tests, mixed-file page-rotation print
+  proofs, preset-picker checks, page-selection checks, and native paint/resource
+  checks. The paint tests reported zero GDI-object growth across the 160-frame
+  light/dark runs in EN/FR/AR. No hardware jobs or interactive desktop input were
+  used. Original customer files were not modified.
+- Native content-layout checks cover 1366×768, 1600×900, 1920×1080 and 820×640,
+  English/French/Arabic RTL, light/dark, long preset names, wrapping, conditional
+  range controls, selection state, and bounded PDF retention. A missing percent
+  column in shared Field was corrected after the smallest-width check found
+  dropdown overflow. Evidence: output/fast-print-ui/results.json and
+  output/fast-print-preview-performance/results.json. Visual review is recorded
+  after the final capture pass below.
+- Design review used the saved design-motion-toolkit catalog and Impeccable's
+  hierarchy/polish guidance alongside docs/DESIGN_SYSTEM.md. Its CLI/hooks were
+  not installed or claimed as executed. Source reviewed:
+  https://github.com/pbakaus/impeccable/blob/main/README.md.
+- Pending: live keyboard/focus traversal, screen-reader output, high-DPI desktop
+  checks, and continuous-input latency on the workshop hardware. The native UI
+  has no motion tied to the renderer's low-end preference; these tests used one
+  CPU core and retained the bounded caches. Changes remain local, unpublished.
+
+Final visual pass: inspected all 24 content captures in the final UI review
+contact sheet, plus full-size French 1366×768, English 1920×1080 and Arabic
+820×640 samples. The native proof painter now accounts for the left scrollbar's
+inset in RTL captures. Controls remain grouped, the toolbar wraps at 820 px,
+layout labels retain their text size, the selected page remains outlined and
+Print remains visible. At the smallest width long selected values use ellipsis
+and the layout list scrolls; native dropdowns and accessible names retain full
+values. Live desktop/high-DPI checks remain pending as stated above.

@@ -36,6 +36,10 @@ internal static class NativePresetOrder {
       return printers.TryGetValue(printer,out value)?Ids(value).Select((id,index)=>new{id,index}).ToDictionary(item=>item.id,item=>item.index,StringComparer.Ordinal):new Dictionary<string,int>(StringComparer.Ordinal);
     }catch{if(strict)throw;return new Dictionary<string,int>(StringComparer.Ordinal);}
   }
+  internal static Dictionary<string,Dictionary<string,int>> AllPositions(){
+    try{return NativePrint.Map(Read(),"printers").ToDictionary(pair=>pair.Key,pair=>Ids(pair.Value).Select((id,index)=>new{id,index}).ToDictionary(item=>item.id,item=>item.index,StringComparer.Ordinal),StringComparer.Ordinal);}
+    catch{return new Dictionary<string,Dictionary<string,int>>(StringComparer.Ordinal);}
+  }
   internal static void Save(string printer,string[] ids){
     if(string.IsNullOrWhiteSpace(printer)||printer.Length>512||printer.Any(char.IsControl))throw new InvalidOperationException("Invalid preset order.");
     try{Ids(ids);}catch{throw new InvalidOperationException("Invalid preset order.");}

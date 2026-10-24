@@ -1,6 +1,6 @@
 {
   "name": "my-printer-app-by-maher-tka",
-  "version": "0.2.23",
+  "version": "0.2.24",
   "description": "Local-first printer-shop hub desktop app by Maher Tka.",
   "author": "Maher Tka",
   "private": true,
@@ -61,7 +61,12 @@
     "test:fast-print:page-size": "powershell -NoProfile -STA -ExecutionPolicy Bypass -File scripts/test-fast-print-page-size.ps1",
     "test:fast-print:page-selection": "tsx scripts/verify-fast-print-page-selection.mjs",
     "test:fast-print:id-presets": "tsx src/shared/fast-print-id-preset.test.ts",
-    "test:fast-print:preset-order": "tsx scripts/verify-fast-print-preset-order.mjs"
+    "test:fast-print:preset-order": "tsx scripts/verify-fast-print-preset-order.mjs",
+    "test:fast-print:sheet-images": "tsx scripts/verify-fast-print-sheet-images.mjs",
+    "test:fast-print:page-rotation": "tsx scripts/verify-fast-print-page-rotation.mjs",
+    "test:fast-print:ui": "tsx scripts/verify-fast-print-ui.mjs",
+    "test:fast-print:preview-performance": "tsx scripts/verify-fast-print-preview-performance.mjs",
+    "test:fast-print:preset-picker": "tsx scripts/verify-fast-print-preset-picker.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

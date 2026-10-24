@@ -27,6 +27,36 @@ const request = {
 }
 assert.equal(parseNativePrintRequest(JSON.stringify(request)).preset.fitToFrame, true)
 assert.equal(parseNativePrintRequest(JSON.stringify(request)).copies, 3)
+const rotated = {
+  ...request,
+  preset: {
+    ...request.preset,
+    sourceRotations: [2],
+    pageRotations: [{ file: 0, page: 1, turns: 1 }]
+  }
+}
+assert.deepEqual(parseNativePrintRequest(JSON.stringify(rotated)).preset.pageRotations, [
+  { file: 0, page: 1, turns: 1 }
+])
+for (const pageRotations of [
+  null,
+  [null],
+  [{ file: 1, page: 0, turns: 1 }],
+  [{ file: 0, page: -1, turns: 1 }],
+  [{ file: 0, page: 0, turns: 4 }],
+  [{ file: 0, page: 0.5, turns: 1 }],
+  [{ file: 0, page: 0, turns: '1' }],
+  [
+    { file: 0, page: 1, turns: 1 },
+    { file: 0, page: 1, turns: 2 }
+  ],
+  Array.from({ length: 2001 }, (_, page) => ({ file: 0, page, turns: 1 }))
+])
+  assert.throws(() =>
+    parseNativePrintRequest(
+      JSON.stringify({ ...request, preset: { ...request.preset, pageRotations } })
+    )
+  )
 const selected = { ...request, preset: { ...request.preset, sourcePages: [[0, 2, 4]] } }
 assert.deepEqual(parseNativePrintRequest(JSON.stringify(selected)).preset.sourcePages, [[0, 2, 4]])
 for (const sourcePages of [

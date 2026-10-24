@@ -31,6 +31,8 @@ export interface FastPrintPreset {
   marginMm?: number
   gapMm?: number
   sourceRotations?: number[]
+  /** Sparse overrides keyed by original file and zero-based source page. */
+  pageRotations?: Array<{ file: number; page: number; turns: number }>
   /** Zero-based source page indices per file, in document order. Empty lists skip a file. */
   sourcePages?: number[][]
 }
@@ -102,6 +104,25 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
       (!Array.isArray(p.sourceRotations) ||
         p.sourceRotations.length > 1000 ||
         p.sourceRotations.some((turn) => !Number.isInteger(turn) || turn < 0 || turn > 3))) ||
+    (p.pageRotations !== undefined &&
+      (p.mode !== undefined ||
+        !Array.isArray(p.pageRotations) ||
+        p.pageRotations.length > 2000 ||
+        p.pageRotations.some(
+          (entry) =>
+            !entry ||
+            !Number.isInteger(entry.file) ||
+            entry.file < 0 ||
+            entry.file > 999 ||
+            !Number.isInteger(entry.page) ||
+            entry.page < 0 ||
+            entry.page > 2147483646 ||
+            !Number.isInteger(entry.turns) ||
+            entry.turns < 0 ||
+            entry.turns > 3
+        ) ||
+        new Set(p.pageRotations.map((entry) => `${entry.file}:${entry.page}`)).size !==
+          p.pageRotations.length)) ||
     (p.sourcePages !== undefined &&
       (p.mode !== undefined ||
         !Array.isArray(p.sourcePages) ||
@@ -147,11 +168,22 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     ...(p.marginMm !== undefined ? { marginMm: p.marginMm } : {}),
     ...(p.gapMm !== undefined ? { gapMm: p.gapMm } : {}),
     ...(p.sourceRotations !== undefined ? { sourceRotations: [...p.sourceRotations] } : {}),
+    ...(p.pageRotations !== undefined
+      ? { pageRotations: p.pageRotations.map(({ file, page, turns }) => ({ file, page, turns })) }
+      : {}),
     ...(p.sourcePages !== undefined
       ? { sourcePages: p.sourcePages.map((pages) => [...pages]) }
       : {}),
     ...(p.mode ? { mode: p.mode } : {})
   }
+}
+
+export function fastPrintPageTurns(preset: FastPrintPreset, file: number, page: number): number {
+  return (
+    preset.pageRotations?.find((entry) => entry.file === file && entry.page === page)?.turns ??
+    preset.sourceRotations?.[file] ??
+    0
+  )
 }
 
 /** A shared grid definition is also compiled into the native preview. */
