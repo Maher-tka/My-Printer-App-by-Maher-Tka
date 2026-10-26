@@ -2,9 +2,11 @@ import { useLanguage } from '@/i18n/useLanguage'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ActionButton } from '@/components/ui/action-button'
+import { ImageStickerSheetReview } from './ImageStickerSheetReview'
 import { ImagePlus, Trash2, ZoomIn, ZoomOut, Scan, Sparkles } from 'lucide-react'
 import { bytesToArrayBuffer } from '../lib/sourcePreview'
 import type { StickerSendOrder } from '../lib/stickerCutterAdapter'
+import { preparePngContourHandoff, type PngContourInput } from '../lib/pngContourHandoff'
 import {
   DEFAULT_STICKER_SHEET_SETTINGS,
   importStickerSheetPages,
@@ -13,7 +15,8 @@ import {
   stickerPngPdf,
   resizeStickerVectorPdf,
   cropStickerVectorPdf,
-  type StickerSheetSettings
+  type StickerSheetSettings,
+  type ReviewedStickerBounds
 } from '../lib/stickerSheet'
 import { downloadBlob } from '../../booklet-montage/lib/download'
 import {
@@ -41,10 +44,18 @@ interface QueueItem {
   widthMm: number
   quantity: number
   cutOffsetMm?: number
+  cutSettings?: StickerMakerSettings
   isSheet?: boolean
   keepOriginal?: boolean
   vectorArtwork?: StickerMakerResult['vectorArtwork']
   pdfSheet?: { bytes: Uint8Array; pageNumber: number }
+  preparedFile?: File
+  imageSheet?: {
+    file: File
+    bounds: ReviewedStickerBounds
+    widthMm: number
+    removeBackground: boolean
+  }
 }
 
 type StickerPreviewMode = 'original' | 'result' | 'mask' | 'cut'
@@ -72,21 +83,29 @@ function drawMaskPreview(
 
 export function AIStickerMaker({
   onSend,
-  onClose
+  onClose,
+  onOpenPngContours
 }: {
   onSend: (orders: StickerSendOrder[], offsetMm: number) => void
   onClose: () => void
+  onOpenPngContours?: (stickers: PngContourInput[]) => void
 }): JSX.Element {
   const { t } = useLanguage()
 
   const [items, setItems] = useState<QueueItem[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [importMode, setImportMode] = useState<'individual' | 'sheet'>('individual')
+  const [imageReview, setImageReview] = useState<{
+    itemId: string
+    file: File
+    widthMm: number
+    initial?: ReviewedStickerBounds[]
+  } | null>(null)
   const [sheetSettings, setSheetSettings] = useState(DEFAULT_STICKER_SHEET_SETTINGS)
   const [exportScope, setExportScope] = useState<'selected' | 'all'>('all')
   const [exportFormat, setExportFormat] = useState<'png' | 'pdf' | 'svg'>('png')
   const [backgroundMode, setBackgroundMode] = useState<StickerBackgroundMode>('auto')
+  const [cutScope, setCutScope] = useState<'selected' | 'all'>('all')
   const [zoom, setZoom] = useState(1)
   const [previewBackground, setPreviewBackground] = useState('checker')
   const [previewSize, setPreviewSize] = useState({ width: 400, height: 400 })
@@ -103,6 +122,7 @@ export function AIStickerMaker({
     widthMm: 80
   })
   const fileRef = useRef<HTMLInputElement>(null)
+  const sheetFileRef = useRef<HTMLInputElement>(null)
   const maskCanvasRef = useRef<HTMLCanvasElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const stopRef = useRef(false)
@@ -122,7 +142,7 @@ export function AIStickerMaker({
     })
     observer.observe(element)
     return () => observer.disconnect()
-  }, [])
+  }, [imageReview])
 
   useEffect(() => setZoom(1), [selected])
 
@@ -137,12 +157,13 @@ export function AIStickerMaker({
     []
   )
 
-  const addFiles = async (files: File[]) => {
+  const addFiles = async (files: File[], asImageSheet = false) => {
     if (busy || !files.length) return
     setBusy(true)
     stopRef.current = false
     const errors: string[] = []
     let added = 0
+    let reviewCandidate: QueueItem | undefined
     setProgress({ done: 0, total: files.length })
     try {
       for (const [index, source] of files.entries()) {
@@ -164,7 +185,7 @@ export function AIStickerMaker({
                 redoMasks: [],
                 widthMm: widthMm ?? settings.widthMm,
                 quantity: 1,
-                isSheet: !vectorArtwork && (widthMm !== undefined || importMode === 'sheet'),
+                isSheet: !vectorArtwork && (asImageSheet || widthMm !== undefined),
                 keepOriginal: !!vectorArtwork,
                 vectorArtwork,
                 pdfSheet
@@ -172,6 +193,8 @@ export function AIStickerMaker({
               setItems((current) => [...current, item])
               setSelected((current) => current ?? item.id)
               added++
+              if (asImageSheet && !vectorArtwork && !pdfSheet && !reviewCandidate)
+                reviewCandidate = item
             },
             () => stopRef.current
           )
@@ -185,6 +208,100 @@ export function AIStickerMaker({
       setBusy(false)
       setProgress(null)
     }
+    if (reviewCandidate && !stopRef.current) {
+      setSelected(reviewCandidate.id)
+      setImageReview({
+        itemId: reviewCandidate.id,
+        file: reviewCandidate.file,
+        widthMm: reviewCandidate.widthMm
+      })
+    }
+  }
+
+  const openImageReview = (item: QueueItem) => {
+    if (busy || item.status === 'Sent' || item.vectorArtwork || item.pdfSheet) return
+    setImageReview({
+      itemId: item.id,
+      file: item.imageSheet?.file ?? item.file,
+      widthMm: item.imageSheet ? item.widthMm / item.imageSheet.bounds.width : item.widthMm,
+      initial: item.imageSheet
+        ? [{ ...item.imageSheet.bounds, removeBackground: item.imageSheet.removeBackground }]
+        : undefined
+    })
+  }
+
+  const applyImageReview = async (regions: ReviewedStickerBounds[]) => {
+    const target = imageReview
+    const original = queueRef.current.find((item) => item.id === target?.itemId)
+    if (!target || !original || busy) return
+    if (items.length - 1 + regions.length > 500)
+      throw new Error(t('Import up to 500 stickers or pages at a time.'))
+    setBusy(true)
+    stopRef.current = false
+    const next: QueueItem[] = []
+    let published = false
+    try {
+      const crops = await separateStickerSheet(target.file, sheetSettings, regions)
+      for (const [index, crop] of crops.entries()) {
+        if (stopRef.current) throw new Error(t('Sticker preparation canceled.'))
+        const widthMm = Math.max(5, Math.min(920, target.widthMm * crop.widthFraction))
+        const cutSettings = { ...(original.cutSettings ?? settings), widthMm }
+        const result = await processSticker(crop.file, cutSettings, () => {}, 'keep')
+        const name = target.initial && crops.length === 1 ? original.file.name : crop.file.name
+        result.fileName = name
+        next.push({
+          id: target.initial && crops.length === 1 ? original.id : crypto.randomUUID(),
+          file:
+            name === crop.originalFile.name
+              ? crop.originalFile
+              : new File([crop.originalFile], name, { type: 'image/png' }),
+          originalPreview: URL.createObjectURL(crop.originalFile),
+          preview: URL.createObjectURL(
+            new Blob([bytesToArrayBuffer(result.png)], { type: 'image/png' })
+          ),
+          status: result.pathData ? 'Ready' : 'Review',
+          result,
+          initialMask: result.contourMask.slice(),
+          undoMasks: [],
+          redoMasks: [],
+          widthMm,
+          quantity: original.quantity,
+          cutOffsetMm: cutSettings.offsetMm,
+          cutSettings,
+          keepOriginal: true,
+          preparedFile: crop.file,
+          imageSheet: {
+            file: target.file,
+            bounds: {
+              ...crop.bounds,
+              seeds: regions[index].seeds,
+              isolateArtwork: regions[index].isolateArtwork
+            },
+            widthMm: target.widthMm,
+            removeBackground: regions[index].removeBackground ?? false
+          }
+        })
+      }
+      if (stopRef.current) throw new Error(t('Sticker preparation canceled.'))
+      setItems((current) => current.flatMap((item) => (item.id === original.id ? next : [item])))
+      setSelected(next[0]?.id ?? null)
+      setPreviewMode('cut')
+      setCutScope('selected')
+      setImageReview(null)
+      URL.revokeObjectURL(original.originalPreview)
+      if (original.preview) URL.revokeObjectURL(original.preview)
+      published = true
+      setMessage(
+        `${t('Stickers separated:')} ${next.length}. ${t('Select a sticker to edit its own crop, mask, size, and copies.')}`
+      )
+    } finally {
+      if (!published)
+        for (const item of next) {
+          URL.revokeObjectURL(item.originalPreview)
+          if (item.preview) URL.revokeObjectURL(item.preview)
+        }
+      setBusy(false)
+    }
   }
 
   const splitSheets = async () => {
@@ -193,6 +310,11 @@ export function AIStickerMaker({
       ? items.filter((item) => item.isSheet && item.status !== 'Sent')
       : items.filter((item) => item.id === selected && item.status !== 'Sent')
     if (!targets.length) return
+    const rasterSheet = targets.find((item) => !item.vectorArtwork && !item.pdfSheet)
+    if (rasterSheet) {
+      openImageReview(rasterSheet)
+      return
+    }
     setBusy(true)
     stopRef.current = false
     setProgress({ done: 0, total: targets.length })
@@ -211,7 +333,7 @@ export function AIStickerMaker({
           if (stopRef.current) break
           if (items.length + count + crops.length - replacedSheets - 1 > 500)
             throw new Error(t('Import up to 500 stickers or pages at a time.'))
-          for (const { file, widthFraction, bounds } of crops) {
+          for (const { file, originalFile, widthFraction, bounds } of crops) {
             if (stopRef.current) break
             const vectorArtwork = item.pdfSheet
               ? {
@@ -229,9 +351,10 @@ export function AIStickerMaker({
               )
             next.push({
               id: crypto.randomUUID(),
-              file,
+              file: originalFile,
+              preparedFile: file,
               status: 'Waiting',
-              originalPreview: URL.createObjectURL(file),
+              originalPreview: URL.createObjectURL(originalFile),
               undoMasks: [],
               redoMasks: [],
               widthMm: Math.max(5, Math.min(920, item.widthMm * widthFraction)),
@@ -309,9 +432,10 @@ export function AIStickerMaker({
           })
           continue
         }
-        let bytes = item.result?.png ?? new Uint8Array(await item.file.arrayBuffer())
-        if (!item.result && item.file.type !== 'image/png') {
-          const bitmap = await createImageBitmap(item.file)
+        const artworkFile = item.preparedFile ?? item.file
+        let bytes = item.result?.png ?? new Uint8Array(await artworkFile.arrayBuffer())
+        if (!item.result && artworkFile.type !== 'image/png') {
+          const bitmap = await createImageBitmap(artworkFile)
           const canvas = document.createElement('canvas')
           try {
             canvas.width = bitmap.width
@@ -396,6 +520,19 @@ export function AIStickerMaker({
     setMessage(`Removed ${item.file.name} from the queue.`)
   }
 
+  const openPngContours = async () => {
+    if (busy || !onOpenPngContours) return
+    setBusy(true)
+    try {
+      const stickers = await preparePngContourHandoff(items)
+      onOpenPngContours(stickers)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const processAll = async (selectedOnly = false) => {
     if (busy) return
     const targets = items.filter((item) =>
@@ -419,9 +556,10 @@ export function AIStickerMaker({
       )
       setMessage(`Processing ${index + 1} / ${targets.length}: ${item.file.name}`)
       try {
+        const itemSettings = { ...(item.cutSettings ?? settings), widthMm: item.widthMm }
         const processed = await processSticker(
-          item.file,
-          { ...settings, widthMm: item.widthMm },
+          item.preparedFile ?? item.file,
+          itemSettings,
           setMessage,
           item.keepOriginal && backgroundMode === 'auto' ? 'keep' : backgroundMode
         )
@@ -440,7 +578,8 @@ export function AIStickerMaker({
                   ...entry,
                   status: result.pathData ? 'Ready' : 'Review',
                   result,
-                  cutOffsetMm: settings.offsetMm,
+                  cutOffsetMm: itemSettings.offsetMm,
+                  cutSettings: itemSettings,
                   preview,
                   initialMask: result.contourMask.slice(),
                   undoMasks: [],
@@ -482,12 +621,19 @@ export function AIStickerMaker({
     setItems((current) =>
       current.map((item) => {
         if (!item.result || item.status === 'Sent' || item.status === 'Failed') return item
+        if (cutScope === 'selected' && item.id !== selected) return item
         try {
-          const result = updateStickerCutline(item.result, { ...next, widthMm: item.widthMm })
+          const itemSettings = {
+            ...(item.cutSettings ?? settings),
+            ...patch,
+            widthMm: item.widthMm
+          }
+          const result = updateStickerCutline(item.result, itemSettings)
           return {
             ...item,
             result,
-            cutOffsetMm: next.offsetMm,
+            cutOffsetMm: itemSettings.offsetMm,
+            cutSettings: itemSettings,
             error: undefined,
             status: result.pathData ? 'Ready' : 'Review'
           }
@@ -508,12 +654,14 @@ export function AIStickerMaker({
       current.map((item) => {
         if (item.id !== selected || item.status === 'Sent') return item
         if (!item.result || item.status === 'Failed') return { ...item, widthMm }
-        const result = updateStickerCutline(item.result, { ...settings, widthMm })
+        const itemSettings = { ...(item.cutSettings ?? settings), widthMm }
+        const result = updateStickerCutline(item.result, itemSettings)
         return {
           ...item,
           widthMm,
           result,
-          cutOffsetMm: settings.offsetMm,
+          cutOffsetMm: itemSettings.offsetMm,
+          cutSettings: itemSettings,
           error: undefined,
           status: result.pathData ? 'Ready' : 'Review'
         }
@@ -541,7 +689,7 @@ export function AIStickerMaker({
     setMessage(`Updating artwork and cutline for ${item.file.name}…`)
     try {
       const result = await rebuildStickerFromMask(item.file, item.result, mask, {
-        ...settings,
+        ...(item.cutSettings ?? settings),
         widthMm: item.widthMm
       })
       const preview = URL.createObjectURL(
@@ -553,7 +701,7 @@ export function AIStickerMaker({
             ? {
                 ...entry,
                 result,
-                cutOffsetMm: settings.offsetMm,
+                cutOffsetMm: (item.cutSettings ?? settings).offsetMm,
                 preview,
                 undoMasks,
                 redoMasks,
@@ -705,12 +853,42 @@ export function AIStickerMaker({
     )
   }
 
+  const restoreOriginalArtwork = async () => {
+    const item = items.find((entry) => entry.id === selected)
+    if (!item?.result || !item.imageSheet || busy || item.status === 'Sent') return
+    setBusy(true)
+    try {
+      const original = await processSticker(
+        item.file,
+        { ...settings, widthMm: item.widthMm },
+        () => {},
+        'keep'
+      )
+      await commitMask(
+        item,
+        original.contourMask,
+        [...item.undoMasks.slice(-19), item.result.contourMask.slice()],
+        []
+      )
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const sendReady = () => {
     try {
       onSend(
         items.flatMap((item) =>
           item.result && item.status === 'Ready'
-            ? [{ result: item.result, quantity: item.quantity }]
+            ? [
+                {
+                  result: item.result,
+                  quantity: item.quantity,
+                  offsetMm: item.cutOffsetMm ?? settings.offsetMm
+                }
+              ]
             : []
         ),
         settings.offsetMm
@@ -725,6 +903,7 @@ export function AIStickerMaker({
   }
 
   const active = items.find((item) => item.id === selected)
+  const displaySettings = cutScope === 'selected' ? (active?.cutSettings ?? settings) : settings
   const readyCount = items.filter((item) => item.status === 'Ready').length
   const readyCopies = items
     .filter((item) => item.status === 'Ready')
@@ -755,6 +934,22 @@ export function AIStickerMaker({
       )
     }
   }, [active?.result, previewMode])
+  if (imageReview)
+    return (
+      <ImageStickerSheetReview
+        key={imageReview.itemId}
+        file={imageReview.file}
+        settings={sheetSettings}
+        initial={imageReview.initial}
+        onApply={applyImageReview}
+        onClose={() => {
+          setImageReview(null)
+          requestAnimationFrame(() =>
+            document.querySelector<HTMLButtonElement>('[data-review-stickers]')?.focus()
+          )
+        }}
+      />
+    )
   return (
     <section
       className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden rounded-lg border bg-card p-3"
@@ -784,16 +979,17 @@ export function AIStickerMaker({
           role="group"
           aria-label={t('Import artwork')}
         >
-          <select
-            aria-label={t('Import mode')}
-            value={importMode}
-            disabled={busy}
-            onChange={(event) => setImportMode(event.target.value as typeof importMode)}
-            className="h-9 max-w-48 rounded-md border bg-background px-2 text-sm"
-          >
-            <option value="individual">{t('Individual artwork')}</option>
-            <option value="sheet">{t('Sticker sheets')}</option>
-          </select>
+          <input
+            ref={sheetFileRef}
+            type="file"
+            accept=".png,.jpg,.jpeg,.webp"
+            className="hidden"
+            aria-label={t('Import sticker sheet')}
+            onChange={(event) => {
+              void addFiles(Array.from(event.target.files ?? []), true)
+              event.target.value = ''
+            }}
+          />
           <ActionButton
             action="import"
             variant={items.length ? 'outline' : 'default'}
@@ -802,6 +998,24 @@ export function AIStickerMaker({
           >
             {t('Import artwork')}
           </ActionButton>
+          <ActionButton
+            action="import"
+            disabled={busy}
+            onClick={() => sheetFileRef.current?.click()}
+          >
+            {t('Import sticker sheet')}
+          </ActionButton>
+          {onOpenPngContours && (
+            <Button
+              data-open-png-contours
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void openPngContours()}
+            >
+              {t('PNG white contour')}
+            </Button>
+          )}
         </div>
         <div
           className="flex flex-wrap items-center gap-2"
@@ -900,6 +1114,9 @@ export function AIStickerMaker({
             >
               <button
                 type="button"
+                data-sticker-id={item.id}
+                aria-label={item.file.name}
+                title={item.file.name}
                 className="flex min-w-0 flex-1 items-center gap-2 p-2 text-left text-xs"
                 aria-pressed={selected === item.id}
                 disabled={busy}
@@ -918,7 +1135,8 @@ export function AIStickerMaker({
                     {item.isSheet ? t('Sticker sheet') : t(item.status)}
                   </span>
                   <span className="text-muted-foreground">
-                    {item.widthMm} mm · {item.quantity} {item.quantity === 1 ? 'copy' : 'copies'}
+                    {Number(item.widthMm.toFixed(2))} mm · {item.quantity}{' '}
+                    {item.quantity === 1 ? 'copy' : 'copies'}
                   </span>
                   {item.error && <span className="block text-destructive">{item.error}</span>}
                 </span>
@@ -1109,6 +1327,98 @@ export function AIStickerMaker({
           )}
         </div>
         <div className="w-48 shrink-0 space-y-3 overflow-y-auto pr-1 text-sm xl:w-56">
+          {previewMode === 'mask' && active?.result && (
+            <div className="space-y-2 rounded-md border bg-muted/30 p-2">
+              <p className="font-medium">{t('Correct mask')}</p>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={brushMode === 'erase' ? 'default' : 'outline'}
+                  disabled={busy || active.status === 'Sent'}
+                  onClick={() => setBrushMode('erase')}
+                >
+                  {t('Erase')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={brushMode === 'restore' ? 'default' : 'outline'}
+                  disabled={busy || active.status === 'Sent'}
+                  onClick={() => setBrushMode('restore')}
+                >
+                  {t('Restore')}
+                </Button>
+              </div>
+              <label className="block">
+                {t('Brush size:')} {brushSize} px
+                <input
+                  type="range"
+                  min="4"
+                  max="128"
+                  value={brushSize}
+                  onChange={(event) => setBrushSize(Number(event.target.value))}
+                  className="w-full"
+                />
+              </label>
+              <label className="block">
+                {t('Hardness:')} {Math.round(brushHardness * 100)}%
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={Math.round(brushHardness * 100)}
+                  onChange={(event) => setBrushHardness(Number(event.target.value) / 100)}
+                  className="w-full"
+                />
+              </label>
+              <div className="flex flex-wrap gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || !active.undoMasks.length || active.status === 'Sent'}
+                  onClick={undoMask}
+                >
+                  {t('Undo')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || !active.redoMasks.length || active.status === 'Sent'}
+                  onClick={redoMask}
+                >
+                  {t('Redo')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || !active.initialMask || active.status === 'Sent'}
+                  onClick={resetMask}
+                >
+                  {t('Reset mask')}
+                </Button>
+                {active.imageSheet && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || active.status === 'Sent'}
+                    onClick={() => void restoreOriginalArtwork()}
+                  >
+                    {t('Restore original artwork')}
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  'Paint white to keep pixels or black to remove them. The cutline updates when you finish a stroke.'
+                )}
+              </p>
+            </div>
+          )}
           <div className="space-y-2 rounded-md border bg-muted/20 p-3">
             <h3 className="font-medium">{t('Separate stickers')}</h3>
             <label className="block">
@@ -1187,22 +1497,25 @@ export function AIStickerMaker({
                 </label>
               </>
             )}
-            <label className="flex items-start gap-2 text-xs">
-              <input
-                type="checkbox"
-                checked={sheetSettings.removeBackground}
-                disabled={busy}
-                onChange={(event) =>
-                  setSheetSettings((current) => ({
-                    ...current,
-                    removeBackground: event.target.checked
-                  }))
-                }
-              />
-              {t('Remove sheet background')}
-            </label>
+            {items.some((item) => item.pdfSheet && item.isSheet) && (
+              <label className="flex items-start gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={sheetSettings.removeBackground}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setSheetSettings((current) => ({
+                      ...current,
+                      removeBackground: event.target.checked
+                    }))
+                  }
+                />
+                {t('Remove sheet background')}
+              </label>
+            )}
             <Button
               type="button"
+              data-review-stickers
               variant={items.some((item) => item.isSheet) ? 'default' : 'outline'}
               className="w-full whitespace-normal"
               disabled={
@@ -1211,9 +1524,15 @@ export function AIStickerMaker({
                 active.status === 'Sent' ||
                 (!!active.vectorArtwork && !items.some((item) => item.isSheet))
               }
-              onClick={() => void splitSheets()}
+              onClick={() => (active?.imageSheet ? openImageReview(active) : void splitSheets())}
             >
-              {t(items.some((item) => item.isSheet) ? 'Separate all sheets' : 'Separate selected')}
+              {t(
+                active?.imageSheet
+                  ? 'Adjust sticker crop'
+                  : items.some((item) => item.pdfSheet && item.isSheet)
+                    ? 'Separate all sheets'
+                    : 'Review image stickers'
+              )}
             </Button>
           </div>
           <div className="space-y-2 rounded-md border bg-muted/20 p-3">
@@ -1291,87 +1610,6 @@ export function AIStickerMaker({
               </p>
             )}
           </div>
-          {previewMode === 'mask' && active?.result && (
-            <div className="space-y-2 rounded-md border bg-muted/30 p-2">
-              <p className="font-medium">{t('Correct mask')}</p>
-              <div className="flex gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={brushMode === 'erase' ? 'default' : 'outline'}
-                  disabled={busy || active.status === 'Sent'}
-                  onClick={() => setBrushMode('erase')}
-                >
-                  {t('Erase')}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={brushMode === 'restore' ? 'default' : 'outline'}
-                  disabled={busy || active.status === 'Sent'}
-                  onClick={() => setBrushMode('restore')}
-                >
-                  {t('Restore')}
-                </Button>
-              </div>
-              <label className="block">
-                {t('Brush size:')} {brushSize} px
-                <input
-                  type="range"
-                  min="4"
-                  max="128"
-                  value={brushSize}
-                  onChange={(event) => setBrushSize(Number(event.target.value))}
-                  className="w-full"
-                />
-              </label>
-              <label className="block">
-                {t('Hardness:')} {Math.round(brushHardness * 100)}%
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={Math.round(brushHardness * 100)}
-                  onChange={(event) => setBrushHardness(Number(event.target.value) / 100)}
-                  className="w-full"
-                />
-              </label>
-              <div className="flex flex-wrap gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={busy || !active.undoMasks.length || active.status === 'Sent'}
-                  onClick={undoMask}
-                >
-                  {t('Undo')}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={busy || !active.redoMasks.length || active.status === 'Sent'}
-                  onClick={redoMask}
-                >
-                  {t('Redo')}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={busy || !active.initialMask || active.status === 'Sent'}
-                  onClick={resetMask}
-                >
-                  {t('Reset mask')}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {t(
-                  'Paint white to keep pixels or black to remove them. The cutline updates when you finish a stroke.'
-                )}
-              </p>
-            </div>
-          )}
           <label className="block">
             {t('Artwork width (mm)')}
             <input
@@ -1416,14 +1654,26 @@ export function AIStickerMaker({
             />
           </label>
           <label className="block">
+            {t('Apply cut settings')}
+            <select
+              value={cutScope}
+              disabled={busy}
+              onChange={(event) => setCutScope(event.target.value as typeof cutScope)}
+              className="mt-1 w-full rounded border bg-background p-2"
+            >
+              <option value="selected">{t('Selected sticker')}</option>
+              <option value="all">{t('All unsent stickers')}</option>
+            </select>
+          </label>
+          <label className="block">
             {t('Cut offset (mm)')}
             <input
               type="number"
               min="0"
               max="20"
               step="0.5"
-              key={`offset-${settings.offsetMm}`}
-              defaultValue={settings.offsetMm}
+              key={`offset-${active?.id}-${cutScope}-${displaySettings.offsetMm}`}
+              defaultValue={displaySettings.offsetMm}
               disabled={busy}
               onBlur={(event) => {
                 const value = Number(event.currentTarget.value)
@@ -1434,7 +1684,7 @@ export function AIStickerMaker({
                   value <= 20
                 )
                   changeSettings({ offsetMm: value })
-                else event.currentTarget.value = String(settings.offsetMm)
+                else event.currentTarget.value = String(displaySettings.offsetMm)
               }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') event.currentTarget.blur()
@@ -1448,17 +1698,17 @@ export function AIStickerMaker({
               type="range"
               min="1"
               max="254"
-              value={settings.threshold}
+              value={displaySettings.threshold}
               disabled={busy}
               onChange={(event) => changeSettings({ threshold: Number(event.target.value) })}
               className="mt-1 w-full"
             />
-            <span>{settings.threshold} / 255</span>
+            <span>{displaySettings.threshold} / 255</span>
           </label>
           <label className="block">
             {t('Contour smoothing')}
             <select
-              value={settings.smoothing}
+              value={displaySettings.smoothing}
               disabled={busy}
               onChange={(event) => changeSettings({ smoothing: Number(event.target.value) })}
               className="mt-1 w-full rounded border bg-background p-2"
@@ -1469,7 +1719,11 @@ export function AIStickerMaker({
             </select>
           </label>
           <p className="text-xs text-muted-foreground">
-            {t('Cut settings apply to all unsent stickers.')}
+            {t(
+              cutScope === 'selected'
+                ? 'Cut settings apply to the selected sticker.'
+                : 'Cut settings apply to all unsent stickers.'
+            )}
           </p>
           {active?.result?.warnings.map((warning) => (
             <p key={warning} className="text-amber-700">

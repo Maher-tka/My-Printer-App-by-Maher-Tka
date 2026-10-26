@@ -55,10 +55,12 @@ export async function exportCardMontagePdf(
           ? source.getPageIndices()
           : [sideArtwork.pageNumber - 1]
       if (indices.length > 200) throw new Error('Export up to 200 card sides at a time.')
-      for (const index of indices) {
+      const sourcePages = indices.map((index) => {
         const sourcePage = source.getPage(index)
         assertCardFontsEmbedded(sourcePage, index + 1)
-        const rotation = ((sourcePage.getRotation().angle % 360) + 360) % 360
+        return sourcePage
+      })
+      const bounds = sourcePages.map((sourcePage) => {
         const crop = sourcePage.getCropBox()
         const media = sourcePage.getMediaBox()
         const clipped = {
@@ -67,17 +69,20 @@ export async function exportCardMontagePdf(
           right: Math.min(crop.x + crop.width, media.x + media.width),
           top: Math.min(crop.y + crop.height, media.y + media.height)
         }
-        const asset = await doc.embedPage(
-          sourcePage,
-          clipped.right > clipped.left && clipped.top > clipped.bottom
-            ? clipped
-            : {
-                left: media.x,
-                bottom: media.y,
-                right: media.x + media.width,
-                top: media.y + media.height
-              }
-        )
+        return clipped.right > clipped.left && clipped.top > clipped.bottom
+          ? clipped
+          : {
+              left: media.x,
+              bottom: media.y,
+              right: media.x + media.width,
+              top: media.y + media.height
+            }
+      })
+      // One copier for the whole source preserves shared image/font resources.
+      const embedded = await doc.embedPages(sourcePages, bounds)
+      for (const [position, sourcePage] of sourcePages.entries()) {
+        const asset = embedded[position]
+        const rotation = ((sourcePage.getRotation().angle % 360) + 360) % 360
         // pdf-lib copies page resources but omits the page-level transparency
         // group from the Form XObject. Preserve its blending space, isolation,
         // knockout flags and referenced profiles without flattening the artwork.

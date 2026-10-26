@@ -65,11 +65,20 @@ preview, export, and printing on front and back sheets. The physical line width 
 **Clear** removes the loaded front and back designs, messages, and preview zoom,
 while keeping montage dimensions, spacing, and crop preferences for the next card.
 
-**Print A4** first opens a popup for **Front only**, **Back only**, or **Both sides**
-and **Copies** (1–999). **Printer settings** prepares the selected sheet(s) and
-opens the native printer dialog with that copy count. The copy count applies to
-the A4 sheets; both-side jobs are collated as front/back sets. Cancel closes the
-popup without starting a print request.
+**Print** opens **Print cards**. Choose an existing A4 **Default printer preset**
+once to pin its printer and driver options to Card Montage. The choice is saved
+immediately and reused for new card jobs and after restarting the app, including
+when the popup is closed with Cancel. It does not change other tools' defaults.
+Choose **Use app printing settings** to remove the Card Montage override. Create
+or edit driver presets in **Settings > Printing settings**.
+
+Choose **Front only**, **Back only**, or **Both sides**, and **Copies** (1–999)
+for the current job. With a driver preset configured, **Print** prepares the
+selected sheets and uses that preset. Otherwise **Printer settings** opens the
+ordinary printer dialog. The copy count applies to the A4 sheets; both-side jobs
+are collated as front/back sets. Cancel closes the popup without starting a print
+request. Missing or invalid presets block printing until another preset or the
+app settings option is selected.
 
 Export an A4 PDF or use the desktop printer dialog. Print at **100% / actual size**
 on A4. PDF input remains vector artwork in the export; images are embedded from

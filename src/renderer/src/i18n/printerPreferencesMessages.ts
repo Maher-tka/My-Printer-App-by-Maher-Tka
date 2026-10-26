@@ -1,4 +1,36 @@
 export const printerPreferencesMessages: Record<string, { fr: string; ar: string }> = {
+  'Choose a printer preset, sides and copies.': {
+    fr: 'Choisissez un préréglage, les faces et le nombre de copies.',
+    ar: 'اختر إعداد الطابعة والأوجه وعدد النسخ.'
+  },
+  'Default printer preset': {
+    fr: 'Préréglage d’impression par défaut',
+    ar: 'إعداد الطابعة الافتراضي'
+  },
+  'Use app printing settings': {
+    fr: 'Utiliser les paramètres d’impression de l’application',
+    ar: 'استخدام إعدادات الطباعة في التطبيق'
+  },
+  'Unavailable saved preset': {
+    fr: 'Préréglage enregistré indisponible',
+    ar: 'الإعداد المحفوظ غير متاح'
+  },
+  'The saved printer preset is unavailable. Choose another preset.': {
+    fr: 'Le préréglage est indisponible. Choisissez-en un autre.',
+    ar: 'إعداد الطابعة المحفوظ غير متاح. اختر إعدادًا آخر.'
+  },
+  'Card Montage requires an A4 printer preset.': {
+    fr: 'Le montage de cartes nécessite un préréglage A4.',
+    ar: 'يتطلب مونتاج البطاقات إعداد طابعة بورق A4.'
+  },
+  'Could not load printer presets. Close and reopen this dialog to retry.': {
+    fr: 'Impossible de charger les préréglages. Fermez puis rouvrez cette fenêtre pour réessayer.',
+    ar: 'تعذر تحميل إعدادات الطابعة. أغلق هذه النافذة وأعد فتحها للمحاولة.'
+  },
+  'Could not save printer preset. Choose it again to retry.': {
+    fr: 'Impossible d’enregistrer le préréglage. Sélectionnez-le à nouveau pour réessayer.',
+    ar: 'تعذر حفظ إعداد الطابعة. اختره مجددًا للمحاولة.'
+  },
   'Saved driver presets': {
     fr: 'Préréglages du pilote enregistrés',
     ar: 'إعدادات برنامج التشغيل المحفوظة'

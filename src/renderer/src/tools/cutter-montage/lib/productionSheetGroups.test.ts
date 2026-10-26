@@ -12,6 +12,11 @@ import {
   getProductionSheetLayoutGroups,
   getProductionSheetLayoutSignature
 } from './productionSheetGroups'
+import {
+  getProductionSheetCount,
+  getProductionSheetProject,
+  getProductionSheetProjects
+} from './productionSheets'
 
 const pngBytes = Uint8Array.from(
   Buffer.from(
@@ -96,6 +101,28 @@ async function run(): Promise<void> {
   expectEqual(groups[1]?.repeatCount, 1, 'remainder layout prints once')
   expectEqual(groups[1]?.copiesPerSheet, 1, 'remainder carries the final sticker')
   expectEqual(groups[1]?.heightCm, 69.5, 'remainder trims without an implicit cut border')
+
+  for (const lengthMode of ['fixed', 'auto-trim-last'] as const) {
+    for (const placements of [[], placedPieces, [placedPieces[placedPieces.length - 1]]]) {
+      const sample = {
+        ...project,
+        sheet: { ...project.sheet, lengthMode },
+        placedPieces: placements
+      }
+      expectEqual(
+        getProductionSheetProjects(sample),
+        Array.from({ length: getProductionSheetCount(placements) }, (_, index) =>
+          getProductionSheetProject(sample, index)
+        ),
+        'partitioned jobs preserve empty, sparse and trimmed sheet geometry'
+      )
+    }
+  }
+  expectEqual(
+    getProductionSheetCount(Array<PlacedPiece>(160000).fill(placedPieces[placedPieces.length - 1])),
+    5,
+    'large placement counts do not exceed the JavaScript function argument limit'
+  )
 
   const firstPhysicalSheet = {
     ...project,

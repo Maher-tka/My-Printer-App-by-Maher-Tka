@@ -633,8 +633,13 @@ export function useCutterProject(initialProject?: PrinterProjectFile<CutterProje
 
   const addStickerResults = useCallback((orders: StickerSendOrder[], offsetMm: number): void => {
     if (!orders.length) return
-    const created = orders.map(({ result, quantity }) => {
-      const assets = createStickerCutterAssets(result, offsetMm, piecesRef.current, quantity)
+    const created = orders.map(({ result, quantity, offsetMm: itemOffsetMm }) => {
+      const assets = createStickerCutterAssets(
+        result,
+        itemOffsetMm ?? offsetMm,
+        piecesRef.current,
+        quantity
+      )
       piecesRef.current = [...piecesRef.current, assets.piece]
       return assets
     })

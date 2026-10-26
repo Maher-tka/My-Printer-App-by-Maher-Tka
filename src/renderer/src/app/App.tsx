@@ -18,11 +18,11 @@ import {
   type ToolFileImport
 } from '@/tools/shared/toolFileDrop'
 import { usePerformanceSettings } from '@/performance/usePerformanceSettings'
-import {
-  isPrinterProjectFile,
-  type BookletProjectPayload,
-  type CutterProjectPayload,
-  type HardcoverProjectPayload
+import { isPrinterProjectFile } from '@/projects/projectValidation'
+import type {
+  BookletProjectPayload,
+  CutterProjectPayload,
+  HardcoverProjectPayload
 } from '@/projects/projectFiles'
 import { AutosaveRecoveryBanner } from '@/projects/AutosaveRecoveryBanner'
 import { writeProjectRecovery } from '@/projects/recoverySave'

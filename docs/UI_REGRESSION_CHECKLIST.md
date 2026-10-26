@@ -2171,6 +2171,144 @@ installer/blockmap/metadata SHA256 checks passed. See
 `RELEASE_0.2.19_VERIFICATION.md` for publication evidence and the remaining native
 integration and antivirus-review limitations.
 
+## Individual image-sticker review — 2026-10-21
+
+- [x] Added a distinct Import sticker sheet workflow using shared import/action
+      buttons. Review tabs select individual regions; dragging, pixel inputs, add,
+      delete, merge and Undo/Redo control the selections before creating stickers.
+- [x] Image review keeps original pixels by default. Removal is opt-in for each
+      selection. The full original sheet and untouched crop remain available in the
+      current session for recropping and mask restoration. Existing AI vector import
+      is unchanged.
+- [x] Tested disconnected-part merge, selection Undo/Redo, manual bounds and corner
+      resizing, manual fallback with no automatic detections, Cancel/reopen, and
+      recropping one item while preserving the other stickers.
+- [x] Background-colored artwork deleted by removal was restored from the original
+      crop with its exact RGBA value `[240,240,240,255]`. Mask Undo/Redo and full-original
+      restoration were exercised; another sticker's PNG hash remained unchanged.
+- [x] Each sticker has independent size/copies/mask and selected/all cut settings.
+      The test transferred three stickers with quantities 3/1/1 and offsets 1/2/2 mm.
+      Cutter handoff now respects the optional offset on each order.
+- [x] Inspected hidden review proofs at 1366×768, 1600×900 and 1920×1080, light/dark,
+      French, Arabic RTL and low-end mode. No horizontal overflow; settings scroll.
+      Arrow-key tab selection and numeric crop controls were exercised. Mask controls
+      now appear first in the settings panel while Mask view is active.
+- [x] The compact workshop image still produces ten selectable stickers, with
+      untouched original crops retained. No original files or hardware print jobs
+      were modified/submitted.
+- [x] Typecheck, build, formatting, sticker/Cutter/project/i18n suites passed.
+      The repeatable hidden-window regression is `npm run test:sticker:review`;
+      it creates its own fixture and records an unavailable workshop sample as
+      pending when that local file is absent.
+- [ ] Interactive full-shell/workshop verification remains pending. Initial proofs
+      used an isolated hidden renderer and a compact workshop sample; real-file
+      coverage is recorded below. These improvements have not been published.
+
+Artifacts: `output/sticker-image-review-proof/report.json`, size/theme review
+screenshots, restored-mask proof and exported PNGs.
+
+## Real sticker files — 2026-10-21
+
+Source: `C:\Users\Maher\Documents\stickers test`. Six inputs, ten printable pages.
+All files were read in place. SHA256 checks before and after testing matched.
+
+| File                             | Pages | Suggested crops per page |
+| -------------------------------- | ----- | ------------------------ |
+| Mintech Stickers1.ai             | 1     | 10                       |
+| PDF_2026-10-19_10-22-09_2505.pdf | 1     | 19                       |
+| PDF_2026-10-21_01-17-56_1767.pdf | 1     | 17                       |
+| stickerss.pdf                    | 1     | 1                        |
+| STK.pdf                          | 4     | 16, 18, 18, 19           |
+| Zaid .pdf                        | 2     | 13, 25                   |
+
+- [x] Every page imported through the renderer's PDF pipeline. The 94.6 MB STK
+      and 90.3 MB Zaid files now fit the PDF-specific 256 MB limit; images and native
+      AI retain the 65 MB limit. Rendering remains bounded at 12 MP/5000 px/300 DPI.
+- [x] Flattened image-only PDFs enter editable image review, avoiding a separate
+      full-page PDF master in every crop. Pages with vector paths or text keep the
+      PDF master. Conservative classifier and input-limit tests passed.
+- [x] Dark checkerboard detection retains white outlines. Reduced initial joining
+      and suppression of enclosed duplicate components improve suggestions. Core
+      regression includes a white outlined sticker with disconnected inner details.
+- [x] All 156 suggested crops retained exactly the corresponding rendered source
+      RGBA pixels, with background removal disabled. Inspected source page and crop
+      proofs. These are suggestion counts, not verified individual sticker counts:
+      touching designs still merge, and some rectangular crops include neighboring
+      artwork. Manual add/resize/merge and mask edits remain necessary on dense sheets.
+- [x] Imported the Oct 19 PDF through AI Sticker Maker and opened 19 review tabs.
+      Removal was off. Inspected review layouts at 1366×768 and 1920×1080 without
+      horizontal overflow. Fixed the small crop preview displaying artwork outside
+      its selection in SVG letterboxing. Theme/RTL/low-end and keyboard coverage
+      remains in the image-review proof above.
+- [x] Sticker unit/native-script regressions, image review regression, typecheck,
+      build, i18n and targeted formatting passed. No hardware output was submitted.
+- [ ] Native Illustrator import was not repeated: Illustrator was installed but
+      not running. Mintech was tested as its PDF-compatible preview, detecting ten
+      regions; this is not a claim of native app-to-Illustrator integration coverage.
+- [ ] Full application shell and workshop verification remain pending. Local changes
+      are unpublished.
+
+Repeat: `npm run test:sticker:files` (override `STICKER_TEST_FOLDER` if needed).
+`-- --review-only` repeats the UI check using the existing corpus report.
+Artifacts: `output/sticker-real-files/real-file-report.json`,
+`original-integrity.json`, `all-crops-contact.png`, numbered bounds/crop proofs,
+`real-pdf-review.json` and the two real-PDF review screenshots.
+
+## Crowded sticker sheets — 2026-10-22
+
+- [x] Auto detection no longer dilates neighboring stickers by default. Enclosed
+      dark details join their outline through a bounded component analysis, avoiding
+      hundreds of internal fragments. Tiny components fully contained by much larger
+      artwork retain their source points in that selection instead of becoming extra
+      tabs. Grid mode and the explicit join control remain available.
+- [x] Added Split vertically / Split horizontally using shared outline buttons.
+      Both halves can be resized independently. Split, Undo and Redo were exercised.
+- [x] Added opt-in Exclude neighboring artwork for detected selections. It retains
+      selected source components, their enclosed details, and every explicitly merged
+      source point. Manual/split selections explain why isolation is unavailable;
+      the existing mask tools remain available after opening.
+- [x] Optional cleanup has a debounced, serialized processed preview. Preview errors
+      prevent opening until corrected. Cancel and changing selections release preview
+      URLs, and queued obsolete preview work is skipped.
+- [x] Synthetic checks verified an enclosed black design stayed opaque, a neighboring
+      sticker became transparent, explicitly merged parts stayed present, and the
+      untouched crop retained excluded pixels. Invalid/stale merged source points fail
+      instead of silently dropping a part. Open/recrop retained the isolation option;
+      Restore original artwork recovered excluded pixels and Undo reinstated isolation.
+- [x] Retested all six supplied files / ten pages. All 185 suggested crops matched
+      their original rendered RGBA pixels. Every isolated crop retained exact visible
+      source colors and produced a cut contour at 90 mm width / 1 mm offset.
+      One crop still had multiple offset contours and 20 carried
+      foreground/mask review warnings. These are measured suggestions, not
+      ground-truth sticker counts.
+- [x] Inspected every page's cleaned crop contact sheet and the real PDF review at
+      1366×768 / 1920×1080. Synthetic layout proofs cover 1600×900, French dark mode,
+      Arabic RTL dark / low-end mode, keyboard tabs, split controls and optional cleanup.
+      No horizontal overflow. Original source SHA256 values matched before/after.
+- [x] Sticker regression, image-review UI regression, i18n, typecheck, build and
+      targeted formatting passed. No hardware print/cut jobs were submitted.
+- [ ] Touching artwork can still share a detected component; examples remain in
+      STK and Zaid. Split/resize/merge and mask tools are available for correction.
+      This is not a claim of perfect automatic separation.
+- [ ] Native Illustrator integration, full application-shell checks and workshop
+      released-build verification remain pending. Improvements remain unpublished.
+
+| Source                 | Previous suggestions | Current suggestions |
+| ---------------------- | -------------------- | ------------------- |
+| Mintech AI PDF preview | 10                   | 10                  |
+| Oct 19 PDF             | 19                   | 20                  |
+| Oct 21 PDF             | 17                   | 19                  |
+| stickerss.pdf          | 1                    | 1                   |
+| STK.pdf pages 1–4      | 16, 18, 18, 19       | 21, 19, 19, 25      |
+| Zaid .pdf pages 1–2    | 13, 25               | 19, 32              |
+
+Artifacts: `output/sticker-real-files/real-file-report.json`,
+`before-improve-report.json`, `original-integrity.json`, per-page
+`contact-*-isolated.png`, `all-isolated-contact.png`, and real-PDF review screenshots.
+`npm run test:sticker:files -- --contacts-only` regenerates contact sheets from the
+latest successful report. `output/sticker-image-review-proof/report.json` and
+`isolated-sticker-preview.png` record the new controls and isolation checks.
+
 ## Fast Print direction, named printer stocks and combined PDFs — 2026-10-22
 
 - [x] Full page restores Original orientation. All 2/4/6/8/9/12/16-up layouts
@@ -2216,6 +2354,10 @@ Stable v0.2.21 was published and verified on 2026-10-22. Windows workflow
 Setup/blockmap/metadata SHA256 and Portable API digest checks passed. See
 `RELEASE_0.2.21_VERIFICATION.md` for publication evidence and remaining device
 validation.
+
+Local helper note: the 0.2.21 development helper was refreshed when the app was
+started. The later performance candidate is now staged as `out/native/FastPrint.exe`;
+the running old image was retained under its backup name without closing its window.
 
 ## Fast Print preview responsiveness — 2026-10-22
 
@@ -2550,3 +2692,137 @@ layout labels retain their text size, the selected page remains outlined and
 Print remains visible. At the smallest width long selected values use ellipsis
 and the layout list scrolls; native dropdowns and accessible names retain full
 values. Live desktop/high-DPI checks remain pending as stated above.
+
+## 2026-10-24 — App performance pass
+
+- Startup project validation is independent of editor/serialization modules.
+- Card multi-page exports share original image/font resources; all 24 comparison
+  pages and 31 native preview proofs are pixel-identical before/after.
+- Cutter grouping and the layout view partition placements once. Empty/sparse
+  sheets, last-sheet trimming, production bounds and repeat counts remain correct.
+- Hidden layout checks passed at 1366×768 and 1920×1080, light/dark themes,
+  English/French/Arabic, RTL and low-end mode. The 12-piece fixture retained all
+  placements and had no page overflow or renderer errors. Tab reached Export PDF.
+- Existing controls, action homes, labels, styling and project formats were
+  preserved. The existing long Arabic AI Sticker Maker label remains cramped in
+  the narrow design sidebar; this pass does not change its layout.
+- Full tests, typecheck, production build, native compilation, source-orientation
+  and independent page-rotation checks passed. No hardware jobs were submitted.
+- Workshop performance and live high-DPI desktop checks remain pending.
+
+Measurements, limits and evidence: [Performance audit](PERFORMANCE_AUDIT_2026-10-24.md).
+
+## 2026-10-24 — Remember Fast Print printer options
+
+- Fast Print retains a separate complete driver snapshot and selected named
+  preset for each printer, along with paper, color, orientation, quality and
+  copies. Cancel, close, request submission, switching printers and Refresh are
+  covered. New file selections reset file-specific rotations and page ranges.
+- The native persistence check passed in English, French and Arabic using
+  Microsoft Print to PDF and Adobe PDF. It verified all 5,208 private driver
+  bytes, named preset restoration, completed-ID settings, atomic preference
+  writes and changed-driver/deleted-preset/edited-preset/corrupt-record rejection.
+- Native grouped-control/layout and saved-preset-picker checks passed in all
+  three languages. Captures at 1366×768 and 1920×1080 were inspected in light and
+  dark appearances, including RTL. The existing keyboard/accessibility behavior
+  and command homes are preserved; no controls or explanatory labels were added.
+- The real-photo ID workflow passed in English, French and Arabic: two review
+  round trips, saved presets, six 90 mm IDs per side on A3, five copies and
+  grayscale output. Original photo hashes were unchanged. This exercises the
+  existing ID geometry; no detection, crop or output sizing algorithms changed.
+- A focused hidden Electron check verified the final ID-options handoff on both
+  window Close and the finish IPC, without preparing or submitting a print job.
+- Fast Print and printer-preference suites, typecheck, formatting, production
+  build and the normal `out/native/FastPrint.exe` compilation passed.
+- Driver records are encrypted for the Windows user. Existing saved presets,
+  Windows defaults, original artwork and source files are preserved. No hardware
+  print jobs were submitted. Physical printer and workshop verification remain
+  pending; the implementation is local and unpublished.
+
+Evidence: `output/fast-print-last-settings/`,
+`output/fast-print-last-settings-ui.log`,
+`output/fast-print-last-settings-presets.log` and
+`output/fast-print-last-settings-id/`; the focused handoff proof is in
+`output/fast-print-id-last-options-proof/`.
+Reproduce the native persistence checks with `npm run test:fast-print:last-settings`.
+
+## 2026-10-24 — Card Montage default printer preset
+
+- **Print cards > Default printer preset** assigns a saved A4 driver preset and
+  its printer specifically to Card Montage. The assignment uses the existing
+  persistent printing preferences and survives Cancel, reopening, new artwork,
+  app restart and changes to the app-wide default printer. **Use app printing
+  settings** clears the Card Montage override.
+- Other tool/Fast Print defaults and saved driver snapshots are preserved. The
+  picker reads the latest preferences before saving. Missing, unusable, offline,
+  wrong-paper and unsupported-color presets cannot be assigned; a missing or
+  invalid current assignment remains visible and blocks printing until corrected.
+- The dialog retains Side and Copies, shared buttons, spacing/radius tokens and
+  one primary action. A configured driver preset uses the **Print** label; the
+  ordinary dialog path retains **Printer settings**. No subtitles were added.
+- Hidden full-page checks passed for persistence across close/reload, routing a
+  generated card PDF to the configured printer/profile, preserving another tool's
+  concurrent preference change, reset, missing-preset and save-failure guards.
+  Printer calls were mocked; zero hardware jobs were submitted.
+- Captures were inspected at 1366×768 and 1920×1080 in light/dark themes, English,
+  French and Arabic, including RTL and low-end mode. There was no dialog overflow;
+  keyboard Tab moved from Default printer preset to Side.
+- Card export/layout/font/color and printer preference tests, typecheck, i18n,
+  formatting and the production build passed. Physical driver/paper handling
+  remains pending. Changes are local and unpublished.
+
+Evidence: `output/card-print-default/`, `output/card-print-default-build.log`.
+Reproduce UI checks with `npm run test:card:printer-default`.
+
+## 2026-10-25 — PNG white contour batch tool
+
+- Added a separate **PNG white contour** workspace in the Cutter artwork library
+  and AI Sticker Maker. Shared buttons, tokens and the existing ToolHeader/Clear
+  confirmation are reused. One Send action owns production transfer; back
+  navigation uses ToolHeader. No heading subtitles were added.
+- Transparent PNGs receive white artwork and an independent vector cut path
+  automatically. Defaults are 3 mm white border, with the cut 1 mm inside its
+  outer edge. Original pixels/files are preserved. No AI inference is used.
+  The cut remains at least 0.2 mm from both the artwork and the white edge.
+- A sequential queue supports up to 100 images, per-image copies, Stop, readable
+  file failures and settings regeneration. Failed/pending items block sending
+  until corrected or removed. Limits are 65 MB per source, 24 megapixels after
+  bordering and 200 MB of prepared PNG artwork.
+- White bleed is retained outside the cut line instead of inheriting the older
+  sticker contour clipping behavior. Production nesting reserves its footprint;
+  resizing and project save/open preserve it. Artwork and CutContour stay on
+  separate PDF layers.
+- Hidden full-Cutter proofs imported rectangular, curved and edge-touching PNGs,
+  rejected opaque/invalid files, regenerated changed borders, placed three
+  designs/four copies, and saved/reopened/exported them. Pixel checks found white
+  on both sides of the cut, unchanged colored source pixels and transparency
+  beyond the border. Default cut clearance measured 2.0003 mm from artwork.
+- Inspected proofs at 1366×768, 1600×900 and 1920×1080, including light/dark,
+  English/French/Arabic RTL and low-end mode. No horizontal overflow or clipped
+  action buttons was detected. Native headless Tab reached Send to Cutter;
+  reopening from AI Sticker Maker retained the queue. Clear Cancel preserved
+  content; confirmation cleared the queue.
+- Sticker/cutter/project/i18n regression suites, typecheck, changed-file
+  formatting and production build passed. No hardware jobs were submitted.
+  Physical cutter alignment remains pending. Changes are local and unpublished.
+
+Evidence: `output/png-white-contour-proof/`, including layout captures,
+`report.json`, `production.pdf` and rendered production proofs.
+Reproduce with `npm run test:sticker:png-contour`.
+
+### AI Sticker Maker handoff follow-up
+
+- PNG white contour now carries the current AI sticker queue automatically,
+  retaining current edited/prepared pixels, individual widths and copies.
+  Unprocessed stickers are included. Whole sheets must be separated first.
+- Reopening reuses source identities instead of appending duplicates. Changed
+  artwork/width/copies refresh the corresponding entry. Back preserves the AI
+  source queue and restores focus to its PNG white contour button.
+- Hidden full-page checks covered a mask-edited 45 mm sticker with three copies
+  and an unprocessed 65 mm sticker with two copies, repeat opening without
+  regenerating unchanged results, updating a source quantity and sending the
+  resulting six copies alongside the earlier four-copy job. Edited pixels,
+  mixed widths, source-queue preservation and the ten-copy saved project passed.
+- Handoff layouts were checked at 1366×768 and 1920×1080 in English light,
+  French dark and Arabic RTL/low-end mode. Typecheck, sticker/handoff and i18n
+  suites passed. Evidence remains in `output/png-white-contour-proof/`.

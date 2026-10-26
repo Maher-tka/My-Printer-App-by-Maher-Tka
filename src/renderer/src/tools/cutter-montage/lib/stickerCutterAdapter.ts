@@ -9,6 +9,7 @@ import { bytesToArrayBuffer, bytesToDataUrl, uint8ToBase64 } from './sourcePrevi
 export interface StickerSendOrder {
   result: StickerMakerResult
   quantity: number
+  offsetMm?: number
 }
 
 export function createStickerCutterAssets(
@@ -60,7 +61,7 @@ export function createStickerCutterAssets(
   const piece = synchronizePieceEditorModel({
     ...base,
     quantity: Math.max(1, Math.min(100000, Math.round(quantity))),
-    stickerMakerOffsetMm: offsetMm,
+    stickerMakerOffsetMm: result.preserveArtworkBleed ? undefined : offsetMm,
     widthCm,
     heightCm,
     artwork: { ...base.artwork, transform: artworkTransform },

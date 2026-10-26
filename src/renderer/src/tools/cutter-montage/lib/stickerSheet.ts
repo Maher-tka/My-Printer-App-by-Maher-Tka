@@ -8,6 +8,57 @@ export interface StickerBounds {
   height: number
 }
 
+export interface ReviewedStickerBounds extends StickerBounds {
+  removeBackground?: boolean
+  isolateArtwork?: boolean
+  seeds?: Array<{ x: number; y: number }>
+}
+
+export interface StickerSheetCrop {
+  file: File
+  originalFile: File
+  widthFraction: number
+  bounds: StickerBounds
+}
+
+export function splitStickerBounds(bounds: StickerBounds, axis: 'x' | 'y'): StickerBounds[] {
+  const b = clampStickerBounds(bounds)
+  return axis === 'x'
+    ? [
+        { ...b, width: b.width / 2 },
+        { ...b, x: b.x + b.width / 2, width: b.width / 2 }
+      ]
+    : [
+        { ...b, height: b.height / 2 },
+        { ...b, y: b.y + b.height / 2, height: b.height / 2 }
+      ]
+}
+
+export function clampStickerBounds(bounds: StickerBounds): StickerBounds {
+  if (![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isFinite))
+    throw new Error('Invalid sticker selection.')
+  const x = Math.max(0, Math.min(0.999999, bounds.x)),
+    y = Math.max(0, Math.min(0.999999, bounds.y))
+  return {
+    x,
+    y,
+    width: Math.max(0.000001, Math.min(1 - x, bounds.width)),
+    height: Math.max(0.000001, Math.min(1 - y, bounds.height))
+  }
+}
+
+export function mergeStickerBounds(bounds: StickerBounds[]): StickerBounds {
+  if (!bounds.length) throw new Error('Select sticker parts to merge.')
+  const left = Math.min(...bounds.map((b) => b.x)),
+    top = Math.min(...bounds.map((b) => b.y))
+  return clampStickerBounds({
+    x: left,
+    y: top,
+    width: Math.max(...bounds.map((b) => b.x + b.width)) - left,
+    height: Math.max(...bounds.map((b) => b.y + b.height)) - top
+  })
+}
+
 export interface StickerSheetSettings {
   mode: 'auto' | 'grid'
   rows: number
@@ -21,12 +72,16 @@ export const DEFAULT_STICKER_SHEET_SETTINGS: StickerSheetSettings = {
   mode: 'auto',
   rows: 2,
   columns: 2,
-  joinPercent: 1.5,
+  joinPercent: 0,
   paddingPercent: 0.2,
   removeBackground: true
 }
 
-function sheetBackground(rgba: Uint8ClampedArray, width: number, height: number): number[] | null {
+function sheetBackground(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number
+): number[][] | null {
   let transparent = 0
   const colors = new Map<string, { count: number; color: number[] }>()
   const sample = (x: number, y: number) => {
@@ -52,20 +107,74 @@ function sheetBackground(rgba: Uint8ClampedArray, width: number, height: number)
   if (transparent > (width + height) / 2) return null
   // Screenshots can have a thin outer frame in a different color from the paper.
   colors.clear()
+  const edges = new Map<string, number>()
+  let samples = 0,
+    edgeSamples = 0
   const step = Math.max(1, Math.floor(Math.sqrt(width * height) / 160))
-  for (let y = 0; y < height; y += step) for (let x = 0; x < width; x += step) sample(x, y)
-  return [...colors.values()].sort((a, b) => b.count - a.count)[0]?.color ?? null
+  for (let y = 0; y < height; y += step)
+    for (let x = 0; x < width; x += step) {
+      sample(x, y)
+      samples++
+      if (x < width * 0.04 || x > width * 0.96 || y < height * 0.04 || y > height * 0.96) {
+        const offset = (y * width + x) * 4
+        if (rgba[offset + 3] >= 32) {
+          const key = [rgba[offset], rgba[offset + 1], rgba[offset + 2]]
+            .map((value) => Math.round(value / 16))
+            .join(',')
+          edges.set(key, (edges.get(key) ?? 0) + 1)
+          edgeSamples++
+        }
+      }
+    }
+  const ranked = [...colors.values()].sort((a, b) => b.count - a.count)
+  const neutralDark = ranked.filter(
+    (entry) =>
+      Math.max(...entry.color) - Math.min(...entry.color) <= 12 &&
+      Math.max(...entry.color) <= 112 &&
+      entry.count >= samples * 0.025
+  )
+  const edgeDark = neutralDark.filter(
+    (entry) =>
+      (edges.get(entry.color.map((value) => Math.round(value / 16)).join(',')) ?? 0) >=
+      edgeSamples * 0.08
+  )
+  const distinct: number[][] = []
+  for (const entry of edgeDark)
+    if (
+      distinct.every((color) => Math.max(...color.map((v, i) => Math.abs(v - entry.color[i]))) > 24)
+    )
+      distinct.push(entry.color)
+  const darkEdgeCount = edgeDark.reduce(
+    (sum, entry) =>
+      sum + (edges.get(entry.color.map((value) => Math.round(value / 16)).join(',')) ?? 0),
+    0
+  )
+  if (distinct.length >= 2 && darkEdgeCount >= edgeSamples * 0.33) {
+    // Repeated dark shades reaching the paper edges identify a flattened checkerboard.
+    // White sticker outlines are foreground; enclosed dark design pixels stay intact.
+    for (const entry of neutralDark)
+      if (
+        distinct.every(
+          (color) => Math.max(...color.map((v, i) => Math.abs(v - entry.color[i]))) > 24
+        )
+      )
+        distinct.push(entry.color)
+    return distinct.slice(0, 4)
+  }
+  return ranked[0] ? [ranked[0].color] : null
 }
 
 function isSheetBackground(
   rgba: Uint8ClampedArray,
   index: number,
-  background: number[] | null
+  background: number[][] | null
 ): boolean {
   if (rgba[index * 4 + 3] < 24) return true
   return (
     background !== null &&
-    background.every((value, channel) => Math.abs(rgba[index * 4 + channel] - value) <= 24)
+    background.some((color) =>
+      color.every((value, channel) => Math.abs(rgba[index * 4 + channel] - value) <= 24)
+    )
   )
 }
 
@@ -107,13 +216,169 @@ function dilate(mask: Uint8Array, width: number, height: number, radius: number)
   return result
 }
 
+interface SheetComponent extends StickerBounds {
+  id: number
+  pixels: number
+  seed: number
+}
+
+function labelSheet(mask: Uint8Array, width: number, height: number) {
+  const labels = new Int32Array(mask.length),
+    queue = new Int32Array(mask.length)
+  const components: SheetComponent[] = []
+  for (let start = 0; start < mask.length; start++) {
+    if (!mask[start] || labels[start]) continue
+    const id = components.length + 1
+    let head = 0,
+      tail = 1,
+      left = width,
+      top = height,
+      right = 0,
+      bottom = 0
+    labels[start] = id
+    queue[0] = start
+    while (head < tail) {
+      const index = queue[head++],
+        x = index % width,
+        y = Math.floor(index / width)
+      left = Math.min(left, x)
+      right = Math.max(right, x)
+      top = Math.min(top, y)
+      bottom = Math.max(bottom, y)
+      const visit = (next: number) => {
+        if (mask[next] && !labels[next]) {
+          labels[next] = id
+          queue[tail++] = next
+        }
+      }
+      if (x) visit(index - 1)
+      if (x + 1 < width) visit(index + 1)
+      if (y) visit(index - width)
+      if (y + 1 < height) visit(index + width)
+    }
+    components.push({
+      id,
+      x: left,
+      y: top,
+      width: right - left + 1,
+      height: bottom - top + 1,
+      pixels: tail,
+      seed: start
+    })
+  }
+  return { labels, components }
+}
+
+/** Enclosed dark artwork belongs to its outline, rather than becoming another sticker. */
+export function fillStickerInteriors(mask: Uint8Array, width: number, height: number): Uint8Array {
+  if (
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width < 1 ||
+    height < 1 ||
+    width * height > 4_000_000 ||
+    mask.length !== width * height
+  )
+    throw new Error('Invalid sheet dimensions.')
+  const outside = new Uint8Array(mask.length),
+    queue = new Int32Array(mask.length)
+  let head = 0,
+    tail = 0
+  const visit = (index: number) => {
+    if (!mask[index] && !outside[index]) {
+      outside[index] = 1
+      queue[tail++] = index
+    }
+  }
+  for (let x = 0; x < width; x++) {
+    visit(x)
+    visit((height - 1) * width + x)
+  }
+  for (let y = 0; y < height; y++) {
+    visit(y * width)
+    visit(y * width + width - 1)
+  }
+  while (head < tail) {
+    const index = queue[head++],
+      x = index % width,
+      y = Math.floor(index / width)
+    if (x) visit(index - 1)
+    if (x + 1 < width) visit(index + 1)
+    if (y) visit(index - width)
+    if (y + 1 < height) visit(index + width)
+  }
+  return Uint8Array.from(outside, (value) => Number(!value))
+}
+
+function stickerComponents(mask: Uint8Array, width: number, height: number, joinPercent: number) {
+  if (
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width < 1 ||
+    height < 1 ||
+    width * height > 4_000_000 ||
+    mask.length !== width * height ||
+    !Number.isFinite(joinPercent) ||
+    joinPercent < 0 ||
+    joinPercent > 5
+  )
+    throw new Error('Invalid sheet dimensions.')
+  const first = labelSheet(mask, width, height)
+  const frames = new Set(
+    first.components
+      .filter(
+        (b) => b.width >= width * 0.95 && b.height >= height * 0.95 && b.pixels < mask.length * 0.1
+      )
+      .map((b) => b.id)
+  )
+  const clean = frames.size
+    ? mask.map((value, index) => (frames.has(first.labels[index]) ? 0 : value))
+    : mask
+  const filled = fillStickerInteriors(clean, width, height)
+  const grown = dilate(
+    filled,
+    width,
+    height,
+    Math.round((Math.max(width, height) * joinPercent) / 200)
+  )
+  const result = labelSheet(grown, width, height)
+  return { ...result, filled }
+}
+
+/** The source points identify complete components, including all merged disconnected parts. */
+export function selectStickerArtwork(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  seeds: Array<{ x: number; y: number }>,
+  joinPercent = 0
+): Uint8Array {
+  if (
+    !seeds.length ||
+    seeds.length > 500 ||
+    seeds.some(
+      (p) =>
+        !Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x < 0 || p.y < 0 || p.x >= 1 || p.y >= 1
+    )
+  )
+    throw new Error('Invalid sticker artwork selection.')
+  const { labels, filled } = stickerComponents(mask, width, height, joinPercent)
+  const ids = seeds.map((p) => labels[Math.floor(p.y * height) * width + Math.floor(p.x * width)])
+  const selected = new Set(ids)
+  if (ids.some((id) => !id))
+    throw new Error(
+      'The selected artwork is no longer available. Adjust the crop or disable isolation.'
+    )
+  return filled.map((value, index) => (value && selected.has(labels[index]) ? 1 : 0))
+}
+
 /** Bounded thumbnail connected components; nearby letters can be joined without changing artwork. */
-export function findStickerSheetBounds(
+export function findStickerSheetSelections(
   mask: Uint8Array,
   width: number,
   height: number,
   settings: StickerSheetSettings
-): StickerBounds[] {
+): ReviewedStickerBounds[] {
   if (
     !Number.isSafeInteger(width) ||
     !Number.isSafeInteger(height) ||
@@ -161,66 +426,93 @@ export function findStickerSheetBounds(
       }
     return bounds
   }
-  const grown = dilate(mask, width, height, Math.round((longest * settings.joinPercent) / 200))
-  const queue = new Int32Array(mask.length)
-  const bounds: StickerBounds[] = []
-  const frames = new Set<StickerBounds>()
-  for (let start = 0; start < grown.length; start++) {
-    if (!grown[start]) continue
-    let head = 0,
-      tail = 1,
-      left = width,
-      top = height,
-      right = -1,
-      bottom = -1,
-      pixels = 0
-    queue[0] = start
-    grown[start] = 0
-    while (head < tail) {
-      const index = queue[head++],
-        x = index % width,
-        y = Math.floor(index / width)
-      if (mask[index]) {
-        pixels++
-        left = Math.min(left, x)
-        top = Math.min(top, y)
-        right = Math.max(right, x)
-        bottom = Math.max(bottom, y)
-      }
-      const visit = (next: number) => {
-        if (grown[next]) {
-          grown[next] = 0
-          queue[tail++] = next
-        }
-      }
-      if (x > 0) visit(index - 1)
-      if (x + 1 < width) visit(index + 1)
-      if (y > 0) visit(index - width)
-      if (y + 1 < height) visit(index + width)
-    }
-    if (pixels < Math.max(4, Math.round(mask.length * 0.000005))) continue
-    const x = Math.max(0, left - padding),
-      y = Math.max(0, top - padding)
-    const bound = {
-      x,
-      y,
-      width: Math.min(width, right + padding + 1) - x,
-      height: Math.min(height, bottom + padding + 1) - y
-    }
-    bounds.push(bound)
-    if (bound.width >= width * 0.95 && bound.height >= height * 0.95 && pixels < mask.length * 0.1)
-      frames.add(bound)
-    if (bounds.length > 500)
-      throw new Error('Too many separate parts. Increase Join nearby parts or use Grid.')
+  const { labels, components, filled } = stickerComponents(
+    mask,
+    width,
+    height,
+    settings.joinPercent
+  )
+  const located = components.map(() => ({
+    left: width,
+    top: height,
+    right: -1,
+    bottom: -1,
+    pixels: 0,
+    seed: -1
+  }))
+  for (let index = 0; index < filled.length; index++) {
+    if (!filled[index]) continue
+    const b = located[labels[index] - 1]
+    if (!b) continue
+    const x = index % width,
+      y = Math.floor(index / width)
+    b.left = Math.min(b.left, x)
+    b.right = Math.max(b.right, x)
+    b.top = Math.min(b.top, y)
+    b.bottom = Math.max(b.bottom, y)
+    b.pixels++
+    if (b.seed < 0) b.seed = index
   }
-  // Reading order remains left-to-right for production, independent of interface language.
-  return bounds
-    .filter((bound) => bounds.length === 1 || !frames.has(bound))
-    .sort((a, b) =>
-      Math.abs(a.y - b.y) < Math.min(a.height, b.height) / 2 ? a.x - b.x : a.y - b.y
-    )
+  const candidates = located.filter(
+    (b) => b.pixels >= Math.max(4, Math.round(mask.length * 0.000005))
+  )
+  const absorbed = new Set<(typeof candidates)[number]>()
+  const seedsFor = new Map(candidates.map((b) => [b, [b.seed]]))
+  // Tiny antialiased details inside a much larger selection are parts of that
+  // artwork. Attach their source points instead of hiding or discarding them.
+  for (const part of [...candidates].sort((a, b) => a.pixels - b.pixels)) {
+    if (part.pixels > Math.max(16, Math.round(mask.length * 0.00005))) continue
+    const parent = candidates
+      .filter(
+        (b) =>
+          b !== part &&
+          b.pixels > part.pixels * 20 &&
+          b.left <= part.left &&
+          b.top <= part.top &&
+          b.right >= part.right &&
+          b.bottom >= part.bottom
+      )
+      .sort(
+        (a, b) => (a.right - a.left) * (a.bottom - a.top) - (b.right - b.left) * (b.bottom - b.top)
+      )[0]
+    if (parent) {
+      seedsFor.get(parent)!.push(...seedsFor.get(part)!)
+      absorbed.add(part)
+    }
+  }
+  const bounds: ReviewedStickerBounds[] = candidates
+    .filter((b) => !absorbed.has(b))
+    .map((b) => {
+      const x = Math.max(0, b.left - padding),
+        y = Math.max(0, b.top - padding)
+      return {
+        x,
+        y,
+        width: Math.min(width, b.right + padding + 1) - x,
+        height: Math.min(height, b.bottom + padding + 1) - y,
+        seeds: seedsFor.get(b)!.map((seed) => ({
+          x: ((seed % width) + 0.5) / width,
+          y: (Math.floor(seed / width) + 0.5) / height
+        }))
+      }
+    })
+  if (bounds.length > 500)
+    throw new Error('Too many separate parts. Increase Join nearby parts or use Grid.')
+  return bounds.sort((a, b) =>
+    Math.abs(a.y - b.y) < Math.min(a.height, b.height) / 2 ? a.x - b.x : a.y - b.y
+  )
 }
 
+export function findStickerSheetBounds(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  settings: StickerSheetSettings
+): StickerBounds[] {
+  return findStickerSheetSelections(mask, width, height, settings).map(
+    ({ x, y, width, height }) => ({ x, y, width, height })
+  )
+}
 async function canvasFile(canvas: HTMLCanvasElement, name: string): Promise<File> {
   const blob = await new Promise<Blob>((resolve, reject) =>
     canvas.toBlob(
@@ -236,6 +528,34 @@ export interface StickerSheetPage {
   widthMm?: number
   vectorArtwork?: StickerMakerResult['vectorArtwork']
   pdfSheet?: { bytes: Uint8Array; pageNumber: number }
+}
+
+export function validateStickerSheetSize(size: number, pdf: boolean): void {
+  const limit = pdf ? 256 : 65
+  if (!Number.isSafeInteger(size) || size < 1 || size > limit * 1024 * 1024)
+    throw new Error(`Choose ${pdf ? 'a PDF' : 'artwork'} smaller than ${limit} MB.`)
+}
+
+/** Keep PDF masters whenever vector painting, paths, or text could be present. */
+export function isRasterStickerPage(
+  operators: readonly number[],
+  ops: Record<string, number>
+): boolean {
+  const images = new Set(
+    Object.entries(ops)
+      .filter(([name]) => /^(paint(Image|InlineImage|SolidColorImage)|beginInlineImage)/.test(name))
+      .map(([, value]) => value)
+  )
+  const paints = new Set(
+    Object.entries(ops)
+      .filter(([name]) =>
+        /^(constructPath|stroke|closeStroke|fill|eoFill|fillStroke|eoFillStroke|closeFillStroke|closeEOFillStroke|showText|showSpacedText|nextLineShowText|nextLineSetSpacingShowText|shadingFill|paintXObject)$/.test(
+          name
+        )
+      )
+      .map(([, value]) => value)
+  )
+  return operators.some((op) => images.has(op)) && !operators.some((op) => paints.has(op))
 }
 
 function fromBase64(value: string): Uint8Array {
@@ -265,12 +585,11 @@ async function rasterizeVectorFile(file: File): Promise<File> {
 /** Render one page at a time at up to 300 DPI; keep page dimensions for proportional crops. */
 export async function importStickerSheetPages(
   file: File,
-  onPage: (page: StickerSheetPage) => void,
+  onPage: (page: StickerSheetPage) => void | Promise<void>,
   shouldStop: () => boolean
 ): Promise<void> {
-  if (!file.size || file.size > 65 * 1024 * 1024)
-    throw new Error('Choose artwork smaller than 65 MB.')
   if (/\.ai$/i.test(file.name)) {
+    validateStickerSheetSize(file.size, false)
     const importer = window.printerApp?.runtime?.importStickerVectors
     if (!importer)
       throw new Error(
@@ -288,24 +607,27 @@ export async function importStickerSheetPages(
       const rendered = await rasterizeVectorFile(
         new File([bytesToArrayBuffer(svg)], `${sticker.name}.svg`, { type: 'image/svg+xml' })
       )
-      onPage({ file: rendered, widthMm: sticker.widthMm, vectorArtwork: { svg, pdf } })
+      await onPage({ file: rendered, widthMm: sticker.widthMm, vectorArtwork: { svg, pdf } })
     }
     return
   }
   const header = new Uint8Array(await file.slice(0, 1024).arrayBuffer())
-  if (!hasPdfSignature(header)) {
+  const isPdf = hasPdfSignature(header)
+  validateStickerSheetSize(file.size, isPdf)
+  if (!isPdf) {
     if (/\.(ai|pdf)$/i.test(file.name))
       throw new Error(
         'Choose a PDF-compatible AI file. Save it with Create PDF Compatible File enabled, or export it as PDF.'
       )
     if (!/\.(png|jpe?g|webp)$/i.test(file.name))
       throw new Error('Choose AI, PDF, PNG, JPG, or WebP artwork.')
-    onPage({ file })
+    await onPage({ file })
     return
   }
   const { loadPdfDocument, destroyPdfDocument } =
     await import('../../booklet-montage/lib/pdfWorker')
   const sourceBytes = new Uint8Array(await file.arrayBuffer())
+  const { OPS } = await import('pdfjs-dist')
   const pdf = await loadPdfDocument(sourceBytes)
   try {
     for (let number = 1; number <= pdf.numPages && !shouldStop(); number++) {
@@ -323,15 +645,17 @@ export async function importStickerSheetPages(
         canvas.height = Math.max(1, Math.ceil(viewport.height))
         const context = canvas.getContext('2d')
         if (!context) throw new Error('Canvas processing is unavailable.')
+        const operators = await page.getOperatorList()
+        const rasterOnly = isRasterStickerPage(operators.fnArray, OPS)
         await page.render({ canvas, canvasContext: context, viewport, background: 'rgba(0,0,0,0)' })
           .promise
-        onPage({
+        await onPage({
           file: await canvasFile(
             canvas,
             `${file.name.replace(/\.[^.]+$/, '')} - page ${number}.png`
           ),
           widthMm: (actual.width * 25.4) / 72,
-          pdfSheet: { bytes: sourceBytes, pageNumber: number }
+          pdfSheet: rasterOnly ? undefined : { bytes: sourceBytes, pageNumber: number }
         })
       } finally {
         canvas.width = canvas.height = 0
@@ -345,10 +669,50 @@ export async function importStickerSheetPages(
 }
 
 /** The thumbnail only locates crops. Each crop uses the original decoded pixels. */
-export async function separateStickerSheet(
+export async function detectStickerSheetRegions(
   file: File,
   settings: StickerSheetSettings
-): Promise<Array<{ file: File; widthFraction: number; bounds: StickerBounds }>> {
+): Promise<{ width: number; height: number; bounds: ReviewedStickerBounds[] }> {
+  const bitmap = await createImageBitmap(file),
+    canvas = document.createElement('canvas')
+  try {
+    if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 80_000_000)
+      throw new Error('Choose a sheet smaller than 80 megapixels.')
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height))
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (!context) throw new Error('Canvas processing is unavailable.')
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    const mask = stickerSheetForeground(
+      context.getImageData(0, 0, canvas.width, canvas.height).data,
+      canvas.width,
+      canvas.height
+    )
+    return {
+      width: bitmap.width,
+      height: bitmap.height,
+      bounds: findStickerSheetSelections(mask, canvas.width, canvas.height, settings).map((b) => ({
+        x: b.x / canvas.width,
+        y: b.y / canvas.height,
+        width: b.width / canvas.width,
+        height: b.height / canvas.height,
+        seeds: b.seeds
+      }))
+    }
+  } finally {
+    bitmap.close()
+    canvas.width = canvas.height = 0
+  }
+}
+
+export async function separateStickerSheet(
+  file: File,
+  settings: StickerSheetSettings,
+  reviewed?: ReviewedStickerBounds[]
+): Promise<StickerSheetCrop[]> {
+  if (reviewed && (!reviewed.length || reviewed.length > 500))
+    throw new Error('Choose between 1 and 500 sticker selections.')
   const bitmap = await createImageBitmap(file)
   const preview = document.createElement('canvas'),
     crop = document.createElement('canvas')
@@ -364,10 +728,24 @@ export async function separateStickerSheet(
     const previewPixels = context.getImageData(0, 0, preview.width, preview.height).data
     const background = sheetBackground(previewPixels, preview.width, preview.height)
     const foreground = stickerSheetForeground(previewPixels, preview.width, preview.height)
-    const bounds = findStickerSheetBounds(foreground, preview.width, preview.height, settings)
+    const isolation = reviewed?.some((region) => region.isolateArtwork)
+      ? stickerComponents(foreground, preview.width, preview.height, settings.joinPercent)
+      : undefined
+    const bounds = reviewed
+      ? reviewed.map((region) => {
+          const b = clampStickerBounds(region)
+          return {
+            x: b.x * preview.width,
+            y: b.y * preview.height,
+            width: b.width * preview.width,
+            height: b.height * preview.height
+          }
+        })
+      : findStickerSheetBounds(foreground, preview.width, preview.height, settings)
     if (!bounds.length)
       throw new Error('No stickers found. Use Grid for white artwork or a busy background.')
-    const result: Array<{ file: File; widthFraction: number; bounds: StickerBounds }> = []
+    const result: StickerSheetCrop[] = []
+    let outputBytes = 0
     for (const [index, bound] of bounds.entries()) {
       const x = Math.floor((bound.x * bitmap.width) / preview.width),
         y = Math.floor((bound.y * bitmap.height) / preview.height)
@@ -384,7 +762,61 @@ export async function separateStickerSheet(
       const cropContext = crop.getContext('2d')
       if (!cropContext) throw new Error('Canvas processing is unavailable.')
       cropContext.drawImage(bitmap, x, y, crop.width, crop.height, 0, 0, crop.width, crop.height)
-      if (settings.removeBackground && background) {
+      const name = `${file.name.replace(/\.[^.]+$/, '')} - sticker ${String(index + 1).padStart(3, '0')}.png`
+      const originalFile = await canvasFile(crop, name)
+      const removeBackground = reviewed?.[index].removeBackground ?? settings.removeBackground
+      const isolateArtwork = reviewed?.[index].isolateArtwork ?? false
+      if (isolateArtwork && isolation) {
+        const seeds = reviewed?.[index].seeds ?? []
+        if (
+          !seeds.length ||
+          seeds.length > 500 ||
+          seeds.some(
+            (p) =>
+              !Number.isFinite(p.x) ||
+              !Number.isFinite(p.y) ||
+              p.x < 0 ||
+              p.y < 0 ||
+              p.x >= 1 ||
+              p.y >= 1
+          )
+        )
+          throw new Error(
+            'The selected artwork is no longer available. Adjust the crop or disable isolation.'
+          )
+        const ids = seeds.map(
+          (p) =>
+            isolation.labels[
+              Math.floor(p.y * preview.height) * preview.width + Math.floor(p.x * preview.width)
+            ]
+        )
+        const selected = new Set(ids)
+        if (ids.some((id) => !id))
+          throw new Error(
+            'The selected artwork is no longer available. Adjust the crop or disable isolation.'
+          )
+        const pixels = cropContext.getImageData(0, 0, crop.width, crop.height)
+        const keep = (i: number) => isolation.filled[i] && selected.has(isolation.labels[i])
+        for (let py = 0; py < crop.height; py++)
+          for (let px = 0; px < crop.width; px++) {
+            const sx = ((x + px + 0.5) * preview.width) / bitmap.width - 0.5,
+              sy = ((y + py + 0.5) * preview.height) / bitmap.height - 0.5
+            const left = Math.max(0, Math.floor(sx)),
+              top = Math.max(0, Math.floor(sy))
+            const right = Math.min(preview.width - 1, left + 1),
+              bottom = Math.min(preview.height - 1, top + 1)
+            // Conservatively keep boundary samples; antialiased white outlines must not shrink.
+            if (
+              !keep(top * preview.width + left) &&
+              !keep(top * preview.width + right) &&
+              !keep(bottom * preview.width + left) &&
+              !keep(bottom * preview.width + right)
+            )
+              pixels.data[(py * crop.width + px) * 4 + 3] = 0
+          }
+        cropContext.putImageData(pixels, 0, 0)
+      }
+      if (removeBackground && background) {
         const pixels = cropContext.getImageData(0, 0, crop.width, crop.height)
         const visited = new Uint8Array(crop.width * crop.height)
         const queue = new Int32Array(visited.length)
@@ -416,11 +848,16 @@ export async function separateStickerSheet(
         }
         cropContext.putImageData(pixels, 0, 0)
       }
+      const preparedFile =
+        (removeBackground && background) || isolateArtwork
+          ? await canvasFile(crop, name)
+          : originalFile
+      outputBytes += originalFile.size + (preparedFile === originalFile ? 0 : preparedFile.size)
+      if (outputBytes > 200 * 1024 * 1024)
+        throw new Error('The separated artwork exceeds 200 MB. Use fewer or smaller selections.')
       result.push({
-        file: await canvasFile(
-          crop,
-          `${file.name.replace(/\.[^.]+$/, '')} - sticker ${String(index + 1).padStart(3, '0')}.png`
-        ),
+        file: preparedFile,
+        originalFile,
         widthFraction: crop.width / bitmap.width,
         bounds: {
           x: x / bitmap.width,

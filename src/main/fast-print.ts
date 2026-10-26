@@ -459,6 +459,25 @@ async function runJob(
     )
       throw new Error('Fast Print session is no longer active.')
   }
+  async function rememberIdPrinterOptions(): Promise<void> {
+    if (!canReturnToSettings || !jobOptions.profileDirectory) return
+    try {
+      await writeFile(
+        join(jobOptions.profileDirectory, 'id-last-settings.json'),
+        JSON.stringify({
+          version: 1,
+          printer: preset.printer,
+          paper: preset.paper,
+          landscape: preset.landscape === true,
+          profileId: preset.profileId,
+          color: preset.color,
+          duplex: preset.duplex === true
+        })
+      )
+    } catch (rememberError) {
+      console.warn('[fast-print] Could not remember ID printer options:', rememberError)
+    }
+  }
   ipcMain.handle('fast-print:source', async (event) => {
     authorize(event)
     return {
@@ -633,11 +652,14 @@ async function runJob(
       throw error
     }
   })
-  ipcMain.handle('fast-print:finish', (event, error?: string) => {
+  ipcMain.handle('fast-print:finish', async (event, error?: string) => {
     authorize(event)
     done = true
     if (error) fail(new Error(error))
-    else finish()
+    else {
+      await rememberIdPrinterOptions()
+      finish()
+    }
   })
   ipcMain.handle('fast-print:back', async (event, draft: unknown) => {
     authorize(event)
@@ -834,7 +856,10 @@ async function runJob(
     if ((submitted || returningToSettings) && !done) event.preventDefault()
     else if (!done) {
       done = true
-      finish()
+      if (canReturnToSettings) {
+        event.preventDefault()
+        void rememberIdPrinterOptions().then(() => finish())
+      } else finish()
     }
   })
   window.webContents.on('render-process-gone', () =>

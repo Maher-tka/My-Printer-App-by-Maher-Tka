@@ -613,4 +613,33 @@ await assert.rejects(
   /font data is not embedded/
 )
 await assert.rejects(exportCardMontagePdf(png, { ...settings, marginMm: 100 }), /does not fit/)
+
+// Multi-page customer PDFs often share embedded fonts. Copy the font once,
+// while retaining every imposed side and its page-specific text.
+const sharedFontSource = await PDFDocument.create()
+sharedFontSource.registerFontkit(fontkit)
+const sharedFont = await sharedFontSource.embedFont(fontBytes, { subset: true })
+for (let index = 0; index < 12; index++)
+  sharedFontSource.addPage([240, 150]).drawText(`CARD ${index + 1}`, { font: sharedFont })
+const sharedFontOutput = await PDFDocument.load(
+  await exportCardMontagePdf(
+    {
+      ...transparencyArtwork,
+      bytesBase64: Buffer.from(await sharedFontSource.save()).toString('base64'),
+      pageCount: 12
+    },
+    { ...settings, exportAllPdfPages: true }
+  )
+)
+assert.equal(sharedFontOutput.getPageCount(), 12)
+const sharedFontRefs = sharedFontOutput.getPages().map((page) => {
+  const xObjects = page.node.Resources()!.lookup(PDFName.of('XObject'), PDFDict)
+  const form = sharedFontOutput.context.lookup(xObjects.values()[0], PDFStream)
+  return form.dict
+    .lookup(PDFName.of('Resources'), PDFDict)
+    .lookup(PDFName.of('Font'), PDFDict)
+    .values()[0]
+    .toString()
+})
+assert.equal(new Set(sharedFontRefs).size, 1, 'card sides share one original font resource')
 console.log('Card montage PDF export tests passed.')

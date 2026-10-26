@@ -1,5 +1,5 @@
 import type { CutterProject, PlacedPiece } from '../types'
-import { getProductionSheetCount, getProductionSheetProject } from './productionSheets'
+import { getProductionSheetProjects } from './productionSheets'
 
 export interface ProductionSheetLayoutGroup {
   signature: string
@@ -22,10 +22,9 @@ export function getProductionSheetLayoutGroups(
 ): ProductionSheetLayoutGroup[] {
   const groups: ProductionSheetLayoutGroup[] = []
   const groupBySignature = new Map<string, ProductionSheetLayoutGroup>()
-  const sheetCount = getProductionSheetCount(project.placedPieces)
+  const sheets = getProductionSheetProjects(project)
 
-  for (let sheetIndex = 0; sheetIndex < sheetCount; sheetIndex += 1) {
-    const sheetProject = getProductionSheetProject(project, sheetIndex)
+  for (const [sheetIndex, sheetProject] of sheets.entries()) {
     const signature = getProductionSheetLayoutSignature(sheetProject)
     const existing = groupBySignature.get(signature)
 

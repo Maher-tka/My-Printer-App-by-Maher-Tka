@@ -75,6 +75,8 @@ internal static class NativePrint {
           using(var context=new ApplicationContext()){
             form.FormClosed+=delegate{context.ExitThread();};
             var handle=form.Handle;
+            if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_LAST_SETTINGS")=="1")form.BeginInvoke(new Action(async delegate{await form.VerifyLastSettings();}));
+            else
             form.BeginInvoke(new Action(async delegate{if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PICKER")=="1")await form.VerifyPresetPicker();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_ORDER")=="1")await form.VerifyPresetOrder();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SELECTION")=="1")await form.VerifyPageSelection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PERFORMANCE")=="1")await form.VerifyPerformance();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_COMBINED")=="1")await form.VerifyCombined();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_DIRECTION")=="1")await form.VerifyDirection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SOURCE")=="1")await form.VerifySource();else if(options.VerifyCounts)await form.VerifyPageCounts();else if(options.VerifyId)await form.VerifyId();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PRESETS")=="1")await form.VerifyPresets();else if(options.VerifyAudit)await form.VerifyAudit();else if(options.VerifyPaint)await form.VerifyPaint();else await form.VerifyPolaroid();}));
             Application.Run(context);
           }
@@ -275,7 +277,7 @@ internal sealed class PrintWindow : Form {
   readonly LinkedList<string> polaroidThumbnailOrder=new LinkedList<string>();
   PolaroidSheets activePolaroid;
   int polaroidPreparations,polaroidProgressEvents,driverSnapshotRequests;
-  long cacheHits,cacheMisses,lastRenderMs;
+  long cacheHits,cacheMisses,lastRenderMs,pageRequests;
   readonly int uiThread=Thread.CurrentThread.ManagedThreadId;int photoDecodeThread,previewCompositions,previewReuses;string retainedPreviewKey,retainedPreviewStatus;int summaryRequest;
   bool canColor,canDuplex;
   readonly List<long> warmRenderTimes=new List<long>();
@@ -501,7 +503,7 @@ internal sealed class PrintWindow : Form {
     } };
     Shown += async delegate { firstPaint = NativePrint.Clock.ElapsedMilliseconds;QueuePageSummary();var prime=PrimePreview();await LoadPrinters();if(args.Verify!=null&&!closing){await prime;await Verify();} };
     HandleCreated+=delegate{PrintTheme.Apply(this);};PrintTheme.Apply(this);
-    FormClosing += delegate(object sender, FormClosingEventArgs e) { if (submitting) e.Cancel = true; else closing = true; };
+    FormClosing += delegate(object sender, FormClosingEventArgs e) { if (submitting) e.Cancel = true; else { RememberPrinterSettings();closing = true; } };
   }
   Control Field(string name, ComboBox combo) {
     var field = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0, 0, 12, 0) };
@@ -516,6 +518,7 @@ internal sealed class PrintWindow : Form {
   }
   readonly Dictionary<string,PrinterCapture> captures=new Dictionary<string,PrinterCapture>();
   async Task LoadPrinters(bool refresh=false) {
+    RememberPrinterSettings();
     int refreshGeneration=++printerRefreshGeneration;++printerGeneration;++rendering;settingsReady=false;SetPrinterControlsEnabled(false);
     QueuePageSummary();
     print.Enabled = false; status.Text = L("Loading printers…");
@@ -537,6 +540,7 @@ internal sealed class PrintWindow : Form {
     } catch (Exception error) { if(!closing&&refreshGeneration==printerRefreshGeneration){updating = false; status.Text = error.Message;} }
   }
   async Task SelectPrinter(Func<Task<PrinterCapture>> captureOverride=null) {
+    RememberPrinterSettings();
     int selection=++printerGeneration;++rendering;settingsReady=false;SetPrinterControlsEnabled(false);
     QueuePageSummary();
     print.Enabled = false;
@@ -567,6 +571,7 @@ internal sealed class PrintWindow : Form {
       color.Items.Clear(); if (canColor) color.Items.Add(new Entry("color", L("Color"))); color.Items.Add(new Entry("mono", L("Black & white"))); color.SelectedIndex = 0;
       mode = ""; layouts.SelectedIndex = 0; orientation.SelectedIndex = 0;orientationLayout=0; if(!copiesEdited)copies.Value = Math.Max(1, Math.Min(999, (int)settings.PrinterSettings.Copies));
       explicitProfile = null; updating = false; UpdateProfiles(); ApplyAutomaticProfile();
+      RestorePrinterSettings(name);
       if (!initialApplied && args.Initial != null) {
         initialApplied = true; updating = true;
         string initialPaper = NativePrint.Text(args.Initial, "paper", "A4");
@@ -581,6 +586,38 @@ internal sealed class PrintWindow : Form {
       settingsReady=true;SetPrinterControlsEnabled(true);NativePrint.RememberPrinter(name);Changed();
       if(paper.SelectedIndex<0)status.Text=L("No compatible printers found");
     } catch (Exception error) { if(!closing&&selection==printerGeneration){settingsReady=false;updating = false;status.Text = error.Message;preview.Busy(error.Message);print.Enabled=false;} }
+  }
+  string DriverFingerprint(string name){string fingerprint;if(!fingerprints.TryGetValue(name,out fingerprint)){fingerprint=FastPrintDriver.Fingerprint(name);fingerprints[name]=fingerprint;}return fingerprint;}
+  void RememberPrinterSettings(){
+    if(!settingsReady||settings==null||appliedProfile=="invalid"||paper.SelectedItem==null)return;
+    try{
+      string name=settings.PrinterSettings.PrinterName;
+      var profile=saved.FirstOrDefault(item=>NativePrint.Text(item,"id")==appliedProfile&&NativePrint.Text(item,"printer")==name);
+      using(var document=new PrintDocument()){
+        document.PrinterSettings.PrinterName=name;FastPrintDriver.Apply(document,FastPrintDriver.FromDocument(settings));
+        document.DefaultPageSettings.PaperSize=(PaperSize)((Entry)paper.SelectedItem).Value;
+        document.DefaultPageSettings.Color=Selected(color)=="color";document.DefaultPageSettings.Landscape=Landscape;
+        var resolution=quality.SelectedItem as Entry;if(resolution!=null&&resolution.Value!=null)document.DefaultPageSettings.PrinterResolution=(PrinterResolution)resolution.Value;
+        document.PrinterSettings.Copies=(short)copies.Value;if(IsPolaroid&&canDuplex)document.PrinterSettings.Duplex=Duplex.Simplex;
+        NativeLastSettings.Save(new Dictionary<string,object>{{"printer",name},{"driverFingerprint",DriverFingerprint(name)},{"paper",Selected(paper)},{"color",Selected(color)=="color"},{"orientation",Selected(orientation)},{"quality",Selected(quality)},{"copies",(int)copies.Value},{"profileId",profile==null?"current":NativePrint.Text(profile,"id")},{"profileStamp",profile==null?"":NativeLastSettings.ProfileStamp(profile)}},FastPrintDriver.FromDocument(document));
+      }
+    }catch(Exception error){Trace.WriteLine("Fast Print could not remember printer options: "+error.Message);}
+  }
+  bool RestorePrinterSettings(string name){
+    try{
+      byte[] bytes;var data=NativeLastSettings.Read(name,DriverFingerprint(name),out bytes);if(data==null)return false;
+      string profileId=NativePrint.Text(data,"profileId");var profile=saved.FirstOrDefault(item=>NativePrint.Text(item,"id")==profileId&&NativePrint.Text(item,"printer")==name);
+      if(profileId!="current"&&(profile==null||NativeLastSettings.ProfileStamp(profile)!=NativePrint.Text(data,"profileStamp")))return false;
+      int stock=paper.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==NativePrint.Text(data,"paper"));
+      if(stock<0||NativePrint.Flag(data,"color")&&!canColor)return false;
+      // Validate before touching the live job or its cached device defaults.
+      using(var document=new PrintDocument()){document.PrinterSettings.PrinterName=name;FastPrintDriver.Apply(document,bytes);if(document.DefaultPageSettings.PaperSize.Kind.ToString()!=NativePrint.Text(data,"paper"))return false;}
+      FastPrintDriver.Apply(settings,bytes);driverCache[name]=bytes;appliedDriverBytes=bytes;appliedSavedSnapshot=profile==null?null:NativePrint.Text(profile,"driverSettings");
+      updating=true;paper.SelectedIndex=stock;color.SelectedIndex=NativePrint.Flag(data,"color")&&canColor?0:color.Items.Count-1;
+      int resolution=quality.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==NativePrint.Text(data,"quality"));quality.SelectedIndex=Math.Max(0,resolution);
+      orientation.SelectedIndex=orientation.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==NativePrint.Text(data,"orientation"));
+      copies.Value=int.Parse(NativePrint.Text(data,"copies"),CultureInfo.InvariantCulture);copiesEdited=true;explicitProfile=profileId;appliedProfile=profile==null?null:profileId;profileError=null;updating=false;UpdateProfiles();return true;
+    }catch{updating=false;return false;}
   }
   void SetPrinterControlsEnabled(bool enabled){paper.Enabled=quality.Enabled=color.Enabled=profiles.Enabled=orientation.Enabled=fill.Enabled=rotateSelected.Enabled=sameDirection.Enabled=combineFiles.Enabled=enabled;layouts.Enabled=enabled;polaroid8.Enabled=polaroid9.Enabled=enabled;}
   void ReloadSavedProfiles(){
@@ -887,6 +924,7 @@ internal sealed class PrintWindow : Form {
     finally{previewGate.Release();}
   }
   async Task<Bitmap> Page(string path,int index,int width){
+    pageRequests++;
     string version=SourceVersion(path),key=version+"|"+index;Bitmap cached;int renderedWidth;
     if(pageCache.TryGetValue(key,out cached)&&pageWidths.TryGetValue(key,out renderedWidth)&&renderedWidth>=width){
       cacheHits++;pageRecency.Remove(key);pageRecency.AddLast(key);pageCount=documentPages[version];return new Bitmap(cached);
@@ -1030,10 +1068,12 @@ internal sealed class PrintWindow : Form {
       for(int file=groupStart;file<=groupEnd;file++)foreach(int page in map[file])refs.Add(Tuple.Create(file,page));
       if(refs.Count==0){preview.Replace(null);pageCount=0;sheetIndex=0;count.Text="0 / 0";previous.Enabled=next.Enabled=false;status.Text=L("No selected pages in this file.");preview.Busy(status.Text);visibleSourceVersion=sources;print.Enabled=appliedProfile!="invalid";return;}
     }
-    string path=await PreparedFile(Special?source:args.Files[refs[0].Item1]);
+    // Ordinary jobs already have page totals. Decode only the visible sheet;
+    // loading its first source page again wastes work on every later sheet.
+    string path=Special?await PreparedFile(source):null;
     if (generation != rendering || closing) return;
     int decodeWidth=Math.Max(180,(int)(640/Math.Sqrt(Special?1:PerSheet)));
-    using (var first = await Page(path, Special?0:refs[0].Item2, decodeWidth)) {
+    using (var first = Special?await Page(path,0,decodeWidth):null) {
       if (generation != rendering || closing) return;
       int per = Special ? 1 : PerSheet; int pages = Special?pageCount:refs.Count; sheetIndex = Math.Min(sheetIndex, Math.Max(0, (pages - 1) / per));
       if(SourceOrientation){
@@ -1143,6 +1183,7 @@ internal sealed class PrintWindow : Form {
     if (settings.DefaultPageSettings.PaperSize.Kind.ToString() != Selected(paper) || settings.DefaultPageSettings.Landscape != Landscape || settings.DefaultPageSettings.Color!=outputColor&&!virtualGrayscale) throw new InvalidOperationException("The printer driver could not keep the selected paper, orientation and color.");
     string id = Guid.NewGuid().ToString("N"); var page = settings.DefaultPageSettings;
     var profile = new Dictionary<string, object> { {"version",1},{"id",id},{"name",saved.Where(item=>NativePrint.Text(item,"id")==appliedProfile).Select(item=>NativePrint.Text(item,"name")).FirstOrDefault()??"Fast Print session"},{"printer",Selected(printer)},{"paper",Selected(paper)},{"color",page.Color},{"landscape",page.Landscape},{"duplex",settings.PrinterSettings.Duplex.ToString()},{"tray",page.PaperSource.SourceName},{"trayId",page.PaperSource.RawKind},{"driverFingerprint",FastPrintDriver.Fingerprint(Selected(printer))},{"driverSettings",Convert.ToBase64String(ProtectedData.Protect(bytes,null,DataProtectionScope.CurrentUser))} };
+    var originalProfile=saved.FirstOrDefault(item=>NativePrint.Text(item,"id")==appliedProfile);if(originalProfile!=null){profile["savedProfileId"]=appliedProfile;profile["savedProfileStamp"]=NativeLastSettings.ProfileStamp(originalProfile);}
     File.WriteAllText(Path.Combine(directory,id+".json"),NativePrint.Json.Serialize(profile),new UTF8Encoding(false));
     // Grayscale is rendered into the artwork even when a color-only driver resets dmColor.
     var preset = new Dictionary<string, object> { {"printer",Selected(printer)},{"paper",Selected(paper)},{"color",outputColor},{"pagesPerSheet",Special?1:PerSheet},{"profileId",id},{"landscape",Landscape},{"duplex",canDuplex && (settings.PrinterSettings.Duplex == Duplex.Vertical || settings.PrinterSettings.Duplex == Duplex.Horizontal)},{"fitToFrame",fill.Checked && !Special},{"combineImages",!Special} }; if (Special) preset["mode"]=mode; else {preset["combineFiles"]=combineFiles.Checked;preset["marginMm"]=marginMm;preset["gapMm"]=gapMm;preset["sourceRotations"]=sourceRotations;preset["autoOrientation"]=SourceOrientation;preset["matchLayoutOrientation"]=sameDirection.Checked&&PerSheet>1;}
@@ -1175,21 +1216,23 @@ internal sealed class PrintWindow : Form {
     try {
       if(visibleSourceVersion!=SourceVersion()||IsPolaroid&&(activePolaroid==null||activePolaroid.Key!=PolaroidKey())){restorePrint=false;await RenderPreview();if(print.Enabled)status.Text=L("Files changed. Review the updated preview before printing.");return;}
       string request = await Request(null,true);
+      RememberPrinterSettings();
       if (args.Verify != null) { File.WriteAllText(Path.Combine(args.Verify,"request-path.txt"),request); return; }
       if (string.IsNullOrEmpty(args.App) || !File.Exists(args.App)) throw new InvalidOperationException("Fast Print worker is missing. Repair the app installation.");
       var arguments = new List<string>(); if (!string.IsNullOrEmpty(args.AppPath)) arguments.Add(args.AppPath); arguments.Add("--fast-print-request"); arguments.Add(request);
       pdf=null;loadedFile=null;pdfDocuments.Clear();pdfDocumentOrder.Clear();GC.Collect();GC.WaitForPendingFinalizers();
       using (var process = NativePrint.Start(args.App,arguments)) { Hide(); await Task.Run(()=>process.WaitForExit()); if(process.ExitCode!=0) { Show(); status.Text="Print preparation failed. Check the print queue before retrying."; return; } }
       if(await RestoreIdReview())return;
+      try{await RestoreIdReview(true);}catch(Exception error){Trace.WriteLine("Fast Print could not remember ID printer options: "+error.Message);}
       submitting=false; Close();
     } catch(Exception error) { restorePrint=false;updating=false;if(!Visible&&args.Verify==null)Show();status.Text=error.Message;preview.Busy(error.Message);if(args.Verify!=null)throw;MessageBox.Show(this,error.Message,L("Fast Print"),MessageBoxButtons.OK,MessageBoxIcon.Error); }
     finally { submitting=false; if(!closing&&restorePrint)print.Enabled=settingsReady&&appliedProfile!="invalid"; }
   }
-  async Task<bool> RestoreIdReview(){
-    if(mode!="id-card"||!File.Exists(Path.Combine(session,"id-returned.json")))return false;
-    var returned=NativePrint.Read(Path.Combine(session,"id-returned.json"));
-    File.Delete(Path.Combine(session,"id-returned.json"));
-    var draft=NativePrint.Read(Path.Combine(session,"id-draft.json"));
+  async Task<bool> RestoreIdReview(bool completed=false){
+    string marker=Path.Combine(session,completed?"id-last-settings.json":"id-returned.json");
+    if(mode!="id-card"||!File.Exists(marker))return false;
+    var returned=NativePrint.Read(marker);File.Delete(marker);
+    var draft=completed?returned:NativePrint.Read(Path.Combine(session,"id-draft.json"));
     decimal keptCopies=copies.Value;
     string target=NativePrint.Text(returned,"printer");
     if(target!=""&&target!=Selected(printer)){
@@ -1200,19 +1243,25 @@ internal sealed class PrintWindow : Form {
     }
     updating=true;mode="id-card";layouts.SelectedIndex=layouts.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id=="id-card");
     string returnedProfile=NativePrint.Text(returned,"profileId");
+    Dictionary<string,object> rememberedProfile=null;
     if(returnedProfile!=""){
       if(!System.Text.RegularExpressions.Regex.IsMatch(returnedProfile,@"^[a-f0-9]{32}$"))throw new InvalidOperationException("Invalid returned printer preset.");
       var profile=NativePrint.Read(Path.Combine(session,returnedProfile+".json"));
       if(NativePrint.Text(profile,"printer")!=Selected(printer)||NativePrint.Text(profile,"driverFingerprint")!=FastPrintDriver.Fingerprint(Selected(printer)))throw new InvalidOperationException("The selected printer preset has changed. Choose it again.");
       var bytes=ProtectedData.Unprotect(Convert.FromBase64String(NativePrint.Text(profile,"driverSettings")),null,DataProtectionScope.CurrentUser);FastPrintDriver.Apply(settings,bytes);
+      string savedId=NativePrint.Text(profile,"savedProfileId",returnedProfile),stamp=NativePrint.Text(profile,"savedProfileStamp",NativeLastSettings.ProfileStamp(profile));
+      rememberedProfile=saved.FirstOrDefault(item=>NativePrint.Text(item,"id")==savedId&&NativePrint.Text(item,"printer")==Selected(printer)&&NativeLastSettings.ProfileStamp(item)==stamp);
     }
+    else if(completed)FastPrintDriver.Apply(settings,captures[Selected(printer)].Bytes);
     string targetPaper=NativePrint.Text(returned,"paper");
     if(targetPaper!="")paper.SelectedIndex=paper.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==targetPaper);
     if(returned.ContainsKey("landscape"))SetOrientation(NativePrint.Flag(returned,"landscape"));
     copies.Value=keptCopies;
     updating=true;color.SelectedIndex=NativePrint.Flag(draft,"color")&&canColor?0:color.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id=="mono");
     if(canDuplex)settings.PrinterSettings.Duplex=NativePrint.Flag(draft,"duplex")?(settings.PrinterSettings.Duplex==Duplex.Horizontal?Duplex.Horizontal:Duplex.Vertical):Duplex.Simplex;
-    ApplyControls();driverCache[Selected(printer)]=FastPrintDriver.FromDocument(settings);explicitProfile="current";appliedProfile=null;profileError=null;UpdateProfiles();updating=false;
+    if(completed)quality.SelectedIndex=0;
+    ApplyControls();driverCache[Selected(printer)]=FastPrintDriver.FromDocument(settings);explicitProfile=rememberedProfile==null?"current":NativePrint.Text(rememberedProfile,"id");appliedProfile=rememberedProfile==null?null:explicitProfile;appliedSavedSnapshot=rememberedProfile==null?null:NativePrint.Text(rememberedProfile,"driverSettings");profileError=null;UpdateProfiles();updating=false;
+    RememberPrinterSettings();if(completed)return false;
     if(args.Verify==null){Show();Activate();}await RenderPreview();status.Text=L("ID edits saved. Choose printer settings, then Review ID.");return true;
   }
   internal async Task VerifyId(){
@@ -1258,6 +1307,76 @@ internal sealed class PrintWindow : Form {
     string request=await Request(Path.Combine(Path.GetTempPath(),"maher-fast-print-native",Guid.NewGuid().ToString("N")));
     return new{name=name,paper=Selected(paper),per=PerSheet,landscape=Landscape,request=request,sheets=sheets,rotations=(int[])sourceRotations.Clone(),align=sameDirection.Checked,fill=fill.Checked};
   }
+  internal async Task VerifyLastSettings(){
+    Directory.CreateDirectory(args.Verify);
+    try{
+      AuditCheck(Path.GetFullPath(NativePrint.LocalRoot)==Path.GetFullPath(Path.Combine(args.Verify,"settings")),"Last settings checks require isolated settings.");
+      Func<string,Task<PrintWindow>> open=async stage=>{
+        string folder=Path.Combine(args.Verify,stage);Directory.CreateDirectory(folder);
+        var window=new PrintWindow(new Options(new[]{"--verify-audit",folder,"--language",args.Language,"--appearance",args.Appearance??"light","--"}.Concat(args.Files.AsEnumerable().Reverse()).ToArray()));
+        var handle=window.Handle;await window.LoadPrinters();await window.RenderPreview();AuditCheck(window.settingsReady&&window.print.Enabled,window.status.Text);return window;
+      };
+      string owner,other,id;byte[] expected;Duplex expectedDuplex;int expectedTray;string expectedQuality;int privateBytes;
+      using(var first=await open("first")){
+        var target=first.printer.Items.Cast<Entry>().FirstOrDefault(item=>item.Id.IndexOf("EPSON",StringComparison.OrdinalIgnoreCase)>=0);
+        if(target!=null){first.updating=true;first.printer.SelectedItem=target;first.updating=false;await first.SelectPrinter();}
+        owner=first.Selected(first.printer);other=first.printer.Items.Cast<Entry>().Where(item=>item.Id!=owner).Select(item=>item.Id).FirstOrDefault();
+        first.updating=true;first.paper.SelectedIndex=first.paper.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id=="A3");AuditCheck(first.paper.SelectedIndex>=0,"A3 driver is required for last settings checks.");
+        first.color.SelectedIndex=first.color.Items.Count-1;first.SetOrientation(true);first.quality.SelectedIndex=first.quality.Items.Count>1?1:0;first.updating=false;first.copies.Value=3;
+        if(first.canDuplex)first.settings.PrinterSettings.Duplex=Duplex.Vertical;
+        var tray=first.settings.PrinterSettings.PaperSources.Cast<PaperSource>().LastOrDefault();if(tray!=null)first.settings.DefaultPageSettings.PaperSource=tray;
+        first.driverCache[owner]=FastPrintDriver.FromDocument(first.settings);first.explicitProfile="current";first.appliedProfile=null;first.UpdateProfiles();first.ApplyAutomaticProfile();first.ApplyControls();
+        expected=FastPrintDriver.FromDocument(first.settings);expectedDuplex=first.settings.PrinterSettings.Duplex;expectedTray=first.settings.DefaultPageSettings.PaperSource.RawKind;expectedQuality=first.Selected(first.quality);privateBytes=BitConverter.ToUInt16(expected,70);
+        first.sourceRotations[0]=1;first.pageFilters[0]="range";first.pageRanges[0]="1";
+        first.Close();
+      }
+      using(var fresh=await open("after-cancel")){
+        AuditCheck(fresh.Selected(fresh.printer)==owner&&fresh.Selected(fresh.paper)=="A3"&&fresh.Selected(fresh.color)=="mono"&&fresh.Selected(fresh.orientation)=="landscape"&&fresh.copies.Value==3&&fresh.Selected(fresh.quality)==expectedQuality,"Closing forgot printer controls.");
+        AuditCheck(fresh.settings.PrinterSettings.Duplex==expectedDuplex&&fresh.settings.DefaultPageSettings.PaperSource.RawKind==expectedTray,"Closing forgot duplex or tray.");
+        AuditCheck(fresh.driverCache[owner].SequenceEqual(expected),"The full DEVMODE including private driver options changed.");
+        AuditCheck(fresh.sourceRotations.All(turns=>turns==0)&&fresh.pageRotations.Count==0&&fresh.pageFilters.All(filter=>filter=="all"),"File-specific choices leaked into a new selection.");
+        fresh.ApplyControls();var profile=fresh.StorePrinterPreset("Last settings — "+args.Language,FastPrintDriver.FromDocument(fresh.settings));id=NativePrint.Text(profile,"id");fresh.SelectSavedProfile(id);fresh.UpdateProfiles();await fresh.RenderPreview();fresh.Close();
+      }
+      using(var named=await open("named-preset")){
+        AuditCheck(named.Selected(named.profiles)==id&&named.appliedProfile==id&&named.Selected(named.paper)=="A3","The saved preset was not restored.");
+        foreach(var size in new[]{new Size(1366,768),new Size(1920,1080)}){named.Size=size;await named.RenderPreview();NativePrint.Capture(named,Path.Combine(args.Verify,"remembered-"+size.Width+"x"+size.Height+".png"));}
+        named.copies.Value=4;await named.Submit();AuditCheck(File.Exists(Path.Combine(named.args.Verify,"request-path.txt")),"The verification print request was not prepared.");
+        byte[] bytes;var remembered=NativeLastSettings.Read(owner,named.DriverFingerprint(owner),out bytes);AuditCheck(remembered!=null&&NativePrint.Text(remembered,"copies")=="4","Submitting forgot the printer setup.");
+        named.Close();
+      }
+      using(var printed=await open("after-submit")){
+        AuditCheck(printed.Selected(printed.profiles)==id&&printed.copies.Value==4,"The next job forgot the submitted preset or copies.");
+        if(other!=null){printed.updating=true;printed.printer.SelectedIndex=printed.printer.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==other);printed.updating=false;await printed.SelectPrinter();printed.updating=true;printed.paper.SelectedIndex=printed.paper.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id=="A4");printed.SetOrientation(false);printed.updating=false;printed.copies.Value=2;printed.Close();}
+        else printed.Close();
+      }
+      if(other!=null)using(var alternate=await open("other-printer")){
+        AuditCheck(alternate.Selected(alternate.printer)==other&&alternate.Selected(alternate.paper)=="A4"&&alternate.copies.Value==2,"The second printer did not retain its own options.");
+        alternate.updating=true;alternate.printer.SelectedIndex=alternate.printer.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==owner);alternate.updating=false;await alternate.SelectPrinter();
+        AuditCheck(alternate.Selected(alternate.profiles)==id&&alternate.Selected(alternate.paper)=="A3"&&alternate.copies.Value==4,"Switching printers mixed their settings.");
+        await alternate.LoadPrinters(true);AuditCheck(alternate.Selected(alternate.paper)=="A3"&&alternate.copies.Value==4,"Refresh reset remembered options.");alternate.Close();
+      }
+      using(var idDone=await open("id-completed")){
+        idDone.updating=true;idDone.mode="id-card";idDone.layouts.SelectedIndex=idDone.layouts.Items.FindIndex(item=>item.Id=="id-card");idDone.updating=false;
+        string request=await idDone.Request();var preset=NativePrint.Map(NativePrint.Read(request),"preset");
+        File.WriteAllText(Path.Combine(idDone.session,"id-last-settings.json"),NativePrint.Json.Serialize(new{version=1,printer=owner,paper="A3",landscape=true,profileId=NativePrint.Text(preset,"profileId"),color=idDone.canColor,duplex=idDone.canDuplex}));
+        await idDone.RestoreIdReview(true);AuditCheck(idDone.explicitProfile==id,"ID completion lost the originating named preset.");idDone.Close();
+      }
+      using(var afterId=await open("after-id")){AuditCheck(afterId.Selected(afterId.paper)=="A3"&&afterId.Selected(afterId.color)==(afterId.canColor?"color":"mono")&&afterId.Selected(afterId.profiles)==id,"ID completion forgot the final paper, color or preset.");afterId.Close();}
+      string file=NativeLastSettings.PathFor(owner),original=File.ReadAllText(file);var stored=NativePrint.Read(file);byte[] decoded;
+      AuditCheck(NativePrint.Text(stored,"driverSettings")!=Convert.ToBase64String(expected),"Driver data was stored without user encryption.");
+      stored["driverFingerprint"]="changed-driver";File.WriteAllText(file,NativePrint.Json.Serialize(stored));AuditCheck(NativeLastSettings.Read(owner,FastPrintDriver.Fingerprint(owner),out decoded)==null,"Changed drivers reused stale settings.");
+      File.WriteAllText(file,"{invalid");AuditCheck(NativeLastSettings.Read(owner,FastPrintDriver.Fingerprint(owner),out decoded)==null,"Corrupt preferences were accepted.");
+      File.WriteAllText(file,original);stored=NativePrint.Read(file);stored["printer"]="another queue";File.WriteAllText(file,NativePrint.Json.Serialize(stored));AuditCheck(NativeLastSettings.Read(owner,FastPrintDriver.Fingerprint(owner),out decoded)==null,"Driver options leaked across printers.");
+      File.WriteAllText(file,original);string profilePath=Path.Combine(NativePrint.LocalRoot,"profiles",id+".json"),profileText=File.ReadAllText(profilePath);File.Delete(profilePath);
+      using(var removed=await open("removed-preset")){AuditCheck(removed.explicitProfile!=id&&removed.appliedProfile!=id&&removed.print.Enabled,"A removed preset was replayed or prevented printing.");removed.settingsReady=false;removed.Close();}
+      File.WriteAllText(profilePath,profileText);File.WriteAllText(file,original);var edited=NativePrint.Read(profilePath);edited["notes"]="edited outside the dialog";File.WriteAllText(profilePath,NativePrint.Json.Serialize(edited));
+      using(var changed=await open("changed-preset")){AuditCheck(changed.explicitProfile!=id&&changed.print.Enabled,"An edited preset replayed its old driver snapshot.");changed.settingsReady=false;changed.Close();}
+      File.WriteAllText(profilePath,profileText);File.WriteAllText(file,original);
+      AuditCheck(!Directory.GetFiles(Path.GetDirectoryName(file),"*.tmp").Any(),"A temporary preference write was left behind.");
+      File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,printer=owner,otherPrinter=other,privateDriverBytes=privateBytes,cancelRestored=true,submitRestored=true,namedPresetRestored=true,perPrinterRestored=other!=null,fullDriverBytesPreserved=true,newFilesReset=true,idCompletionRestored=true,changedDriverRejected=true,removedPresetRejected=true,editedPresetRejected=true,corruptDataRejected=true}),new UTF8Encoding(false));
+    }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}
+    finally{Close();}
+  }
   internal async Task VerifyPerformance(){
     Directory.CreateDirectory(args.Verify);
     var heartbeat=Stopwatch.StartNew();long lastBeat=0,maxPause=0;int beats=0;
@@ -1282,8 +1401,12 @@ internal sealed class PrintWindow : Form {
         for(int i=0;i<200;i++){preview.SelectItem(i%preview.Items.Length);selectionReady&=print.Enabled&&preview.Interactive;}
         selectionClock.Stop();selectionCompositions=previewCompositions-selectionCompositions;
         AuditCheck(selectionCompositions==0&&object.ReferenceEquals(selectedSheet,preview.Sheet)&&selectionReady,"Selecting a visible image recomposed the sheet or disabled Print.");
+        updating=true;layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id=="1");orientation.SelectedIndex=0;fileList.SelectedIndex=0;sheetIndex=0;combineFiles.Checked=false;updating=false;Changed();await PresetReady();
+        int navigationSheets=Math.Min(12,(await Inventory()).Counts[0]);long navigationRequests=pageRequests,navigationMisses=cacheMisses;var navigationClock=Stopwatch.StartNew();
+        for(int index=0;index<navigationSheets;index++){sheetIndex=index;await RenderPreview();await PresetReady();preview.Sheet.Save(Path.Combine(args.Verify,"navigation-"+index+".png"),ImageFormat.Png);}
+        navigationClock.Stop();navigationRequests=pageRequests-navigationRequests;navigationMisses=cacheMisses-navigationMisses;
         await Task.Delay(80);timer.Stop();
-        File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,coldMs=cold.ElapsedMilliseconds,workingMiB=Process.GetCurrentProcess().WorkingSet64/1048576.0,maxUiPauseMs=Math.Max(maxPause,startupPause),startupPauseMs=startupPause,interactionPauseMs=maxPause,uiTicks=beats,photoDecodeOffUi=photoDecodeThread!=uiThread,compositions=previewCompositions,reuses=previewReuses,selectionReuses=selectionReuses,selectionCompositions=selectionCompositions,selectionMs=selectionClock.ElapsedMilliseconds,selectionReady=selectionReady,pdfDocumentLoads=pdfDocumentLoads,pdfDocumentsRetained=pdfDocuments.Count,states=states,cleanupDirectory=session}),new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,coldMs=cold.ElapsedMilliseconds,workingMiB=Process.GetCurrentProcess().WorkingSet64/1048576.0,maxUiPauseMs=Math.Max(maxPause,startupPause),startupPauseMs=startupPause,interactionPauseMs=maxPause,uiTicks=beats,photoDecodeOffUi=photoDecodeThread!=uiThread,compositions=previewCompositions,reuses=previewReuses,selectionReuses=selectionReuses,selectionCompositions=selectionCompositions,selectionMs=selectionClock.ElapsedMilliseconds,selectionReady=selectionReady,pdfDocumentLoads=pdfDocumentLoads,pdfDocumentsRetained=pdfDocuments.Count,navigationSheets=navigationSheets,navigationRequests=navigationRequests,navigationMisses=navigationMisses,navigationMs=navigationClock.ElapsedMilliseconds,states=states,cleanupDirectory=session}),new UTF8Encoding(false));
       }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
     }
   }

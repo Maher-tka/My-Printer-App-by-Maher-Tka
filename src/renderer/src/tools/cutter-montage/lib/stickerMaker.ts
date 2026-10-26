@@ -19,6 +19,8 @@ export interface StickerMakerResult {
   contourWidth: number
   contourHeight: number
   warnings: string[]
+  /** Keep printed white bleed beyond a separate inset cutting contour. */
+  preserveArtworkBleed?: boolean
   vectorArtwork?: { svg?: Uint8Array; pdf: Uint8Array }
 }
 

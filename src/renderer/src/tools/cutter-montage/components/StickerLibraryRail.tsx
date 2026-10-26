@@ -13,6 +13,7 @@ export function StickerLibraryRail({
   onSelect,
   onImport,
   onOpenStickerMaker,
+  onOpenPngContours,
   onDuplicate,
   onDelete,
   onManage,
@@ -25,6 +26,7 @@ export function StickerLibraryRail({
   activeId: string | null
   onSelect: (id: string) => void
   onOpenStickerMaker?: () => void
+  onOpenPngContours?: () => void
   onImport: (files: File[]) => void
   onDuplicate: (id: string) => void
   onDelete: (id: string) => void
@@ -65,6 +67,17 @@ export function StickerLibraryRail({
           onClick={onOpenStickerMaker}
         >
           <Sparkles aria-hidden="true" /> {t('AI Sticker Maker')}
+        </Button>
+      )}
+      {onOpenPngContours && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mx-2 mb-2 shrink-0 whitespace-normal"
+          onClick={onOpenPngContours}
+        >
+          {t('PNG white contour')}
         </Button>
       )}
       <input

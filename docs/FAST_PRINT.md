@@ -33,11 +33,23 @@ header. Layout tiles use compact thumbnails with unchanged text sizes.
 
 Fast Print remembers the last selected printer, including a selection followed by
 Cancel, and selects it on the next launch while it remains installed. A stale
-printer hint from the Explorer command does not replace that choice. Printer
-snapshots are used only for the device that owns them; Windows defaults are not
-changed.
+printer hint from the Explorer command does not replace that choice. Each printer
+also remembers its last paper, color, orientation, quality, copy count, saved
+preset and complete driver options, including tray, duplex and vendor-specific
+settings. Closing, Cancel, printing and switching printers preserve the setup;
+reopening with different files restores it automatically. Refreshing printers
+retains valid choices. Explicit print-option commands still take precedence.
 
-Full page defaults to **Original orientation** and **Fit to frame off**.
+The per-printer records live in `%LOCALAPPDATA%\MaherTka\FastPrint\last-settings`,
+with driver snapshots encrypted for the current Windows user. Saved preset files
+and Windows printer defaults are not modified. Missing or edited presets,
+changed drivers and corrupt records are ignored instead of replaying stale
+options. File-specific page ranges, rotations and artwork are not remembered.
+ID review carries its final printer options back to the native dialog on completion
+or close. Polaroid continues to require A4, color and simplex.
+
+Full page initially defaults to **Original orientation** and **Fit to frame off**;
+a remembered explicit Portrait/Landscape choice is restored on later launches.
 For Full page, each image or PDF page retains its visible portrait/landscape
 orientation, including EXIF and PDF rotation metadata. Mixed-orientation PDFs
 carry a physical size for each prepared page through print submission. Explicit
@@ -299,7 +311,8 @@ instead of flashing blank. Confirming Print uses the same production compositor 
 settings. Closing the native dialog removes its temporary prepared sheets.
 
 **Options… > Printer properties…** opens the real vendor driver dialog for tray,
-stock, duplex, quality and finishing. Changes apply only to this print session.
+stock, duplex, quality and finishing. Changes are remembered as that printer's
+last-used options for future Fast Print windows.
 **Saved preset > Manage saved presets…** opens preset management and refreshes the
 printer list afterwards. Automatic selection uses the existing per-option and
 bypass defaults; explicit preset selections take precedence. Copies initially

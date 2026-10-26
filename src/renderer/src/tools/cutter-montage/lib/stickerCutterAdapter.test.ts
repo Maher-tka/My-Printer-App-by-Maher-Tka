@@ -42,6 +42,28 @@ const result: StickerMakerResult = {
 }
 
 const { source, piece } = createStickerCutterAssets(result, 2, [])
+const whiteBleed = createStickerCutterAssets({ ...result, preserveArtworkBleed: true }, 0, [], 3)
+assert.equal(whiteBleed.piece.clippingMaskEnabled, false, 'inset cuts retain printed white bleed')
+assert.equal(
+  whiteBleed.piece.stickerMakerOffsetMm,
+  undefined,
+  'bleed stickers do not inherit legacy auto-clipping'
+)
+assert.equal(whiteBleed.piece.artwork.transform.widthCm, result.widthMm / 10)
+assert.equal(whiteBleed.piece.cutline.customPathData, result.pathData)
+assert.equal(
+  resizeFinishedStickerWidth(whiteBleed.piece, 100).clippingMaskEnabled,
+  false,
+  'resizing preserves bleed'
+)
+const bleedBounds = getPlacedProductionBounds(
+  createPlacedPieceFromPreset(whiteBleed.piece, 0, 0),
+  whiteBleed.piece
+)
+assert.ok(
+  Math.abs(bleedBounds.widthCm - result.widthMm / 10) < 0.001,
+  'nesting reserves the full printed bleed'
+)
 assert.equal(piece.objects.find((item) => item.role === 'cutline')?.shapeType, 'path')
 assert.equal(piece.objects.find((item) => item.role === 'cutline')?.pathData, result.pathData)
 assert.equal(piece.artwork.transform.xCm, 0.2)

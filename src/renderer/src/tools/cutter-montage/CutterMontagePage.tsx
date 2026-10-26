@@ -6,6 +6,8 @@ import { ProjectFileActions } from '@/projects/ProjectFileActions'
 import { StickerLibraryRail } from './components/StickerLibraryRail'
 import { StickerQuantities } from './components/StickerQuantities'
 import { AIStickerMaker } from './components/AIStickerMaker'
+import { PngWhiteContourMaker } from './components/PngWhiteContourMaker'
+import type { PngContourImport, PngContourInput } from './lib/pngContourHandoff'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -45,12 +47,7 @@ import { getDefaultCutterExportSettings } from './lib/exportPresets'
 import { resizeFinishedStickerWidth } from './lib/stickerCutterAdapter'
 import { getCutlineInspectorState } from './lib/cutlineValidation'
 import { getProductionSheetLayoutGroups } from './lib/productionSheetGroups'
-import {
-  getPlacedSheetIndex,
-  getMarkedSheetWidth,
-  getProductionSheetCount,
-  getProductionSheetHeight
-} from './lib/productionSheets'
+import { getProductionSheetCount, getProductionSheetProjects } from './lib/productionSheets'
 import type { CutterProject } from './types'
 
 interface PendingCutterImageImport {
@@ -109,6 +106,22 @@ export function CutterMontagePage({
     [cutter.pieces]
   )
   const [stickerMakerOpen, setStickerMakerOpen] = useState(false)
+  const [pngContourOpen, setPngContourOpen] = useState(false)
+  const [pngContourClearSignal, setPngContourClearSignal] = useState(0)
+  const [pngContourState, setPngContourState] = useState({ busy: false, hasContent: false })
+  const [pngContourImport, setPngContourImport] = useState<PngContourImport | null>(null)
+  const pngContourTrigger = useRef<HTMLElement | null>(null)
+  const openPngContours = (stickers?: PngContourInput[]) => {
+    pngContourTrigger.current = stickers
+      ? document.querySelector<HTMLElement>('[data-open-png-contours]')
+      : (document.activeElement as HTMLElement | null)
+    if (stickers?.length) setPngContourImport({ id: crypto.randomUUID(), stickers })
+    setPngContourOpen(true)
+  }
+  const closePngContours = () => {
+    setPngContourOpen(false)
+    requestAnimationFrame(() => pngContourTrigger.current?.focus())
+  }
   const changeStep = (next: typeof step) => {
     setStep(next)
     setPanel(null)
@@ -146,26 +159,22 @@ export function CutterMontagePage({
   useEffect(() => {
     setPreviewSheetIndex((current) => Math.min(current, productionLayoutCount - 1))
   }, [productionLayoutCount])
-  const productionLayouts = useMemo(
-    () =>
-      productionSheetLayoutGroups.map((group, layoutIndex) => {
-        const sheetIndex = group.templateSheetIndex
+  const productionLayouts = useMemo(() => {
+    const sheets = getProductionSheetProjects({
+      sheet: cutter.sheet,
+      placedPieces: cutter.placedPieces
+    })
+    return productionSheetLayoutGroups.map((group, layoutIndex) => {
+      const sheet = sheets[group.templateSheetIndex]
 
-        return {
-          ...group,
-          layoutIndex,
-          placedPieces: cutter.placedPieces.filter(
-            (piece) => getPlacedSheetIndex(piece) === sheetIndex
-          ),
-          settings: {
-            ...cutter.sheet,
-            widthCm: getMarkedSheetWidth(cutter.placedPieces, cutter.sheet, sheetIndex),
-            heightCm: getProductionSheetHeight(cutter.placedPieces, cutter.sheet, sheetIndex)
-          }
-        }
-      }),
-    [cutter.placedPieces, cutter.sheet, productionSheetLayoutGroups]
-  )
+      return {
+        ...group,
+        layoutIndex,
+        placedPieces: sheet.placedPieces,
+        settings: sheet.sheet
+      }
+    })
+  }, [cutter.placedPieces, cutter.sheet, productionSheetLayoutGroups])
   const selectProductionSheet = useCallback(
     (layoutIndex: number, scrollIntoView = false): void => {
       const boundedIndex = Math.min(Math.max(layoutIndex, 0), productionLayoutCount - 1)
@@ -414,11 +423,24 @@ export function CutterMontagePage({
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-0 bg-transparent shadow-none">
         <ToolHeader
           title={t('Cutter Montage')}
+          backDisabled={pngContourOpen && pngContourState.busy}
           projectName={projectName}
-          backLabel={stickerMakerOpen ? t('Cutter Montage') : t('All tools')}
-          onBack={() => (stickerMakerOpen ? setStickerMakerOpen(false) : onNavigate('dashboard'))}
+          backLabel={
+            pngContourOpen
+              ? t(stickerMakerOpen ? 'AI Sticker Maker' : 'Cutter Montage')
+              : stickerMakerOpen
+                ? t('Cutter Montage')
+                : t('All tools')
+          }
+          onBack={() =>
+            pngContourOpen
+              ? closePngContours()
+              : stickerMakerOpen
+                ? setStickerMakerOpen(false)
+                : onNavigate('dashboard')
+          }
           print={{
-            disabled: stickerMakerOpen || !cutter.canExport || projectIsBusy,
+            disabled: pngContourOpen || stickerMakerOpen || !cutter.canExport || projectIsBusy,
             isBusy: cutter.printBusy,
             onPrint: () => {
               setProjectMessage(null)
@@ -428,7 +450,7 @@ export function CutterMontagePage({
             }
           }}
           exportPdf={{
-            disabled: stickerMakerOpen || !cutter.canExport || projectIsBusy,
+            disabled: pngContourOpen || stickerMakerOpen || !cutter.canExport || projectIsBusy,
             isBusy: cutter.fineCutBusy && !cutter.printBusy,
             onExport: () => {
               setProjectMessage(null)
@@ -441,23 +463,32 @@ export function CutterMontagePage({
             <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
               <ProjectFileActions
                 filePath={projectFilePath}
-                isBusy={projectIsBusy || cutter.fineCutBusy}
+                isBusy={
+                  projectIsBusy || cutter.fineCutBusy || (pngContourOpen && pngContourState.busy)
+                }
                 isDirty={isDirty}
                 message={null}
                 onNew={() => void startNewProject()}
                 onClear={() => {
+                  if (pngContourOpen) {
+                    setPngContourImport(null)
+                    setPngContourClearSignal((value) => value + 1)
+                    return
+                  }
                   cutter.clearProject(true)
                   setStep('prepare')
                   setPanel(null)
                   setProjectMessage(null)
                 }}
                 clearDisabled={
-                  stickerMakerOpen ||
-                  cutter.isPdfImportBusy ||
-                  cutter.printBusy ||
-                  (cutter.sources.length === 0 &&
-                    cutter.pieces.length === 0 &&
-                    cutter.placedPieces.length === 0)
+                  pngContourOpen
+                    ? pngContourState.busy || !pngContourState.hasContent
+                    : stickerMakerOpen ||
+                      cutter.isPdfImportBusy ||
+                      cutter.printBusy ||
+                      (cutter.sources.length === 0 &&
+                        cutter.pieces.length === 0 &&
+                        cutter.placedPieces.length === 0)
                 }
                 onOpen={() => void openProject()}
                 onSave={() => void saveProject(false)}
@@ -467,16 +498,29 @@ export function CutterMontagePage({
           }
         />
         <CardContent className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-          <div className={stickerMakerOpen ? 'flex min-h-0 flex-1' : 'hidden'}>
+          <div className={pngContourOpen ? 'flex min-h-0 flex-1' : 'hidden'}>
+            <PngWhiteContourMaker
+              active={pngContourOpen}
+              incoming={pngContourImport}
+              clearSignal={pngContourClearSignal}
+              onStateChange={setPngContourState}
+              onSend={(results, offsetMm) => {
+                cutter.addStickerResults(results, offsetMm)
+                setStep('layout')
+              }}
+            />
+          </div>
+          <div className={stickerMakerOpen && !pngContourOpen ? 'flex min-h-0 flex-1' : 'hidden'}>
             <AIStickerMaker
               onSend={(results, offsetMm) => {
                 cutter.addStickerResults(results, offsetMm)
                 setStep('layout')
               }}
               onClose={() => setStickerMakerOpen(false)}
+              onOpenPngContours={openPngContours}
             />
           </div>
-          {!stickerMakerOpen && (
+          {!stickerMakerOpen && !pngContourOpen && (
             <Tabs
               value={step}
               onValueChange={(value) => changeStep(value as typeof step)}
@@ -582,6 +626,7 @@ export function CutterMontagePage({
                   onDelete={cutter.deletePiece}
                   onManage={() => setPanel('designs')}
                   onOpenStickerMaker={() => setStickerMakerOpen(true)}
+                  onOpenPngContours={() => openPngContours()}
                   showProductionControls={step === 'layout'}
                   onQuantity={cutter.updatePieceQuantity}
                   onTargetLength={cutter.updatePieceTargetLength}

@@ -1,4 +1,4 @@
-import { isSequentialProject } from '../../../shared/sequential-validation'
+export { isPrinterProjectFile } from './projectValidation'
 import type {
   BookletPage,
   BookletSource,
@@ -303,25 +303,6 @@ function serializeHardcoverProjectState(state: HardcoverProjectState): Hardcover
   }
 
   return structuredClone({ ...state, sourcePdf })
-}
-
-export function isPrinterProjectFile(value: unknown): value is PrinterProjectFile {
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-
-  const candidate = value as Partial<PrinterProjectFile>
-
-  return (
-    candidate.schema === PRINTER_PROJECT_SCHEMA &&
-    candidate.version === PRINTER_PROJECT_VERSION &&
-    Boolean(candidate.metadata) &&
-    Boolean(candidate.payload) &&
-    (candidate.metadata?.tool === 'booklet-montage' ||
-      candidate.metadata?.tool === 'cutter-montage' ||
-      candidate.metadata?.tool === 'hardcover-cover' ||
-      (candidate.metadata?.tool === 'sequential-number' && isSequentialProject(candidate.payload)))
-  )
 }
 
 export function getSuggestedProjectFileName(jobName: string, tool: ProjectToolId): string {

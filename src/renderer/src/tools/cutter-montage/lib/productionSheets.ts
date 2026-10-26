@@ -12,14 +12,30 @@ export function getPlacedSheetIndex(piece: PlacedPiece): number {
 }
 
 export function getProductionSheetCount(placedPieces: PlacedPiece[]): number {
-  if (placedPieces.length === 0) return 1
-  return Math.max(...placedPieces.map(getPlacedSheetIndex)) + 1
+  let lastSheetIndex = 0
+  for (const piece of placedPieces)
+    lastSheetIndex = Math.max(lastSheetIndex, getPlacedSheetIndex(piece))
+  return lastSheetIndex + 1
 }
 
 export function getProductionSheetHeight(
   placedPieces: PlacedPiece[],
   settings: CutterSheetSettings,
   sheetIndex: number
+): number {
+  return getSheetHeight(
+    placedPieces.filter((piece) => getPlacedSheetIndex(piece) === sheetIndex),
+    settings,
+    sheetIndex,
+    getProductionSheetCount(placedPieces) - 1
+  )
+}
+
+function getSheetHeight(
+  pieces: PlacedPiece[],
+  settings: CutterSheetSettings,
+  sheetIndex: number,
+  finalSheetIndex: number
 ): number {
   const requestedHeightCm = Number.isFinite(settings.heightCm)
     ? settings.heightCm
@@ -28,20 +44,17 @@ export function getProductionSheetHeight(
     Math.max(requestedHeightCm, MIN_PRODUCTION_SHEET_HEIGHT_CM),
     MAX_PRODUCTION_SHEET_HEIGHT_CM
   )
-  const pieces = placedPieces.filter((piece) => getPlacedSheetIndex(piece) === sheetIndex)
-  const finalSheetIndex = getProductionSheetCount(placedPieces) - 1
 
   if (settings.lengthMode === 'fixed' || sheetIndex < finalSheetIndex) {
     return configuredHeightCm
   }
 
   if (pieces.length === 0) return Math.min(configuredHeightCm, settings.safeMarginCm * 2 + 1)
-  const usedBottom = Math.max(
-    ...pieces.map((piece) => {
-      const bounds = piece.productionBoundsCm ?? piece
-      return bounds.yCm + bounds.heightCm
-    })
-  )
+  let usedBottom = -Infinity
+  for (const piece of pieces) {
+    const bounds = piece.productionBoundsCm ?? piece
+    usedBottom = Math.max(usedBottom, bounds.yCm + bounds.heightCm)
+  }
   return Math.min(
     settings.autoExpandHeight ? MAX_PRODUCTION_SHEET_HEIGHT_CM : configuredHeightCm,
     Math.max(1, Math.ceil((usedBottom + settings.safeMarginCm) * 2) / 2)
@@ -53,14 +66,19 @@ export function getProductionArtworkWidth(
   settings: CutterSheetSettings,
   sheetIndex: number
 ): number {
-  const pieces = placedPieces.filter((piece) => getPlacedSheetIndex(piece) === sheetIndex)
-  if (pieces.length === 0) return Math.min(PRODUCTION_SHEET_WIDTH_CM, settings.safeMarginCm * 2 + 1)
-  const usedRight = Math.max(
-    ...pieces.map((piece) => {
-      const bounds = piece.productionBoundsCm ?? piece
-      return bounds.xCm + bounds.widthCm
-    })
+  return getArtworkWidth(
+    placedPieces.filter((piece) => getPlacedSheetIndex(piece) === sheetIndex),
+    settings
   )
+}
+
+function getArtworkWidth(pieces: PlacedPiece[], settings: CutterSheetSettings): number {
+  if (pieces.length === 0) return Math.min(PRODUCTION_SHEET_WIDTH_CM, settings.safeMarginCm * 2 + 1)
+  let usedRight = -Infinity
+  for (const piece of pieces) {
+    const bounds = piece.productionBoundsCm ?? piece
+    usedRight = Math.max(usedRight, bounds.xCm + bounds.widthCm)
+  }
   return Math.min(
     PRODUCTION_SHEET_WIDTH_CM,
     Math.max(1, Math.ceil((usedRight + settings.safeMarginCm) * 2) / 2)
@@ -76,6 +94,32 @@ export function getProductionSheetWidth(
 }
 
 export const getMarkedSheetWidth = getProductionSheetWidth
+
+/** Partition once when all sheets are needed, rather than scanning the job for each sheet. */
+export function getProductionSheetProjects<T extends Pick<CutterProject, 'sheet' | 'placedPieces'>>(
+  project: T
+): T[] {
+  const placementsBySheet = new Map<number, PlacedPiece[]>()
+  const sheetCount = getProductionSheetCount(project.placedPieces)
+  for (const piece of project.placedPieces) {
+    const index = getPlacedSheetIndex(piece)
+    const placements = placementsBySheet.get(index)
+    if (placements) placements.push(piece)
+    else placementsBySheet.set(index, [piece])
+  }
+  return Array.from({ length: sheetCount }, (_, sheetIndex) => {
+    const placements = placementsBySheet.get(sheetIndex) ?? []
+    return {
+      ...project,
+      sheet: {
+        ...project.sheet,
+        widthCm: getArtworkWidth(placements, project.sheet),
+        heightCm: getSheetHeight(placements, project.sheet, sheetIndex, sheetCount - 1)
+      },
+      placedPieces: placements
+    }
+  })
+}
 
 /** A standalone sheet starts at page zero, including later sheets in a job. */
 export function getSingleProductionSheetProject(

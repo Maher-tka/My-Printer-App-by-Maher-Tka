@@ -22,6 +22,6 @@ $arguments = @('/nologo','/target:winexe','/platform:x64','/optimize+','/warn:4'
   ('/r:' + (Join-Path $referenceRoot 'Facades\System.Runtime.dll')),
   ('/r:' + (Join-Path $referenceRoot 'Facades\System.Threading.Tasks.dll')),
   ('/r:' + (Join-Path $referenceRoot 'Facades\System.Runtime.InteropServices.WindowsRuntime.dll')),
-  (Join-Path $root 'src\native\FastPrint.cs'), (Join-Path $root 'src\native\FastPrintUi.cs'), (Join-Path $root 'src\native\FastPrintPresetOrder.cs'), (Join-Path $PSScriptRoot 'FastPrintDriver.cs'))
+  (Join-Path $root 'src\native\FastPrint.cs'), (Join-Path $root 'src\native\FastPrintUi.cs'), (Join-Path $root 'src\native\FastPrintPresetOrder.cs'), (Join-Path $root 'src\native\FastPrintLastSettings.cs'), (Join-Path $PSScriptRoot 'FastPrintDriver.cs'))
 & (Join-Path $framework 'csc.exe') @arguments
 if ($LASTEXITCODE -ne 0) { throw 'Native Fast Print build failed.' }
