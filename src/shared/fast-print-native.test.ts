@@ -58,6 +58,33 @@ for (const pageRotations of [
     )
   )
 const selected = { ...request, preset: { ...request.preset, sourcePages: [[0, 2, 4]] } }
+const imageJob = {
+  ...request,
+  files: ['a.png', 'b.jpg'],
+  preset: { ...request.preset, sourceCopies: [9, 1] }
+}
+assert.deepEqual(parseNativePrintRequest(JSON.stringify(imageJob)).preset.sourceCopies, [9, 1])
+for (const sourceCopies of [[], [9], [0, 1], [1000, 1], [1.5, 1], ['9', 1]])
+  assert.throws(() =>
+    parseNativePrintRequest(
+      JSON.stringify({ ...imageJob, preset: { ...imageJob.preset, sourceCopies } })
+    )
+  )
+assert.throws(
+  () =>
+    parseNativePrintRequest(
+      JSON.stringify({ ...request, preset: { ...request.preset, sourceCopies: [9] } })
+    ),
+  /Image quantities/
+)
+assert.throws(() =>
+  parseNativePrintRequest(
+    JSON.stringify({
+      ...imageJob,
+      preset: { ...imageJob.preset, mode: 'polaroid-9', pagesPerSheet: 1 }
+    })
+  )
+)
 assert.deepEqual(parseNativePrintRequest(JSON.stringify(selected)).preset.sourcePages, [[0, 2, 4]])
 for (const sourcePages of [
   null,

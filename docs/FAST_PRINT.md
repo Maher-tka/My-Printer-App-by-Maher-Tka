@@ -135,6 +135,16 @@ the same source-to-slot mapping. Rotations belong to original source pages, so
 filtering or navigating sheets does not transfer rotation to another page.
 ID and Polaroid retain their dedicated workflows.
 
+Use **Image copies** beneath the preview to place the selected image more than
+once. For example, choose **9 per sheet**, select an image, and set Image copies
+to 9 to preview nine copies on one sheet. A repeated image gets its own sheets,
+including when **Combine files on sheets** is enabled; other selected images and
+documents keep their own quantities. Larger quantities continue onto additional
+sheets, and changing the value back to 1 restores ordinary grouping. **Copies**
+beside the output totals still repeats the complete print job. Image quantities
+belong to the current selection and reset for a new Fast Print session. The
+expanded job is limited to 2,000 pages/images.
+
 Hidden checks: build `FastPrint-sheet-selection.exe` with the native build script,
 then run `npm run test:fast-print:sheet-images`. The checks exercise hidden native
 mouse/key handlers and compare rendered print proofs without hardware jobs.
@@ -524,14 +534,19 @@ manual adjustment from -180° to 180°, and Auto straighten restores the detecte
 angle. These settings are independent for each side. Camera perspective and
 partly missing corners remain approximate.
 
-Output is two pages at 300 DPI, each card **90 mm wide with proportional height**,
-measured after straightening and centered on the same physical sheet coordinates. Unlike normal document presets,
-the ID output is printed at physical page size without fitting to printer margins.
+Output is two pages at 300 DPI, with both sides **90 mm wide** and the selected
+fixed height of 55, 56 or 60 mm, centered on matching physical sheet coordinates.
+The crop is rectified to that selected size, so its original aspect ratio can
+change. Unlike normal document presets, ID output is printed at physical page
+size without fitting to printer margins.
 Paper and saved tray/stock settings remain available. Select Color or Black & white
 in the crop window; mono-only printers disable Color.
 
-Automatic long-edge duplex is the default when the printer supports it. Manual
-duplex prints the front first, pauses with a reinsertion prompt, then prints the
+Automatic long-edge duplex is the default when the printer supports it, even
+when a saved stock preset was captured as single-sided. Choosing another saved
+preset keeps the ID job's current two-sided choice; the preset still supplies the
+paper, tray and other driver options. Manual duplex prints the front first, pauses
+with a reinsertion prompt, then prints the
 back on confirmation. Canceling that prompt leaves the back unprinted. PDF/XPS
 printers save the two pages together. Submission controls prevent cancellation or
 duplicate printing while the driver is running. Physical feed direction and duplex

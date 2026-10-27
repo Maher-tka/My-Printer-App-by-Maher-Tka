@@ -9,7 +9,11 @@ import {
   type FastPrintSubmitOptions,
   type IdPrinterSelection
 } from '../../../shared/fast-print'
-import { FAST_PRINT_MAX_PAGES, needsBatchBlankBack } from '../../../shared/fast-print-batch'
+import {
+  FAST_PRINT_MAX_PAGES,
+  fastPrintGroupEnd,
+  needsBatchBlankBack
+} from '../../../shared/fast-print-batch'
 import type { IdPrintDraft } from '../../../shared/fast-print-id'
 import {
   loadPdfDocument,
@@ -62,6 +66,14 @@ async function run(): Promise<void> {
     const { preset } = batch
     if (preset.sourcePages && preset.sourcePages.length !== batch.files.length)
       throw new Error('Page selections do not match the selected files.')
+    if (
+      preset.sourceCopies &&
+      (preset.sourceCopies.length !== batch.files.length ||
+        preset.sourceCopies.some(
+          (count, index) => count > 1 && batch.files[index].extension === '.pdf'
+        ))
+    )
+      throw new Error('Image quantities do not match the selected files.')
     label('file', batch.name)
     label(
       'preset',
@@ -77,12 +89,13 @@ async function run(): Promise<void> {
     let totalSheets = 0
     for (let documentIndex = 0; documentIndex < batch.files.length; documentIndex++) {
       const source = await window.fastPrint.file(documentIndex)
-      let groupEnd = documentIndex
-      if (preset.combineFiles) groupEnd = batch.files.length - 1
-      else if (preset.combineImages && source.extension !== '.pdf') {
-        while (groupEnd + 1 < batch.files.length && batch.files[groupEnd + 1].extension !== '.pdf')
-          groupEnd++
-      }
+      const groupEnd = fastPrintGroupEnd(
+        batch.files.map((file) => file.extension),
+        documentIndex,
+        preset.combineFiles === true,
+        preset.combineImages === true,
+        preset.sourceCopies
+      )
       label(
         'file',
         batch.files.length === 1
@@ -112,8 +125,9 @@ async function run(): Promise<void> {
           const selected = preset.sourcePages?.[file]
           if (selected?.some((page) => page >= count))
             throw new Error('The selected pages no longer exist. Review the page selection.')
+          const repeats = isPdf ? 1 : (preset.sourceCopies?.[file] ?? 1)
           for (const page of selected ?? Array.from({ length: count }, (_, index) => index))
-            pages.push({ file, page })
+            for (let copy = 0; copy < repeats; copy++) pages.push({ file, page })
           if (totalPages + pages.length > FAST_PRINT_MAX_PAGES)
             throw new Error(`Fast Print supports up to ${FAST_PRINT_MAX_PAGES} pages in one job.`)
         }

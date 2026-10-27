@@ -2826,3 +2826,69 @@ Reproduce with `npm run test:sticker:png-contour`.
 - Handoff layouts were checked at 1366×768 and 1920×1080 in English light,
   French dark and Arabic RTL/low-end mode. Typecheck, sticker/handoff and i18n
   suites passed. Evidence remains in `output/png-white-contour-proof/`.
+
+## 2026-10-27 — ID automatic duplex with saved presets
+
+- ID review starts with automatic long-edge duplex on duplex-capable printers,
+  including when the selected stock preset was captured as single-sided. The
+  saved preset still supplies its paper, tray and driver settings. Selecting a
+  different preset keeps the current ID duplex choice; an explicit manual choice
+  stays available. Switching to a printer for the first time uses its capabilities;
+  returning to a printer restores its previous ID choice for that review.
+- Hidden renderer tests simulated an Epson WF-C879R and two single-sided stock
+  presets. Selecting an A3 preset kept automatic duplex, a deliberate manual
+  choice survived preset changes, and the final mocked submission contained both
+  ID pages with duplex enabled and the selected preset. No hardware jobs ran.
+- The full Fast Print suite, typecheck and production build passed. The existing
+  native/ID review workflow passed in English, French and Arabic, including two
+  settings round trips, saved preset selection, six IDs per A3 side, five copies,
+  grayscale and matching front/back centers. The local virtual printers do not
+  support duplex; this workflow checked manual fallback and production proofs.
+- All eight original ID pictures passed original and off-center ±45-degree crop
+  and 300 DPI print proofs. Inspected the crop and output contact sheet; originals
+  retained their hashes. Tests checked 90 mm widths, the selected fixed card heights
+  and centered artwork. Multi-ID front/back alignment passed the existing production
+  workflow. No changes were made to detection or artwork geometry. The existing
+  renderer rectifies each crop to the chosen 90 × 55/56/60 mm size, so the source
+  proportions change when its crop has a different aspect ratio.
+- Inspected hidden renderer captures at 1366×768 and 1920×1080, light/dark,
+  English/French/Arabic RTL and low-end mode. Existing controls, action homes,
+  labels and shared tokens are unchanged. The real workflow exercised keyboard
+  crop controls. Live screen-reader and high-DPI checks remain pending.
+- Physical Epson driver acceptance, feed direction and front/back registration
+  require a workshop print test; they were not verified by the simulated printer.
+  These changes are local and have not been published.
+
+Evidence: `output/id-auto-duplex/`, including real-photo crops and output proofs,
+`id-photo-contact.png`, `renderer/results.json`, renderer captures, and the
+native workflow results. Repeat the simulated check with
+`node scripts/verify-fast-print-id-duplex.mjs`.
+
+## 2026-10-27 — Fast Print image copies
+
+- Added **Image copies** beside the selected-image rotation control. It applies
+  to the selected image, supports 1–999 placements, and is hidden for PDFs and
+  dedicated ID/Polaroid workflows. **Copies** continues to repeat the whole job.
+  Repeated images occupy separate sheets; other files retain their own quantities.
+  The existing 2,000-page job limit applies after expanding image quantities.
+- Hidden native/production checks covered nine copies on a nine-up sheet, nine
+  copies across three four-up sheets, 13 copies across two nine-up sheets, partial
+  final sheets, mixed images and a two-page PDF, A4/A3, rotation, file combining,
+  separate job copies and the limit guard. Preview/output proofs matched; the
+  request and prepared job retained the selected image's quantity. The originals
+  were synthetic and no hardware jobs were submitted.
+- English/French/Arabic checks ran with the one-core test mode. Captures were
+  reviewed at 1366×768, 1600×900 and 1920×1080 in both themes, plus 820×640;
+  Arabic RTL, accessible names/tab stops and keyboard-based preview selection were
+  checked. Native controls, tokens, command homes and one Print action are reused.
+  Print button, job totals and the quantity control remain visible. Live desktop,
+  high-DPI and screen-reader checks remain pending.
+- Typecheck/production build, Fast Print regression tests, selected-image/rotation,
+  page-selection and combined-file regressions passed. Polaroid remains directly
+  below the printer with its existing 8 PIC and 9 PIC controls. The change is local
+  and has not been published.
+
+Evidence: `output/fast-print-image-copies/results.json`, its run folders, preview
+and prepared-output PNGs, and `verification-final.log`. Repeat with
+`node scripts/verify-fast-print-image-copies.mjs` after building
+`FastPrint-image-copies.exe` with `scripts/build-fast-print-native.ps1`.

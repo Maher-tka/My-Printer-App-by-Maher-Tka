@@ -1,5 +1,23 @@
 import type { FastPrintPreset, FastPrintPrinter, IdPrinterSelection } from './fast-print.js'
 import type { DriverPresetSummary } from './printer-preferences.js'
+import type { IdPrintDraft } from './fast-print-id.js'
+
+/** Start ID jobs in automatic duplex, unless returning to an explicit choice. */
+export function idReviewDuplex(canDuplex: boolean, previous?: boolean): boolean {
+  return canDuplex && (previous ?? true)
+}
+
+/** Restore the review choice only for its printer; a newly selected device gets its default. */
+export function initialIdReviewDuplex(
+  canDuplex: boolean,
+  printer: string,
+  draft?: Pick<IdPrintDraft, 'printer' | 'duplex'>
+): boolean {
+  return idReviewDuplex(
+    canDuplex,
+    draft && (!draft.printer || draft.printer === printer) ? draft.duplex : undefined
+  )
+}
 
 /** Apply a resolved driver snapshot without changing ID artwork or sheet settings. */
 export function selectIdDriverPreset(
@@ -23,8 +41,9 @@ export function selectIdDriverPreset(
   )
     throw new Error('This printer does not support the preset paper.')
   if (profile.color && !device.color) throw new Error('This printer does not support color.')
-  const duplex = ['Vertical', 'Horizontal'].includes(profile.duplex)
-  if (duplex && !device.duplex) throw new Error('This printer does not support automatic duplex.')
+  const profileDuplex = ['Vertical', 'Horizontal'].includes(profile.duplex)
+  if (profileDuplex && !device.duplex)
+    throw new Error('This printer does not support automatic duplex.')
   return {
     preset: {
       ...current,
@@ -33,7 +52,8 @@ export function selectIdDriverPreset(
       paper: profile.paper as 'A4' | 'A3',
       color: profile.color,
       landscape: profile.landscape,
-      duplex
+      // The ID two-sided choice belongs to the job; a stock preset may be simplex.
+      duplex: idReviewDuplex(device.duplex === true, current.duplex)
     },
     canColor: device.color,
     canDuplex: device.duplex === true

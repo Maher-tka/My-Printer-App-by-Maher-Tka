@@ -30,6 +30,7 @@ try {
   await writeFile(original, 'original artwork remains unchanged')
   const draft: IdPrintDraft = {
     version: 1,
+    printer: 'Workshop printer',
     sources: [
       {
         id: 'a'.repeat(32),

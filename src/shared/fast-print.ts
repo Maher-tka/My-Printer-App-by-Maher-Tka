@@ -31,6 +31,8 @@ export interface FastPrintPreset {
   marginMm?: number
   gapMm?: number
   sourceRotations?: number[]
+  /** Number of times to place each selected image; document pages stay unchanged. */
+  sourceCopies?: number[]
   /** Sparse overrides keyed by original file and zero-based source page. */
   pageRotations?: Array<{ file: number; page: number; turns: number }>
   /** Zero-based source page indices per file, in document order. Empty lists skip a file. */
@@ -104,6 +106,12 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
       (!Array.isArray(p.sourceRotations) ||
         p.sourceRotations.length > 1000 ||
         p.sourceRotations.some((turn) => !Number.isInteger(turn) || turn < 0 || turn > 3))) ||
+    (p.sourceCopies !== undefined &&
+      (p.mode !== undefined ||
+        !Array.isArray(p.sourceCopies) ||
+        p.sourceCopies.length < 1 ||
+        p.sourceCopies.length > 1000 ||
+        p.sourceCopies.some((count) => !Number.isInteger(count) || count < 1 || count > 999))) ||
     (p.pageRotations !== undefined &&
       (p.mode !== undefined ||
         !Array.isArray(p.pageRotations) ||
@@ -168,6 +176,7 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     ...(p.marginMm !== undefined ? { marginMm: p.marginMm } : {}),
     ...(p.gapMm !== undefined ? { gapMm: p.gapMm } : {}),
     ...(p.sourceRotations !== undefined ? { sourceRotations: [...p.sourceRotations] } : {}),
+    ...(p.sourceCopies !== undefined ? { sourceCopies: [...p.sourceCopies] } : {}),
     ...(p.pageRotations !== undefined
       ? { pageRotations: p.pageRotations.map(({ file, page, turns }) => ({ file, page, turns })) }
       : {}),

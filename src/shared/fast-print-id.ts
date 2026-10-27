@@ -36,6 +36,8 @@ export function rotateIdSide(side: IdSide, turns: 1 | 2 | 3): IdSide {
 /** Session-only artwork and edits; never a saved project or printer command. */
 export interface IdPrintDraft {
   version: 1
+  /** Printer owning the remembered two-sided choice; absent in older reviews. */
+  printer?: string
   sources: Array<{ id: string; name: string; png: string }>
   sides: [IdSide | null, IdSide | null]
   active: number

@@ -25,6 +25,10 @@ export function validateIdDraft(value: unknown): IdPrintDraft {
     ![0, 1].includes(draft.active) ||
     typeof draft.color !== 'boolean' ||
     typeof draft.duplex !== 'boolean' ||
+    (draft.printer !== undefined &&
+      (typeof draft.printer !== 'string' ||
+        !draft.printer.trim() ||
+        draft.printer.length > 1024)) ||
     (draft.idsPerSheet !== undefined &&
       (!Number.isInteger(draft.idsPerSheet) ||
         draft.idsPerSheet < 1 ||
@@ -97,6 +101,7 @@ export function validateIdDraft(value: unknown): IdPrintDraft {
   }) as IdPrintDraft['sides']
   return {
     version: 1,
+    ...(draft.printer === undefined ? {} : { printer: draft.printer }),
     sources,
     sides,
     active: draft.active,

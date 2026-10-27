@@ -6,7 +6,11 @@ import { loadIdDraft, saveIdDraft, validateIdDraft } from './fast-print-id-draft
 import { LastFastPrintPrinter } from './fast-print-last-printer.js'
 import { loadReviewedPolaroid } from './fast-print-polaroid-cache.js'
 import { MAX_IDS_PER_SHEET } from '../shared/fast-print-id.js'
-import { selectIdDriverPreset } from '../shared/fast-print-id-preset.js'
+import {
+  idReviewDuplex,
+  initialIdReviewDuplex,
+  selectIdDriverPreset
+} from '../shared/fast-print-id-preset.js'
 import {
   createFastPrintChoices,
   defaultFastPrintStock,
@@ -350,8 +354,11 @@ async function runJob(
   if (preset.mode !== 'document' && !printer.papers.includes(preset.paper))
     throw new Error(`This printer does not support ${preset.paper}.`)
   if (preset.color && !printer.color) throw new Error('This printer does not support color.')
-  if (preset.mode === 'id-card' && !preset.profileId)
-    preset = { ...preset, duplex: printer.duplex === true }
+  if (preset.mode === 'id-card')
+    preset = {
+      ...preset,
+      duplex: initialIdReviewDuplex(printer.duplex === true, preset.printer, idDraft)
+    }
   const settingsRoot =
     !app.isPackaged &&
     process.env.FAST_PRINT_NONINTERACTIVE === '1' &&
@@ -752,7 +759,7 @@ async function runJob(
       const device = available.find((item) => item.name === preset.printer)
       if (!device || profile.id !== id)
         throw new Error('The selected printer or preset is no longer available.')
-      const selection = selectIdDriverPreset(preset, profile, device)
+      const selection = selectIdDriverPreset({ ...preset, duplex: draft.duplex }, profile, device)
       authorize(event)
       await copyFile(join(candidate, name), join(jobOptions.profileDirectory, name))
       await saveIdDraft(jobOptions.profileDirectory, files, {
@@ -797,7 +804,8 @@ async function runJob(
       const device = available.find((item) => item.name === name)
       if (!device || !device.papers.some((paper) => paper === 'A4' || paper === 'A3'))
         throw new Error('The selected printer is no longer available.')
-      let next: FastPrintPreset = printerPresets.get(name) ?? {
+      const previous = printerPresets.get(name)
+      let next: FastPrintPreset = previous ?? {
         printer: name,
         paper: device.papers.includes(preset.paper)
           ? preset.paper
@@ -808,12 +816,12 @@ async function runJob(
         pagesPerSheet: 1,
         landscape: preset.landscape === true,
         color: draft.color && device.color,
-        duplex: draft.duplex && device.duplex === true
+        duplex: idReviewDuplex(device.duplex === true)
       }
       next = {
         ...next,
         color: draft.color && device.color,
-        duplex: draft.duplex && device.duplex === true
+        duplex: idReviewDuplex(device.duplex === true, previous?.duplex)
       }
       if (!device.papers.includes(next.paper))
         throw new Error(`This printer does not support ${next.paper}.`)
@@ -838,12 +846,13 @@ async function runJob(
       if (jobOptions.profileDirectory)
         await saveIdDraft(jobOptions.profileDirectory, files, {
           ...draft,
+          printer: name,
           color: next.color,
           duplex: next.duplex === true
         })
       await lastPrinter.save(name)
       authorize(event)
-      printerPresets.set(preset.printer, preset)
+      printerPresets.set(preset.printer, { ...preset, color: draft.color, duplex: draft.duplex })
       printerPresets.set(name, next)
       printer = device
       preset = next

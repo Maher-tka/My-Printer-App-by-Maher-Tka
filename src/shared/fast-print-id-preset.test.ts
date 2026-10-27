@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
-import { selectIdDriverPreset } from './fast-print-id-preset.js'
+import {
+  idReviewDuplex,
+  initialIdReviewDuplex,
+  selectIdDriverPreset
+} from './fast-print-id-preset.js'
 import type { FastPrintPreset } from './fast-print.js'
 
 const current: FastPrintPreset = {
@@ -36,8 +40,22 @@ assert.equal(
     { ...profile, duplex: 'Simplex', paper: 'A3', landscape: true },
     device
   ).preset.duplex,
+  true
+)
+assert.equal(
+  selectIdDriverPreset({ ...current, duplex: false }, profile, device).preset.duplex,
   false
 )
+assert.equal(idReviewDuplex(true), true)
+assert.equal(idReviewDuplex(true, true), true)
+assert.equal(idReviewDuplex(true, false), false)
+assert.equal(idReviewDuplex(false), false)
+assert.equal(idReviewDuplex(false, true), false)
+assert.equal(initialIdReviewDuplex(true, 'EPSON WF'), true)
+assert.equal(initialIdReviewDuplex(true, 'EPSON WF', { printer: 'EPSON WF', duplex: false }), false)
+assert.equal(initialIdReviewDuplex(true, 'EPSON WF', { printer: 'Other', duplex: false }), true)
+assert.equal(initialIdReviewDuplex(true, 'EPSON WF', { duplex: false }), false)
+assert.equal(initialIdReviewDuplex(false, 'PDF', { printer: 'PDF', duplex: true }), false)
 for (const invalid of [
   { ...profile, printer: 'another printer' },
   { ...profile, paper: 'A5' },

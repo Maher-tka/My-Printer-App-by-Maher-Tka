@@ -42,6 +42,14 @@ export function parseNativePrintRequest(text: string): NativePrintRequest {
   if (!preset.profileId || preset.mode === 'document')
     throw new Error('Missing native printer settings.')
   const files = normalizeFastPrintSelection(data.files)
+  if (
+    preset.sourceCopies &&
+    (preset.sourceCopies.length !== files.length ||
+      preset.sourceCopies.some(
+        (count, index) => count > 1 && !/\.(png|jpe?g|gif)$/i.test(files[index])
+      ))
+  )
+    throw new Error('Image quantities do not match the selected files.')
   if (preset.sourcePages && preset.sourcePages.length !== files.length)
     throw new Error('Page selections do not match the selected files.')
   if (preset.pageRotations?.some((entry) => entry.file >= files.length))

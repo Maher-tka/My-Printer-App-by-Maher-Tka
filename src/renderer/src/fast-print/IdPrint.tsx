@@ -346,6 +346,7 @@ function IdPrint({ batch }: { batch: FastPrintBatchSource }): JSX.Element {
   function reviewDraft() {
     return {
       version: 1 as const,
+      printer: preset.printer,
       sources: sources.map((item) => ({
         id: item.id,
         name: item.name,
