@@ -264,6 +264,9 @@ internal sealed class PrintWindow : Form {
   readonly string[] pageFilters, pageRanges;
   readonly CheckBox fill = new CheckBox(), sameDirection = new CheckBox{Checked=true};
   readonly CheckBox combineFiles = new CheckBox();
+  readonly CheckBox compact = new CheckBox(), actualSize = new CheckBox(), separatorLines = new CheckBox();
+  readonly Button separatorColorButton = new PrintButtonControl();
+  Color separatorColor=Color.Black;
   readonly Button rotateSelected = new PrintButtonControl();
   readonly int[] sourceRotations;
   readonly int[] sourceCopies;
@@ -287,6 +290,7 @@ internal sealed class PrintWindow : Form {
   readonly Dictionary<string,int> pageWidths=new Dictionary<string,int>(),documentPages=new Dictionary<string,int>();
   readonly LinkedList<string> pageRecency=new LinkedList<string>();
   long cachedPixels;
+  readonly Dictionary<string,SizeF> physicalSizes=new Dictionary<string,SizeF>();
   readonly SemaphoreSlim previewGate=new SemaphoreSlim(1,1);
   readonly SemaphoreSlim polaroidGate=new SemaphoreSlim(1,1);
   sealed class PolaroidSheets {internal string[] Files;internal int[] FileSheets,FileLastSheets;internal string Key;internal int Photos;}
@@ -402,6 +406,12 @@ internal sealed class PrintWindow : Form {
     ,{"No saved printer presets",new[]{"Aucun préréglage enregistré","لا توجد إعدادات طابعة محفوظة"}}
     ,{"The saved preset changed. Choose a preset again.",new[]{"Le préréglage a changé. Choisissez à nouveau un préréglage.","تغير الإعداد المحفوظ. اختر إعدادًا مرة أخرى."}}
     ,{"This preset's printer is unavailable. Install it, then refresh printers.",new[]{"L’imprimante de ce préréglage est indisponible. Installez-la, puis actualisez les imprimantes.","طابعة هذا الإعداد غير متاحة. ثبّتها ثم حدّث قائمة الطابعات."}}
+    ,{"Compact layout",new[]{"Disposition compacte","تخطيط مضغوط"}}
+    ,{"Preserve actual size",new[]{"Conserver la taille réelle","الحفاظ على الحجم الحقيقي"}}
+    ,{"Separation lines · 0.25 px",new[]{"Traits de séparation · 0,25 px","خطوط الفصل · 0.25 px"}}
+    ,{"Line color…",new[]{"Couleur des traits…","لون الخط…"}}
+    ,{"Uses PDF page size or image DPI (96 DPI when missing).",new[]{"Utilise le format PDF ou la résolution de l’image (96 ppp si absente).","يستخدم حجم صفحة PDF أو دقة الصورة (96 DPI عند غيابها)."}}
+    ,{NativeLayout.SizeError,new[]{"Les éléments en taille réelle ne tiennent pas. Réduisez le nombre par feuille, agrandissez le papier ou changez l’orientation.","العناصر بحجمها الحقيقي لا تتسع. قلّل العدد في الورقة أو اختر ورقًا أكبر أو غيّر الاتجاه."}}
   };
   string L(string key) { string[] values; return (args.Language == "ar" || args.Language == "fr") && translations.TryGetValue(key, out values) ? values[args.Language == "ar" ? 1 : 0] : key; }
   string Quantity(long value,string singular,string plural){return value+" "+L(value==1?singular:plural);}
@@ -420,7 +430,12 @@ internal sealed class PrintWindow : Form {
     if(args.Initial!=null){
       int value;
       if(args.Initial.ContainsKey("marginMm")){if(!int.TryParse(NativePrint.Text(args.Initial,"marginMm"),out value)||value<5||value>20)throw new InvalidOperationException("Invalid Fast Print margins.");marginMm=value;}
-      if(args.Initial.ContainsKey("gapMm")){if(!int.TryParse(NativePrint.Text(args.Initial,"gapMm"),out value)||value<3||value>10)throw new InvalidOperationException("Invalid Fast Print cutting gap.");gapMm=value;}
+      if(args.Initial.ContainsKey("gapMm")){if(!int.TryParse(NativePrint.Text(args.Initial,"gapMm"),out value)||value<0||value>10)throw new InvalidOperationException("Invalid Fast Print cutting gap.");gapMm=value;}
+      compact.Checked=NativePrint.Flag(args.Initial,"compact");actualSize.Checked=NativePrint.Flag(args.Initial,"preserveActualSize");separatorLines.Checked=NativePrint.Flag(args.Initial,"separatorLines");
+      if(compact.Checked&&!args.Initial.ContainsKey("gapMm"))gapMm=0;
+      string lineColor=NativePrint.Text(args.Initial,"separatorColor","#000000");
+      if(!System.Text.RegularExpressions.Regex.IsMatch(lineColor,"^#[0-9a-fA-F]{6}$"))throw new InvalidOperationException("Invalid separation line color.");
+      separatorColor=ColorTranslator.FromHtml(lineColor);
       if(args.Initial.ContainsKey("fitToFrame")){generalFill=NativePrint.Flag(args.Initial,"fitToFrame");fillEdited=true;}
       if(args.Initial.ContainsKey("combineFiles"))combineFiles.Checked=NativePrint.Flag(args.Initial,"combineFiles");
       if(args.Initial.ContainsKey("matchLayoutOrientation"))sameDirection.Checked=NativePrint.Flag(args.Initial,"matchLayoutOrientation");
@@ -477,7 +492,13 @@ internal sealed class PrintWindow : Form {
     layouts.Items.AddRange(NativeLayout.All.Select(item=>new Entry(item.count.ToString(),item.count==1?L("Full page"):item.count+" "+L("per sheet"))));
     layouts.Items.Add(new Entry("id-card",L("ID card — 9 cm")));layouts.Reload();layouts.SelectedIndex = 0;
     var layoutPanel=new PrintGlassPanel{Dock=DockStyle.Top,Height=208,ColumnCount=1,RowCount=2,Padding=new Padding(8),Margin=new Padding(8,0,0,0)};layoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute,26));layoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent,100));layoutPanel.Controls.Add(new Label{Text=L("Pages per sheet"),Font=new Font(Font,FontStyle.Bold),Dock=DockStyle.Fill,AutoEllipsis=true},0,0);
-    layouts.AccessibleName = L("Layout");layouts.Margin=Padding.Empty;layoutPanel.Controls.Add(layouts,0,1);work.Controls.Add(layoutPanel, 1, 0);work.SetRowSpan(layoutPanel,2);
+    layouts.AccessibleName = L("Layout");layouts.Margin=Padding.Empty;layoutPanel.Controls.Add(layouts,0,1);
+    var montagePanel=new PrintFlowLayoutPanel{Dock=DockStyle.Top,Height=152,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(12,8,8,8)};
+    foreach(var item in new[]{compact,actualSize,separatorLines}){item.AutoSize=true;item.Margin=new Padding(0,4,0,4);montagePanel.Controls.Add(item);}
+    compact.Text=L("Compact layout");compact.AccessibleName=compact.Text;actualSize.Text=L("Preserve actual size");actualSize.AccessibleName=actualSize.Text;separatorLines.Text=L("Separation lines · 0.25 px");separatorLines.AccessibleName=separatorLines.Text;
+    tips.SetToolTip(actualSize,L("Uses PDF page size or image DPI (96 DPI when missing)."));
+    SetButton(separatorColorButton,L("Line color…"),delegate{using(var dialog=new ColorDialog{Color=separatorColor,FullOpen=true})if(dialog.ShowDialog(this)==DialogResult.OK){separatorColor=dialog.Color;Changed();}});separatorColorButton.AccessibleName=L("Line color…");montagePanel.Controls.Add(separatorColorButton);
+    var layoutScroll=new Panel{Dock=DockStyle.Fill,AutoScroll=true,Margin=Padding.Empty};layoutScroll.Controls.Add(montagePanel);layoutScroll.Controls.Add(layoutPanel);work.Controls.Add(layoutScroll,1,0);work.SetRowSpan(layoutScroll,2);
     var navigation = new PrintFlowLayoutPanel { Dock=DockStyle.Fill,WrapContents=true,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Margin=new Padding(0,8,0,0) };
     SetButton(previous, "◀", delegate { if (sheetIndex > 0) { sheetIndex--; QueuePreview(); } }); SetButton(next, "▶", delegate { if ((sheetIndex + 1) * (Special ? 1 : PerSheet) < pageCount) { sheetIndex++; QueuePreview(); } }); previous.AccessibleName = L("Previous sheet"); next.AccessibleName = L("Next sheet"); previous.MinimumSize = next.MinimumSize = new Size(40, 28); previous.Width = next.Width = 40;
     count.AutoSize = true; count.Margin = new Padding(8); navigation.Controls.Add(count); navigation.Controls.Add(previous); navigation.Controls.Add(next); work.Controls.Add(navigation, 0, 1); root.Controls.Add(work, 0, 2);
@@ -496,7 +517,7 @@ internal sealed class PrintWindow : Form {
     var margins=new ToolStripMenuItem(L("Margins"));menu.Items.Add(margins);
     foreach(int size in new[]{5,7,10,15,20}){int selectedSize=size;var item=new ToolStripMenuItem(size+" mm");item.Click+=delegate{marginMm=selectedSize;Changed();};margins.DropDownItems.Add(item);}
     var gaps=new ToolStripMenuItem(L("Cutting gap"));menu.Items.Add(gaps);
-    foreach(int size in new[]{3,5,8,10}){int selectedSize=size;var item=new ToolStripMenuItem(size+" mm");item.Click+=delegate{gapMm=selectedSize;Changed();};gaps.DropDownItems.Add(item);}
+    foreach(int size in new[]{0,1,2,3,5,8,10}){int selectedSize=size;var item=new ToolStripMenuItem(size+" mm");item.Click+=delegate{gapMm=selectedSize;Changed();};gaps.DropDownItems.Add(item);}
     menu.Opening+=delegate{rotateAll.Enabled=margins.Enabled=gaps.Enabled=settingsReady&&!Special;foreach(ToolStripMenuItem item in rotateAll.DropDownItems)item.Checked=sourceRotations.All(turn=>item.Text==(turn*90)+"°")&&pageRotations.Values.All(turn=>item.Text==(turn*90)+"°");foreach(ToolStripMenuItem item in margins.DropDownItems)item.Checked=item.Text==marginMm+" mm";foreach(ToolStripMenuItem item in gaps.DropDownItems)item.Checked=item.Text==gapMm+" mm";};
     menu.Items.Add(L("Light appearance"),null,delegate{PrintTheme.Initialize(false);PrintTheme.Apply(this);});
     menu.Items.Add(L("Dark appearance"),null,delegate{PrintTheme.Initialize(true);PrintTheme.Apply(this);});
@@ -522,6 +543,9 @@ internal sealed class PrintWindow : Form {
     orientation.SelectedIndexChanged += delegate { if (!updating) Changed(); }; fill.CheckedChanged += delegate { if (!updating) {if(!Special){generalFill=fill.Checked;fillEdited=true;}Changed();} };
     combineFiles.CheckedChanged+=delegate{if(!updating){sheetIndex=0;Changed();}};
     sameDirection.CheckedChanged+=delegate{if(!updating)Changed();};
+    compact.CheckedChanged+=delegate{if(!updating){if(compact.Checked)gapMm=0;Changed();}};
+    actualSize.CheckedChanged+=delegate{if(!updating){updating=true;fill.Checked=actualSize.Checked?false:generalFill;updating=false;Changed();}};
+    separatorLines.CheckedChanged+=delegate{if(!updating)Changed();};
     pageFilter.SelectedIndexChanged+=delegate{if(!updating){pageFilters[fileList.SelectedIndex]=Selected(pageFilter);SyncPageControls();sheetIndex=0;QueuePreview();}};
     pageRange.TextChanged+=delegate{if(!updating){pageRanges[fileList.SelectedIndex]=pageRange.Text;sheetIndex=0;QueuePreview();}};
     layouts.SelectedIndexChanged += delegate { if (!updating) {mode = SelectedLayout == "id-card" ? "id-card" : ""; if(!Special){updating=true;fill.Checked=generalFill;orientation.SelectedIndex=0;updating=false;}sheetIndex = 0; ApplyAutomaticProfile(); Changed(); } };
@@ -791,7 +815,8 @@ internal sealed class PrintWindow : Form {
     if(appliedProfile!="invalid"){
       if(!IsImage(args.Files[item.Source]))status.Text+=" · "+L("page")+" "+(item.Page+1);
       float physicalWidth=Selected(paper)=="A3"?(Landscape?420:297):(Landscape?297:210);
-      status.Text+=" · "+L("Slot size")+": "+(item.Bounds.Width*physicalWidth/preview.Sheet.Width).ToString("0.0",CultureInfo.InvariantCulture)+" × "+(item.Bounds.Height*physicalWidth/preview.Sheet.Width).ToString("0.0",CultureInfo.InvariantCulture)+" mm · "+L("Rotation")+": "+(item.Turns*90)+"°";
+      float physicalHeight=Selected(paper)=="A3"?(Landscape?297:420):(Landscape?210:297);
+      status.Text+=" · "+L("Slot size")+": "+(item.Bounds.Width*physicalWidth/preview.Sheet.Width).ToString("0.0",CultureInfo.InvariantCulture)+" × "+(item.Bounds.Height*physicalHeight/preview.Sheet.Height).ToString("0.0",CultureInfo.InvariantCulture)+" mm · "+L("Rotation")+": "+(item.Turns*90)+"°";
     }
     tips.SetToolTip(status,status.Text);
   }
@@ -802,13 +827,18 @@ internal sealed class PrintWindow : Form {
       if(!fillEdited){generalFill=PerSheet>1&&args.Files.All(IsImage);fill.Checked=generalFill;}
       orientationLayout=PerSheet;updating=false;
     }else if(Special)orientationLayout=0;
+    if(!Special&&actualSize.Checked&&fill.Checked){updating=true;fill.Checked=false;updating=false;}
     bool compatible = settingsReady && settings != null && canColor && paper.Items.Cast<Entry>().Any(e => e.Id == "A4");
+    compact.Enabled=actualSize.Enabled=separatorLines.Enabled=settingsReady&&!Special;
+    separatorColorButton.Enabled=settingsReady&&!Special&&separatorLines.Checked;
+    separatorColorButton.Text=L("Line color…")+" "+ColorTranslator.ToHtml(separatorColor);
     polaroid8.Enabled = polaroid9.Enabled = compatible; paper.Enabled = color.Enabled = settingsReady&&!IsPolaroid; orientation.Enabled = settingsReady&&!Special; fill.Enabled = rotateSelected.Enabled = sameDirection.Enabled = settingsReady&&!Special;sameDirection.Visible=!Special&&PerSheet>1;combineFiles.Visible=!Special&&args.Files.Count>1;combineFiles.Enabled=settingsReady&&!Special;
     ((PrintButtonControl)polaroid8).Selected=mode=="polaroid-8";((PrintButtonControl)polaroid9).Selected=mode=="polaroid-9";
+    fill.Enabled=settingsReady&&!Special&&!actualSize.Checked;
     if(IsPolaroid){updating=true;SetOrientation(mode=="polaroid-8");updating=false;}
     print.Text = mode == "id-card" ? L("Review ID…") : L("Print"); QueuePreview();
   }
-  async void QueuePreview() { int request=rendering+1;try { await RenderPreview(); } catch (Exception error) { if (!closing&&request==rendering) { status.Text = error.Message;preview.Busy(error.Message);print.Enabled = false; } } }
+  async void QueuePreview() { int request=rendering+1;try { await RenderPreview(); } catch (Exception error) { if (!closing&&request==rendering) { status.Text = L(error.Message);preview.Busy(status.Text);print.Enabled = false; } } }
   Task<string> PreparedFile(string path) {
     string version=SourceVersion(path);
     Task<string> existing;
@@ -1004,6 +1034,22 @@ internal sealed class PrintWindow : Form {
     }
   }
   bool IsImage(string path){string extension=Path.GetExtension(path).ToLowerInvariant();return extension!=".pdf"&&extension!=".docx";}
+  async Task<SizeF> PhysicalSize(int file,int page){
+    string path=args.Files[file],key=SourceVersion(path)+":"+page;SizeF size;
+    if(physicalSizes.TryGetValue(key,out size))return size;
+    if(IsImage(path))size=await Task.Run(()=>{
+      using(var image=Image.FromFile(path)){
+        bool storedDpi=(image.Flags&(int)ImageFlags.HasRealDpi)!=0;
+        float dx=storedDpi?image.HorizontalResolution:96,dy=storedDpi?image.VerticalResolution:96;if(float.IsNaN(dx)||float.IsInfinity(dx)||dx<=0)dx=96;if(float.IsNaN(dy)||float.IsInfinity(dy)||dy<=0)dy=96;
+        float w=image.Width*25.4f/dx,h=image.Height*25.4f/dy;
+        int orientation=image.PropertyIdList.Contains(0x112)?image.GetPropertyItem(0x112).Value[0]:1;
+        return orientation>=5&&orientation<=8?new SizeF(h,w):new SizeF(w,h);
+      }
+    });
+    else{var document=await CachedPdfDocument(await PreparedFile(path));using(var sourcePage=document.GetPage((uint)page))size=new SizeF((float)(sourcePage.Size.Width*25.4/96),(float)(sourcePage.Size.Height*25.4/96));}
+    physicalSizes[key]=size;return size;
+  }
+  string SeparatorHex {get{return "#"+separatorColor.R.ToString("X2")+separatorColor.G.ToString("X2")+separatorColor.B.ToString("X2");}}
   void ImageRange(int index,out int start,out int end){start=end=index;if(Special||sourceCopies[index]>1)return;if(!combineFiles.Checked&&!IsImage(args.Files[index]))return;while(start>0&&sourceCopies[start-1]==1&&(combineFiles.Checked||IsImage(args.Files[start-1])))start--;while(end+1<args.Files.Count&&sourceCopies[end+1]==1&&(combineFiles.Checked||IsImage(args.Files[end+1])))end++;}
   string SourceVersion(string path){var file=new FileInfo(path);if(!file.Exists)throw new FileNotFoundException(L("The selected file is missing.")+" "+file.Name,path);if(file.Length==0||file.Length>512L*1024*1024)throw new InvalidOperationException(L("Choose a non-empty file smaller than 512 MB.")+" "+file.Name);return file.FullName+":"+file.Length+":"+file.LastWriteTimeUtc.Ticks;}
   string SourceVersion(){return string.Join("|",args.Files.Select(SourceVersion));}
@@ -1078,7 +1124,7 @@ internal sealed class PrintWindow : Form {
   }
   string PreviewKey(string sources){
     int selectedPage=preview.SelectedItem>=0&&preview.SelectedItem<preview.Items.Length?preview.Items[preview.SelectedItem].Page:-1;
-    return PageSelectionKey()+"|"+sources+"|"+Selected(printer)+"|"+Selected(paper)+"|"+Selected(color)+"|"+Selected(orientation)+"|"+PerSheet+"|"+fileList.SelectedIndex+"|"+selectedPage+"|"+sheetIndex+"|"+preview.ClientSize+"|"+fill.Checked+"|"+sameDirection.Checked+"|"+combineFiles.Checked+"|"+marginMm+"|"+gapMm+"|"+RotationKey()+"|"+appliedProfile+"|"+profileError;
+    return PageSelectionKey()+"|"+sources+"|"+Selected(printer)+"|"+Selected(paper)+"|"+Selected(color)+"|"+Selected(orientation)+"|"+PerSheet+"|"+fileList.SelectedIndex+"|"+selectedPage+"|"+sheetIndex+"|"+preview.ClientSize+"|"+fill.Checked+"|"+sameDirection.Checked+"|"+combineFiles.Checked+"|"+marginMm+"|"+gapMm+"|"+compact.Checked+"|"+actualSize.Checked+"|"+separatorLines.Checked+"|"+SeparatorHex+"|"+RotationKey()+"|"+appliedProfile+"|"+profileError;
   }
   async Task RenderPreview() {
     int generation=++rendering;print.Enabled=false;preview.Interactive=false;preview.Invalidate();
@@ -1134,24 +1180,45 @@ internal sealed class PrintWindow : Form {
         float physicalWidth=Selected(paper)=="A3"?(Landscape?420:297):(Landscape?297:210);
         float gap=Special?0:w*(float)gapMm/physicalWidth,margin=Special?0:w*(float)marginMm/physicalWidth;
         int occupied=Math.Min(per,pages-sheetIndex*per);
+        RectangleF[] montageCells=null;int[] montageTurns=null;
+        if(!Special&&(compact.Checked||actualSize.Checked)){
+          var sizes=new SizeF[occupied];montageTurns=new int[occupied];
+          for(int slot=0;slot<occupied;slot++){
+            var reference=refs[sheetIndex*per+slot];var regular=grid.Cell(slot,occupied,w,h,margin,gap);
+            using(var image=await Page(await PreparedFile(args.Files[reference.Item1]),reference.Item2,decodeWidth)){
+              int turns=NativeLayout.ContentTurns(per,sameDirection.Checked,image.Width,image.Height,regular.Width,regular.Height,PageTurns(reference.Item1,reference.Item2));montageTurns[slot]=turns;
+              var size=actualSize.Checked?await PhysicalSize(reference.Item1,reference.Item2):new SizeF(image.Width,image.Height);
+              if(turns%2==1)size=new SizeF(size.Height,size.Width);
+              if(actualSize.Checked){float physicalHeight=Selected(paper)=="A3"?(Landscape?297:420):(Landscape?210:297);size=new SizeF(size.Width*w/physicalWidth,size.Height*h/physicalHeight);}
+              sizes[slot]=size;
+            }
+            if(generation!=rendering||closing)return;
+          }
+          montageCells=grid.MontageCells(sizes,w,h,margin,gap,compact.Checked,actualSize.Checked,fill.Checked);
+        }
         for (int slot = 0; slot < per && sheetIndex * per + slot < pages; slot++) {
           int number = sheetIndex * per + slot;
           int sourceIndex=Special?fileList.SelectedIndex:refs[number].Item1;
           using (var image = Special?(number==0?new Bitmap(first):await Page(path,number,decodeWidth)):await Page(await PreparedFile(args.Files[sourceIndex]),refs[number].Item2,decodeWidth)) {
             if (generation != rendering || closing) return;
-            var cell=grid.Cell(slot,occupied,w,h,margin,gap);float cw=cell.Width,ch=cell.Height;
-            int turns=Special?0:NativeLayout.ContentTurns(per,sameDirection.Checked,image.Width,image.Height,cw,ch,PageTurns(sourceIndex,refs[number].Item2));
+            var cell=montageCells==null?grid.Cell(slot,occupied,w,h,margin,gap):montageCells[slot];float cw=cell.Width,ch=cell.Height;
+            int turns=Special?0:montageTurns!=null?montageTurns[slot]:NativeLayout.ContentTurns(per,sameDirection.Checked,image.Width,image.Height,cw,ch,PageTurns(sourceIndex,refs[number].Item2));
             if(!Special)previewItems.Add(new PreviewSurface.Item{Bounds=cell,Source=sourceIndex,Page=refs[number].Item2,Turns=turns,Name=Path.GetFileName(args.Files[sourceIndex])+" · "+(refs[number].Item2+1)});
             if(turns!=0)image.RotateFlip(turns==1?RotateFlipType.Rotate90FlipNone:turns==2?RotateFlipType.Rotate180FlipNone:RotateFlipType.Rotate270FlipNone);
             float scale = fill.Checked && !Special ? Math.Max(cw / image.Width, ch / image.Height) : Math.Min(cw / image.Width, ch / image.Height);
             var state = g.Save(); g.SetClip(cell);
             var target = new RectangleF(cell.X + (cw - image.Width * scale) / 2, cell.Y + (ch - image.Height * scale) / 2, image.Width * scale, image.Height * scale);
+            if(!Special&&actualSize.Checked)target=cell;
             using (var attributes = new ImageAttributes()) {
               if (Selected(color) == "mono") attributes.SetColorMatrix(new ColorMatrix(new float[][] { new[]{.2126f,.2126f,.2126f,0,0},new[]{.7152f,.7152f,.7152f,0,0},new[]{.0722f,.0722f,.0722f,0,0},new[]{0f,0,0,1,0},new[]{0f,0,0,0,1} }));
               g.DrawImage(image, Rectangle.Round(target), 0, 0, image.Width, image.Height, GraphicsUnit.Pixel, attributes);
             }
             g.Restore(state);
           }
+        }
+        if(!Special&&separatorLines.Checked){
+          var lineColor=separatorColor;if(Selected(color)=="mono"){int gray=(int)Math.Round(.2126*lineColor.R+.7152*lineColor.G+.0722*lineColor.B);lineColor=Color.FromArgb(gray,gray,gray);}
+          NativeLayout.DrawSeparators(g,montageCells??Enumerable.Range(0,occupied).Select(slot=>grid.Cell(slot,occupied,w,h,margin,gap)).ToArray(),lineColor,.25f*25.4f/96*w/physicalWidth);
         }
       }
       if(SourceVersion()!=sources)throw new InvalidOperationException(L("Files changed while preparing. Refresh the preview."));
@@ -1230,6 +1297,13 @@ internal sealed class PrintWindow : Form {
     // Grayscale is rendered into the artwork even when a color-only driver resets dmColor.
     var preset = new Dictionary<string, object> { {"printer",Selected(printer)},{"paper",Selected(paper)},{"color",outputColor},{"pagesPerSheet",Special?1:PerSheet},{"profileId",id},{"landscape",Landscape},{"duplex",canDuplex && (settings.PrinterSettings.Duplex == Duplex.Vertical || settings.PrinterSettings.Duplex == Duplex.Horizontal)},{"fitToFrame",fill.Checked && !Special},{"combineImages",!Special} }; if (Special) preset["mode"]=mode; else {preset["combineFiles"]=combineFiles.Checked;preset["marginMm"]=marginMm;preset["gapMm"]=gapMm;preset["sourceRotations"]=sourceRotations;preset["autoOrientation"]=SourceOrientation;preset["matchLayoutOrientation"]=sameDirection.Checked&&PerSheet>1;}
     if(!Special){
+      preset["compact"]=compact.Checked;preset["preserveActualSize"]=actualSize.Checked;preset["separatorLines"]=separatorLines.Checked;preset["separatorColor"]=SeparatorHex;
+      if(actualSize.Checked){
+        var imageSizes=new object[args.Files.Count];
+        for(int file=0;file<args.Files.Count;file++)if(IsImage(args.Files[file])){var size=await PhysicalSize(file,0);imageSizes[file]=new{widthMm=size.Width,heightMm=size.Height};}
+        preset["imageSizesMm"]=imageSizes;
+        preset["fitToFrame"]=false;
+      }
       preset["pageRotations"]=pageRotations.OrderBy(item=>item.Key.Item1).ThenBy(item=>item.Key.Item2).Select(item=>new{file=item.Key.Item1,page=item.Key.Item2,turns=item.Value}).ToArray();
       var selected=SelectedPageMap(await Inventory());if(!selected.Any(pages=>pages.Length>0))throw new InvalidOperationException(L("Select at least one page to print."));preset["sourcePages"]=selected;
       ExpandedPageMap(await Inventory());preset["sourceCopies"]=sourceCopies.ToArray();
@@ -1590,6 +1664,7 @@ internal sealed class PrintWindow : Form {
     }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
   }
   internal async Task VerifyDirection(){
+    if(Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_MONTAGE")=="1"){await VerifyMontage();return;}
     if(Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_UI")=="1"){await VerifyFastPrintUi();return;}
     if(Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_WINDOW_SIZE")=="1"){await VerifyInitialWindowSize();return;}
     if(Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PAGE_ROTATION")=="1"){await VerifyPageRotation();return;}
@@ -1614,6 +1689,45 @@ internal sealed class PrintWindow : Form {
       foreach(var size in new[]{new Size(1366,768),new Size(1920,1080),new Size(1600,900),new Size(820,640)}){Size=size;sheetIndex=0;fileList.SelectedIndex=0;await RenderPreview();NativePrint.Capture(this,Path.Combine(args.Verify,"native-"+Width+"x"+Height+".png"));}
       layouts.SelectedIndex=0;await PresetReady();AuditCheck(SourceOrientation&&!fill.Checked,"Returning to one-up must restore original direction and complete-photo fit.");
       File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,reports=reports,manualRotationEnabled=true,oneUpOriginalRestored=true,cleanupDirectory=session}),new UTF8Encoding(false));
+    }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
+  }
+  internal async Task VerifyMontage(){
+    Directory.CreateDirectory(args.Verify);
+    try{
+      await LoadPrinters();await PresetReady();
+      var surface=Controls[0];surface.Dock=DockStyle.None;surface.Location=Point.Empty;surface.Size=new Size(1366,768);
+      var reports=new List<object>();var captures=new List<object>();
+      updating=true;layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id=="9");SetOrientation(false);combineFiles.Checked=true;sameDirection.Checked=false;compact.Checked=true;actualSize.Checked=true;separatorLines.Checked=true;separatorColor=Color.FromArgb(224,32,128);gapMm=0;fill.Checked=true;fillEdited=true;updating=false;Changed();await PresetReady();
+      AuditCheck(!fill.Enabled,"Actual size must disable cropping.");
+      foreach(string stock in new[]{"A4","A3"})foreach(bool mono in new[]{false,true}){
+        updating=true;paper.SelectedIndex=paper.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==stock);color.SelectedIndex=mono?color.Items.Count-1:0;sheetIndex=0;fileList.SelectedIndex=0;updating=false;Changed();await PresetReady();
+        string name=stock+(mono?"-mono":"-color"),folder=Path.Combine(args.Verify,name);Directory.CreateDirectory(folder);var sheets=new List<string>();var bounds=new List<object>();
+        int total=(pageCount+PerSheet-1)/PerSheet;
+        for(int sheet=0;sheet<total;sheet++){
+          sheetIndex=sheet;await RenderPreview();await PresetReady();string file=Path.Combine(folder,"sheet-"+sheet+".png");preview.Sheet.Save(file,ImageFormat.Png);sheets.Add(file);
+          foreach(var item in preview.Items){var size=await PhysicalSize(item.Source,item.Page);float expectedWidth=item.Turns%2==0?size.Width:size.Height,expectedHeight=item.Turns%2==0?size.Height:size.Width;float width=item.Bounds.Width*(stock=="A4"?210:297)/preview.Sheet.Width,height=item.Bounds.Height*(stock=="A4"?297:420)/preview.Sheet.Height;AuditCheck(Math.Abs(width-expectedWidth)<.01&&Math.Abs(height-expectedHeight)<.01,"Actual dimensions changed in preview.");bounds.Add(new{file=item.Source,page=item.Page,widthMm=width,heightMm=height,turns=item.Turns});}
+        }
+        string request=await Request(Path.Combine(Path.GetTempPath(),"maher-fast-print-native",Guid.NewGuid().ToString("N")));
+        reports.Add(new{name=name,request=request,sheets=sheets,bounds=bounds});
+      }
+      updating=true;paper.SelectedIndex=paper.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id=="A4");color.SelectedIndex=0;sheetIndex=0;fileList.SelectedIndex=0;pageRotations[Tuple.Create(0,0)]=1;updating=false;Changed();await PresetReady();
+      var rotationFolder=Path.Combine(args.Verify,"rotation");Directory.CreateDirectory(rotationFolder);preview.Sheet.Save(Path.Combine(rotationFolder,"sheet-0.png"),ImageFormat.Png);string rotatedRequest=await Request(Path.Combine(Path.GetTempPath(),"maher-fast-print-native",Guid.NewGuid().ToString("N")));
+      AuditCheck(preview.Items[0].Turns==1,"Manual rotation was lost.");
+      // Fixed grid cells cannot contain a rotated 85 mm badge. Compact packing can.
+      updating=true;compact.Checked=false;updating=false;bool rejected=false;try{await RenderPreview();}catch(InvalidOperationException error){rejected=error.Message==NativeLayout.SizeError;}
+      AuditCheck(rejected&&!print.Enabled,"An oversized actual-size layout enabled Print.");
+      updating=true;compact.Checked=true;pageRotations.Clear();updating=false;Changed();await PresetReady();
+      foreach(bool dark in new[]{false,true}){PrintTheme.Initialize(dark);PrintTheme.Apply(this);foreach(var size in new[]{new Size(1366,768),new Size(1600,900),new Size(1920,1080),new Size(820,640)}){
+        surface.Size=size;NativePrint.CaptureLayout(surface);await RenderPreview();await PresetReady();
+        foreach(var control in new Control[]{compact,actualSize,separatorLines,separatorColorButton}){AuditCheck(control.TabStop&&control.AccessibleName.Length>0,"Montage option is not keyboard accessible.");AuditCheck(control.Parent.ClientRectangle.Contains(control.Bounds),"Montage option is clipped.");}
+        var scroll=compact.Parent.Parent as ScrollableControl;AuditCheck(scroll!=null&&scroll.AutoScroll,"Montage options do not scroll in small windows.");
+        string name=(dark?"dark":"light")+"-"+size.Width+"x"+size.Height;NativePrint.CaptureContent(surface,Path.Combine(args.Verify,name+".png"));captures.Add(new{dark=dark,width=size.Width,height=size.Height});
+      }}
+      updating=true;actualSize.Checked=false;fill.Checked=false;generalFill=false;sheetIndex=0;fileList.SelectedIndex=0;updating=false;Changed();await PresetReady();
+      var fittedFolder=Path.Combine(args.Verify,"compact-fit");Directory.CreateDirectory(fittedFolder);preview.Sheet.Save(Path.Combine(fittedFolder,"sheet-0.png"),ImageFormat.Png);string fittedRequest=await Request(Path.Combine(Path.GetTempPath(),"maher-fast-print-native",Guid.NewGuid().ToString("N")));
+      AuditCheck(fill.Enabled,"Leaving actual size did not restore Fit to frame.");
+      layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id=="id-card");await PresetReady();AuditCheck(!compact.Enabled&&!actualSize.Enabled&&!separatorLines.Enabled,"Montage settings leaked into ID mode.");
+      File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,reports=reports,captures=captures,rotatedRequest=rotatedRequest,fittedRequest=fittedRequest,rejectedOversize=true,actualSizeDisablesCrop=true,specialModesIsolated=true,cleanupDirectory=session}),new UTF8Encoding(false));
     }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
   }
   internal async Task VerifyInitialWindowSize(){

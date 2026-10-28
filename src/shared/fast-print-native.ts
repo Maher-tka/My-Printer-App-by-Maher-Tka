@@ -52,6 +52,13 @@ export function parseNativePrintRequest(text: string): NativePrintRequest {
     throw new Error('Image quantities do not match the selected files.')
   if (preset.sourcePages && preset.sourcePages.length !== files.length)
     throw new Error('Page selections do not match the selected files.')
+  if (preset.imageSizesMm && preset.imageSizesMm.length !== files.length)
+    throw new Error('Image dimensions do not match the selected files.')
+  if (
+    preset.preserveActualSize &&
+    files.some((file, index) => !/\.pdf$/i.test(file) && !preset.imageSizesMm?.[index])
+  )
+    throw new Error('Actual-size images require their original physical dimensions.')
   if (preset.pageRotations?.some((entry) => entry.file >= files.length))
     throw new Error('Page rotations do not match the selected files.')
   return {

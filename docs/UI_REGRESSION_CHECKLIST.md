@@ -3016,3 +3016,34 @@ the native/production proof runs and test logs. Repeat the focused proof with
   published. Evidence: `output/fast-print-window-size/`,
   `output/fast-print-window-size-id-contact.png`,
   `output/fast-print-window-size-polaroid-contact.png` and related test logs.
+
+## 2026-10-28 — Compact Fast Print montage
+
+- Added Compact layout, Preserve actual size, and optional 0.25 px separation
+  outlines with a color picker below the existing layout selector. Compact
+  packing retains source order and the selected pages-per-sheet count, starts
+  with zero gap, and centers incomplete sheets. Cutting gap now offers 0, 1,
+  and 2 mm as well as the existing choices.
+- Actual size uses PDF dimensions and image DPI with EXIF orientation. Missing
+  image DPI uses 96. Fit to frame is disabled and unchecked; oversized layouts
+  raise an error instead of resizing the artwork. Shared cut edges are stroked
+  once and monochrome output converts the chosen line color to grayscale.
+- Hidden native proofs passed at 1366×768, 1600×900, 1920×1080 and 820×640 in
+  light/dark, English/French/Arabic RTL, with one-core mode. Checked names,
+  keyboard tab availability, scrolling, and disabled states. Inspected preview
+  and production proofs; actual high-DPI and screen-reader testing remain
+  pending.
+- Prepared A4/A3 color and monochrome output matched native previews for a
+  mixed 14-page job over two sheets. PDF badges retained 55×85 mm, including
+  PDF intrinsic rotation, manual page rotation, image DPI, EXIF orientation,
+  and missing-DPI fixtures. Compact fitting without actual size also matched.
+  Original hashes stayed unchanged and no hardware jobs were sent.
+- Typecheck, production build, native compilation, Fast Print/i18n suites,
+  existing native UI/paint checks and page rotation renderer comparisons passed.
+  ID and Polaroid geometry was not changed. Hardware measurement remains
+  pending. The implementation and helper are local; no subscriber release was
+  published.
+
+Repeat with `npm run build` then `npm run test:fast-print:montage`. Evidence:
+`output/fast-print-montage/fc3d8763-d326-4eb4-9a03-bb2b65ad6799/`.
+Usage: [FAST_PRINT_MONTAGE.md](FAST_PRINT_MONTAGE.md).

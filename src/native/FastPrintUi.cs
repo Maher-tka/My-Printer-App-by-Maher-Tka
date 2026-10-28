@@ -25,6 +25,41 @@ internal sealed class NativeLayout {
   internal static NativeLayout Find(int count){return All.FirstOrDefault(item=>item.count==count)??All[0];}
   internal static NativeLayout ForSheet(int count,bool landscape){var grid=Find(count);return count>1&&grid.landscape!=landscape?new NativeLayout{count=count,columns=grid.rows,rows=grid.columns,landscape=landscape}:grid;}
   internal static int ContentTurns(int count,bool align,int width,int height,float cellWidth,float cellHeight,int manual){return ((count>1&&align&&width!=height&&(width>height)!=(cellWidth>cellHeight)?1:0)+manual)%4;}
+  internal const string SizeError="Actual-size items do not fit. Choose fewer pages per sheet, a larger paper, or another orientation.";
+  internal RectangleF[] MontageCells(SizeF[] sizes,float width,float height,float margin,float gap,bool compact,bool actual,bool fill){
+    var cells=new RectangleF[sizes.Length];
+    for(int slot=0;slot<sizes.Length;slot++){
+      var cell=Cell(slot,sizes.Length,width,height,margin,gap);var size=sizes[slot];
+      if(!compact&&!actual){cells[slot]=cell;continue;}
+      float scale=actual?1:fill?Math.Max(cell.Width/size.Width,cell.Height/size.Height):Math.Min(cell.Width/size.Width,cell.Height/size.Height);
+      float w=fill&&!actual?cell.Width:size.Width*scale,h=fill&&!actual?cell.Height:size.Height*scale;
+      if(!compact&&(w>cell.Width+.001f||h>cell.Height+.001f))throw new InvalidOperationException(SizeError);
+      cells[slot]=new RectangleF(cell.X+(cell.Width-w)/2,cell.Y+(cell.Height-h)/2,w,h);
+    }
+    if(!compact)return cells;
+    int usedRows=(sizes.Length+columns-1)/columns;var widths=new float[usedRows];var heights=new float[usedRows];
+    for(int slot=0;slot<cells.Length;slot++){int row=slot/columns;widths[row]+=cells[slot].Width+(slot%columns==0?0:gap);heights[row]=Math.Max(heights[row],cells[slot].Height);}
+    float totalHeight=heights.Sum()+Math.Max(0,usedRows-1)*gap;
+    if(widths.Max()>width-2*margin+.001f||totalHeight>height-2*margin+.001f)throw new InvalidOperationException(SizeError);
+    float y=(height-totalHeight)/2;
+    for(int row=0;row<usedRows;row++){float x=(width-widths[row])/2;for(int slot=row*columns;slot<Math.Min(cells.Length,(row+1)*columns);slot++){var cell=cells[slot];cells[slot]=new RectangleF(x,y+(heights[row]-cell.Height)/2,cell.Width,cell.Height);x+=cell.Width+gap;}y+=heights[row]+gap;}
+    return cells;
+  }
+  internal static void DrawSeparators(Graphics graphics,RectangleF[] cells,Color color,float pixelWidth){
+    var groups=new Dictionary<string,List<float[]>>();
+    foreach(var cell in cells)foreach(var edge in new[]{new[]{0f,cell.Top,cell.Left,cell.Right},new[]{0f,cell.Bottom,cell.Left,cell.Right},new[]{1f,cell.Left,cell.Top,cell.Bottom},new[]{1f,cell.Right,cell.Top,cell.Bottom}}){
+      string key=edge[0]+":"+edge[1].ToString("F4",System.Globalization.CultureInfo.InvariantCulture);List<float[]> spans;if(!groups.TryGetValue(key,out spans)){spans=new List<float[]>();groups[key]=spans;}spans.Add(edge);
+    }
+    graphics.SmoothingMode=SmoothingMode.AntiAlias;
+    using(var pen=new Pen(color,pixelWidth))foreach(var group in groups.Values){
+      var sorted=group.OrderBy(edge=>edge[2]).ToArray();var current=(float[])sorted[0].Clone();
+      for(int index=1;index<=sorted.Length;index++){
+        if(index<sorted.Length&&sorted[index][2]<=current[3]+.0001f){current[3]=Math.Max(current[3],sorted[index][3]);continue;}
+        if(current[0]==1)graphics.DrawLine(pen,current[1],current[2],current[1],current[3]);else graphics.DrawLine(pen,current[2],current[1],current[3],current[1]);
+        if(index<sorted.Length)current=(float[])sorted[index].Clone();
+      }
+    }
+  }
 }
 internal static class PrintTheme {
   internal static bool Dark;

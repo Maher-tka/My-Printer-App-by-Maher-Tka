@@ -10,6 +10,11 @@ import {
   validateFastPrintPreset
 } from './fast-print.js'
 import { polaroidLayout, polaroidCoverCrop } from './fast-print-polaroid.js'
+import {
+  fastPrintMontageCells,
+  fastPrintSeparatorSegments,
+  FAST_PRINT_SEPARATOR_PX
+} from './fast-print-montage.js'
 
 const rotations = {
   printer: 'P',
@@ -255,7 +260,7 @@ for (const paper of ['A4', 'A3'] as const)
 for (const extra of [
   { marginMm: 0 },
   { marginMm: NaN },
-  { gapMm: 0 },
+  { gapMm: -1 },
   { sourceRotations: [4] },
   { sourceRotations: [0.5] },
   { sourceRotations: '90' }
@@ -305,4 +310,103 @@ assert.throws(
       combineFiles: 'yes'
     }),
   /Invalid/
+)
+
+const montagePreset = {
+  printer: 'Test',
+  paper: 'A4' as const,
+  color: true,
+  pagesPerSheet: 9 as const,
+  compact: true,
+  preserveActualSize: true,
+  separatorLines: true,
+  separatorColor: '#e02080',
+  gapMm: 0
+}
+assert.deepEqual(validateFastPrintPreset(montagePreset), montagePreset)
+for (const extra of [
+  { compact: 1 },
+  { preserveActualSize: 'yes' },
+  { separatorLines: 'yes' },
+  { separatorColor: 'red' },
+  { separatorColor: '#fff' },
+  { imageSizesMm: [{ widthMm: 0, heightMm: 55 }] },
+  { imageSizesMm: [{ widthMm: 85, heightMm: Infinity }] },
+  { gapMm: 11 }
+])
+  assert.throws(() => validateFastPrintPreset({ ...montagePreset, ...extra }), /Invalid/)
+for (const paper of ['A4', 'A3'] as const)
+  for (const landscape of [false, true]) {
+    const preset = { ...montagePreset, paper, landscape }
+    const layout = fastPrintLayout(preset)
+    const widthMm = paper === 'A4' ? (landscape ? 297 : 210) : landscape ? 420 : 297
+    const heightMm = paper === 'A4' ? (landscape ? 210 : 297) : landscape ? 297 : 420
+    const size = { width: (55 * layout.width) / widthMm, height: (85 * layout.height) / heightMm }
+    for (const count of [1, 2, 5, 7, 9]) {
+      // Nine portrait badges require more vertical room on an A4 landscape sheet.
+      if (paper === 'A4' && landscape && count > 6) continue
+      const cells = fastPrintMontageCells(
+        layout,
+        Array.from({ length: count }, () => size),
+        preset
+      )
+      for (const cell of cells) {
+        assert.ok(Math.abs((cell.width * widthMm) / layout.width - 55) < 1e-8)
+        assert.ok(Math.abs((cell.height * heightMm) / layout.height - 85) < 1e-8)
+        assert.ok(cell.x >= layout.margin && cell.y >= layout.margin)
+        assert.ok(cell.x + cell.width <= layout.width - layout.margin)
+        assert.ok(cell.y + cell.height <= layout.height - layout.margin)
+      }
+      const left = Math.min(...cells.map((cell) => cell.x)),
+        right = Math.max(...cells.map((cell) => cell.x + cell.width))
+      const top = Math.min(...cells.map((cell) => cell.y)),
+        bottom = Math.max(...cells.map((cell) => cell.y + cell.height))
+      assert.ok(Math.abs(left + right - layout.width) < 1e-8)
+      assert.ok(Math.abs(top + bottom - layout.height) < 1e-8)
+      for (let i = 0; i < cells.length; i++)
+        for (const b of cells.slice(i + 1)) {
+          const a = cells[i],
+            epsilon = 1e-8
+          assert.ok(
+            a.x + a.width <= b.x + epsilon ||
+              b.x + b.width <= a.x + epsilon ||
+              a.y + a.height <= b.y + epsilon ||
+              b.y + b.height <= a.y + epsilon
+          )
+        }
+    }
+  }
+const montageLayout = fastPrintLayout(montagePreset)
+assert.throws(
+  () => fastPrintMontageCells(montageLayout, [{ width: 5000, height: 400 }], montagePreset),
+  /do not fit/
+)
+assert.throws(
+  () =>
+    fastPrintMontageCells(montageLayout, [{ width: 800, height: 400 }], {
+      preserveActualSize: true
+    }),
+  /do not fit/
+)
+const pair = [
+  { x: 0, y: 0, width: 55, height: 85 },
+  { x: 55, y: 0, width: 55, height: 85 }
+]
+const cuts = fastPrintSeparatorSegments(pair)
+assert.equal(cuts.length, 5, 'Touching badges share a single cut and merged top/bottom edges')
+assert.equal(cuts.filter((line) => line.x1 === 55 && line.x2 === 55).length, 1)
+assert.equal(FAST_PRINT_SEPARATOR_PX, 0.25)
+assert.equal(fastPrintSeparatorSegments([]).length, 0)
+const fitted = fastPrintMontageCells(
+  montageLayout,
+  [
+    { width: 1000, height: 100 },
+    { width: 100, height: 1000 }
+  ],
+  { compact: true }
+)
+assert.ok(fitted[1].x >= fitted[0].x + fitted[0].width - 1e-8)
+assert.ok(fitted[0].height < montageLayout.cellHeight)
+console.log(
+  'Compact montage, physical sizing, fit rejection, zero gaps and shared separator checks passed.'
 )

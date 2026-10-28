@@ -26,6 +26,12 @@ export interface FastPrintPreset {
   paperWidthMm?: number
   paperHeightMm?: number
   fitToFrame?: boolean
+  compact?: boolean
+  preserveActualSize?: boolean
+  separatorLines?: boolean
+  separatorColor?: string
+  /** EXIF-oriented image dimensions from the native metadata reader; PDFs use page points. */
+  imageSizesMm?: Array<{ widthMm: number; heightMm: number } | null>
   combineImages?: boolean
   combineFiles?: boolean
   marginMm?: number
@@ -97,11 +103,30 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     (p.matchLayoutOrientation !== undefined && typeof p.matchLayoutOrientation !== 'boolean') ||
     (p.duplex !== undefined && typeof p.duplex !== 'boolean') ||
     (p.fitToFrame !== undefined && typeof p.fitToFrame !== 'boolean') ||
+    (p.compact !== undefined && typeof p.compact !== 'boolean') ||
+    (p.preserveActualSize !== undefined && typeof p.preserveActualSize !== 'boolean') ||
+    (p.separatorLines !== undefined && typeof p.separatorLines !== 'boolean') ||
+    (p.separatorColor !== undefined &&
+      (typeof p.separatorColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(p.separatorColor))) ||
+    (p.imageSizesMm !== undefined &&
+      (!Array.isArray(p.imageSizesMm) ||
+        p.imageSizesMm.length > 1000 ||
+        p.imageSizesMm.some(
+          (size) =>
+            size !== null &&
+            (!size ||
+              !Number.isFinite(size.widthMm) ||
+              !Number.isFinite(size.heightMm) ||
+              size.widthMm <= 0 ||
+              size.heightMm <= 0 ||
+              size.widthMm > 10000 ||
+              size.heightMm > 10000)
+        ))) ||
     (p.combineImages !== undefined && typeof p.combineImages !== 'boolean') ||
     (p.combineFiles !== undefined && typeof p.combineFiles !== 'boolean') ||
     (p.marginMm !== undefined &&
       (!Number.isInteger(p.marginMm) || p.marginMm < 5 || p.marginMm > 20)) ||
-    (p.gapMm !== undefined && (!Number.isInteger(p.gapMm) || p.gapMm < 3 || p.gapMm > 10)) ||
+    (p.gapMm !== undefined && (!Number.isInteger(p.gapMm) || p.gapMm < 0 || p.gapMm > 10)) ||
     (p.sourceRotations !== undefined &&
       (!Array.isArray(p.sourceRotations) ||
         p.sourceRotations.length > 1000 ||
@@ -171,6 +196,13 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
       : {}),
     ...(p.duplex !== undefined ? { duplex: p.duplex } : {}),
     ...(p.fitToFrame !== undefined ? { fitToFrame: p.fitToFrame } : {}),
+    ...(p.compact !== undefined ? { compact: p.compact } : {}),
+    ...(p.preserveActualSize !== undefined ? { preserveActualSize: p.preserveActualSize } : {}),
+    ...(p.separatorLines !== undefined ? { separatorLines: p.separatorLines } : {}),
+    ...(p.separatorColor !== undefined ? { separatorColor: p.separatorColor } : {}),
+    ...(p.imageSizesMm !== undefined
+      ? { imageSizesMm: p.imageSizesMm.map((size) => (size ? { ...size } : null)) }
+      : {}),
     ...(p.combineImages !== undefined ? { combineImages: p.combineImages } : {}),
     ...(p.combineFiles !== undefined ? { combineFiles: p.combineFiles } : {}),
     ...(p.marginMm !== undefined ? { marginMm: p.marginMm } : {}),

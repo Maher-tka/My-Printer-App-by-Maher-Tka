@@ -1,6 +1,6 @@
 {
   "name": "my-printer-app-by-maher-tka",
-  "version": "0.2.27",
+  "version": "0.2.28",
   "description": "Local-first printer-shop hub desktop app by Maher Tka.",
   "author": "Maher Tka",
   "private": true,
@@ -50,6 +50,7 @@
     "test:fast-print:native": "node scripts/verify-fast-print-native.mjs",
     "test:fast-print:polaroid-native": "tsx scripts/verify-fast-print-polaroid-native.mjs",
     "test:fast-print:paint": "node scripts/verify-fast-print-paint.mjs",
+    "test:fast-print:montage": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-fast-print-native.ps1 -OutputName FastPrint-montage.exe && node scripts/verify-fast-print-montage.mjs",
     "test:fast-print:direction": "tsx scripts/verify-fast-print-direction.mjs",
     "test:fast-print:sheet-images": "tsx scripts/verify-fast-print-sheet-images.mjs",
     "test:fast-print:page-rotation": "tsx scripts/verify-fast-print-page-rotation.mjs",

@@ -27,6 +27,40 @@ const request = {
 }
 assert.equal(parseNativePrintRequest(JSON.stringify(request)).preset.fitToFrame, true)
 assert.equal(parseNativePrintRequest(JSON.stringify(request)).copies, 3)
+assert.equal(
+  parseNativePrintRequest(
+    JSON.stringify({
+      ...request,
+      preset: { ...request.preset, preserveActualSize: true }
+    })
+  ).preset.preserveActualSize,
+  true,
+  'PDF dimensions come from page points'
+)
+const sizedImage = {
+  ...request,
+  files: ['badge.png'],
+  preset: {
+    ...request.preset,
+    preserveActualSize: true,
+    imageSizesMm: [{ widthMm: 55, heightMm: 85 }]
+  }
+}
+assert.equal(
+  parseNativePrintRequest(JSON.stringify(sizedImage)).preset.imageSizesMm?.[0]?.widthMm,
+  55
+)
+for (const imageSizesMm of [undefined, [], [null], [{ widthMm: 55, heightMm: 85 }, null]])
+  assert.throws(
+    () =>
+      parseNativePrintRequest(
+        JSON.stringify({
+          ...sizedImage,
+          preset: { ...sizedImage.preset, imageSizesMm }
+        })
+      ),
+    /dimensions/
+  )
 const rotated = {
   ...request,
   preset: {
