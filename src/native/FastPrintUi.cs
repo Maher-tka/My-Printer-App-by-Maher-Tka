@@ -28,8 +28,8 @@ internal sealed class NativeLayout {
 }
 internal static class PrintTheme {
   internal static bool Dark;
-  internal static Color Background,Surface,Text,Muted,Accent,Border,Selected,Stage,PrimaryText;
-  internal static int Radius=14;
+  internal static Color Background,Surface,Glass,Text,Muted,Accent,Border,Selected,Stage,PrimaryText;
+  internal static int Radius=14,PanelRadius=18;
   [DllImport("dwmapi.dll")]static extern int DwmSetWindowAttribute(IntPtr window,int attribute,ref int value,int size);
   internal static void Initialize(bool? dark=null){
     if(dark.HasValue)Dark=dark.Value;
@@ -39,16 +39,19 @@ internal static class PrintTheme {
     string block=Dark?css.Substring(css.IndexOf(":root.dark",StringComparison.Ordinal)):light;
     Func<string,string> token=name=>{var match=Regex.Match(block,@"--"+Regex.Escape(name)+@":\s*([^;]+);");if(!match.Success)match=Regex.Match(light,@"--"+Regex.Escape(name)+@":\s*([^;]+);");return match.Groups[1].Value.Trim();};
     Background=ColorTranslator.FromHtml(token("ui-background"));Surface=ColorTranslator.FromHtml(token("ui-surface-strong"));Text=ColorTranslator.FromHtml(token("ui-text"));Muted=ColorTranslator.FromHtml(token("ui-text-secondary"));Accent=ColorTranslator.FromHtml(token("ui-accent"));
-    Border=Blend(Text,Surface,Dark?.17f:.13f);Selected=Blend(Accent,Surface,Dark?.18f:.10f);Stage=Blend(Text,Background,Dark?.07f:.035f);
+    Glass=Blend(Surface,Background,Dark?.72f:.80f);Border=Blend(Text,Surface,Dark?.17f:.13f);Selected=Blend(Accent,Surface,Dark?.22f:.13f);Stage=Blend(Text,Background,Dark?.07f:.035f);
     PrimaryText=Dark?Background:ColorTranslator.FromHtml(Regex.Match(light,@"--ui-surface-strong:\s*([^;]+)").Groups[1].Value.Trim());
     Radius=int.Parse(Regex.Match(token("ui-radius-md"),@"\d+").Value);
-    if(SystemInformation.HighContrast){Background=SystemColors.Control;Surface=SystemColors.Window;Text=SystemColors.WindowText;Muted=SystemColors.ControlText;Accent=SystemColors.Highlight;Border=SystemColors.WindowText;Selected=SystemColors.Highlight;PrimaryText=SystemColors.HighlightText;Stage=Background;}
+    PanelRadius=int.Parse(Regex.Match(token("ui-radius-lg"),@"\d+").Value);
+    if(SystemInformation.HighContrast){Background=SystemColors.Control;Surface=Glass=SystemColors.Window;Text=SystemColors.WindowText;Muted=SystemColors.ControlText;Accent=SystemColors.Highlight;Border=SystemColors.WindowText;Selected=SystemColors.Highlight;PrimaryText=SystemColors.HighlightText;Stage=Background;}
   }
   internal static Color Blend(Color top,Color bottom,float alpha){return Color.FromArgb((int)(top.R*alpha+bottom.R*(1-alpha)),(int)(top.G*alpha+bottom.G*(1-alpha)),(int)(top.B*alpha+bottom.B*(1-alpha)));}
   internal static GraphicsPath Round(RectangleF r,float radius){var path=new GraphicsPath();float d=Math.Min(radius*2,Math.Min(r.Width,r.Height));if(d<=0)return path;path.AddArc(r.X,r.Y,d,d,180,90);path.AddArc(r.Right-d,r.Y,d,d,270,90);path.AddArc(r.Right-d,r.Bottom-d,d,d,0,90);path.AddArc(r.X,r.Bottom-d,d,d,90,90);path.CloseFigure();return path;}
   internal static void Apply(Control root){
     root.ForeColor=Text;
-    if(root is Form || root is TableLayoutPanel || root is FlowLayoutPanel || root is LayoutPicker)root.BackColor=Background;
+    if(root is Form)root.BackColor=Background;
+    else if(root is PrintGlassPanel)root.BackColor=Glass;
+    else if(root is TableLayoutPanel || root is FlowLayoutPanel || root is LayoutPicker)root.BackColor=root.Parent==null?Background:root.Parent.BackColor;
     if(root is PreviewSurface)root.BackColor=Stage;
     if(root is PrintButtonControl)root.BackColor=Background;
     if(root is ComboBox || root is NumericUpDown || root is TextBoxBase || root is ListBox){root.BackColor=Surface;root.ForeColor=Text;}
@@ -67,13 +70,14 @@ internal sealed class PrintComboBox : ComboBox {
   [DllImport("user32.dll")]static extern IntPtr BeginPaint(IntPtr window,out PaintData paint);
   [DllImport("user32.dll")]static extern bool EndPaint(IntPtr window,ref PaintData paint);
   internal int BufferedPaints;
+  internal bool CompactSelection;
   internal PrintComboBox(){DrawMode=DrawMode.OwnerDrawFixed;DropDownStyle=ComboBoxStyle.DropDownList;ItemHeight=28;FlatStyle=FlatStyle.Standard;IntegralHeight=false;}
   protected override CreateParams CreateParams {get{var value=base.CreateParams;value.Style&=~0x00800000;value.ExStyle&=~0x00000200;return value;}}
   protected override void OnDrawItem(DrawItemEventArgs e){
     if((e.State&DrawItemState.ComboBoxEdit)!=0){PrintPaint.Frame(e.Graphics,ClientSize,graphics=>Face(graphics,ClientSize));return;}
     if(e.Index<0)return;bool selected=(e.State&DrawItemState.Selected)!=0;
     using(var brush=new SolidBrush(selected?PrintTheme.Selected:PrintTheme.Surface))e.Graphics.FillRectangle(brush,e.Bounds);
-    TextRenderer.DrawText(e.Graphics,Items[e.Index].ToString(),Font,new Rectangle(e.Bounds.X+10,e.Bounds.Y,e.Bounds.Width-20,e.Bounds.Height),PrintTheme.Text,TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);
+    TextRenderer.DrawText(e.Graphics,Items[e.Index].ToString(),Font,new Rectangle(e.Bounds.X+10,e.Bounds.Y,e.Bounds.Width-20,e.Bounds.Height),selected&&SystemInformation.HighContrast?SystemColors.HighlightText:PrintTheme.Text,TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);
     if((e.State&DrawItemState.Focus)!=0)e.DrawFocusRectangle();
   }
   void Face(Graphics graphics,Size size){
@@ -81,13 +85,17 @@ internal sealed class PrintComboBox : ComboBox {
     using(var background=new SolidBrush(Parent==null?PrintTheme.Background:Parent.BackColor))graphics.FillRectangle(background,new Rectangle(Point.Empty,size));
     graphics.SmoothingMode=SmoothingMode.AntiAlias;
     var rect=new RectangleF(1,1,size.Width-3,size.Height-3);
-    using(var path=PrintTheme.Round(rect,PrintTheme.Radius))using(var brush=new SolidBrush(PrintTheme.Surface))using(var pen=new Pen(Focused?PrintTheme.Accent:PrintTheme.Border)){graphics.FillPath(brush,path);graphics.DrawPath(pen,path);}
+    if(rect.Width<=0||rect.Height<=0)return;
+    var top=SystemInformation.HighContrast?PrintTheme.Surface:PrintTheme.Blend(Color.White,PrintTheme.Surface,PrintTheme.Dark?.07f:.35f);
+    var bottom=SystemInformation.HighContrast?PrintTheme.Surface:PrintTheme.Blend(PrintTheme.Background,PrintTheme.Surface,PrintTheme.Dark?.10f:.22f);
+    using(var path=PrintTheme.Round(rect,PrintTheme.Radius))using(var brush=new LinearGradientBrush(rect,top,bottom,90f))using(var pen=new Pen(Focused?PrintTheme.Accent:PrintTheme.Border)){graphics.FillPath(brush,path);graphics.DrawPath(pen,path);}
     bool rtl=RightToLeft==RightToLeft.Yes;int arrow=rtl?18:size.Width-18;
     using(var pen=new Pen(Enabled?PrintTheme.Muted:PrintTheme.Border,1.5f)){graphics.DrawLines(pen,new[]{new Point(arrow-4,size.Height/2-2),new Point(arrow,size.Height/2+2),new Point(arrow+4,size.Height/2-2)});}
-    string label=SelectedItem==null?Text:SelectedItem.ToString();
+    string label=FaceText();
     var text=new Rectangle(rtl?32:12,0,Math.Max(1,size.Width-44),size.Height);
     TextRenderer.DrawText(graphics,label,Font,text,Enabled?PrintTheme.Text:PrintTheme.Muted,TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix|(rtl?TextFormatFlags.RightToLeft|TextFormatFlags.Right:TextFormatFlags.Left));
   }
+  internal string FaceText(){var entry=SelectedItem as Entry;return CompactSelection&&entry!=null&&entry.Value is string?(string)entry.Value:SelectedItem==null?Text:SelectedItem.ToString();}
   protected override void WndProc(ref Message message){
     // Own the complete face: never paint the native box underneath the rounded one.
     // WM_NCCALCSIZE returning zero makes the entire face client area; WM_PAINT
@@ -117,6 +125,19 @@ internal static class PrintPaint {
 }
 internal sealed class PrintTableLayoutPanel : TableLayoutPanel {
   internal PrintTableLayoutPanel(){SetStyle(ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint|ControlStyles.ResizeRedraw,true);}
+}
+// A calm, token-based glass-inspired surface. It avoids desktop blur and stays
+// legible in high contrast and on low-end PCs.
+internal sealed class PrintGlassPanel : TableLayoutPanel {
+  internal PrintGlassPanel(){SetStyle(ControlStyles.UserPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint|ControlStyles.ResizeRedraw,true);}
+  protected override void OnPaintBackground(PaintEventArgs e){
+    using(var background=new SolidBrush(Parent==null?PrintTheme.Background:Parent.BackColor))e.Graphics.FillRectangle(background,ClientRectangle);
+    if(Width<=3||Height<=3)return;
+    e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
+    var rect=new RectangleF(1,1,Math.Max(0,Width-3),Math.Max(0,Height-3));
+    using(var path=PrintTheme.Round(rect,PrintTheme.PanelRadius))using(var fill=new SolidBrush(PrintTheme.Glass))using(var border=new Pen(PrintTheme.Border)){e.Graphics.FillPath(fill,path);e.Graphics.DrawPath(border,path);}
+    if(!SystemInformation.HighContrast&&Width>8&&Height>8){var inner=new RectangleF(2,2,Width-5,Height-5);using(var path=PrintTheme.Round(inner,Math.Max(1,PrintTheme.PanelRadius-1)))using(var rim=new Pen(PrintTheme.Blend(Color.White,PrintTheme.Glass,PrintTheme.Dark?.10f:.48f)))e.Graphics.DrawPath(rim,path);}
+  }
 }
 internal sealed class PrintFlowLayoutPanel : FlowLayoutPanel {
   internal PrintFlowLayoutPanel(){SetStyle(ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint|ControlStyles.ResizeRedraw,true);}
@@ -158,11 +179,13 @@ internal class PrintButtonControl : Button {
   protected override void OnPaint(PaintEventArgs e){
     e.Graphics.SmoothingMode=SmoothingMode.None;
     using(var brush=new SolidBrush(Parent==null?PrintTheme.Background:Parent.BackColor))e.Graphics.FillRectangle(brush,ClientRectangle);
-    e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;var rect=new RectangleF(1,1,Width-3,Height-3);
-    var background=Primary&&Enabled?PrintTheme.Accent:Selected?PrintTheme.Selected:Quiet?PrintTheme.Background:PrintTheme.Surface;
+    e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;var rect=new RectangleF(1,1,Width-3,Height-3);if(rect.Width<=0||rect.Height<=0)return;
+    var background=Primary&&Enabled?PrintTheme.Accent:Selected?PrintTheme.Selected:Quiet?(Parent==null?PrintTheme.Background:Parent.BackColor):PrintTheme.Surface;
     if(hover&&Enabled)background=PrintTheme.Blend(PrintTheme.Accent,background,.08f);
-    var foreground=!Enabled?PrintTheme.Muted:Primary?PrintTheme.PrimaryText:Selected?PrintTheme.Accent:PrintTheme.Text;
-    using(var path=PrintTheme.Round(rect,PrintTheme.Radius))using(var brush=new SolidBrush(background))using(var pen=new Pen(Focused&&ShowFocusCues?PrintTheme.Accent:PrintTheme.Border,Focused&&ShowFocusCues?2:1)){e.Graphics.FillPath(brush,path);if(!Quiet||Focused)e.Graphics.DrawPath(pen,path);}
+    var foreground=!Enabled?PrintTheme.Muted:Primary||Selected&&SystemInformation.HighContrast?PrintTheme.PrimaryText:Selected?PrintTheme.Accent:PrintTheme.Text;
+    var top=SystemInformation.HighContrast||Primary?background:PrintTheme.Blend(Color.White,background,PrintTheme.Dark?.07f:.30f);
+    var bottom=SystemInformation.HighContrast||Primary?background:PrintTheme.Blend(PrintTheme.Background,background,PrintTheme.Dark?.10f:.18f);
+    using(var path=PrintTheme.Round(rect,PrintTheme.Radius))using(var brush=new LinearGradientBrush(rect,top,bottom,90f))using(var pen=new Pen(Focused&&ShowFocusCues||Selected?PrintTheme.Accent:PrintTheme.Border,Focused&&ShowFocusCues||Selected?2:1)){e.Graphics.FillPath(brush,path);if(!Quiet||Focused||Selected)e.Graphics.DrawPath(pen,path);}
     PaintContent(e.Graphics,foreground);
   }
   protected virtual void PaintContent(Graphics graphics,Color foreground){TextRenderer.DrawText(graphics,Text,Font,ClientRectangle,foreground,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);}
@@ -170,6 +193,7 @@ internal class PrintButtonControl : Button {
 internal sealed class LayoutPicker : ScrollableControl {
   internal readonly List<Entry> Items=new List<Entry>();
   readonly List<PrintButtonControl> tiles=new List<PrintButtonControl>();
+  readonly ToolTip tips=new ToolTip();
   int selected=-1;
   internal event EventHandler SelectedIndexChanged;
   internal event EventHandler RefreshRequested;
@@ -180,12 +204,13 @@ internal sealed class LayoutPicker : ScrollableControl {
   internal LayoutPicker(){AutoScroll=true;DoubleBuffered=true;TabStop=false;AccessibleName="Layout";Padding=new Padding(4);BackColor=PrintTheme.Background;}
   internal void Reload(){
     foreach(var tile in tiles)tile.Dispose();tiles.Clear();Controls.Clear();
-    for(int i=0;i<Items.Count;i++){int index=i;var tile=new LayoutTile(Items[i]){TabIndex=i,AccessibleName=Items[i].Label,Selected=i==selected};tile.Click+=delegate{Activate(index);};tile.KeyDown+=delegate(object sender,KeyEventArgs e){int direction=RightToLeft==RightToLeft.Yes?-1:1;int offset=e.KeyCode==Keys.Right?direction:e.KeyCode==Keys.Left?-direction:e.KeyCode==Keys.Down?2:e.KeyCode==Keys.Up?-2:0;if(offset!=0){SelectedIndex=Math.Max(0,Math.Min(Items.Count-1,index+offset));tiles[SelectedIndex].Focus();e.Handled=true;}};tile.PreviewKeyDown+=delegate(object sender,PreviewKeyDownEventArgs e){if(e.KeyCode==Keys.Right||e.KeyCode==Keys.Left||e.KeyCode==Keys.Up||e.KeyCode==Keys.Down)e.IsInputKey=true;};tiles.Add(tile);Controls.Add(tile);}Arrange();
+    for(int i=0;i<Items.Count;i++){int index=i;var tile=new LayoutTile(Items[i]){TabIndex=i,AccessibleName=Items[i].Label,Selected=i==selected};tips.SetToolTip(tile,Items[i].Label);tile.Click+=delegate{Activate(index);};tile.KeyDown+=delegate(object sender,KeyEventArgs e){int direction=RightToLeft==RightToLeft.Yes?-1:1;int offset=e.KeyCode==Keys.Right?direction:e.KeyCode==Keys.Left?-direction:e.KeyCode==Keys.Down?5:e.KeyCode==Keys.Up?-5:0;if(offset!=0){SelectedIndex=Math.Max(0,Math.Min(Items.Count-1,index+offset));tiles[SelectedIndex].Focus();e.Handled=true;}};tile.PreviewKeyDown+=delegate(object sender,PreviewKeyDownEventArgs e){if(e.KeyCode==Keys.Right||e.KeyCode==Keys.Left||e.KeyCode==Keys.Up||e.KeyCode==Keys.Down)e.IsInputKey=true;};tiles.Add(tile);Controls.Add(tile);}Arrange();
   }
   protected override void OnResize(EventArgs e){base.OnResize(e);Arrange();}
   bool arranging;
-  internal Rectangle TileBounds(int index,Point offset){int width=Math.Max(85,(ClientSize.Width-SystemInformation.VerticalScrollBarWidth-16)/2);return new Rectangle(offset.X+4+(Items[index].Id=="id-card"?0:RightToLeft==RightToLeft.Yes?1-index%2:index%2)*(width+8),offset.Y+4+(index/2)*72,Items[index].Id=="id-card"?width*2+8:width,64);}
-  void Arrange(){if(tiles==null||arranging)return;arranging=true;SuspendLayout();try{AutoScrollMinSize=new Size(0,((tiles.Count+1)/2)*72);var offset=AutoScrollPosition;for(int i=0;i<tiles.Count;i++)tiles[i].Bounds=TileBounds(i,offset);}finally{ResumeLayout(true);arranging=false;}}
+  internal Rectangle TileBounds(int index,Point offset){int width=Math.Max(44,(ClientSize.Width-40)/5);return new Rectangle(offset.X+4+(Items[index].Id=="id-card"?0:RightToLeft==RightToLeft.Yes?4-index%5:index%5)*(width+8),offset.Y+4+(index/5)*52,Items[index].Id=="id-card"?width*5+32:width,44);}
+  void Arrange(){if(tiles==null||arranging)return;arranging=true;SuspendLayout();try{AutoScrollMinSize=new Size(0,((tiles.Count+4)/5)*52);var offset=AutoScrollPosition;for(int i=0;i<tiles.Count;i++)tiles[i].Bounds=TileBounds(i,offset);}finally{ResumeLayout(true);arranging=false;}}
+  protected override void Dispose(bool disposing){if(disposing)tips.Dispose();base.Dispose(disposing);}
   internal sealed class LayoutTile : PrintButtonControlBase {
     internal LayoutTile(Entry entry):base(entry){}
   }
@@ -193,7 +218,7 @@ internal sealed class LayoutPicker : ScrollableControl {
 // A Button-derived tile keeps native UI Automation, focus, Space and Enter support.
 internal class PrintButtonControlBase : PrintButtonControl {
   readonly Entry entry;
-  internal PrintButtonControlBase(Entry value){entry=value;Text=value.Label;MinimumSize=new Size(80,64);AccessibleRole=AccessibleRole.RadioButton;}
+  internal PrintButtonControlBase(Entry value){entry=value;Text=value.Label;MinimumSize=new Size(44,44);AccessibleRole=AccessibleRole.RadioButton;}
   protected override AccessibleObject CreateAccessibilityInstance(){return new TileAccessibility(this);}
   sealed class TileAccessibility : Control.ControlAccessibleObject {
     readonly PrintButtonControlBase tile;
@@ -203,11 +228,8 @@ internal class PrintButtonControlBase : PrintButtonControl {
     public override void DoDefaultAction(){tile.PerformClick();}
   }
   protected override void PaintContent(Graphics graphics,Color foreground){
-    int count;int.TryParse(entry.Id,out count);var layout=NativeLayout.Find(count);var box=new Rectangle(Width/2-15,6,30,30);
-    using(var paper=new SolidBrush(PrintTheme.Surface))using(var pen=new Pen(PrintTheme.Border)){graphics.FillRectangle(paper,box);graphics.DrawRectangle(pen,box);}
-    int columns=layout.columns,rows=layout.rows;float cellW=22f/columns,cellH=22f/rows;
-    using(var ink=new SolidBrush(PrintTheme.Blend(PrintTheme.Accent,PrintTheme.Surface,Selected?.65f:.30f)))
-      for(int i=0;i<layout.count;i++)graphics.FillRectangle(ink,box.X+4+(i%columns)*cellW,box.Y+4+(i/columns)*cellH,Math.Max(1,cellW-2),Math.Max(1,cellH-2));
-    TextRenderer.DrawText(graphics,entry.Label,Font,new Rectangle(4,39,Width-8,22),foreground,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+    int count;bool numeric=int.TryParse(entry.Id,out count);
+    using(var labelFont=new Font(Font.FontFamily,numeric?14f:Font.Size,numeric?FontStyle.Bold:FontStyle.Regular))
+      TextRenderer.DrawText(graphics,numeric?entry.Id:entry.Label,labelFont,new Rectangle(5,2,Width-10,Height-4),foreground,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);
   }
 }

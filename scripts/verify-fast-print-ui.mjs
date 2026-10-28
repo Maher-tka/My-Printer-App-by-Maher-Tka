@@ -73,6 +73,9 @@ for (const language of ['en', 'fr', 'ar']) {
   const report = JSON.parse(await readFile(join(folder, 'result.json'), 'utf8'))
   assert.equal(report.headless, true)
   assert.equal(report.pdfCacheBounded, true)
+  assert.equal(report.quickLayoutsAccessible, true)
+  assert.equal(report.keyboardLayoutNavigation, true)
+  assert.equal(report.idLayoutAvailable, true)
   assert.ok(report.selectionReuses >= 8)
   assert.equal(report.captures.length, 8)
   for (const capture of report.captures) {

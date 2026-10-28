@@ -23,8 +23,10 @@ const stocks = [
 const menu = createFastPrintChoices(devices, stocks)
 assert.equal(menu[0].label, 'Epson test (default)')
 const print = leaves(menu).filter((item) => item.preset && !item.preset.mode)
-assert.equal(print.length, 72)
-assert.equal(print.filter((item) => item.preset?.profileId).length, 16)
+assert.equal(print.length, 90)
+assert.equal(print.filter((item) => item.preset?.profileId).length, 20)
+assert.ok(print.some((item) => item.preset?.pagesPerSheet === 5))
+assert.ok(print.some((item) => item.preset?.pagesPerSheet === 7))
 assert.ok(
   print
     .filter((item) => item.preset?.printer === 'Mono')

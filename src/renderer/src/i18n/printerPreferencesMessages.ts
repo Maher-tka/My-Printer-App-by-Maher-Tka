@@ -220,7 +220,7 @@ for (const paper of ['A4', 'A3'])
     const en = color ? 'Color' : 'Black & white',
       fr = color ? 'Couleur' : 'Noir et blanc',
       ar = color ? 'ألوان' : 'أبيض وأسود'
-    for (const count of [1, 2, 4, 6, 8, 9, 12, 16])
+    for (const count of [1, 2, 4, 5, 6, 7, 8, 9, 12, 16])
       printerPreferencesMessages[`${paper} · ${en} · ${count} per sheet`] = {
         fr: `${paper} · ${fr} · ${count} par feuille`,
         ar: `${paper} · ${ar} · ${count} في الورقة`

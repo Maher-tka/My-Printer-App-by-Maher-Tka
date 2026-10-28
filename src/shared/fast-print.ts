@@ -2,7 +2,7 @@ import layoutDefinitions from './fast-print-layouts.json' with { type: 'json' }
 import type { IdPrintDraft } from './fast-print-id.js'
 import type { DriverPresetSummary } from './printer-preferences.js'
 
-export type FastPrintPagesPerSheet = 1 | 2 | 4 | 6 | 8 | 9 | 12 | 16
+export type FastPrintPagesPerSheet = 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 | 12 | 16
 export const FAST_PRINT_LAYOUTS = layoutDefinitions as Array<{
   count: FastPrintPagesPerSheet
   columns: number

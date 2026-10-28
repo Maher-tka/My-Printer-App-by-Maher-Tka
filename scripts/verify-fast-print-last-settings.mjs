@@ -71,6 +71,9 @@ for (const [language, appearance] of [
     'namedPresetRestored',
     'fullDriverBytesPreserved',
     'newFilesReset',
+    'newJobCopiesReset',
+    'currentJobCopiesPreserved',
+    'legacyCopiesIgnored',
     'idCompletionRestored',
     'changedDriverRejected',
     'removedPresetRejected',
@@ -80,7 +83,7 @@ for (const [language, appearance] of [
     assert.equal(report[key], true, key)
   reports.push({ language, appearance, ...report })
   console.log(
-    `${language}: cancel, submit, named preset, complete driver options, new files and stale/corrupt preferences passed (${report.privateDriverBytes} private driver bytes).`
+    `${language}: new jobs reset copies, current-job copies survive printer changes, and saved driver settings remain intact (${report.privateDriverBytes} private driver bytes).`
   )
 }
 await writeFile(join(output, 'results.json'), JSON.stringify({ hardwareJobs: 0, reports }, null, 2))

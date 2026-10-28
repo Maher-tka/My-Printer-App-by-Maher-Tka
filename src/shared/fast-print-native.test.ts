@@ -132,7 +132,7 @@ for (const invalid of [
   { ...polaroid, preparedPolaroid: 'true' }
 ])
   assert.throws(() => parseNativePrintRequest(JSON.stringify(invalid)), /Invalid prepared/)
-for (const pagesPerSheet of [1, 2, 4, 6, 8, 9, 12, 16]) {
+for (const pagesPerSheet of [1, 2, 4, 5, 6, 7, 8, 9, 12, 16]) {
   const parsed = parseNativePrintRequest(
     JSON.stringify({
       ...request,
@@ -151,7 +151,7 @@ for (const preset of [
   { ...request.preset, profileId: undefined },
   { ...request.preset, fitToFrame: 'true' },
   { ...request.preset, combineImages: 'true' },
-  { ...request.preset, pagesPerSheet: 7 },
+  { ...request.preset, pagesPerSheet: 3 },
   { ...request.preset, mode: 'document', pagesPerSheet: 1 }
 ])
   assert.throws(() => parseNativePrintRequest(JSON.stringify({ ...request, preset })))

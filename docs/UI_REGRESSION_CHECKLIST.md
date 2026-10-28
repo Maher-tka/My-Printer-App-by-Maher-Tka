@@ -2892,3 +2892,127 @@ Evidence: `output/fast-print-image-copies/results.json`, its run folders, previe
 and prepared-output PNGs, and `verification-final.log`. Repeat with
 `node scripts/verify-fast-print-image-copies.mjs` after building
 `FastPrint-image-copies.exe` with `scripts/build-fast-print-native.ps1`.
+
+## 2026-10-27 — Reset Fast Print job copies
+
+- A new Fast Print session starts with one job copy. Prior counts are ignored
+  even when present in older saved settings or inside a saved driver preset.
+  Current-job copies remain selected across printer changes, preset choices,
+  printer refresh and ID review. Image copies still start at one per new selection.
+- Hidden native checks passed in English, French and Arabic. They seeded an older
+  settings record with three copies and a named driver preset with six, verified
+  the next sessions show one, then verified a four-copy request and a five-copy
+  choice across printer changes. The saved driver snapshot contains one copy;
+  its paper, color, orientation, quality, tray, duplex and private driver settings
+  were retained. No printer defaults or saved presets were modified.
+- Typecheck, production build and the Fast Print suite passed. Image duplication
+  preview/output checks passed in all three languages. Hidden captures at
+  1366×768 and 1920×1080 were inspected in light/dark and Arabic RTL; the
+  image-duplication checks ran in the one-core test mode and covered keyboard
+  selection and accessibility names. Live high-DPI and screen-reader checks
+  remain pending.
+- All eight ID pictures passed original and off-center ±45-degree crop/print
+  proofs; the multi-ID workflow verified six 90 mm IDs per A3 side, five job
+  copies and matching centers. Existing fixed-height ID sizing can alter source
+  proportions, as documented above; no ID geometry changed. Both 8 PIC and 9 PIC
+  passed all 15 Polaroid photos over two sheets, with matching previews/output
+  and blank final slots. Inspected the proof contact sheets. Original photo hashes
+  were unchanged and no hardware jobs were submitted.
+- These changes are local and unpublished. Evidence:
+  `output/fast-print-copy-reset/`, including the ID and Polaroid proof contacts,
+  `last-settings-final.log`, workflow results and image-copy checks; native
+  settings captures are under `output/fast-print-last-settings/`.
+
+## 2026-10-27 — Fast Print glass-inspired redesign
+
+- Updated the native window with soft, rounded glass-inspired control surfaces,
+  a clear preview area and a grouped output footer. The effects use the app's
+  existing light/dark tokens and native controls; they are painted approximations,
+  with no desktop blur or animation. The Windows high-contrast palette is retained.
+- Replaced the page thumbnails and repeated labels with a compact numbered
+  four-column grid under **Pages per sheet**. All eight choices and the ID button
+  fit without scrolling at the tested window sizes. The selected option has a
+  visible outline, and full labels remain in tooltips and accessibility names.
+  Arrow keys move between options and the checked radio state is exposed.
+- The selected saved printer preset shows its name. Its expanded list still
+  identifies the owning printer, paper and tray; cross-printer selection, live
+  refresh and missing/deleted-preset guards passed. Polaroid remains directly
+  below the printer with 8 PIC and 9 PIC. File, preview and output actions keep
+  one home each, with Print as the primary action.
+- Hidden layout captures at 1366×768, 1600×900, 1920×1080 and 820×640 were
+  checked in light/dark and English/French/Arabic RTL. The UI and image-copy
+  checks ran in one-core mode. They checked ancestor clipping, preview space,
+  layout access, keyboard arrows, image-copy placement and both output quantities.
+  The paint check passed 160 redraws per theme without GDI growth or stale frames.
+  Actual high-DPI, Windows high-contrast and screen-reader use remain pending.
+- Typecheck, production build, Fast Print suite, native UI/paint/audit, saved
+  preset, image-copy and last-settings regressions passed. ID review round trips
+  and photo proofs covered all eight originals and off-center ±45-degree cases;
+  existing fixed-height ID sizing can alter source proportions. Both Polaroid
+  layouts passed all 15 supplied photos, two sheets each, correct preview/output
+  and blank final slots. Inspected the proof contacts. Original photo hashes were
+  unchanged and no hardware print jobs were submitted.
+- Design guidance considered Apple's
+  [material principles](https://developer.apple.com/design/human-interface-guidelines/materials)
+  and the saved Impeccable catalog entry, while retaining the project's design
+  tokens and native stack. The changes are local and unpublished.
+
+Evidence: `output/fast-print-glass/`, including UI captures, `ui-contact.png`,
+the ID and Polaroid proof contacts, build/test logs and production proofs.
+
+## 2026-10-27 — Five and seven per sheet
+
+- Added 5-up and 7-up to Fast Print and the printing preferences. The quick
+  layout selector now shows ten numbered choices in two rows of five, with ID
+  below; all remain visible at the tested minimum window size. Polaroid remains
+  directly below the printer with 8 PIC and 9 PIC.
+- Five-up defaults to a landscape 3 × 2 grid with its last two slots centered;
+  seven-up defaults to a portrait 3 × 3 grid with the final slot centered.
+  Orientation overrides transpose the grids. Partial sheets retain the same
+  cell sizes and center their occupied rows.
+- Hidden native/production checks covered A4/A3, both orientations, nine
+  distinct images and a two-page PDF, selected-image rotation, source order,
+  pagination and two job copies. Native previews and prepared print pages
+  matched in all eight cases. Separate tests covered five/seven duplicated
+  images, multi-sheet quantities and blank slots. No hardware jobs were sent.
+- Typecheck, production build, Fast Print and i18n suites, native page totals,
+  keyboard/accessibility, UI and paint checks passed. Layout captures at
+  1366×768, 1600×900, 1920×1080 and 820×640 covered light/dark, English,
+  French and Arabic RTL with one-core mode. Inspected placement and UI proofs.
+  Actual high-DPI and screen-reader checks remain pending. No ID or Polaroid
+  geometry was changed. The update is local and unpublished.
+
+Evidence: `output/fast-print-five-seven/`, including `placement-contact.png`,
+the native/production proof runs and test logs. Repeat the focused proof with
+`npx tsx scripts/verify-fast-print-five-seven.mjs` after building
+`FastPrint-five-seven.exe` using `scripts/build-fast-print-native.ps1`.
+
+## 2026-10-27 — More vertical space in Fast Print
+
+- New windows open centered in the foreground monitor's work area. The standard
+  width is retained when it fits; on taller screens the window grows to roughly
+  92% of the work-area height while leaving a margin. It remains resizable and
+  opens normally, not maximized. On unusually small work areas, initial bounds
+  are constrained to the available area.
+- Hidden native tests applied the actual placement method and simulated a
+  1366 × 728 work area, a 1920 × 1032 work area, a secondary monitor with a
+  negative X coordinate, and an 800 × 600 work area. For the 1080p case, the
+  default outer window grew from 743 px to 949 px high. The larger window also
+  increased the preview height. The small-screen case checks bounds only;
+  full layout usability below the normal minimum size remains unverified.
+- Inspected compact and taller-window captures in light/dark and English,
+  French and Arabic RTL. Existing 1366×768, 1600×900, 1920×1080 and 820×640 UI
+  checks, keyboard layout navigation and one-core checks passed. Actual
+  multi-monitor DPI scaling, live high-DPI and screen-reader checks remain pending.
+- Typecheck, production build, Fast Print and native UI/paint tests passed.
+  ID review proofs covered all eight supplied photos and off-center ±45-degree
+  placements, with 90 mm output widths and matching front/back centers. The
+  previously documented fixed ID height can change source proportions. Both
+  Polaroid layouts passed all 15 photos over two sheets, with matching previews,
+  output and blank final slots. Original hashes were unchanged; inspected the
+  proof contacts and sent no hardware print jobs.
+- The existing open Fast Print process was left running while the development
+  helper was replaced for future launches. These changes are local and not yet
+  published. Evidence: `output/fast-print-window-size/`,
+  `output/fast-print-window-size-id-contact.png`,
+  `output/fast-print-window-size-polaroid-contact.png` and related test logs.

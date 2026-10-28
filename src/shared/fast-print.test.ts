@@ -45,7 +45,8 @@ for (const paper of ['A4', 'A3'] as const) {
         pagesPerSheet
       })
       const layout = fastPrintLayout(preset)
-      assert.equal(layout.columns * layout.rows, pagesPerSheet)
+      assert.ok(layout.columns * layout.rows >= pagesPerSheet)
+      assert.ok(layout.columns * layout.rows - pagesPerSheet < layout.columns)
       assert.equal(
         layout.width > layout.height,
         FAST_PRINT_LAYOUTS.find((item) => item.count === pagesPerSheet)!.landscape

@@ -96,7 +96,7 @@ for (const language of ['en', 'fr', 'ar']) {
     'limitChecked'
   ])
     assert.equal(result[key], true, key)
-  assert.equal(result.reports.length, 3)
+  assert.equal(result.reports.length, 7)
   for (const capture of result.captures) {
     const name = `${capture.dark ? 'dark' : 'light'}-${capture.width}x${capture.height}.png`
     const metadata = await sharp(join(folder, name)).metadata()

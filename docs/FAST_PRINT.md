@@ -15,30 +15,37 @@ show ordinary PDF/image previews. A legacy Electron command delegates to the sam
 
 The compact Windows dialog has printer, A4/A3 paper, driver quality, color,
 saved preset, orientation, file selection, preview navigation, copies and Fit to
-frame controls. Choose 1, 2, 4, 6, 8, 9, 12 or 16 pages per sheet on A4 or A3,
-or ID in the scrolling layout tiles. Two-, six- and eight-up start with landscape
+frame controls. Choose 1, 2, 4, 5, 6, 7, 8, 9, 12 or 16 pages per sheet on A4 or A3,
+or ID in the layout selector. Two-, five-, six- and eight-up start with landscape
 sheets; Portrait/Landscape can be selected for every ordinary layout.
 The native controls use the app's shared color, spacing and radius tokens, with
-rounded buttons, layout thumbnails and light/dark appearance. **Options…** can
+soft glass-inspired panels, rounded controls and light/dark appearance. **Options…** can
 select light, dark or the Windows app appearance without changing OS settings.
 There is one Print action, with native Enter/Escape behavior and arrow-key layout selection.
 The language follows the Windows UI culture (English, French and Arabic labels).
+The window opens centered within the foreground monitor's usable work area.
+On taller screens it uses more height for the preview while leaving a margin;
+it stays resizable and does not open maximized.
 
 Printer and Saved preset share the first settings row, with Polaroid directly
 under the printer. Paper, color, orientation and quality are grouped together.
 Combine files is beside the file selector; the range editor appears when Page
 range is chosen. Navigation and image-editing controls wrap beneath the preview,
 while Copies stays with output totals. Options and Refresh printers are in the
-header. Layout tiles use compact thumbnails with unchanged text sizes.
+header. A numbered **Pages per sheet** grid keeps the layout choices visible
+together, with ID underneath. The selected saved printer preset shows its name;
+the expanded list retains printer, paper and tray details.
 
 Fast Print remembers the last selected printer, including a selection followed by
 Cancel, and selects it on the next launch while it remains installed. A stale
 printer hint from the Explorer command does not replace that choice. Each printer
-also remembers its last paper, color, orientation, quality, copy count, saved
+also remembers its last paper, color, orientation, quality, saved
 preset and complete driver options, including tray, duplex and vendor-specific
 settings. Closing, Cancel, printing and switching printers preserve the setup;
 reopening with different files restores it automatically. Refreshing printers
 retains valid choices. Explicit print-option commands still take precedence.
+Each new Fast Print session starts with one job copy; a quantity selected during
+the current job remains in place when switching printers or refreshing the list.
 
 The per-printer records live in `%LOCALAPPDATA%\MaherTka\FastPrint\last-settings`,
 with driver snapshots encrypted for the current Windows user. Saved preset files
@@ -111,10 +118,13 @@ setting is not used to decide whether the device can print color. See Microsoft'
 For a read-only Windows PowerShell diagnostic (no UI or print jobs), run
 `powershell -NoProfile -STA -File scripts/diagnose-fast-print-color.ps1`.
 
-General 1/2/4/6/8/9/12/16-up presets use equal-size slots, 5 mm outside margins
+General 1/2/4/5/6/7/8/9/12/16-up presets use equal-size slots, 5 mm outside margins
 and 3 mm cutting gaps. **Options… > Margins** offers 5/7/10/15/20 mm;
 **Cutting gap** offers 3/5/8/10 mm. Incomplete final sheets and rows are centered
 without enlarging the remaining items, so their slot size stays consistent.
+Five-up defaults to a 3 × 2 landscape grid; seven-up defaults to a 3 × 3 portrait
+grid. The incomplete row is centered, and changing sheet orientation transposes
+the grid.
 
 Multi-up aligns each source to the slot direction before applying manual rotation. **Rotate selected** turns only the
 selected page or image by 90 degrees inside its slot. PDF/Word pages rotate
@@ -373,7 +383,7 @@ npm run test:fast-print:native
 ```
 
 This opens native test windows, records startup/preview timings and screenshots,
-then exercises all eight layouts on A4/A3, photo grouping/document boundaries,
+then exercises all ten layouts on A4/A3, photo grouping/document boundaries,
 encrypted settings/copies and matching preview/output through the real worker in
 ValidateOnly mode. DOCX runs when Word/LibreOffice is available; no hardware jobs
 are submitted. The matrix uses a 19-page mixed-orientation document to exercise
@@ -507,10 +517,11 @@ Windows security policies are unchanged.
 
 - PDF, PNG, JPG, JPEG and GIF files. GIFs use their first frame. Export other documents to PDF first.
 - Up to 512 MB per file and 2,000 PDF pages. Password-protected PDFs are unsupported.
-- Jobs without a driver preset use one copy and simplex. Saved presets retain
-  their preferred copy count and duplex settings, subject to layout constraints.
+- New jobs start with one copy. Saved presets retain their duplex settings,
+  subject to layout constraints; their stored copy count does not change the
+  current job's Copies control.
 - Two-up starts in landscape; sheet orientation remains editable. Four-up reads left to right, top to bottom. Images count
-  as one source page and are not duplicated to fill empty cells.
+  as one source page; use Image copies to repeat a selected image.
 - Pages render at 200 DPI and fit inside the printer's printable margins.
 - Closing the progress window during preparation cancels. Once submission starts,
   manage cancellation in the Windows print queue. Submission is not proof of

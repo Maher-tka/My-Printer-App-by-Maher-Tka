@@ -123,7 +123,7 @@ for (const [language, appearance] of [
     assert.equal(item.duplex.TotalSheets, Math.ceil(duplexSides / 2) * item.copies)
     assert.ok(item.label.includes('12 '), 'The visible total must include every source page')
   }
-  assert.equal(report.reports.length, 16)
+  assert.equal(report.reports.length, 20)
   await promisify(execFile)(electron, [root, '--fast-print-request', report.request], {
     cwd: root,
     windowsHide: true,
