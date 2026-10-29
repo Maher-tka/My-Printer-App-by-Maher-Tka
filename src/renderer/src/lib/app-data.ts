@@ -2,6 +2,16 @@ import type { PrinterTool } from '@/types/tools'
 
 export const printerTools: PrinterTool[] = [
   {
+    id: 'pdf-tools',
+    route: 'pdf-tools',
+    title: 'PDF Tools',
+    shortTitle: 'PDF Tools',
+    description: 'Merge, split, compress, edit, and convert PDF, Office, and image files',
+    status: 'active',
+    accent: 'blue',
+    requiredFeature: 'paid-tools'
+  },
+  {
     id: 'card-montage',
     route: 'card-montage',
     title: 'Business Card Montage',

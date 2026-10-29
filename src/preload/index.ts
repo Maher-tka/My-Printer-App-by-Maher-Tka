@@ -74,6 +74,15 @@ contextBridge.exposeInMainWorld('printerApp', {
     activeToolId = SUBSCRIPTION_TOOLS.find((tool) => tool.id === route)?.id
   },
   platform: process.platform,
+  pdf: {
+    machineMemory: () => ipcRenderer.invoke('pdf:machine-memory'),
+    selectFiles: (kind: import('../shared/pdf-files.js').PdfPickerKind) =>
+      ipcRenderer.invoke('pdf:select-files', kind),
+    readSelectedFile: (id: string) => ipcRenderer.invoke('pdf:read-selected-file', id),
+    officeCapabilities: () => ipcRenderer.invoke('pdf:office-capabilities'),
+    convertOffice: (request: import('../shared/pdf-office.js').OfficePdfRequest) =>
+      ipcRenderer.invoke('pdf:office-convert', request)
+  },
   storageMode: 'local-first',
   account: {
     adminPlan: (plan: SubscriptionPlanRecord): Promise<AccountMutationResult> =>

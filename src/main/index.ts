@@ -3,6 +3,8 @@ import { mkdir, readFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { exportBuffer, planOutputFiles, writeExportFile } from './export-files.js'
 import { registerAccountHandlers } from './account.js'
+import { convertOfficePdf, getOfficePdfCapabilities } from './pdf-office.js'
+import { registerPdfFileHandlers } from './pdf-files.js'
 import { assertOnlineProductionAccess } from './online-account.js'
 import { registerAppUpdaterHandlers } from './app-updater.js'
 import { registerLicenseHandlers } from './licensing.js'
@@ -171,7 +173,13 @@ app
     }
     registerBookletExportHandlers()
     registerNativeFileHandlers()
+    registerPdfFileHandlers()
     registerAccountHandlers()
+    ipcMain.handle('pdf:office-capabilities', () => getOfficePdfCapabilities())
+    ipcMain.handle('pdf:office-convert', async (_event, request) => {
+      await assertOnlineProductionAccess('paid-tools', 'pdf-tools')
+      return convertOfficePdf(request)
+    })
     registerAppUpdaterHandlers()
     registerLicenseHandlers()
     registerProjectHandlers()

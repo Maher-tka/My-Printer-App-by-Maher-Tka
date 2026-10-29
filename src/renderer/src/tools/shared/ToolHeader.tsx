@@ -14,6 +14,7 @@ export function ToolHeader({
   backLabel = 'All tools',
   actions,
   exportPdf,
+  output,
   print,
   className
 }: {
@@ -24,7 +25,8 @@ export function ToolHeader({
   backLabel?: string
   actions?: ReactNode
   exportPdf?: { onExport: () => void; disabled?: boolean; isBusy?: boolean }
-  print: Omit<ComponentProps<typeof PrintButton>, 'compact' | 'label' | 'variant'>
+  output?: ReactNode
+  print?: Omit<ComponentProps<typeof PrintButton>, 'compact' | 'label' | 'variant'>
   className?: string
 }): JSX.Element {
   const { t } = useLanguage()
@@ -61,7 +63,8 @@ export function ToolHeader({
             />
           </div>
         )}
-        <PrintButton {...print} compact label={t('Print')} />
+        {output}
+        {print && <PrintButton {...print} compact label={t('Print')} />}
       </div>
       {actions && (
         <div

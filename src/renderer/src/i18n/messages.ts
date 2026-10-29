@@ -1,9 +1,11 @@
 import { printerPreferencesMessages } from './printerPreferencesMessages'
 import { stickerSheetMessages } from './stickerSheetMessages'
+import { pdfToolsMessages } from './pdfToolsMessages'
 // App-owned English copy is the stable key. Missing translations fall back to English.
 export const messages: Record<string, { fr: string; ar: string }> = {
   ...printerPreferencesMessages,
   ...stickerSheetMessages,
+  ...pdfToolsMessages,
   'The selected printer is no longer available.': {
     fr: 'L’imprimante sélectionnée n’est plus disponible.',
     ar: 'الطابعة المحددة لم تعد متاحة.'

@@ -45,6 +45,9 @@ const CardMontagePage = lazy(async () => ({
 }))
 
 const AUTOSAVE_INTERVAL_MS = 60_000
+const PdfToolsPage = lazy(async () => ({
+  default: (await import('@/tools/pdf-tools/PdfToolsPage')).PdfToolsPage
+}))
 const AccountAccessPage = lazy(async () => ({
   default: (await import('@/account/AccountAccessPage')).AccountAccessPage
 }))
@@ -78,6 +81,7 @@ const HardcoverCoverPage = lazy(async () => ({
 }))
 
 const pageMeta: Record<AppRoute, PageMeta> = {
+  'pdf-tools': { title: 'PDF Tools', subtitle: '' },
   'card-montage': {
     title: 'Card Montage',
     subtitle: 'Business cards on A4'
@@ -129,6 +133,7 @@ const pageMeta: Record<AppRoute, PageMeta> = {
 }
 
 const appRoutes = new Set<AppRoute>([
+  'pdf-tools',
   'dashboard',
   'card-montage',
   'booklet-montage',
@@ -813,6 +818,11 @@ export function App(): JSX.Element {
             onImportBookletPdf={importBookletPdf}
             onOpenImageFile={() => void openImageFile()}
           />
+        </Suspense>
+      )}
+      {activeRoute === 'pdf-tools' && !showToolAccessOverlay && (
+        <Suspense fallback={<ToolLoadingFallback label={t('PDF Tools')} />}>
+          <PdfToolsPage onNavigate={navigate} />
         </Suspense>
       )}
       {activeRoute === 'booklet-montage' && !showToolAccessOverlay && (

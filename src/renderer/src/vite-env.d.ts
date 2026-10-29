@@ -91,6 +91,19 @@ declare global {
 
   interface Window {
     printerApp?: {
+      pdf: {
+        machineMemory: () => Promise<import('../../shared/pdf-memory').PdfMachineMemory>
+        selectFiles: (
+          kind: import('../../shared/pdf-files').PdfPickerKind
+        ) => Promise<import('../../shared/pdf-files').PdfSelectedFilesResult>
+        readSelectedFile: (
+          id: string
+        ) => Promise<import('../../shared/pdf-files').PdfReadFileResult>
+        officeCapabilities: () => Promise<import('../../shared/pdf-office').OfficePdfCapabilities>
+        convertOffice: (
+          request: import('../../shared/pdf-office').OfficePdfRequest
+        ) => Promise<import('../../shared/pdf-office').OfficePdfResult>
+      }
       printers: import('../../shared/printer-preferences').PrinterPreferencesApi
       platform: string
       storageMode: 'local-first'

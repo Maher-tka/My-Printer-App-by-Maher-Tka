@@ -1,4 +1,5 @@
 export type AppRoute =
+  | 'pdf-tools'
   | 'dashboard'
   | 'booklet-montage'
   | 'hardcover-cover'
