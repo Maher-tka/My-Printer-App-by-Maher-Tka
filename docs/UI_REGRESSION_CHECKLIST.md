@@ -3047,3 +3047,22 @@ the native/production proof runs and test logs. Repeat the focused proof with
 Repeat with `npm run build` then `npm run test:fast-print:montage`. Evidence:
 `output/fast-print-montage/fc3d8763-d326-4eb4-9a03-bb2b65ad6799/`.
 Usage: [FAST_PRINT_MONTAGE.md](FAST_PRINT_MONTAGE.md).
+
+## 2026-10-28 — Printer preset organization
+
+- Grouped driver presets by printer in collapsible sections with counts and
+  unavailable-printer status. Print-option assignments now have an explicit
+  printer selector, independent of the preset being edited. Card print choices
+  are grouped by printer and show the selected preset details.
+- Hidden printer-settings proofs exercised group toggling, keyboard assignment,
+  editing, saving, cancellation, errors, and missing printers. Captures covered
+  1366×768, 1600×900, and 1920×1080 in English light/dark, French light and
+  Arabic dark/RTL low-end; representative captures were inspected. Card-print
+  proofs exercised routing, persistence, error states, keyboard access, themes,
+  RTL and low-end at 1366×768 and 1920×1080. No hardware jobs were sent.
+- Pending: visual inspection of the expanded native card preset menu and a
+  screen-reader check.
+- Full release checks and targeted printer/card UI proofs passed on the 0.2.29
+  candidate. Two unrelated production metadata and hardcover source fixture tests
+  were skipped because the local sample folder was absent in the release checkout.
+  Evidence: `output/printer-settings-proof/` and `output/card-print-default/`.

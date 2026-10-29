@@ -31,6 +31,13 @@ export const printerPreferencesMessages: Record<string, { fr: string; ar: string
     fr: 'Impossible d’enregistrer le préréglage. Sélectionnez-le à nouveau pour réessayer.',
     ar: 'تعذر حفظ إعداد الطابعة. اختره مجددًا للمحاولة.'
   },
+  preset: { fr: 'préréglage', ar: 'إعداد' },
+  presets: { fr: 'préréglages', ar: 'إعدادات' },
+  'Printer unavailable': { fr: 'Imprimante indisponible', ar: 'الطابعة غير متاحة' },
+  'Printer for preset assignment': {
+    fr: 'Imprimante pour l’association',
+    ar: 'الطابعة لتعيين الإعداد'
+  },
   'Saved driver presets': {
     fr: 'Préréglages du pilote enregistrés',
     ar: 'إعدادات برنامج التشغيل المحفوظة'

@@ -40,6 +40,7 @@ export function PrinterSettings({
   const nameInput = useRef<HTMLInputElement>(null)
   const [snapshot, setSnapshot] = useState<PrinterSettingsSnapshot>()
   const [printer, setPrinter] = useState('')
+  const [assignmentPrinter, setAssignmentPrinter] = useState('')
   const [profileId, setProfileId] = useState('new')
   const [name, setName] = useState('')
   const [optionId, setOptionId] = useState('polaroid-8')
@@ -48,12 +49,13 @@ export function PrinterSettings({
   const [message, setMessage] = useState('')
   const current = snapshot?.presets.find((p) => p.id === profileId)
   const option = PRINTING_OPTIONS.find((p) => p.id === optionId)!
-  const presets = (snapshot?.presets.filter((p) => p.printer === printer) ?? []).sort(
+  const presets = (snapshot?.presets.filter((p) => p.printer === assignmentPrinter) ?? []).sort(
     compareDriverPresets
   )
   const savedPresets = [...(snapshot?.presets ?? [])].sort(compareDriverPresets)
+  const presetGroups = Array.from(new Set(savedPresets.map((profile) => profile.printer)))
   const assignedId = snapshot
-    ? preferredProfile(snapshot.preferences, printer, optionId)
+    ? preferredProfile(snapshot.preferences, assignmentPrinter, optionId)
     : undefined
   const assignedPreset = snapshot?.presets.find((p) => p.id === assignedId)
   const installed = Boolean(snapshot?.devices.some((p) => p.name === printer))
@@ -72,14 +74,14 @@ export function PrinterSettings({
       setProfileId('new')
       setName('')
     }
-    setPrinter(
-      (previous) =>
-        previous ||
-        next.preferences.defaultPrinter ||
-        next.devices.find((p) => p.isDefault)?.name ||
-        next.devices[0]?.name ||
-        ''
-    )
+    const initialPrinter =
+      next.preferences.defaultPrinter ||
+      next.devices.find((p) => p.isDefault)?.name ||
+      next.devices[0]?.name ||
+      next.presets[0]?.printer ||
+      ''
+    setPrinter((previous) => previous || initialPrinter)
+    setAssignmentPrinter((previous) => previous || initialPrinter)
   }
   async function perform(task: () => Promise<void>) {
     setBusy(true)
@@ -228,60 +230,93 @@ export function PrinterSettings({
               </Button>
             </div>
             {savedPresets.length ? (
-              <ul
-                className="max-h-80 divide-y overflow-y-auto overscroll-contain rounded-[var(--ui-radius-md)] border"
+              <div
+                className="max-h-96 space-y-3 overflow-y-auto overscroll-contain"
                 aria-label={t('Saved driver presets')}
               >
-                {savedPresets.map((profile) => (
-                  <li
-                    key={profile.id}
-                    className={`flex min-w-0 items-start justify-between gap-4 p-4 ${profile.id === profileId ? 'bg-primary/10' : ''}`}
-                    data-driver-preset={profile.id}
+                {presetGroups.map((machine) => (
+                  <details
+                    key={machine}
+                    open
+                    data-printer-group={machine}
+                    className="overflow-hidden rounded-[var(--ui-radius-md)] border"
                   >
-                    <div className="min-w-0 space-y-1">
-                      <div className="break-words font-medium">{profile.name}</div>
-                      <div className="break-words text-sm text-muted-foreground">
-                        {profile.printer}
-                      </div>
-                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        <span>{profile.paper}</span>
-                        <span>{t(profile.color ? 'Color' : 'Black & white')}</span>
-                        <span>
+                    <summary className="cursor-pointer bg-secondary/40 px-4 py-3 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+                      <bdi dir="auto" className="break-words">
+                        {machine}
+                      </bdi>
+                      <span className="ms-2 inline-block text-xs font-normal text-muted-foreground">
+                        <bdi>
+                          {savedPresets.filter((profile) => profile.printer === machine).length}{' '}
                           {t(
-                            profile.duplex === 'Simplex'
-                              ? 'Single-sided'
-                              : profile.duplex === 'Vertical'
-                                ? 'Long-edge duplex'
-                                : profile.duplex === 'Horizontal'
-                                  ? 'Short-edge duplex'
-                                  : profile.duplex
+                            savedPresets.filter((profile) => profile.printer === machine).length ===
+                              1
+                              ? 'preset'
+                              : 'presets'
                           )}
+                        </bdi>
+                      </span>
+                      {!snapshot.devices.some((device) => device.name === machine) ? (
+                        <span className="ms-2 text-xs text-destructive">
+                          {t('Printer unavailable')}
                         </span>
-                        <span>
-                          {t('Tray')}: {profile.tray}
-                        </span>
-                      </div>
-                      {!profile.usable ? (
-                        <p className="text-xs text-destructive">{t('Preset needs attention')}</p>
                       ) : null}
-                    </div>
-                    <Button
-                      type="button"
-                      variant={profile.id === profileId ? 'selected' : 'outline'}
-                      size="sm"
-                      className="shrink-0"
-                      disabled={busy}
-                      aria-label={`${t('Edit preset')}: ${profile.name}`}
-                      aria-pressed={profile.id === profileId}
-                      aria-controls="printer-preset-editor"
-                      onClick={() => chooseProfile(profile.id)}
-                    >
-                      <PencilLine aria-hidden="true" />
-                      {t('Edit')}
-                    </Button>
-                  </li>
+                    </summary>
+                    <ul className="divide-y border-t">
+                      {savedPresets
+                        .filter((profile) => profile.printer === machine)
+                        .map((profile) => (
+                          <li
+                            key={profile.id}
+                            className={`flex min-w-0 items-start justify-between gap-4 p-4 ${profile.id === profileId ? 'bg-primary/10' : ''}`}
+                            data-driver-preset={profile.id}
+                          >
+                            <div className="min-w-0 space-y-1">
+                              <div className="break-words font-medium">{profile.name}</div>
+                              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                <span>{profile.paper}</span>
+                                <span>{t(profile.color ? 'Color' : 'Black & white')}</span>
+                                <span>
+                                  {t(
+                                    profile.duplex === 'Simplex'
+                                      ? 'Single-sided'
+                                      : profile.duplex === 'Vertical'
+                                        ? 'Long-edge duplex'
+                                        : profile.duplex === 'Horizontal'
+                                          ? 'Short-edge duplex'
+                                          : profile.duplex
+                                  )}
+                                </span>
+                                <span>
+                                  {t('Tray')}: {profile.tray}
+                                </span>
+                              </div>
+                              {!profile.usable ? (
+                                <p className="text-xs text-destructive">
+                                  {t('Preset needs attention')}
+                                </p>
+                              ) : null}
+                            </div>
+                            <Button
+                              type="button"
+                              variant={profile.id === profileId ? 'selected' : 'outline'}
+                              size="sm"
+                              className="shrink-0"
+                              disabled={busy}
+                              aria-label={`${t('Edit preset')}: ${profile.name}`}
+                              aria-pressed={profile.id === profileId}
+                              aria-controls="printer-preset-editor"
+                              onClick={() => chooseProfile(profile.id)}
+                            >
+                              <PencilLine aria-hidden="true" />
+                              {t('Edit')}
+                            </Button>
+                          </li>
+                        ))}
+                    </ul>
+                  </details>
                 ))}
-              </ul>
+              </div>
             ) : (
               <p role="status" className="text-sm text-muted-foreground">
                 {t('No saved driver presets. Choose New preset to create one.')}
@@ -471,8 +506,7 @@ export function PrinterSettings({
                         else p.optionPrinters[optionId] = value
                       })
                       if (value !== 'inherit') {
-                        setPrinter(value)
-                        chooseProfile('new')
+                        setAssignmentPrinter(value)
                       }
                     },
                     'Preferred printer for this option',
@@ -484,15 +518,25 @@ export function PrinterSettings({
                 )
               : null}
             {field(
+              'Printer for preset assignment',
+              choices(
+                assignmentPrinter,
+                setAssignmentPrinter,
+                'Printer for preset assignment',
+                printerNames.map((value) => ({ value, label: value }))
+              )
+            )}
+            {field(
               'Driver preset for selected printer',
               choices(
-                preferredProfile(snapshot.preferences, printer, optionId) ?? 'driver-default',
+                preferredProfile(snapshot.preferences, assignmentPrinter, optionId) ??
+                  'driver-default',
                 (value) =>
                   void save((p) => {
-                    const assignments = { ...(p.profiles[printer] ?? {}) }
+                    const assignments = { ...(p.profiles[assignmentPrinter] ?? {}) }
                     if (value === 'driver-default') delete assignments[optionId]
                     else assignments[optionId] = value
-                    p.profiles = { ...p.profiles, [printer]: assignments }
+                    p.profiles = { ...p.profiles, [assignmentPrinter]: assignments }
                   }),
                 'Driver preset for selected printer',
                 [
@@ -512,7 +556,7 @@ export function PrinterSettings({
               </p>
             ) : null}
             <p className="text-xs text-muted-foreground">
-              {printer}. {t('Each printer remembers its own preset for this option.')}
+              {t('Each printer remembers its own preset for this option.')}
             </p>
             {option.paper ? (
               <p className="text-xs text-muted-foreground">
