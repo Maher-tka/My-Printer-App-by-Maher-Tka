@@ -151,6 +151,10 @@ internal static class NativePrint {
   }
 }
 internal sealed class Options {
+  [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+  static extern int StrCmpLogicalW(string left, string right);
+  static readonly IComparer<string> ExplorerNameOrder = Comparer<string>.Create(
+    (left, right) => StrCmpLogicalW(Path.GetFileName(left), Path.GetFileName(right)));
   internal string App, AppPath, Verify, Appearance, Language = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
   internal bool VerifyPolaroid,VerifyPaint,VerifyAudit,VerifyId,VerifyCounts;
   internal List<string> Files = new List<string>();
@@ -191,6 +195,10 @@ internal sealed class Options {
     }
     if (Files.Count < 1 || Files.Count > 1000) throw new ArgumentException("Choose between 1 and 1,000 files.");
     Files = Files.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    // Sort only a new selection: an existing preset may reference file indices.
+    // StrCmpLogicalW uses Explorer's natural name comparison (2 before 10).
+    if (Initial == null || !new[]{"sourceRotations", "sourceCopies", "pageRotations"}.Any(Initial.ContainsKey))
+      Files = Files.OrderBy(file => file, ExplorerNameOrder).ToList();
     foreach (string file in Files) {
       if (!new[] { ".pdf", ".docx", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff" }.Contains(Path.GetExtension(file).ToLowerInvariant())) throw new ArgumentException("Unsupported document: " + Path.GetFileName(file));
       var info = new FileInfo(file); if (!info.Exists || info.Length == 0 || info.Length > 512L * 1024 * 1024) throw new ArgumentException("Choose a non-empty document smaller than 512 MB: " + info.Name);
