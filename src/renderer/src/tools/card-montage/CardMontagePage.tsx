@@ -505,7 +505,7 @@ export function CardMontagePage({
                       checked={Boolean(settings.cardOutline)}
                       onChange={(event) => updateSettings({ cardOutline: event.target.checked })}
                     />
-                    {t('Cutting rectangle (0.25 px)')}
+                    {t('Cutting rectangle on front only (0.25 px)')}
                   </label>
                   <label className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
                     {t('Outline color')}

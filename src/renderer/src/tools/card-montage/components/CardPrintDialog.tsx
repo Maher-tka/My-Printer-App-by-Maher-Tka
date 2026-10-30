@@ -113,6 +113,7 @@ export function CardPrintDialog({
     saving.current = operation
   }
   const presetError = failure ?? (snapshot ? getCardPrinterPresetError(snapshot, presetId) : null)
+  const selectedPreset = snapshot?.presets.find((preset) => preset.id === presetId)
   const unavailablePreset =
     presetId !== INHERIT_CARD_PRINTER && !snapshot?.presets.some((preset) => preset.id === presetId)
   const blocked = Boolean(error || presetError || (api && (!loaded || pending)))
@@ -150,16 +151,40 @@ export function CardPrintDialog({
                   {t('Unavailable saved preset')}
                 </option>
               )}
-              {[...(snapshot?.presets ?? [])].sort(compareDriverPresets).map((preset) => (
-                <option
-                  key={preset.id}
-                  value={preset.id}
-                  disabled={Boolean(snapshot && getCardPrinterPresetError(snapshot, preset.id))}
-                >
-                  {preset.name} · {preset.printer} · {preset.paper}
-                </option>
+              {Array.from(
+                new Set(
+                  [...(snapshot?.presets ?? [])]
+                    .sort(compareDriverPresets)
+                    .map((preset) => preset.printer)
+                )
+              ).map((printer) => (
+                <optgroup key={printer} label={printer}>
+                  {[...(snapshot?.presets ?? [])]
+                    .filter((preset) => preset.printer === printer)
+                    .sort(compareDriverPresets)
+                    .map((preset) => (
+                      <option
+                        key={preset.id}
+                        value={preset.id}
+                        disabled={Boolean(
+                          snapshot && getCardPrinterPresetError(snapshot, preset.id)
+                        )}
+                      >
+                        {preset.name} · {preset.printer} · {preset.paper} ·{' '}
+                        {t(preset.color ? 'Color' : 'Black & white')} · {preset.tray}
+                      </option>
+                    ))}
+                </optgroup>
               ))}
             </select>
+            {selectedPreset ? (
+              <span className="break-words text-xs font-normal text-muted-foreground">
+                <bdi dir="auto">{selectedPreset.name}</bdi> ·{' '}
+                <bdi dir="auto">{selectedPreset.printer}</bdi> · {selectedPreset.paper} ·{' '}
+                {t(selectedPreset.color ? 'Color' : 'Black & white')} · {t('Tray')}:{' '}
+                <bdi dir="auto">{selectedPreset.tray}</bdi>
+              </span>
+            ) : null}
           </label>
         )}
         <label className="grid gap-2 text-sm font-medium">

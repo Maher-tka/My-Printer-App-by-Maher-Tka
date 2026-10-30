@@ -2,17 +2,15 @@ import type { FastPrintPagesPerSheet } from './fast-print.js'
 export const FAST_PRINT_MAX_FILES = 1000
 export const FAST_PRINT_MAX_PAGES = 2000
 
-/** Repeated images get their own sheets; ordinary files keep their existing grouping. */
+/** Group adjacent images, or all files when combining is enabled. */
 export function fastPrintGroupEnd(
   extensions: string[],
   start: number,
   combineFiles: boolean,
-  combineImages: boolean,
-  sourceCopies?: number[]
+  combineImages: boolean
 ): number {
-  if ((sourceCopies?.[start] ?? 1) > 1) return start
   let end = start
-  while (end + 1 < extensions.length && (sourceCopies?.[end + 1] ?? 1) === 1) {
+  while (end + 1 < extensions.length) {
     if (
       !combineFiles &&
       !(combineImages && extensions[start] !== '.pdf' && extensions[end + 1] !== '.pdf')

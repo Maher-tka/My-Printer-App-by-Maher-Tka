@@ -76,6 +76,7 @@ const productionActions = [
   }
 ]
 const toolIcons = {
+  'pdf-tools': FileText,
   'card-montage': CreditCard,
   'booklet-montage': BookOpen,
   'hardcover-cover': SquareStack,

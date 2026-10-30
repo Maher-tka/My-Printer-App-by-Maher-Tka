@@ -89,10 +89,12 @@ for (const language of ['en', 'fr', 'ar']) {
     'rotationIsolated',
     'finalSheetSelection',
     'filteredSelection',
-    'blankSlotsIgnored'
+    'blankSlotsIgnored',
+    'dragSwap',
+    'keyboardSwap'
   ])
     assert.equal(result[key], true, key)
-  assert.equal(result.reports.length, 16)
+  assert.equal(result.reports.length, 17)
   for (const capture of result.captures) {
     const name = `${capture.dark ? 'dark' : 'light'}-${capture.width}x${capture.height}.png`
     const metadata = await sharp(join(folder, name)).metadata()

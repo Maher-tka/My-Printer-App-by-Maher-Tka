@@ -1,6 +1,7 @@
 import { useLanguage } from '@/i18n/useLanguage'
 import {
   BookOpen,
+  Files,
   CreditCard,
   BriefcaseBusiness,
   History,
@@ -40,7 +41,8 @@ const productionItems: NavItem[] = [
   { route: 'booklet-montage', label: 'Booklet Montage', icon: BookOpen },
   { route: 'hardcover-cover', label: 'Hardcover Cover', icon: SquareStack },
   { route: 'cutter-montage', label: 'Cutter Montage', icon: PenLine },
-  { route: 'sequential-number', label: 'Sequential Number', icon: Hash }
+  { route: 'sequential-number', label: 'Sequential Number', icon: Hash },
+  { route: 'pdf-tools', label: 'PDF Tools', icon: Files }
 ]
 const operationsItems: NavItem[] = [
   { route: 'jobs', label: 'Shop Jobs', icon: BriefcaseBusiness },

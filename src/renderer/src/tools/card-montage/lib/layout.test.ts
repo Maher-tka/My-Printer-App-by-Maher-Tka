@@ -311,11 +311,27 @@ const backCutLayout = getCardLayout({ ...DEFAULT_CARD_SETTINGS, mode: 'zero' }, 
 assert.ok(frontCutLayout.marks.length > 0)
 assert.equal(backCutLayout.marks.length, 0)
 assert.deepEqual(backCutLayout.slots, frontCutLayout.slots)
-for (const mode of ['spaced', 'auto'] as const) {
-  const settings = { ...DEFAULT_CARD_SETTINGS, mode, cardOutline: true }
+{
+  const settings = { ...DEFAULT_CARD_SETTINGS, mode: 'spaced' as const, cardOutline: true }
   const front = getCardLayout(settings, 'front')
   const back = getCardLayout(settings, 'back')
   assert.deepEqual(back.marks, front.marks)
   assert.deepEqual(back.outlines, front.outlines)
+}
+for (const orientation of ['portrait', 'landscape'] as const) {
+  for (const includeBack of [false, true]) {
+    const settings = { ...DEFAULT_CARD_SETTINGS, orientation, includeBack, cardOutline: true }
+    const front = getCardLayout(settings, 'front')
+    const back = getCardLayout(settings, 'back')
+    assert.deepEqual(front.errors, [])
+    assert.deepEqual(back.errors, [])
+    assert.equal(front.outlines.length, front.capacity)
+    assert.deepEqual(back.outlines, [], 'The back preview never has cutting rectangles.')
+    assert.deepEqual(back.slots, front.slots, 'Front/back card positions remain aligned.')
+    for (const outline of front.outlines) {
+      close(outline.widthMm, 88)
+      close(outline.heightMm, 56)
+    }
+  }
 }
 console.log('Card montage layout tests passed.')

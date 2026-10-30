@@ -1,6 +1,7 @@
 import type { LicenseSnapshot } from './licensing-types.js'
 
 export const SUBSCRIPTION_TOOLS = [
+  { id: 'pdf-tools', label: 'PDF Tools' },
   { id: 'card-montage', label: 'Business Card Montage' },
   { id: 'sequential-number', label: 'Sequential Number' },
   { id: 'booklet-montage', label: 'Booklet Montage' },

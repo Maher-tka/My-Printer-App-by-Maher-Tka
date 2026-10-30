@@ -16,6 +16,12 @@ import {
 } from '../../../shared/fast-print-batch'
 import type { IdPrintDraft } from '../../../shared/fast-print-id'
 import {
+  FAST_PRINT_SEPARATOR_PX,
+  fastPrintMontageCells,
+  fastPrintSeparatorSegments,
+  type MontageRect
+} from '../../../shared/fast-print-montage'
+import {
   loadPdfDocument,
   destroyPdfDocument,
   type PDFDocumentProxy
@@ -64,6 +70,7 @@ async function run(): Promise<void> {
       return
     }
     const { preset } = batch
+    const cover = preset.fitToFrame === true && !preset.preserveActualSize
     if (preset.sourcePages && preset.sourcePages.length !== batch.files.length)
       throw new Error('Page selections do not match the selected files.')
     if (
@@ -86,6 +93,7 @@ async function run(): Promise<void> {
     const progress = document.getElementById('progress') as HTMLProgressElement
     progress.max = batch.files.length
     let totalPages = 0
+    const pendingSlotOrders = new Map(preset.slotOrders?.map((entry) => [entry.start, entry.order]))
     let totalSheets = 0
     for (let documentIndex = 0; documentIndex < batch.files.length; documentIndex++) {
       const source = await window.fastPrint.file(documentIndex)
@@ -93,8 +101,7 @@ async function run(): Promise<void> {
         batch.files.map((file) => file.extension),
         documentIndex,
         preset.combineFiles === true,
-        preset.combineImages === true,
-        preset.sourceCopies
+        preset.combineImages === true
       )
       label(
         'file',
@@ -131,6 +138,16 @@ async function run(): Promise<void> {
           if (totalPages + pages.length > FAST_PRINT_MAX_PAGES)
             throw new Error(`Fast Print supports up to ${FAST_PRINT_MAX_PAGES} pages in one job.`)
         }
+        const order = pendingSlotOrders.get(documentIndex)
+        if (order) {
+          if (order.length !== pages.length)
+            throw new Error(
+              'The image order no longer matches the selected pages. Review the preview.'
+            )
+          const original = [...pages]
+          pages.splice(0, pages.length, ...order.map((index) => original[index]))
+          pendingSlotOrders.delete(documentIndex)
+        }
         const pageCount = pages.length
         totalPages += pageCount
         if (totalPages > FAST_PRINT_MAX_PAGES)
@@ -157,6 +174,51 @@ async function run(): Promise<void> {
           context.filter = 'none'
           context.fillStyle = '#ffffff'
           context.fillRect(0, 0, canvas.width, canvas.height)
+          let montageCells: MontageRect[] | undefined
+          const montageTurns: number[] = []
+          if (preset.compact || preset.preserveActualSize) {
+            const sizes: Array<{ width: number; height: number }> = []
+            for (const ref of pages.slice(first, first + preset.pagesPerSheet)) {
+              await load(ref.file)
+              const page = pdf ? await pdf.getPage(ref.page + 1) : undefined
+              const view = page?.getViewport({ scale: 1, rotation: page.rotate })
+              const turns = fastPrintContentTurns(
+                preset,
+                layout,
+                view?.width ?? image!.width,
+                view?.height ?? image!.height,
+                fastPrintPageTurns(preset, ref.file, ref.page)
+              )
+              montageTurns.push(turns)
+              let width = view?.width ?? image!.width,
+                height = view?.height ?? image!.height
+              if (preset.preserveActualSize) {
+                if (view) {
+                  width *= 25.4 / 72
+                  height *= 25.4 / 72
+                } else {
+                  const size = preset.imageSizesMm?.[ref.file]
+                  if (!size)
+                    throw new Error(
+                      'Actual-size images require their original physical dimensions.'
+                    )
+                  width = size.widthMm
+                  height = size.heightMm
+                }
+              }
+              if (turns % 2) [width, height] = [height, width]
+              if (preset.preserveActualSize) {
+                const paper = preset.paper === 'A3' ? [297, 420] : [210, 297]
+                if (layout.width > layout.height) paper.reverse()
+                width *= layout.width / paper[0]
+                height *= layout.height / paper[1]
+              }
+              sizes.push({ width, height })
+              page?.cleanup()
+            }
+            montageCells = fastPrintMontageCells(layout, sizes, preset)
+          }
+          const separatorCells: MontageRect[] = []
           for (let slot = 0; slot < preset.pagesPerSheet && first + slot < pageCount; slot++) {
             const ref = pages[first + slot]
             label(
@@ -167,56 +229,61 @@ async function run(): Promise<void> {
             const page = pdf ? await pdf.getPage(ref.page + 1) : undefined
             const manualTurns = fastPrintPageTurns(preset, ref.file, ref.page)
             const originalView = page?.getViewport({ scale: 1, rotation: page.rotate })
-            const turns = fastPrintContentTurns(
-              preset,
-              layout,
-              originalView?.width ?? image!.width,
-              originalView?.height ?? image!.height,
-              manualTurns
-            )
+            const turns =
+              montageTurns[slot] ??
+              fastPrintContentTurns(
+                preset,
+                layout,
+                originalView?.width ?? image!.width,
+                originalView?.height ?? image!.height,
+                manualTurns
+              )
             const rotation = page ? (page.rotate + turns * 90) % 360 : 0
             const viewport = page?.getViewport({ scale: 1, rotation })
             const sourceWidth = viewport?.width ?? image!.width
             const sourceHeight = viewport?.height ?? image!.height
             const rotatedWidth = !page && turns % 2 ? sourceHeight : sourceWidth,
               rotatedHeight = !page && turns % 2 ? sourceWidth : sourceHeight
-            const scale = (preset.fitToFrame ? Math.max : Math.min)(
-              layout.cellWidth / rotatedWidth,
-              layout.cellHeight / rotatedHeight
+            const cell =
+              montageCells?.[slot] ??
+              fastPrintCell(layout, slot, Math.min(preset.pagesPerSheet, pageCount - first))
+            separatorCells.push(cell)
+            const scale = (cover ? Math.max : Math.min)(
+              cell.width / rotatedWidth,
+              cell.height / rotatedHeight
             )
-            const width = Math.max(1, Math.floor(rotatedWidth * scale))
-            const height = Math.max(1, Math.floor(rotatedHeight * scale))
-            const cell = fastPrintCell(
-              layout,
-              slot,
-              Math.min(preset.pagesPerSheet, pageCount - first)
-            )
+            const width = preset.preserveActualSize
+              ? cell.width
+              : Math.max(1, Math.floor(rotatedWidth * scale))
+            const height = preset.preserveActualSize
+              ? cell.height
+              : Math.max(1, Math.floor(rotatedHeight * scale))
             const x = cell.x + (cell.width - width) / 2,
               y = cell.y + (cell.height - height) / 2
             context.filter = preset.color ? 'none' : 'grayscale(1)'
             context.save()
             context.beginPath()
-            context.rect(cell.x, cell.y, layout.cellWidth, layout.cellHeight)
+            context.rect(cell.x, cell.y, cell.width, cell.height)
             context.clip()
             if (page) {
               const pageCanvas = document.createElement('canvas')
               // Cover mode crops into a bounded cell instead of allocating an
               // arbitrarily wide/tall bitmap for panoramic PDF pages.
-              pageCanvas.width = preset.fitToFrame ? Math.ceil(layout.cellWidth) : width
-              pageCanvas.height = preset.fitToFrame ? Math.ceil(layout.cellHeight) : height
+              pageCanvas.width = cover ? Math.ceil(cell.width) : Math.ceil(width)
+              pageCanvas.height = cover ? Math.ceil(cell.height) : Math.ceil(height)
               try {
                 await page.render({
                   canvas: pageCanvas,
                   viewport: page.getViewport({ scale, rotation }),
-                  ...(preset.fitToFrame
+                  ...(cover
                     ? {
                         transform: [
                           1,
                           0,
                           0,
                           1,
-                          (layout.cellWidth - width) / 2,
-                          (layout.cellHeight - height) / 2
+                          (cell.width - width) / 2,
+                          (cell.height - height) / 2
                         ]
                       }
                     : {}),
@@ -225,10 +292,10 @@ async function run(): Promise<void> {
                 }).promise
                 context.drawImage(
                   pageCanvas,
-                  preset.fitToFrame ? cell.x : x,
-                  preset.fitToFrame ? cell.y : y,
-                  preset.fitToFrame ? layout.cellWidth : width,
-                  preset.fitToFrame ? layout.cellHeight : height
+                  cover ? cell.x : x,
+                  cover ? cell.y : y,
+                  cover ? cell.width : width,
+                  cover ? cell.height : height
                 )
               } finally {
                 pageCanvas.width = 0
@@ -238,14 +305,40 @@ async function run(): Promise<void> {
             } else {
               context.translate(cell.x + cell.width / 2, cell.y + cell.height / 2)
               context.rotate((turns * Math.PI) / 2)
-              context.drawImage(
-                image!,
-                (-sourceWidth * scale) / 2,
-                (-sourceHeight * scale) / 2,
-                sourceWidth * scale,
-                sourceHeight * scale
-              )
+              const imageWidth = preset.preserveActualSize
+                ? turns % 2
+                  ? height
+                  : width
+                : sourceWidth * scale
+              const imageHeight = preset.preserveActualSize
+                ? turns % 2
+                  ? width
+                  : height
+                : sourceHeight * scale
+              context.drawImage(image!, -imageWidth / 2, -imageHeight / 2, imageWidth, imageHeight)
             }
+            context.restore()
+          }
+          if (preset.separatorLines) {
+            context.save()
+            context.filter = preset.color ? 'none' : 'grayscale(1)'
+            context.strokeStyle = preset.separatorColor ?? '#000000'
+            const physicalWidth =
+              preset.paper === 'A3'
+                ? layout.width > layout.height
+                  ? 420
+                  : 297
+                : layout.width > layout.height
+                  ? 297
+                  : 210
+            context.lineWidth =
+              (((FAST_PRINT_SEPARATOR_PX * 25.4) / 96) * layout.width) / physicalWidth
+            context.beginPath()
+            for (const line of fastPrintSeparatorSegments(separatorCells)) {
+              context.moveTo(line.x1, line.y1)
+              context.lineTo(line.x2, line.y2)
+            }
+            context.stroke()
             context.restore()
           }
           await window.fastPrint.sheet(canvas.toDataURL('image/png'), {
@@ -294,6 +387,8 @@ async function run(): Promise<void> {
     if (totalSheets === 0) throw new Error('Select at least one page to print.')
     label('heading', 'Sending to your printer')
     label('status', 'Applying your settings. A PDF printer may ask where to save.')
+    if (pendingSlotOrders.size)
+      throw new Error('The image order no longer matches the selected files. Review the preview.')
     const result = await window.fastPrint.submit()
     label('heading', result.verified ? 'Print settings verified' : 'Sent to print queue')
     label(

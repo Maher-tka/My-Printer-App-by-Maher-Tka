@@ -119,7 +119,29 @@ const proof={calls:[],behavior:'save',release:null,api:null,key:0,setLanguage,se
         await evaluate(() => document.querySelectorAll('[data-driver-preset]').length),
         3
       )
+      assert.deepEqual(
+        await evaluate(() =>
+          [...document.querySelectorAll('[data-printer-group]')].map((group) => ({
+            printer: group.dataset.printerGroup,
+            count: group.querySelectorAll('[data-driver-preset]').length
+          }))
+        ),
+        [
+          { printer: 'EPSON WorkForce Pro WF-C878RDWF', count: 1 },
+          { printer: 'Konica C4065', count: 2 }
+        ]
+      )
+      await evaluate(() => document.querySelector('[data-printer-group] summary').click())
+      assert.equal(await evaluate(() => document.querySelector('[data-printer-group]').open), false)
+      await evaluate(() => document.querySelector('[data-printer-group] summary').click())
       await select(c)
+      assert.ok(
+        await evaluate(() =>
+          document
+            .querySelector('[aria-label="Printer for preset assignment"]')
+            .textContent.includes('Konica')
+        )
+      )
       const editor = await evaluate(() => ({
         name: document.querySelector('#printer-preset-editor input').value,
         focus: document.activeElement === document.querySelector('#printer-preset-editor input'),
@@ -135,6 +157,48 @@ const proof={calls:[],behavior:'save',release:null,api:null,key:0,setLanguage,se
       assert.equal(editor.printerLocked, true)
       assert.equal(editor.focus, true)
       assert.equal(editor.selected, c)
+      const press = async (key) => {
+        await evaluate(
+          (key) =>
+            document.activeElement.dispatchEvent(
+              new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+            ),
+          key
+        )
+        await pause()
+      }
+      await evaluate(() =>
+        document.querySelector('[aria-label="Printer for preset assignment"]').focus()
+      )
+      await press(' ')
+      await pause()
+      await press('End')
+      await press('Enter')
+      await pause()
+      assert.ok(
+        await evaluate(() =>
+          document
+            .querySelector('[aria-label="Printer for preset assignment"]')
+            .textContent.includes('EPSON')
+        )
+      )
+      await evaluate(() =>
+        document.querySelector('[aria-label="Driver preset for selected printer"]').focus()
+      )
+      await press(' ')
+      await pause()
+      await press('End')
+      await press('Enter')
+      await ready()
+      assert.equal(
+        await evaluate(
+          async () =>
+            (await window.settingsProof.api.get()).preferences.profiles[
+              'EPSON WorkForce Pro WF-C878RDWF'
+            ]['polaroid-8']
+        ),
+        c
+      )
       await name('Epson ID — two sides — renamed')
       await update()
       await ready()

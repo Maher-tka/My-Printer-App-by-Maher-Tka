@@ -17,7 +17,8 @@ export function getCardLayout(settings: CardMontageSettings, side: 'front' | 'ba
     settings.mode === 'auto' ? 1 : settings.mode === 'spaced' ? settings.verticalGapMm : 0
   const marksEnabled =
     settings.mode !== 'auto' && settings.cutMarks && !(settings.mode === 'zero' && side === 'back')
-  const outlinesEnabled = settings.mode === 'auto' && Boolean(settings.cardOutline)
+  const outlinesEnabled =
+    settings.mode === 'auto' && Boolean(settings.cardOutline) && side === 'front'
   const lineColor =
     settings.mode === 'auto'
       ? getCardOutlineColor(settings.cardOutlineColor)

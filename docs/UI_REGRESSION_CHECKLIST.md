@@ -1,5 +1,109 @@
 # UI regression checklist
 
+## 2026-10-28 — Missing PDF IPC handler recovery
+
+- Memory detection is advisory and no longer blocks file import when a running
+  main process lacks `pdf:machine-memory`. Known unavailable channels are cached
+  for the renderer session. If `pdf:select-files` is unavailable, import uses the
+  multi-select browser input. Other picker errors remain visible.
+- Reproduced the exact missing-memory-handler error in the hidden UI proof and
+  still imported multiple files. Also verified the missing-picker fallback with
+  no error banner. A fresh hidden Electron session exercised the real registered
+  IPC handlers for memory, multi-selection, sequential file reads and one-use
+  tokens; the native dialog was stubbed so no desktop control was needed.
+- Typecheck, production build, PDF regression tests and the existing 16 conversion
+  / 11 layout proof passed. A running old main process still needs a normal app
+  restart to load the native endpoints; no user session was closed by this check.
+
+## 2026-10-28 — PDF Tools sidebar order
+
+- PDF Tools is last in the sidebar's tools group, after Sequential Number.
+- Typecheck and formatting passed. Hidden UI proofs passed at 1366×768,
+  1600×900 and 1920×1080 with light/dark, French, Arabic RTL and low-end mode.
+  Inspected the reordered sidebar in the compact English and Arabic captures
+  and the 1920×1080 French capture. Existing PDF behavior checks passed.
+
+## 2026-10-28 — Adaptive PDF memory and batch import fixes
+
+- Replaced the fixed 150 MB gate with a shared policy based on installed RAM,
+  current available memory and JS heap headroom. Normal 8 GB allowance is
+  512 MiB; 16 GB and larger PCs allow up to 1 GiB, with lower budgets under
+  pressure. Native Office validation follows the same policy. Canvas/output
+  budgets adapt too, including low-end mode.
+- Merge and JPG-to-PDF use an explicit native picker with `multiSelections`;
+  browser inputs retain multi-select and are recreated when the tool changes.
+  Native selection transfers metadata first and reads chosen files sequentially.
+- Hidden UI checks selected two more PDFs in one picker action, preserved their
+  order, sorted names naturally and dropped more files into a populated list.
+  A corrupt PDF was reported by name while the valid member was kept; the final
+  merged file reopened with all 16 expected pages. Clear/Cancel and switch-tool
+  keyboard focus tests continue to pass.
+- Merge, split, lossless compression and overlay assembly run in a terminable
+  worker. Worker cancellation was exercised. Import cancellation keeps completed
+  files. Large output previews are loaded on demand and can be closed.
+- Removed the 300-page conversion gate. A 305-page compression completed with
+  every page retained. A 167,794,778-byte PDF compressed to 30,746,406 bytes under
+  the simulated 8 GB policy; the UI heartbeat continued during processing.
+  This proof ran on a 32 GB host and is not an actual 8 GB hardware benchmark.
+- Rechecked representative UI at 1366×768, 1600×900 and 1920×1080, light/dark,
+  French and Arabic RTL, with low-end mode. Inspected batch-error and editor
+  proofs. Limits use isolated measurement text in RTL. Evidence:
+  `output/pdf-tools/large-memory-report.json`, `merge-batch-1366.png` and the
+  updated `scripts/verify-pdf-tools.mjs --large` proof.
+- Native picker configuration and the selected-file flow were checked without
+  taking over the desktop. A live Windows file-dialog interaction, a physical
+  8 GB PC, screen-reader/high-DPI and installed Office conversion checks remain
+  pending. No hardware printing or subscriber release was performed.
+- Typecheck, production build, Storybook build, adaptive-memory/PDF tests and
+  affected export, access and translation suites passed. Formatting and diff
+  checks passed for the changed files.
+
+## 2026-10-28 — PDF Tools workspace
+
+- Added exactly the twelve tools from Maher's image, using ToolHeader, shared
+  buttons, Clear confirmation, settings tabs, tokens and the existing app shell.
+  The library has search and category filters; each tool has one import control
+  and one main output action. Headings and tool cards have no explanatory subtitles.
+- Hidden Electron proof checked the library at 1366×768, 1600×900 and 1920×1080
+  in English/light, French/dark and Arabic RTL/dark, with low-end mode enabled.
+  Editor proofs cover all three sizes, including long French controls and RTL.
+  Inspected the gallery, editor, generated-result preview and rotation proofs;
+  automated layout checks found no horizontal overflow.
+- Keyboard activation opens a tool, Clear cancellation preserves files and
+  restores focus, and switching-tool cancellation returns focus to its card.
+  Output actions reflect busy/disabled state; edits and settings invalidate old
+  results. Save occurs only after conversion, and Print requires an explicit click.
+- Sixteen conversion cases passed. Reopened PDF/ZIP/DOCX/PPTX/XLSX outputs;
+  checked page counts and order, A4 dimensions, formula-like text as strings,
+  phone EXIF rotation, and annotation placement at 0/90/180/270 degrees with a
+  crop box. A representative image-heavy scan shrank from 4.94 MB to 0.90 MB;
+  scanned PDF-to-Excel fails with an actionable OCR message.
+- Typecheck, production build, Storybook build, formatting, PDF unit tests and
+  affected access, exports, projects, card/JPEG, language and theme suites passed.
+  Evidence: `output/pdf-tools/` and `scripts/verify-pdf-tools.mjs`.
+- Pending: end-to-end Word/PowerPoint/Excel-to-PDF on an installed Office or
+  LibreOffice engine; neither is installed on the main PC. Capability detection
+  and the unavailable state are verified. Live screen-reader and high-DPI checks
+  were not performed. No hardware print jobs or subscriber releases were sent.
+
+## 2026-10-28 — Card Montage front-only cutting rectangles
+
+- Auto 8.8 × 5.6 cm cutting rectangles now appear on the front only in preview,
+  PDF export and print PDFs, including separate back-side printing. Card sizes,
+  positions, spacing and front/back alignment are preserved in both orientations.
+- The existing checkbox now says “Cutting rectangle on front only (0.25 px)”
+  in English, French and Arabic. Existing control placement, keyboard behavior,
+  shared styling and output actions are preserved.
+- Typecheck, the Card Montage suite, i18n tests, changed-file formatting and
+  diff whitespace checks passed. PDF checks cover front/back/both print routes,
+  two-sided export, dimensions, positions and absence of back-side rectangles.
+- An offscreen Card Montage fixture passed at 1366×768 and 1920×1080 across
+  English/French/Arabic, light/dark and Arabic RTL with low-end mode. Checked
+  label wrapping, page bounds, keyboard Space toggling and both previews;
+  inspected the captured populated and empty states. No desktop control or
+  hardware print jobs were used. Evidence: `output/card-front-only-outline/`.
+- These changes are local and have not been published.
+
 ## 2026-10-22 — v0.2.20 published and verified
 
 - Stable/latest v0.2.20 is published at release commit `931ed02`; Windows workflow
@@ -3016,3 +3120,59 @@ the native/production proof runs and test logs. Repeat the focused proof with
   published. Evidence: `output/fast-print-window-size/`,
   `output/fast-print-window-size-id-contact.png`,
   `output/fast-print-window-size-polaroid-contact.png` and related test logs.
+
+## 2026-10-28 — Compact Fast Print montage
+
+- Added Compact layout, Preserve actual size, and optional 0.25 px separation
+  outlines with a color picker below the existing layout selector. Compact
+  packing retains source order and the selected pages-per-sheet count, starts
+  with zero gap, and centers incomplete sheets. Cutting gap now offers 0, 1,
+  and 2 mm as well as the existing choices.
+- Actual size uses PDF dimensions and image DPI with EXIF orientation. Missing
+  image DPI uses 96. Fit to frame is disabled and unchecked; oversized layouts
+  raise an error instead of resizing the artwork. Shared cut edges are stroked
+  once and monochrome output converts the chosen line color to grayscale.
+- Hidden native proofs passed at 1366×768, 1600×900, 1920×1080 and 820×640 in
+  light/dark, English/French/Arabic RTL, with one-core mode. Checked names,
+  keyboard tab availability, scrolling, and disabled states. Inspected preview
+  and production proofs; actual high-DPI and screen-reader testing remain
+  pending.
+- Prepared A4/A3 color and monochrome output matched native previews for a
+  mixed 14-page job over two sheets. PDF badges retained 55×85 mm, including
+  PDF intrinsic rotation, manual page rotation, image DPI, EXIF orientation,
+  and missing-DPI fixtures. Compact fitting without actual size also matched.
+  Original hashes stayed unchanged and no hardware jobs were sent.
+- Typecheck, production build, native compilation, Fast Print/i18n suites,
+  existing native UI/paint checks and page rotation renderer comparisons passed.
+  ID and Polaroid geometry was not changed. Hardware measurement remains
+  pending. The implementation and helper are local; no subscriber release was
+  published.
+
+Repeat with `npm run build` then `npm run test:fast-print:montage`. Evidence:
+`output/fast-print-montage/fc3d8763-d326-4eb4-9a03-bb2b65ad6799/`.
+Usage: [FAST_PRINT_MONTAGE.md](FAST_PRINT_MONTAGE.md).
+
+## 2026-10-28 — Printer preset organization
+
+- Grouped driver presets by printer in collapsible sections with counts and
+  unavailable-printer status. Print-option assignments now have an explicit
+  printer selector, independent of the preset being edited. Card print choices
+  are grouped by printer and show the selected preset details.
+- Hidden printer-settings proofs exercised group toggling, keyboard assignment,
+  editing, saving, cancellation, errors, and missing printers. Captures covered
+  1366×768, 1600×900, and 1920×1080 in English light/dark, French light and
+  Arabic dark/RTL low-end; representative captures were inspected. Card-print
+  proofs exercised routing, persistence, error states, keyboard access, themes,
+  RTL and low-end at 1366×768 and 1920×1080. No hardware jobs were sent.
+- Pending: visual inspection of the expanded native card preset menu and a
+  screen-reader check.
+- Typecheck, print, card, i18n and changed-file formatting checks passed. Evidence:
+  `output/printer-settings-proof/` and `output/card-print-default/`.
+
+## 2026-10-29 — Fast Print preview slot swapping
+
+- Added drag-to-swap within the current ordinary Fast Print sheet and a Shift +
+  arrow keyboard alternative. The print request carries the same slot order.
+- Pending: visual inspection of the interaction at 1366×768 and 1920×1080 in
+  light/dark themes, Arabic RTL, and low-end mode, including focus and drag
+  feedback. Interactive desktop control was not used.

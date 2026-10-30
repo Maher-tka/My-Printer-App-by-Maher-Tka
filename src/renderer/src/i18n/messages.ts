@@ -1,9 +1,11 @@
 import { printerPreferencesMessages } from './printerPreferencesMessages'
 import { stickerSheetMessages } from './stickerSheetMessages'
+import { pdfToolsMessages } from './pdfToolsMessages'
 // App-owned English copy is the stable key. Missing translations fall back to English.
 export const messages: Record<string, { fr: string; ar: string }> = {
   ...printerPreferencesMessages,
   ...stickerSheetMessages,
+  ...pdfToolsMessages,
   'The selected printer is no longer available.': {
     fr: 'L’imprimante sélectionnée n’est plus disponible.',
     ar: 'الطابعة المحددة لم تعد متاحة.'
@@ -942,9 +944,9 @@ export const messages: Record<string, { fr: string; ar: string }> = {
     fr: 'Faire défiler les miniatures à droite',
     ar: 'تمرير المعاينات إلى اليمين'
   },
-  'Cutting rectangle (0.25 px)': {
-    fr: 'Rectangle de découpe (0,25 px)',
-    ar: 'إطار القص (0.25 بكسل)'
+  'Cutting rectangle on front only (0.25 px)': {
+    fr: 'Rectangle de découpe au recto uniquement (0,25 px)',
+    ar: 'إطار القص على الوجه الأمامي فقط (0.25 بكسل)'
   },
   'Crop crosses (0.25 px)': {
     fr: 'Croix de coupe (0,25 px)',

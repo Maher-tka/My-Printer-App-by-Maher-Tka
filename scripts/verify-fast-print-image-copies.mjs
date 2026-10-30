@@ -96,7 +96,7 @@ for (const language of ['en', 'fr', 'ar']) {
     'limitChecked'
   ])
     assert.equal(result[key], true, key)
-  assert.equal(result.reports.length, 7)
+  assert.equal(result.reports.length, 8)
   for (const capture of result.captures) {
     const name = `${capture.dark ? 'dark' : 'light'}-${capture.width}x${capture.height}.png`
     const metadata = await sharp(join(folder, name)).metadata()
@@ -145,7 +145,7 @@ for (const language of ['en', 'fr', 'ar']) {
   await removeOwned(result.cleanupDirectory)
   results.push({ language, folder, reports: result.reports.length })
   console.log(
-    `${language}: selected-image duplication, dedicated sheets, mixed files, output, layouts and limits passed`
+    `${language}: selected-image duplication, shared sheets, mixed files, output, layouts and limits passed`
   )
 }
 await writeFile(

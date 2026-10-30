@@ -542,16 +542,42 @@ for (const orientation of ['portrait', 'landscape'] as const) {
     }
   }
 }
-const blueOutlines = await PDFDocument.load(
-  await exportCardMontagePdf(
-    png,
-    { ...settings, cardOutline: true, cardOutlineColor: '#0000ff', includeBack: true },
-    png
-  )
-)
-for (const pageIndex of [0, 1]) {
-  assert.match(content(blueOutlines, pageIndex), /0 0 1 RG/)
-  assert.equal((content(blueOutlines, pageIndex).match(/0\.1875 w/g) ?? []).length, 10)
+for (const orientation of ['portrait', 'landscape'] as const) {
+  const outlineSettings = {
+    ...settings,
+    orientation,
+    cardOutline: true,
+    cardOutlineColor: '#0000ff',
+    includeBack: true
+  }
+  const expected = getCardLayout(outlineSettings)
+  const draft = { artwork: png, back: png, settings: outlineSettings }
+  for (const route of ['export', 'front', 'back', 'both'] as const) {
+    const doc = await PDFDocument.load(
+      route === 'export'
+        ? await exportCardMontagePdf(png, outlineSettings, png)
+        : await createCardPrintPdf(draft, route)
+    )
+    assert.equal(doc.getPageCount(), route === 'export' || route === 'both' ? 2 : 1)
+    for (const [pageIndex, page] of doc.getPages().entries()) {
+      const stream = content(doc, pageIndex)
+      const front = route !== 'back' && pageIndex === 0
+      assert.equal((stream.match(/0\.1875 w/g) ?? []).length, front ? expected.capacity : 0)
+      assert.equal(stream.includes('0 0 1 RG'), front, `${route}: only the front has cut outlines`)
+      close(page.getWidth(), pt(expected.sheetWidthMm))
+      close(page.getHeight(), pt(expected.sheetHeightMm))
+      const boxes = placements(stream, 1, 1)
+      assert.equal(boxes.length, expected.capacity)
+      for (const [index, box] of boxes.entries()) {
+        close(box.width, pt(88))
+        close(box.height, pt(56))
+        close(box.left, pt(expected.slots[index].xMm))
+        close(box.bottom, pt(expected.sheetHeightMm - expected.slots[index].yMm - 56))
+      }
+    }
+    if (doc.getPageCount() === 2)
+      assert.deepEqual(placements(content(doc, 0), 1, 1), placements(content(doc, 1), 1, 1))
+  }
 }
 const automaticWithoutOutlines = await PDFDocument.load(
   await exportCardMontagePdf(png, { ...settings, cutMarks: true, cardOutline: false })

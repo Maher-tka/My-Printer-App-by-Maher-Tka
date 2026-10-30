@@ -32,15 +32,11 @@ assert.deepEqual(
 )
 assert.equal(countBatchSheets([1, 1, 1], 4), 3, 'Separate images are separate documents')
 const mixed = ['.png', '.jpg', '.gif', '.pdf', '.png']
-const quantities = [1, 9, 1, 1, 2]
-assert.equal(fastPrintGroupEnd(mixed, 0, false, true, quantities), 0)
-assert.equal(fastPrintGroupEnd(mixed, 1, false, true, quantities), 1)
-assert.equal(fastPrintGroupEnd(mixed, 2, false, true, quantities), 2)
-assert.equal(fastPrintGroupEnd(mixed, 2, true, true, quantities), 3)
-assert.equal(fastPrintGroupEnd(mixed, 3, true, true, quantities), 3)
-assert.equal(fastPrintGroupEnd(mixed, 4, true, true, quantities), 4)
 assert.equal(fastPrintGroupEnd(mixed, 0, false, true), 2)
+assert.equal(fastPrintGroupEnd(mixed, 3, false, true), 3)
+assert.equal(fastPrintGroupEnd(mixed, 4, false, true), 4)
 assert.equal(fastPrintGroupEnd(mixed, 0, true, true), 4)
+assert.equal(fastPrintGroupEnd(mixed, 0, false, false), 0)
 assert.throws(() => normalizeFastPrintSelection([]), /Select/)
 assert.throws(
   () => normalizeFastPrintSelection(['C:\\Jobs\\good.pdf', 'C:\\Jobs\\script.bat']),
