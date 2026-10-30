@@ -3166,6 +3166,11 @@ Usage: [FAST_PRINT_MONTAGE.md](FAST_PRINT_MONTAGE.md).
   RTL and low-end at 1366×768 and 1920×1080. No hardware jobs were sent.
 - Pending: visual inspection of the expanded native card preset menu and a
   screen-reader check.
+- Full release checks and targeted printer/card UI proofs passed on the 0.2.29
+  candidate. Two unrelated production metadata and hardcover source fixture tests
+  were skipped because the local sample folder was absent in the release checkout.
+  Evidence: `output/printer-settings-proof/` and `output/card-print-default/`.
+
 - Typecheck, print, card, i18n and changed-file formatting checks passed. Evidence:
   `output/printer-settings-proof/` and `output/card-print-default/`.
 

@@ -1,6 +1,6 @@
 {
   "name": "my-printer-app-by-maher-tka",
-  "version": "0.2.27",
+  "version": "0.2.31",
   "description": "Local-first printer-shop hub desktop app by Maher Tka.",
   "author": "Maher Tka",
   "private": true,
@@ -106,7 +106,11 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-pageflip": "^2.0.3",
-    "tailwind-merge": "^2.4.0"
+    "tailwind-merge": "^2.4.0",
+    "docx": "^9.15.0",
+    "exceljs": "^4.4.0",
+    "fflate": "^0.8.3",
+    "pptxgenjs": "^4.0.1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",

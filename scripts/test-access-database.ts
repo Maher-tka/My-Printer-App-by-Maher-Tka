@@ -22,6 +22,27 @@ for (const file of (await readdir(migrationDirectory))
   .sort()) {
   await db.exec(await readFile(new URL(file, migrationDirectory), 'utf8'))
 }
+const pdfPlans = await db.query<{ plan: string; tool_ids: string[] }>(
+  'select plan, tool_ids from public.printer_subscription_plans order by plan'
+)
+assert.ok(pdfPlans.rows.every((plan) => plan.tool_ids.includes('pdf-tools')))
+assert.equal(
+  (
+    await db.query<{ valid: boolean }>(
+      "select printer_private.valid_tools(array['pdf-tools']) as valid"
+    )
+  ).rows[0].valid,
+  true
+)
+assert.equal(
+  (
+    await db.query<{ enabled: string }>(
+      "select tgenabled as enabled from pg_trigger where tgrelid = 'public.printer_subscription_plans'::regclass and tgname = 'printer_plan_audit'"
+    )
+  ).rows[0].enabled,
+  'O',
+  'The plan audit trigger remains enabled after the migration'
+)
 for (const [id, email, verified] of [
   [owner, 'owner@example.com', true],
   [alice, 'alice@example.com', true],
