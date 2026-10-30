@@ -95,7 +95,8 @@ for (const [language, appearance] of [
       .toFile(file)
     files.push(file)
   }
-  files.push(join(folder, 'edited & pages.pdf'))
+  // New selections are sorted in Explorer order, so keep the PDF last.
+  files.push(join(folder, 'z-edited & pages.pdf'))
   await writeFile(files.at(-1), await pdf(1))
   await writeFile(join(folder, 'replacement.pdf'), await pdf(2))
   const selection = join(folder, 'selection.json')
@@ -127,7 +128,7 @@ for (const [language, appearance] of [
   const result = JSON.parse(await readFile(join(folder, 'result.json'), 'utf8'))
   const colorPlan = JSON.parse(await readFile(result.request, 'utf8'))
   assert.equal(basename(colorPlan.files[0]), 'edited & front.png')
-  assert.equal(basename(colorPlan.files.at(-1)), 'edited & pages.pdf')
+  assert.equal(basename(colorPlan.files.at(-1)), 'z-edited & pages.pdf')
   for (const field of [
     'headless',
     'stalePrinterResultsIgnored',

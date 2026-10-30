@@ -3178,6 +3178,12 @@ Usage: [FAST_PRINT_MONTAGE.md](FAST_PRINT_MONTAGE.md).
 
 - Added drag-to-swap within the current ordinary Fast Print sheet and a Shift +
   arrow keyboard alternative. The print request carries the same slot order.
+- Release verification: hidden native tests exercised mouse and keyboard swaps,
+  selection, rotation, partial sheets and filtering in English, French and Arabic
+  with one-core mode. Prepared pages matched the preview for A4/A3 layouts,
+  including a swapped sheet. Captures covered light/dark at 1366×768 and
+  1920×1080; representative English and Arabic captures were inspected. No
+  hardware print jobs were sent. Evidence: `output/fast-print-sheet-images/`.
 - Pending: visual inspection of the interaction at 1366×768 and 1920×1080 in
-  light/dark themes, Arabic RTL, and low-end mode, including focus and drag
-  feedback. Interactive desktop control was not used.
+  progress, especially focus and drag-target feedback. Interactive desktop
+  control was not used.
