@@ -23,11 +23,93 @@ import { getCardLayout } from './layout'
 import { inspectCardPageFonts } from './pdfFonts'
 import { assertCardFileSupported } from './artwork'
 import { createCardPrintPdf, getCardPrintSetupError } from './printSetup'
+import { cardPdfBounds, cardPdfPreviewBytes } from './pdfBounds'
 
 const pt = (mm: number) => (mm * 72) / 25.4
 const close = (actual: number, expected: number) =>
   assert.ok(Math.abs(actual - expected) < 1e-5, `${actual} != ${expected}`)
 const settings = { ...DEFAULT_CARD_SETTINGS, cutMarks: false }
+
+// Trim is the finished artboard; the surrounding bleed and printer marks must
+// not change sizing or appear in either preview or output.
+const trimmedSource = await PDFDocument.create()
+for (const [rotation, trim] of [
+  [0, [20, 30, 160, 100]],
+  [90, [35, 40, 120, 80]]
+] as const) {
+  const page = trimmedSource.addPage([240, 180])
+  page.setCropBox(10, 15, 200, 140)
+  page.setBleedBox(15, 20, 190, 130)
+  page.setTrimBox(trim[0], trim[1], trim[2], trim[3])
+  page.setRotation(degrees(rotation))
+  page.drawRectangle({ x: 0, y: 0, width: 240, height: 180, color: rgb(1, 0, 0) })
+  page.drawRectangle({
+    x: trim[0],
+    y: trim[1],
+    width: trim[2],
+    height: trim[3],
+    color: rgb(0, 0, 1)
+  })
+}
+const trimmedBytes = await trimmedSource.save()
+const preview = await PDFDocument.load(await cardPdfPreviewBytes(trimmedBytes))
+assert.deepEqual(preview.getPage(0).getCropBox(), { x: 20, y: 30, width: 160, height: 100 })
+assert.deepEqual(preview.getPage(1).getCropBox(), { x: 35, y: 40, width: 120, height: 80 })
+assert.equal(preview.getPage(1).getRotation().angle, 90)
+assert.deepEqual(
+  (await PDFDocument.load(trimmedBytes)).getPage(0).getCropBox(),
+  {
+    x: 10,
+    y: 15,
+    width: 200,
+    height: 140
+  },
+  'preview preparation leaves original bytes untouched'
+)
+const trimmedArt: CardArtwork = {
+  name: 'bleed.ai',
+  kind: 'pdf',
+  bytesBase64: Buffer.from(trimmedBytes).toString('base64'),
+  pageNumber: 1,
+  pageCount: 2,
+  widthMm: 1,
+  heightMm: 1,
+  previewDataUrl: ''
+}
+for (const route of ['front', 'back', 'both', 'all'] as const) {
+  const back = { ...trimmedArt, pageNumber: 2 }
+  const output = await PDFDocument.load(
+    route === 'all'
+      ? await exportCardMontagePdf(trimmedArt, { ...settings, exportAllPdfPages: true })
+      : await createCardPrintPdf({ artwork: trimmedArt, back, settings }, route)
+  )
+  const expected =
+    route === 'front'
+      ? [[20, 30, 180, 130]]
+      : route === 'back'
+        ? [[35, 40, 155, 120]]
+        : [
+            [20, 30, 180, 130],
+            [35, 40, 155, 120]
+          ]
+  assert.equal(output.getPageCount(), expected.length)
+  for (const [index, page] of output.getPages().entries()) {
+    const xObjects = page.node.Resources()!.lookup(PDFName.of('XObject'), PDFDict)
+    const form = output.context.lookup(xObjects.values()[0], PDFStream)
+    const bbox = form.dict.lookup(PDFName.of('BBox'), PDFArray)
+    assert.deepEqual(
+      bbox.asArray().map((value) => (value as PDFNumber).asNumber()),
+      expected[index],
+      route
+    )
+  }
+}
+const fallbackSource = await PDFDocument.create()
+const fallbackPage = fallbackSource.addPage([200, 150])
+fallbackPage.setCropBox(10, 15, 170, 120)
+assert.deepEqual(cardPdfBounds(fallbackPage), { left: 10, bottom: 15, right: 180, top: 135 })
+fallbackPage.setTrimBox(500, 500, 20, 20)
+assert.deepEqual(cardPdfBounds(fallbackPage), { left: 10, bottom: 15, right: 180, top: 135 })
 
 // Page transparency groups are outside Resources. Dropping them during
 // imposition changes the blending context used by PDF viewers and printers.

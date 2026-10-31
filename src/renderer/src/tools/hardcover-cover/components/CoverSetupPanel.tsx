@@ -215,7 +215,7 @@ export function CoverSetupPanel({
 
   return (
     <section
-      className="min-w-0 max-w-full overflow-hidden rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4"
+      className="min-w-0 max-w-full overflow-hidden ui-glass-panel rounded-[var(--ui-radius-lg)] border p-4"
       data-hardcover-setup-panel={section}
     >
       <div className="flex min-w-0 items-center justify-between gap-3">

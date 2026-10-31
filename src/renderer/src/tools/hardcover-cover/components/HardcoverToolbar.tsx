@@ -23,9 +23,9 @@ export function HardcoverToolbar(props: HardcoverToolbarProps): JSX.Element {
 
   return (
     <div
-      className="flex flex-wrap items-center gap-2 rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-3"
+      className="flex flex-wrap items-center gap-2 ui-glass-panel rounded-[var(--ui-radius-lg)] border p-3"
       role="toolbar"
-      aria-label="Cover preview tools"
+      aria-label={t('Cover preview tools')}
     >
       <ModeButton
         active={props.viewMode === 'layout'}
@@ -54,11 +54,11 @@ export function HardcoverToolbar(props: HardcoverToolbarProps): JSX.Element {
         onZoomIn={() => props.onZoomChange(Math.min(2, props.zoom + 0.1))}
         onFit={props.onFitToScreen}
       />
-      <details className="relative ml-auto">
-        <summary className="flex h-8 cursor-pointer items-center rounded-[var(--ui-radius-md)] border border-[var(--ui-border)] px-3 text-[13px] text-muted-foreground hover:bg-accent">
+      <details className="relative ms-auto">
+        <summary className="flex h-8 cursor-pointer list-none items-center rounded-[var(--ui-radius-md)] border border-[var(--ui-border)] px-3 text-[13px] text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           {t('View options')}
         </summary>
-        <div className="absolute right-0 top-full z-50 mt-2 grid w-48 gap-1 rounded-[var(--ui-radius-md)] border border-[var(--ui-border)] bg-popover p-2 shadow-elevated">
+        <div className="absolute end-0 top-full z-[var(--ui-z-overlay)] mt-2 grid w-48 gap-1 rounded-[var(--ui-radius-md)] border border-[var(--ui-border)] bg-popover p-2 shadow-elevated">
           <PreviewToggle
             active={props.showGuides}
             onClick={props.onToggleGuides}
@@ -76,7 +76,7 @@ export function HardcoverToolbar(props: HardcoverToolbarProps): JSX.Element {
             onClick={props.onToggleSnap}
             label={t('Snap')}
             title={t('Align artwork to nearby guides while dragging')}
-          />{' '}
+          />
         </div>
       </details>
     </div>

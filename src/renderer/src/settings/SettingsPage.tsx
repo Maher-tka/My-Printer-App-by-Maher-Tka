@@ -18,7 +18,6 @@ import { PrinterSettings } from './PrinterSettings'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -46,7 +45,7 @@ export function SettingsPage({
   isDeveloperMode,
   onNavigate
 }: SettingsPageProps): JSX.Element {
-  const { t } = useLanguage()
+  const { t, direction } = useLanguage()
 
   const { settings, preset, setPreset } = usePerformanceSettings()
 
@@ -62,110 +61,108 @@ export function SettingsPage({
         {t('Back to Dashboard')}
       </Button>
 
-      <Card className="overflow-hidden">
-        <CardHeader className="flex-row items-center gap-3 border-b border-[var(--ui-divider)]">
-          <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary">
+      <section aria-labelledby="settings-title" className="min-w-0 space-y-5">
+        <header className="flex items-center gap-3 border-b border-[var(--ui-divider)] pb-4">
+          <div className="grid size-10 place-items-center rounded-lg bg-secondary text-muted-foreground">
             <Settings className="size-5" aria-hidden="true" />
           </div>
-          <div className="flex flex-col gap-1">
-            <CardTitle className="text-lg">{t('Settings')}</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6 pt-6">
-          <Tabs defaultValue="general">
-            <TabsList className="grid w-full grid-cols-3" aria-label={t('App settings')}>
-              <TabsTrigger value="general">{t('General')}</TabsTrigger>
-              <TabsTrigger value="printing">{t('Printing settings')}</TabsTrigger>
-              <TabsTrigger value="advanced">{t('Advanced')}</TabsTrigger>
-            </TabsList>
-            <TabsContent value="general" className="mt-5 space-y-6">
-              <AppearanceSettings />
+          <h2 id="settings-title" className="text-lg font-semibold">
+            {t('Settings')}
+          </h2>
+        </header>
+        <Tabs defaultValue="general" dir={direction} className="min-w-0">
+          <TabsList className="grid w-full grid-cols-3" aria-label={t('App settings')}>
+            <TabsTrigger value="general">{t('General')}</TabsTrigger>
+            <TabsTrigger value="printing">{t('Printing settings')}</TabsTrigger>
+            <TabsTrigger value="advanced">{t('Advanced')}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="general" className="mt-5 space-y-6">
+            <AppearanceSettings />
 
-              <section>
-                <p className="mb-2 text-xs font-medium text-muted-foreground">
-                  {t('App management')}
-                </p>
-                <div className="overflow-hidden rounded-xl border bg-card">
-                  <UpdatesSettings />
-                  <SettingsDestination
-                    icon={KeyRound}
-                    title={t('Access & Subscription')}
-                    description={getLicenseSummary(licenseState)}
-                    badge={
-                      <Badge variant={getLicenseTone(licenseState)}>
-                        {licenseState?.statusLabel ?? t('Checking')}
-                      </Badge>
-                    }
-                    onClick={() => onNavigate('license')}
-                  />
-                </div>
-              </section>
-            </TabsContent>
-            <TabsContent value="printing" className="mt-5">
-              <PrinterSettings />
-            </TabsContent>
-            <TabsContent value="advanced" className="mt-5 space-y-6">
-              <p className="text-sm text-muted-foreground">
-                {t(
-                  'Performance, backups and diagnostics. These settings usually only need changing once.'
-                )}
+            <section>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                {t('App management')}
               </p>
-              <section>
-                <p className="mb-2 text-xs font-medium text-muted-foreground">{t('Performance')}</p>
-                <div className="rounded-xl border bg-card p-4">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <SettingsIcon icon={Gauge} />
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold">{t('Performance mode')}</h3>
-                          <Badge variant="secondary">{t(settings.label)}</Badge>
-                        </div>
-                        <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                          {t(settings.description)}
-                        </p>
-                      </div>
-                    </div>
-                    <Select
-                      value={preset}
-                      onValueChange={(value) => setPreset(value as PerformancePresetId)}
-                    >
-                      <SelectTrigger className="min-w-48" aria-label={t('Performance mode')}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.values(PERFORMANCE_PRESETS).map((option) => (
-                          <SelectItem key={option.preset} value={option.preset}>
-                            {t(option.label)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </section>
-              <section className="overflow-hidden rounded-xl border bg-card">
-                <BackupRestoreSettings />
+              <div className="ui-glass-surface overflow-hidden rounded-xl border">
+                <UpdatesSettings />
+                <SettingsDestination
+                  icon={KeyRound}
+                  title={t('Account access')}
+                  description={getLicenseSummary(licenseState)}
+                  badge={
+                    <Badge variant={getLicenseTone(licenseState)}>
+                      {licenseState?.statusLabel ?? t('Checking')}
+                    </Badge>
+                  }
+                  onClick={() => onNavigate('license')}
+                />
                 <SettingsDestination
                   icon={Activity}
                   title={t('App Health')}
                   description={t('Storage, diagnostics, cache, recovery, and app information.')}
                   onClick={() => onNavigate('app-health')}
                 />
-                {isDeveloperMode ? (
-                  <SettingsDestination
-                    icon={FlaskConical}
-                    title={t('Quality Lab')}
-                    description={t('Development-only fixtures and release checks.')}
-                    badge={<Badge variant="warning">{t('Developer')}</Badge>}
-                    onClick={() => onNavigate('quality-lab')}
-                  />
-                ) : null}
-              </section>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+              </div>
+            </section>
+          </TabsContent>
+          <TabsContent value="printing" className="mt-5">
+            <PrinterSettings />
+          </TabsContent>
+          <TabsContent value="advanced" className="mt-5 space-y-6">
+            <p className="text-sm text-muted-foreground">
+              {t(
+                'Performance, backups and diagnostics. These settings usually only need changing once.'
+              )}
+            </p>
+            <section>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">{t('Performance')}</p>
+              <div className="ui-glass-surface rounded-xl border p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <SettingsIcon icon={Gauge} />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-semibold">{t('Performance mode')}</h3>
+                        <Badge variant="secondary">{t(settings.label)}</Badge>
+                      </div>
+                      <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                        {t(settings.description)}
+                      </p>
+                    </div>
+                  </div>
+                  <Select
+                    value={preset}
+                    onValueChange={(value) => setPreset(value as PerformancePresetId)}
+                  >
+                    <SelectTrigger className="min-w-48" aria-label={t('Performance mode')}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.values(PERFORMANCE_PRESETS).map((option) => (
+                        <SelectItem key={option.preset} value={option.preset}>
+                          {t(option.label)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </section>
+            <section className="ui-glass-surface overflow-hidden rounded-xl border">
+              <BackupRestoreSettings />
+              {isDeveloperMode ? (
+                <SettingsDestination
+                  icon={FlaskConical}
+                  title={t('Quality Lab')}
+                  description={t('Development-only fixtures and release checks.')}
+                  badge={<Badge variant="warning">{t('Developer')}</Badge>}
+                  onClick={() => onNavigate('quality-lab')}
+                />
+              ) : null}
+            </section>
+          </TabsContent>
+        </Tabs>
+      </section>
     </div>
   )
 }
@@ -195,7 +192,7 @@ function UpdatesSettings(): JSX.Element {
             aria-valuenow={state.downloadPercent ?? 0}
           >
             <div
-              className="h-full rounded-full bg-primary transition-[width]"
+              className="h-full rounded-full bg-primary"
               style={{ width: `${state.downloadPercent ?? 0}%` }}
             />
           </div>
@@ -213,7 +210,10 @@ function UpdatesSettings(): JSX.Element {
           disabled={!state.enabled || isChecking}
           onClick={() => void checkForUpdates()}
         >
-          <RefreshCw className={isChecking ? 'animate-spin' : undefined} aria-hidden="true" />
+          <RefreshCw
+            className={isChecking ? 'motion-safe:animate-spin' : undefined}
+            aria-hidden="true"
+          />
           {isChecking ? t('Checking…') : t('Check now')}
         </Button>
       )}
@@ -277,7 +277,7 @@ function SettingsDestination({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 border-b p-4 text-left transition last:border-b-0 hover:bg-muted/45"
+      className="flex w-full items-center gap-3 border-b p-4 text-start transition-colors last:border-b-0 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
     >
       <SettingsIcon icon={icon} />
       <span className="min-w-0 flex-1">
@@ -287,7 +287,10 @@ function SettingsDestination({
         </span>
         <span className="mt-1 block text-sm leading-5 text-muted-foreground">{t(description)}</span>
       </span>
-      <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <ChevronRight
+        className="size-4 shrink-0 text-muted-foreground rtl:rotate-180"
+        aria-hidden="true"
+      />
     </button>
   )
 }

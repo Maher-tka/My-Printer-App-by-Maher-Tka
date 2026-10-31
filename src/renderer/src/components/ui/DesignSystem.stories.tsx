@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ToolSettingsTabs } from '@/tools/shared/ToolSettingsTabs'
+import { ToolHeader } from '@/tools/shared/ToolHeader'
 import { PdfPageSelector } from '@/tools/shared/PdfPageSelector'
 import { PrintButton } from '@/print/PrintButton'
 
@@ -147,6 +148,27 @@ export const SettingsDirections: Story = {
           </ToolSettingsTabs>
         </div>
       ))}
+    </div>
+  )
+}
+
+export const WorkspaceHeaderStates: Story = {
+  render: () => (
+    <div className="grid w-[900px] max-w-full gap-4">
+      <ToolHeader
+        title="Booklet Montage"
+        projectName="A long project name that should remain readable in the workspace header"
+        onBack={() => {}}
+        exportPdf={{ onExport: () => {} }}
+        print={{ onPrint: () => {}, disabled: true }}
+        actions={<Button variant="outline">Save as</Button>}
+      />
+      <ToolHeader
+        title="Cutter Montage"
+        onBack={() => {}}
+        exportPdf={{ onExport: () => {}, isBusy: true }}
+        print={{ onPrint: () => {}, isBusy: true }}
+      />
     </div>
   )
 }

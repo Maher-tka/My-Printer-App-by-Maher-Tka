@@ -11,7 +11,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { createPrintedJob } from '@/jobs/printHistory'
 import { useJobStore } from '@/jobs/useJobStore'
 import { getPrintResultMessage, printPdfFile } from '@/print/printPdf'
@@ -24,7 +25,7 @@ export function ExportCenterPage({
 }: {
   onNavigate: (route: AppRoute) => void
 }): JSX.Element {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
 
   const [entries, setEntries] = useState<ExportHistoryEntry[]>([])
   const [message, setMessage] = useState<string | null>(null)
@@ -97,7 +98,12 @@ export function ExportCenterPage({
       printInProgress.current = true
       setPrintingId(entry.id)
       try {
-        setMessage(`Opening print dialog for ${getFileName(entry.filePath)}...`)
+        setMessage(
+          t('Opening print dialog for {file}…').replace(
+            '{file}',
+            isolate(getFileName(entry.filePath))
+          )
+        )
         const result = await printPdfFile({
           filePath: entry.filePath,
           toolId: toolRoute(entry.toolType),
@@ -105,7 +111,14 @@ export function ExportCenterPage({
           jobTitle: entry.projectName,
           silent: false
         })
-        setMessage(getPrintResultMessage(result, getFileName(entry.filePath)))
+        setMessage(
+          result.ok
+            ? t('Sent {file} to the printer.').replace(
+                '{file}',
+                isolate(result.pdfName ?? getFileName(entry.filePath))
+              )
+            : t(getPrintResultMessage(result, getFileName(entry.filePath)))
+        )
 
         if (!result.ok) return
 
@@ -131,40 +144,38 @@ export function ExportCenterPage({
         setPrintingId(null)
       }
     },
-    [jobs, saveJob]
+    [jobs, saveJob, t]
   )
 
   return (
     <div className="workspace-shell mx-auto max-w-[1400px]">
-      <Card className="overflow-hidden">
-        <CardHeader className="flex-row items-start justify-between gap-4 border-b bg-muted/25">
-          <div>
-            <CardTitle>{t('Export Center')}</CardTitle>
-            <CardDescription>
-              {t('Local export history. Customer artwork is never copied into this log.')}
-            </CardDescription>
-          </div>
+      <Card className="ui-glass-surface overflow-hidden">
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-4 border-b bg-muted/25">
+          <CardTitle>{t('Export Center')}</CardTitle>
           <Button type="button" variant="outline" onClick={() => void load()} disabled={loading}>
             <RefreshCw data-icon="inline-start" />
-            {loading ? 'Refreshing…' : t('Refresh')}
+            {loading ? t('Refreshing…') : t('Refresh')}
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 pt-5">
           <div className="flex flex-col gap-3 sm:flex-row">
             <label className="relative min-w-0 flex-1">
               <span className="sr-only">{t('Search exports')}</span>
-              <Search className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" />
-              <input
+              <Search
+                className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground rtl:left-auto rtl:right-3"
+                aria-hidden="true"
+              />
+              <Input
                 type="search"
-                className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm"
+                className="ps-9 pe-3"
                 placeholder={t('Search project, file, or tool')}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
             <select
-              aria-label="Filter exports by status"
-              className="h-10 rounded-md border bg-background px-3 text-sm"
+              aria-label={t('Status')}
+              className="h-[var(--ui-control-standard)] rounded-[var(--ui-radius-md)] border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               value={status}
               onChange={(event) => setStatus(event.target.value)}
             >
@@ -176,22 +187,31 @@ export function ExportCenterPage({
           </div>
           <p className="text-xs text-muted-foreground" aria-live="polite">
             {loading
-              ? 'Loading export history…'
-              : `${filteredEntries.length} of ${entries.length} exports`}
+              ? t('Loading export history…')
+              : t('{shown} of {total} exports')
+                  .replace('{shown}', isolate(String(filteredEntries.length)))
+                  .replace('{total}', isolate(String(entries.length)))}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t('Local export history. Customer artwork is never copied into this log.')}
           </p>
           {message && (
             <p
               role="status"
               className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
             >
-              {message}
+              <bdi dir="auto">{t(message)}</bdi>
             </p>
           )}
           {!loading && filteredEntries.length === 0 && (
-            <p className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-              {entries.length === 0
-                ? 'No exports yet. Export a project from Booklet, Cutter, or Hardcover to see it here.'
-                : 'No exports match your search or status filter.'}
+            <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+              <p>
+                {t(
+                  entries.length === 0
+                    ? 'No exports yet. Export a project from Booklet, Cutter, or Hardcover to see it here.'
+                    : 'No exports match your search or status filter.'
+                )}
+              </p>
               {entries.length > 0 && (
                 <Button
                   variant="ghost"
@@ -204,94 +224,114 @@ export function ExportCenterPage({
                   {t('Clear filters')}
                 </Button>
               )}
-            </p>
+            </div>
           )}
-          {filteredEntries.map((entry) => (
-            <article
-              key={entry.id}
-              className="rounded-xl border bg-muted/15 p-4 transition-colors hover:bg-accent/30"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-semibold">{entry.projectName}</h3>
-                    <Badge
-                      variant={
-                        entry.status === 'success'
-                          ? 'success'
-                          : entry.status === 'failed'
-                            ? 'destructive'
-                            : 'secondary'
-                      }
-                    >
-                      {entry.status}
-                    </Badge>
-                    <Badge variant="outline">{entry.exportType}</Badge>
+          <div className="divide-y divide-border">
+            {filteredEntries.map((entry) => (
+              <article key={entry.id} className="py-4 first:pt-1 last:pb-0">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold">
+                        <bdi dir="auto">{entry.projectName}</bdi>
+                      </h3>
+                      <Badge
+                        variant={
+                          entry.status === 'success'
+                            ? 'success'
+                            : entry.status === 'failed'
+                              ? 'destructive'
+                              : 'secondary'
+                        }
+                      >
+                        {t(
+                          entry.status === 'success'
+                            ? 'Successful'
+                            : entry.status === 'failed'
+                              ? 'Failed'
+                              : 'Canceled'
+                        )}
+                      </Badge>
+                      <Badge variant="outline">{entry.exportType}</Badge>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                      <span>
+                        <bdi dir="auto">{t(entry.toolType)}</bdi>
+                      </span>
+                      <span>
+                        <bdi dir="auto">{new Date(entry.timestamp).toLocaleString(language)}</bdi>
+                      </span>
+                      <span>
+                        {t(
+                          entry.warningsCount === 1 ? '{count} warning' : '{count} warnings'
+                        ).replace('{count}', isolate(String(entry.warningsCount)))}
+                      </span>
+                    </div>
+                    <p className="mt-2 break-all text-xs text-muted-foreground">
+                      {entry.filePath ? (
+                        <bdi dir="ltr">{entry.filePath}</bdi>
+                      ) : (
+                        <bdi dir="auto">{t(entry.error ?? 'No path recorded')}</bdi>
+                      )}
+                    </p>
                   </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {entry.toolType} · {new Date(entry.timestamp).toLocaleString()} ·{' '}
-                    {entry.warningsCount} warning(s)
-                  </p>
-                  <p className="mt-2 break-all text-xs text-muted-foreground">
-                    {entry.filePath ?? entry.error ?? 'No path recorded'}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {entry.filePath && (
-                    <>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void runFileAction('open', entry.filePath!)}
-                      >
-                        <ExternalLink />
-                        {t('Open File')}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void runFileAction('folder', entry.filePath!)}
-                      >
-                        <FolderOpen />
-                        {t('Open Folder')}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void runFileAction('copy', entry.filePath!)}
-                      >
-                        <Clipboard />
-                        {t('Copy Path')}
-                      </Button>
-                      {isPdfPath(entry.filePath) && (
+                  <div className="flex flex-wrap gap-2">
+                    {entry.filePath && (
+                      <>
                         <Button
                           type="button"
                           size="sm"
-                          disabled={printingId !== null}
-                          onClick={() => void printExport(entry)}
+                          variant="outline"
+                          onClick={() => void runFileAction('open', entry.filePath!)}
                         >
-                          <Printer />
-                          {printingId === entry.id ? 'Printing…' : t('Print')}
+                          <ExternalLink />
+                          {t('Open File')}
                         </Button>
-                      )}
-                    </>
-                  )}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onNavigate(toolRoute(entry.toolType))}
-                  >
-                    <RotateCcw />
-                    {t('Open tool')}
-                  </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void runFileAction('folder', entry.filePath!)}
+                        >
+                          <FolderOpen />
+                          {t('Open Folder')}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void runFileAction('copy', entry.filePath!)}
+                        >
+                          <Clipboard />
+                          {t('Copy Path')}
+                        </Button>
+                        {isPdfPath(entry.filePath) && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={printingId !== null}
+                            onClick={() => void printExport(entry)}
+                          >
+                            <Printer />
+                            {printingId === entry.id ? t('Printing…') : t('Print')}
+                          </Button>
+                        )}
+                      </>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onNavigate(toolRoute(entry.toolType))}
+                    >
+                      <RotateCcw />
+                      {t('Open tool')}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            ))}
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -321,4 +361,8 @@ function isPdfPath(filePath: string): boolean {
 
 function getFileName(filePath: string): string {
   return filePath.split(/[\\/]/).pop() || 'export.pdf'
+}
+
+function isolate(value: string): string {
+  return `\u2068${value}\u2069`
 }

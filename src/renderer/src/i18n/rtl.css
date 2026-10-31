@@ -1,6 +1,6 @@
 /* UI follows the selected language; production geometry remains in its own coordinates. */
 html[lang='ar'] body {
-  font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+  font-family: var(--ui-font-ar);
   letter-spacing: normal;
 }
 

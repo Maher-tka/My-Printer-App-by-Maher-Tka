@@ -459,12 +459,14 @@ export function PdfToolsPage({
                 <div className="pdf-hub-mark">
                   <Files aria-hidden="true" />
                 </div>
-                <span className="font-medium tabular-nums">12 {t('tools')}</span>
+                <span className="font-medium tabular-nums">
+                  {PDF_TOOLS.length} {t('tools')}
+                </span>
               </div>
               <label className="relative w-full sm:w-72">
                 <Search
                   aria-hidden="true"
-                  className="pointer-events-none absolute start-3 top-2.5 size-4 text-muted-foreground"
+                  className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground rtl:left-auto rtl:right-3"
                 />
                 <Input
                   className="ps-9"
@@ -712,10 +714,10 @@ export function PdfToolsPage({
                     aria-hidden="true"
                   />
                   <p className="font-medium">{t('Drop files here')}</p>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    {tool.accept.replace(/\./g, '').replace(/,/g, ' · ')}{' '}
-                    <span className="normal-case">
-                      · {formatBytes(memoryPolicy.maxInputBytes)} {t('total')}
+                  <p className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span>{tool.accept.replace(/\./g, '').replace(/,/g, ' / ').toUpperCase()}</span>
+                    <span>
+                      {formatBytes(memoryPolicy.maxInputBytes)} {t('total')}
                     </span>
                   </p>
                 </div>
@@ -946,24 +948,21 @@ function PdfToolCard({
   const { t } = useLanguage(),
     Icon = tool.icon
   return (
-    <button type="button" className="pdf-tool-card group" onClick={onClick}>
-      <div className="flex w-full items-start justify-between gap-3">
-        <span className="pdf-card-icon">
-          <Icon aria-hidden="true" strokeWidth={1.6} />
-        </span>
-        <ArrowRight
-          className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 rtl:rotate-180"
-          aria-hidden="true"
-        />
-      </div>
-      <span className="text-start text-sm font-semibold">{t(tool.title)}</span>
-      <span className="flex w-full items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span className="uppercase tracking-wide">
-          {tool.accept === '.pdf' ? 'PDF' : tool.accept.replace(/\./g, '').replace(/,/g, ' / ')}{' '}
-          <span aria-hidden="true">→</span> {tool.extension.toUpperCase()}
-        </span>
-        {selected && <span className="text-primary">{t('In progress')}</span>}
+    <button type="button" className="pdf-tool-card" onClick={onClick}>
+      <span className="pdf-card-icon">
+        <Icon aria-hidden="true" strokeWidth={1.6} />
       </span>
+      <span className="pdf-card-title">{t(tool.title)}</span>
+      <span className="pdf-card-meta" dir="ltr">
+        <span>
+          {tool.accept === '.pdf'
+            ? 'PDF'
+            : tool.accept.replace(/\./g, '').replace(/,/g, ' / ').toUpperCase()}
+        </span>
+        <ArrowRight aria-hidden="true" data-physical-direction />
+        <span>{tool.extension.toUpperCase()}</span>
+      </span>
+      {selected && <span className="pdf-card-status">{t('In progress')}</span>}
     </button>
   )
 }

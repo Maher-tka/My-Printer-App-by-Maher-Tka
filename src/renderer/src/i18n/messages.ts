@@ -1177,6 +1177,16 @@ export const messages: Record<string, { fr: string; ar: string }> = {
     fr: 'Mode feuille',
     ar: 'وضع الورقة'
   },
+  'Reading direction': { fr: 'Sens de lecture', ar: 'اتجاه القراءة' },
+  Portrait: { fr: 'Portrait', ar: 'عمودي' },
+  Landscape: { fr: 'Paysage', ar: 'أفقي' },
+  Custom: { fr: 'Personnalisé', ar: 'مخصص' },
+  'Booklet canvas': { fr: 'Aperçu du livret', ar: 'معاينة الكتيّب' },
+  'Booklet properties': { fr: 'Paramètres du livret', ar: 'إعدادات الكتيّب' },
+  'Cover preview tools': { fr: 'Outils d’aperçu de la couverture', ar: 'أدوات معاينة الغلاف' },
+  'Cover production status': { fr: 'État de production de la couverture', ar: 'حالة إنتاج الغلاف' },
+  'Hardcover properties': { fr: 'Paramètres de couverture rigide', ar: 'إعدادات الغلاف المقوّى' },
+  'Hardcover preview': { fr: 'Aperçu de couverture rigide', ar: 'معاينة الغلاف المقوّى' },
   'Montage Mode': {
     fr: 'Mode montage',
     ar: 'وضع المونتاج'
@@ -1876,6 +1886,10 @@ export const messages: Record<string, { fr: string; ar: string }> = {
   Dashboard: {
     fr: 'Tableau de bord',
     ar: 'لوحة التحكم'
+  },
+  'No active jobs': {
+    fr: 'Aucun travail en cours',
+    ar: 'لا توجد طلبات قيد التنفيذ'
   },
   Workspace: {
     fr: 'Espace de travail',
@@ -2584,6 +2598,116 @@ export const messages: Record<string, { fr: string; ar: string }> = {
   'Back side': {
     fr: 'Verso',
     ar: 'الوجه الخلفي'
+  },
+  'Import front design': {
+    fr: 'Importer le recto',
+    ar: 'استيراد تصميم الوجه الأمامي'
+  },
+  'Import back design': {
+    fr: 'Importer le verso',
+    ar: 'استيراد تصميم الوجه الخلفي'
+  },
+  'Preview front sheet': {
+    fr: 'Aperçu de la feuille recto',
+    ar: 'معاينة ورقة الوجه الأمامي'
+  },
+  'Preview back sheet': {
+    fr: 'Aperçu de la feuille verso',
+    ar: 'معاينة ورقة الوجه الخلفي'
+  },
+  'Front card design': {
+    fr: 'Visuel du recto',
+    ar: 'تصميم الوجه الأمامي للبطاقة'
+  },
+  'Back card design': {
+    fr: 'Visuel du verso',
+    ar: 'تصميم الوجه الخلفي للبطاقة'
+  },
+  'Choose the front of your business card.': {
+    fr: 'Choisissez le recto de votre carte de visite.',
+    ar: 'اختر الوجه الأمامي لبطاقة العمل.'
+  },
+  'Add a separate back file, or use the second page/artboard from the front file.': {
+    fr: 'Ajoutez un fichier verso ou utilisez la deuxième page ou le deuxième plan de travail du fichier recto.',
+    ar: 'أضف ملفاً منفصلاً للوجه الخلفي، أو استخدم الصفحة الثانية من ملف الوجه الأمامي.'
+  },
+  '1 · Zero spacing': { fr: '1 · Sans espace', ar: '1 · بدون مسافات' },
+  '2 · With spacing': { fr: '2 · Avec espacement', ar: '2 · مع مسافات' },
+  '3 · Auto 8.8 × 5.6 cm': { fr: '3 · Auto 8,8 × 5,6 cm', ar: '3 · تلقائي 8.8 × 5.6 سم' },
+  'Cards touch edge to edge.': {
+    fr: 'Les cartes se touchent bord à bord.',
+    ar: 'تتلامس البطاقات من الحواف.'
+  },
+  'Choose horizontal and vertical gaps.': {
+    fr: 'Choisissez les espacements horizontaux et verticaux.',
+    ar: 'اختر المسافات الأفقية والعمودية.'
+  },
+  '1 mm between rows · adjustable space between columns.': {
+    fr: '1 mm entre les rangées · espacement réglable entre les colonnes.',
+    ar: '1 مم بين الصفوف · مسافة قابلة للتعديل بين الأعمدة.'
+  },
+  'Front and back A4 previews': {
+    fr: 'Aperçus A4 recto et verso',
+    ar: 'معاينة وجهي ورقة A4'
+  },
+  'Front A4 sheet preview': {
+    fr: 'Aperçu de la feuille A4 recto',
+    ar: 'معاينة ورقة A4 للوجه الأمامي'
+  },
+  'Back A4 sheet preview': {
+    fr: 'Aperçu de la feuille A4 verso',
+    ar: 'معاينة ورقة A4 للوجه الخلفي'
+  },
+  'Centered layout': { fr: 'Disposition centrée', ar: 'تخطيط متمركز' },
+  'Check settings': { fr: 'Vérifier les paramètres', ar: 'تحقق من الإعدادات' },
+  Cards: { fr: 'Cartes', ar: 'البطاقات' },
+  'Horizontal gap': { fr: 'Espacement horizontal', ar: 'المسافة الأفقية' },
+  'Vertical gap': { fr: 'Espacement vertical', ar: 'المسافة العمودية' },
+  Checks: { fr: 'Contrôles', ar: 'الفحوصات' },
+  Designs: { fr: 'Visuels', ar: 'التصاميم' },
+  'Workspace panels': { fr: 'Panneaux de travail', ar: 'لوحات مساحة العمل' },
+  'Cutter workflow steps': { fr: 'Étapes de découpe', ar: 'خطوات تجهيز القص' },
+  'Workspace views': { fr: 'Vues de l’espace de travail', ar: 'طرق عرض مساحة العمل' },
+  'Start by importing artwork using the button on the left.': {
+    fr: 'Commencez par importer un visuel à l’aide du bouton situé à gauche.',
+    ar: 'ابدأ باستيراد التصميم باستخدام الزر الموجود على اليسار.'
+  },
+  'Start by importing artwork.': {
+    fr: 'Commencez par importer un visuel.',
+    ar: 'ابدأ باستيراد التصميم.'
+  },
+  'Import a design, then prepare its artwork and cut line.': {
+    fr: 'Importez un visuel, puis préparez le visuel et son contour de découpe.',
+    ar: 'استورد تصميماً، ثم جهّز التصميم وخط القص.'
+  },
+  'Your design': { fr: 'Votre visuel', ar: 'تصميمك' },
+  'Replace artwork': { fr: 'Remplacer le visuel', ar: 'استبدال التصميم' },
+  'items per sheet': { fr: 'éléments par feuille', ar: 'عنصر لكل ورقة' },
+  'physical sheets': { fr: 'feuilles physiques', ar: 'ورقة فعلية' },
+  'Previous sheet': { fr: 'Feuille précédente', ar: 'الورقة السابقة' },
+  'Next sheet': { fr: 'Feuille suivante', ar: 'الورقة التالية' },
+  'Page {current} of {total}': {
+    fr: 'Page {current} sur {total}',
+    ar: 'الصفحة {current} من {total}'
+  },
+  'Scrollable card sheet preview': {
+    fr: 'Aperçu défilant de la feuille de cartes',
+    ar: 'معاينة قابلة للتمرير لورقة البطاقات'
+  },
+  'Import artwork to prepare the first sticker piece.': {
+    fr: 'Importez un visuel pour préparer le premier autocollant.',
+    ar: 'استورد تصميماً لإعداد أول ملصق.'
+  },
+  'Close workspace panel': { fr: 'Fermer le panneau de travail', ar: 'إغلاق لوحة مساحة العمل' },
+  'Across each sheet': { fr: 'Sur chaque feuille', ar: 'عبر كل ورقة' },
+  'Cut & stack': { fr: 'Couper et empiler', ar: 'قص وتجميع' },
+  'Read left to right, then the next row.': {
+    fr: 'De gauche à droite, puis la rangée suivante.',
+    ar: 'من اليسار إلى اليمين، ثم الصف التالي.'
+  },
+  'Next number on the next physical sheet.': {
+    fr: 'Le numéro suivant sur la feuille suivante.',
+    ar: 'الرقم التالي على الورقة التالية.'
   },
   'Both sides': {
     fr: 'Recto verso',
@@ -3933,6 +4057,64 @@ export const messages: Record<string, { fr: string; ar: string }> = {
   'Tell us what you’re making. Find your tools and a clear place to start.': {
     fr: 'Dites-nous ce que vous produisez pour trouver les bons outils et commencer.',
     ar: 'أخبرنا بما تنتجه للعثور على الأدوات المناسبة ونقطة البداية.'
+  },
+  'Refreshing…': { fr: 'Actualisation…', ar: 'جارٍ التحديث…' },
+  'Printing…': { fr: 'Impression…', ar: 'جارٍ الطباعة…' },
+  'Loading export history…': {
+    fr: 'Chargement de l’historique des exports…',
+    ar: 'جارٍ تحميل سجل التصدير…'
+  },
+  '{shown} of {total} exports': {
+    fr: '{shown} exports sur {total}',
+    ar: '{shown} من أصل {total} من عمليات التصدير'
+  },
+  '{count} warning': { fr: '{count} avertissement', ar: '{count} تحذير' },
+  '{count} warnings': { fr: '{count} avertissements', ar: '{count} تحذيرات' },
+  'No path recorded': { fr: 'Aucun chemin enregistré', ar: 'لم يُسجّل مسار' },
+  'No exports yet. Export a project from Booklet, Cutter, or Hardcover to see it here.': {
+    fr: 'Aucun export pour le moment. Exportez un projet de livret, de découpe ou de couverture pour le voir ici.',
+    ar: 'لا توجد عمليات تصدير بعد. صدّر مشروع كتيب أو قص أو غلاف ليظهر هنا.'
+  },
+  'No exports match your search or status filter.': {
+    fr: 'Aucun export ne correspond à votre recherche ou au filtre d’état.',
+    ar: 'لا توجد عمليات تصدير تطابق البحث أو حالة التصفية.'
+  },
+  'Export history is available in the desktop app.': {
+    fr: 'L’historique des exports est disponible dans l’application de bureau.',
+    ar: 'سجل التصدير متاح في تطبيق سطح المكتب.'
+  },
+  'Export history could not be loaded. Try refreshing.': {
+    fr: 'Impossible de charger l’historique des exports. Actualisez pour réessayer.',
+    ar: 'تعذّر تحميل سجل التصدير. حدّث الصفحة للمحاولة مجددًا.'
+  },
+  'File path copied.': { fr: 'Chemin du fichier copié.', ar: 'تم نسخ مسار الملف.' },
+  'File opened.': { fr: 'Fichier ouvert.', ar: 'تم فتح الملف.' },
+  'Containing folder opened.': { fr: 'Dossier ouvert.', ar: 'تم فتح المجلد.' },
+  'Open this file from the desktop app.': {
+    fr: 'Ouvrez ce fichier depuis l’application de bureau.',
+    ar: 'افتح هذا الملف من تطبيق سطح المكتب.'
+  },
+  'This action failed. The file may have moved or been deleted.': {
+    fr: 'Cette action a échoué. Le fichier a peut-être été déplacé ou supprimé.',
+    ar: 'فشل الإجراء. قد يكون الملف قد نُقل أو حُذف.'
+  },
+  'Opening print dialog for {file}…': {
+    fr: 'Ouverture de la fenêtre d’impression pour {file}…',
+    ar: 'جارٍ فتح نافذة الطباعة للملف {file}…'
+  },
+  'Sent {file} to the printer.': {
+    fr: '{file} envoyé à l’imprimante.',
+    ar: 'تم إرسال {file} إلى الطابعة.'
+  },
+  'Print canceled.': { fr: 'Impression annulée.', ar: 'أُلغيت الطباعة.' },
+  'Printing failed.': { fr: 'L’impression a échoué.', ar: 'فشلت الطباعة.' },
+  'Printing is only available in the desktop app.': {
+    fr: 'L’impression est disponible uniquement dans l’application de bureau.',
+    ar: 'الطباعة متاحة فقط في تطبيق سطح المكتب.'
+  },
+  'Printing failed. Please try again.': {
+    fr: 'L’impression a échoué. Veuillez réessayer.',
+    ar: 'فشلت الطباعة. يرجى المحاولة مجددًا.'
   },
   Successful: {
     fr: 'Réussi',

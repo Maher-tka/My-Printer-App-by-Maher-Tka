@@ -3187,3 +3187,58 @@ Usage: [FAST_PRINT_MONTAGE.md](FAST_PRINT_MONTAGE.md).
 - Pending: visual inspection of the interaction at 1366×768 and 1920×1080 in
   progress, especially focus and drag-target feedback. Interactive desktop
   control was not used.
+
+## 2026-10-30 — Settings navigation consolidation
+
+- Account access and App Health are available from the General settings tab;
+  the sidebar supplies the single persistent Settings button.
+- Pending: visual and keyboard inspection at 1366×768 and 1920×1080 in light
+  and dark themes, Arabic RTL, and low-end mode. Interactive desktop control
+  was not used.
+
+## 2026-10-31 — Reference-inspired application UI
+
+- Applied the shared blue-green shell and refreshed the dashboard, Settings,
+  jobs, exports, and production-tool controls. Card Montage keeps its source
+  controls beside the sheet preview. Existing artwork and print geometry are
+  unchanged by this UI work.
+- Hidden Electron proofs covered representative screens at 1366×768 and
+  1920×1080, with light and dark themes, French, Arabic RTL, and low-end mode.
+  The shared shell and PDF tools also covered 1600×900. Inspected dashboard,
+  Card, PDF, Booklet, Hardcover, and Cutter captures. Card print routing used a
+  mock; no hardware print jobs were sent.
+- Keyboard checks covered the shared tabs, the card print dialog, Booklet and
+  Hardcover controls, and Settings destination navigation using hidden Electron
+  keyboard events and fixture data.
+  Populated Cutter and Sequential workspaces and Shop Jobs need additional
+  visual review. Hallmark's render tier was unavailable; hidden Electron
+  captures were used for the visual checks instead.
+
+## 2026-10-31 — Visible glass surfaces
+
+- Strengthened the backdrop and reduced panel opacity so the background is
+  visible through the app chrome and major panels. Low-end mode keeps the
+  translucent tint and disables backdrop blur and shadows.
+- Hidden shell proofs checked translucent computed backgrounds, low-end blur,
+  keyboard tabs, RTL, themes, and 1366×768, 1600×900, and 1920×1080 layouts.
+  Dashboard captures covered those sizes, light/dark, French, and Arabic RTL;
+  representative light and dark images were inspected. No hardware print jobs
+  were sent.
+- Settings and Export Center were checked at 1366×768 and 1920×1080, including
+  keyboard activation of both Settings destinations, filter behavior, Arabic
+  RTL, and a mocked canceled print.
+- Pending: a live performance check on an actual low-end computer and further
+  populated-workspace visual review. No desktop control was used.
+
+## 2026-10-31 — UI UX Pro Max contrast pass
+
+- Used the installed UI UX Pro Max glass and accessibility guidance to review
+  the translucent theme. Darkened light-mode secondary text and accents and
+  lightened their dark-mode equivalents against the strongest backdrop tones.
+- `npm run test:appearance` now also checks conservative composites of the
+  shared glass backdrop. The tested text and accent pairs are at least 4.5:1;
+  the tested outline-control edges are at least 3:1. These token checks are not
+  a substitute for auditing every rendered state.
+- Hidden dashboard and shell proofs covered the required window sizes, themes,
+  Arabic RTL, low-end mode, and keyboard navigation. Live low-end performance
+  and a full screen-reader review remain pending.

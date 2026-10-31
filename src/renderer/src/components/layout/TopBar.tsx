@@ -1,12 +1,12 @@
 import { ActionIcon } from '@/components/ui/action-button'
 import { useLanguage } from '@/i18n/useLanguage'
-import { ChevronDown, ChevronRight, LogOut, Search, Settings } from 'lucide-react'
+import { ChevronDown, ChevronRight, LogOut, Search } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/appearance/ThemeToggle'
 import { LanguageSwitcher } from '@/i18n/LanguageSwitcher'
-import type { AppRoute, PageMeta } from '@/types/navigation'
+import type { PageMeta } from '@/types/navigation'
 import type { AccountProfile } from '../../../../shared/account-types'
 
 interface TopBarProps {
@@ -17,7 +17,6 @@ interface TopBarProps {
   onOpenCommandCenter: () => void
   onOpenImageFile: () => void
   isDashboard?: boolean
-  onNavigate?: (route: AppRoute) => void
 }
 
 export function TopBar({
@@ -27,8 +26,7 @@ export function TopBar({
   onSignOut,
   onOpenCommandCenter,
   onOpenImageFile,
-  isDashboard = false,
-  onNavigate
+  isDashboard = false
 }: TopBarProps): JSX.Element {
   const { t } = useLanguage()
 
@@ -125,34 +123,21 @@ export function TopBar({
         >
           <Search className="size-4" />
         </Button>
-        {isDashboard && onNavigate && (
-          <button
-            type="button"
-            className="dashboard-header-icon"
-            onClick={() => onNavigate('settings')}
-            aria-label={t('Settings')}
-            title={t('Settings')}
-          >
-            <Settings className="size-4" aria-hidden="true" />
-          </button>
-        )}
         <ThemeToggle dashboard={isDashboard} />
         <LanguageSwitcher dashboard={isDashboard} />
-        <Button
-          aria-label={t('Import artwork')}
-          title={t('Import artwork into Cutter Montage')}
-          variant="outline"
-          type="button"
-          onClick={onOpenImageFile}
-          className={
-            isDashboard ? 'dashboard-header-icon border-0 p-0' : 'rounded-lg px-3.5 text-xs'
-          }
-        >
-          <ActionIcon action="import" />
-          <span className={isDashboard ? 'sr-only' : 'hidden sm:inline'}>
-            {t('Import artwork')}
-          </span>
-        </Button>
+        {!isDashboard && (
+          <Button
+            aria-label={t('Import artwork')}
+            title={t('Import artwork into Cutter Montage')}
+            variant="outline"
+            type="button"
+            onClick={onOpenImageFile}
+            className="rounded-lg px-3.5 text-xs"
+          >
+            <ActionIcon action="import" />
+            <span className="hidden sm:inline">{t('Import artwork')}</span>
+          </Button>
+        )}
 
         <div
           className="relative"

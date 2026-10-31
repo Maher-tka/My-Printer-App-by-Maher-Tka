@@ -51,13 +51,13 @@ export function ProgressLine({
           aria-valuenow={progress.total > 0 ? percent : undefined}
         >
           <div
-            className={`h-full rounded-full bg-primary transition-all ${progress.total <= 0 ? 'animate-pulse' : ''}`}
-            style={{ width: progress.total > 0 ? `${percent}%` : '100%' }}
+            className={`h-full w-full origin-left rounded-full bg-primary ${progress.total <= 0 ? 'motion-safe:animate-pulse' : ''}`}
+            style={{ transform: `scaleX(${progress.total > 0 ? percent / 100 : 1})` }}
           />
         </div>
       )}
       {warning && (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+        <p className="rounded-[var(--ui-radius-md)] border border-warning-foreground/20 bg-warning px-3 py-2 text-sm font-medium text-warning-foreground">
           {warning}
         </p>
       )}

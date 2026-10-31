@@ -103,7 +103,7 @@ export function BookletToolbar({
         : 'export'
 
   return (
-    <div className="rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4">
+    <div className="ui-glass-panel rounded-[var(--ui-radius-lg)] border p-4">
       {variant === 'properties' && (
         <h3 className="mb-4 text-sm font-semibold">{t('Booklet settings')}</h3>
       )}
@@ -111,11 +111,11 @@ export function BookletToolbar({
         className={
           variant === 'properties'
             ? 'grid gap-4 [&_label]:w-full [&_label]:min-w-0'
-            : 'flex flex-wrap items-center gap-2'
+            : 'flex flex-wrap items-center gap-3'
         }
       >
         {variant === 'actions' && (
-          <>
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('Import')}>
             <Button
               type="button"
               variant={nextAction === 'import' ? 'default' : 'outline'}
@@ -134,7 +134,7 @@ export function BookletToolbar({
               <ActionIcon action="import" />
               {t('Import images')}
             </Button>
-          </>
+          </div>
         )}
         {variant === 'properties' && (
           <ToolSettingsTabs
@@ -215,7 +215,7 @@ export function BookletToolbar({
               >
                 {paperOptions.map((option) => (
                   <option key={option} value={option}>
-                    {option === 'custom' ? 'Custom' : option}
+                    {option === 'custom' ? t('Custom') : option}
                   </option>
                 ))}
               </ToolbarSelect>
@@ -227,14 +227,13 @@ export function BookletToolbar({
               >
                 {orientationOptions.map((option) => (
                   <option key={option} value={option}>
-                    {option[0].toUpperCase()}
-                    {option.slice(1)}
+                    {t(option[0].toUpperCase() + option.slice(1))}
                   </option>
                 ))}
               </ToolbarSelect>
 
               <ToolbarSelect
-                label="Reading"
+                label={t('Reading direction')}
                 value={settings.readingDirection}
                 onChange={(value) =>
                   onSettingsChange({ readingDirection: value as BookletReadingDirection })
@@ -278,7 +277,11 @@ export function BookletToolbar({
         )}
         {variant === 'actions' && (
           <>
-            <div className="flex flex-wrap rounded-[14px] border border-border/60 bg-muted/40 p-1">
+            <div
+              className="flex flex-wrap rounded-[var(--ui-radius-md)] border border-border/60 bg-muted/40 p-1"
+              role="group"
+              aria-label={t('Preview')}
+            >
               {viewModes.map((mode) => {
                 const Icon = mode.icon
 
@@ -292,18 +295,14 @@ export function BookletToolbar({
                     onClick={() => onViewModeChange(mode.value)}
                   >
                     <Icon data-icon="inline-start" />
-                    {mode.label}
+                    {t(mode.label)}
                   </Button>
                 )
               })}
             </div>
 
             {viewMode === 'montage' && (
-              <div className="basis-full border-t border-[var(--ui-divider)]" aria-hidden="true" />
-            )}
-
-            {viewMode === 'montage' && (
-              <>
+              <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" variant="outline" onClick={onAddEmptySheet} disabled={isBusy}>
                   <Plus data-icon="inline-start" />
                   {t('Add Empty Sheet')}
@@ -317,7 +316,7 @@ export function BookletToolbar({
                   <LayoutGrid data-icon="inline-start" />
                   {t('Reset layout')}
                 </Button>
-              </>
+              </div>
             )}
 
             {(importCanCancel || exportCanCancel) && (

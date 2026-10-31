@@ -451,7 +451,7 @@ export function BookletMontagePage({
           />
 
           <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_240px] 2xl:grid-cols-[minmax(0,1fr)_280px]">
-            <section className="min-w-0" aria-label="Booklet canvas">
+            <section className="min-w-0" aria-label={t('Booklet canvas')}>
               <div className="flex min-w-0 flex-col gap-4">
                 {montage.error && (
                   <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
@@ -553,7 +553,7 @@ export function BookletMontagePage({
               </div>
             </section>
             <aside
-              aria-label="Booklet properties"
+              aria-label={t('Booklet properties')}
               className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-180px)] lg:overflow-y-auto"
             >
               <BookletToolbar

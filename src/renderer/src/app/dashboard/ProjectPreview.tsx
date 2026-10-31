@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { FileText } from 'lucide-react'
+import { useLanguage } from '@/i18n/useLanguage'
 
 export function ProjectPreview({
   thumbnail,
@@ -7,6 +9,7 @@ export function ProjectPreview({
   thumbnail?: string
   title: string
 }): JSX.Element {
+  const { t } = useLanguage()
   const [failed, setFailed] = useState(false)
   const localImage =
     typeof thumbnail === 'string' && /^(data:image\/|blob:)/i.test(thumbnail) ? thumbnail : null
@@ -14,30 +17,11 @@ export function ProjectPreview({
   return (
     <div className="dashboard-project-preview">
       {localImage && !failed ? (
-        <img
-          src={localImage}
-          alt={`Artwork preview for ${title}`}
-          onError={() => setFailed(true)}
-        />
+        <img src={localImage} alt={title} onError={() => setFailed(true)} />
       ) : (
-        <div
-          className="dashboard-document-illustration"
-          aria-label="Document illustration; project thumbnail unavailable"
-          role="img"
-        >
-          <span className="dashboard-paper-back" />
-          <span className="dashboard-paper-middle" />
-          <div className="dashboard-paper-front">
-            <span className="dashboard-paper-caption">PRINT</span>
-            <span className="dashboard-paper-line" />
-            <span className="dashboard-paper-line" />
-            <span className="dashboard-paper-line short" />
-            <span className="dashboard-paper-layout">
-              <i />
-              <i />
-            </span>
-            <span className="dashboard-paper-corner" />
-          </div>
+        <div className="dashboard-preview-empty">
+          <FileText aria-hidden="true" />
+          <span>{t('Preview unavailable')}</span>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 {
   "name": "my-printer-app-by-maher-tka",
-  "version": "0.2.32",
+  "version": "0.2.33",
   "description": "Local-first printer-shop hub desktop app by Maher Tka.",
   "author": "Maher Tka",
   "private": true,
@@ -32,7 +32,7 @@
     "test:backup": "tsx --tsconfig tsconfig.web.json src/renderer/src/backup/shopBackup.test.ts",
     "test:updates": "tsx src/main/app-updater.test.ts",
     "test:i18n": "tsx --tsconfig tsconfig.web.json src/renderer/src/i18n/language.test.ts",
-    "test:appearance": "tsx --tsconfig tsconfig.web.json src/renderer/src/appearance/theme.test.ts",
+    "test:appearance": "tsx --tsconfig tsconfig.web.json src/renderer/src/appearance/theme.test.ts && node scripts/verify-glass-contrast.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "preview": "electron-vite preview --config electron.vite.config.ts",
     "pack": "npm run build && npm run build:fast-print-shell && electron-builder --dir",

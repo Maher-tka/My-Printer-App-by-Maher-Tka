@@ -6,11 +6,9 @@ import {
   BookOpen,
   CreditCard,
   FileImage,
-  FilePlus2,
   FileText,
   FolderOpen,
   Hash,
-  Import,
   Layers3,
   PenLine,
   RefreshCw,
@@ -145,18 +143,11 @@ export function DashboardPage({
     else if (selectedAction === 'artwork') onOpenImageFile()
     else onNavigate(selectedAction === 'booklet' ? 'booklet-montage' : 'cutter-montage')
   }
-  const quickActions = [
-    { title: 'Import PDF', icon: Import, run: importPdf },
-    { title: 'Artwork', icon: FileImage, run: onOpenImageFile },
-    { title: 'New booklet', icon: FilePlus2, run: () => onNavigate('booklet-montage') },
-    { title: 'Open', icon: FolderOpen, run: () => void openProject() }
-  ]
   return (
     <div className="production-dashboard">
       <div className="dashboard-welcome">
         <div>
-          <h2>{t('Ready for your next impression?')}</h2>
-          <p>{t('Your projects, production and finishing touches — in one place.')}</p>
+          <h2>{t('Dashboard')}</h2>
         </div>
         <span>
           {new Intl.DateTimeFormat(language, {
@@ -173,70 +164,52 @@ export function DashboardPage({
       )}
       <div className="dashboard-columns">
         <div className="dashboard-column dashboard-left">
-          <section
-            aria-labelledby="current-project-title"
-            className="dashboard-surface dashboard-current"
-          >
-            <div className="dashboard-card-heading">
-              <h2 id="current-project-title">{t('Continue your work')}</h2>
-              <button
-                type="button"
-                onClick={() => void openProject(currentProject?.filePath)}
-                disabled={openingPath !== null || loading}
-                aria-label={currentProject ? t('Open current project') : t('Browse saved projects')}
-                className="dashboard-round-link"
+          {(loading || currentProject) && (
+            <section
+              aria-labelledby="current-project-title"
+              className="dashboard-surface dashboard-current"
+            >
+              <div className="dashboard-card-heading">
+                <h2 id="current-project-title">{t('Continue your work')}</h2>
+              </div>
+              {currentProject && (
+                <ProjectPreview
+                  thumbnail={linkedJob?.thumbnailPreview}
+                  title={currentProject.jobName}
+                />
+              )}
+              <div
+                className={
+                  currentProject
+                    ? 'dashboard-project-copy'
+                    : 'dashboard-project-copy dashboard-project-copy-empty'
+                }
               >
-                <ArrowUpRight aria-hidden="true" />
-              </button>
-            </div>
-            <ProjectPreview
-              thumbnail={linkedJob?.thumbnailPreview}
-              title={currentProject?.jobName ?? t('New project')}
-            />
-            <div className="dashboard-project-copy">
-              <h3>
-                {loading
-                  ? t('Loading your projects…')
-                  : (currentProject?.jobName ?? t('Your next print starts here'))}
-              </h3>
-              <p>
-                {currentProject?.summary ||
-                  t('Open a saved project or import your first document.')}
-              </p>
-            </div>
-            {currentProject && (
-              <div className="dashboard-project-meta">
-                <span>{currentProject.tool}</span>
-                <button
-                  type="button"
-                  onClick={() => void openProject(currentProject.filePath)}
-                  disabled={openingPath !== null}
-                >
-                  {openingPath === currentProject.filePath ? t('Opening…') : t('Open project')}
-                  <ArrowUpRight aria-hidden="true" />
-                </button>
+                <h3>
+                  {loading
+                    ? t('Loading your projects…')
+                    : (currentProject?.jobName ?? t('Your next print starts here'))}
+                </h3>
+                <p>
+                  {currentProject?.summary ||
+                    t('Open a saved project or import your first document.')}
+                </p>
               </div>
-            )}
-            <div className="dashboard-quick">
-              <h3>{t('Quick actions')}</h3>
-              <div>
-                {quickActions.map(({ title, icon: Icon, run }) => (
+              {currentProject && (
+                <div className="dashboard-project-meta">
+                  <span>{currentProject.tool}</span>
                   <button
-                    key={title}
                     type="button"
-                    onClick={run}
-                    disabled={title === 'Open' && openingPath !== null}
-                    className="dashboard-quick-button"
+                    onClick={() => void openProject(currentProject.filePath)}
+                    disabled={openingPath !== null}
                   >
-                    <span>
-                      <Icon aria-hidden="true" />
-                    </span>
-                    <small>{t(title)}</small>
+                    {openingPath === currentProject.filePath ? t('Opening…') : t('Open project')}
+                    <ArrowUpRight aria-hidden="true" />
                   </button>
-                ))}
-              </div>
-            </div>
-          </section>
+                </div>
+              )}
+            </section>
+          )}
           <section
             aria-labelledby="recent-files-title"
             className="dashboard-surface dashboard-recent"
@@ -250,7 +223,10 @@ export function DashboardPage({
                 className="dashboard-quiet-link"
                 aria-label={t('Refresh recent projects')}
               >
-                <RefreshCw className={loading ? 'animate-spin' : ''} aria-hidden="true" />
+                <RefreshCw
+                  className={loading ? 'motion-safe:animate-spin' : ''}
+                  aria-hidden="true"
+                />
               </button>
             </div>
             {recentError && (
@@ -367,7 +343,12 @@ export function DashboardPage({
                 </label>
               ))}
             </fieldset>
-            <Button type="button" onClick={startProduction} className="dashboard-start-button">
+            <Button
+              type="button"
+              size="lg"
+              onClick={startProduction}
+              className="dashboard-start-button justify-between"
+            >
               <span>{t(action.button)}</span>
               <ArrowRight aria-hidden="true" />
             </Button>
@@ -375,7 +356,6 @@ export function DashboardPage({
           </section>
           <section aria-labelledby="production-toolkit-title" className="dashboard-toolkit">
             <div className="dashboard-toolkit-heading">
-              <span>{t('Made for the work you do.')}</span>
               <h2 id="production-toolkit-title">{t('Your production toolkit')}</h2>
             </div>
             <div className="dashboard-toolkit-options">
@@ -402,11 +382,6 @@ export function DashboardPage({
                   </button>
                 )
               })}
-            </div>
-            <div className="dashboard-toolkit-pages" aria-hidden="true">
-              <span>{t('Pages')}</span>
-              <span>{t('Sheets')}</span>
-              <span>{t('Output')}</span>
             </div>
           </section>
           <details className="dashboard-guide">

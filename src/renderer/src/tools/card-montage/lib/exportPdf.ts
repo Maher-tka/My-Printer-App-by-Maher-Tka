@@ -14,6 +14,7 @@ import { assertCardFontsEmbedded } from './pdfFonts'
 import { CARD_CROP_LINE_WIDTH_PT } from './cropMarks'
 import { createCardJpegPdf } from './jpegArtwork'
 import { artworkBytes } from '../../sequential-number/lib/artwork'
+import { cardPdfBounds } from './pdfBounds'
 
 const pt = (mm: number) => (mm * 72) / 25.4
 
@@ -60,24 +61,7 @@ export async function exportCardMontagePdf(
         assertCardFontsEmbedded(sourcePage, index + 1)
         return sourcePage
       })
-      const bounds = sourcePages.map((sourcePage) => {
-        const crop = sourcePage.getCropBox()
-        const media = sourcePage.getMediaBox()
-        const clipped = {
-          left: Math.max(crop.x, media.x),
-          bottom: Math.max(crop.y, media.y),
-          right: Math.min(crop.x + crop.width, media.x + media.width),
-          top: Math.min(crop.y + crop.height, media.y + media.height)
-        }
-        return clipped.right > clipped.left && clipped.top > clipped.bottom
-          ? clipped
-          : {
-              left: media.x,
-              bottom: media.y,
-              right: media.x + media.width,
-              top: media.y + media.height
-            }
-      })
+      const bounds = sourcePages.map(cardPdfBounds)
       // One copier for the whole source preserves shared image/font resources.
       const embedded = await doc.embedPages(sourcePages, bounds)
       for (const [position, sourcePage] of sourcePages.entries()) {

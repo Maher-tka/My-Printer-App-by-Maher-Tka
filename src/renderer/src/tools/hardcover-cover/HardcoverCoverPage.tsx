@@ -554,7 +554,7 @@ export function HardcoverCoverPage({
 
       <div
         className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-xs text-muted-foreground"
-        aria-label="Cover production status"
+        aria-label={t('Cover production status')}
       >
         <span>
           {t('Source:')}{' '}
@@ -565,7 +565,7 @@ export function HardcoverCoverPage({
         <span>
           {t('Preflight:')}{' '}
           <Badge variant={hardcoverPreflight.status === 'passed' ? 'success' : 'warning'}>
-            {hardcoverPreflight.status}
+            {t(hardcoverPreflight.status)}
           </Badge>
         </span>
         <span>
@@ -590,7 +590,7 @@ export function HardcoverCoverPage({
       <div className="grid w-full min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <aside
           ref={settingsColumnRef}
-          aria-label="Hardcover properties"
+          aria-label={t('Hardcover properties')}
           className="min-w-0 lg:order-2 lg:sticky lg:top-4 lg:max-h-[calc(100vh-160px)] lg:overflow-y-auto"
           data-hardcover-settings-column
         >
@@ -598,7 +598,7 @@ export function HardcoverCoverPage({
         </aside>
 
         <section
-          aria-label="Hardcover preview"
+          aria-label={t('Hardcover preview')}
           className="flex min-w-0 max-w-full flex-col gap-4 lg:order-1"
           data-hardcover-preview-column
         >
@@ -683,7 +683,10 @@ function WorkflowStepNav({
 }): JSX.Element {
   const { t } = useLanguage()
   return (
-    <nav className="min-w-0 max-w-full rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-2">
+    <nav
+      aria-label={t('Hardcover Cover')}
+      className="min-w-0 max-w-full ui-glass-panel rounded-[var(--ui-radius-lg)] border p-2"
+    >
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {WORKFLOW_STEPS.map((step, index) => {
           const Icon = step.icon
@@ -695,27 +698,24 @@ function WorkflowStepNav({
               key={step.id}
               type="button"
               aria-current={active ? 'step' : undefined}
-              className={`min-w-0 rounded-[14px] border p-3 text-left transition-colors ${
+              className={`min-h-10 min-w-0 rounded-[var(--ui-radius-md)] border px-3 py-2 text-start transition-colors ui-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
                 active
-                  ? 'border-primary bg-primary/10 text-primary shadow-sm'
+                  ? 'border-primary/20 bg-primary/10 text-primary'
                   : 'border-transparent bg-transparent text-foreground hover:border-border hover:bg-muted/60'
               }`}
               onClick={() => onStepChange(step.id)}
             >
-              <span className="flex items-start gap-3">
-                <span
-                  className={`flex size-8 shrink-0 items-center justify-center rounded-md border ${
-                    active ? 'border-primary/30 bg-background' : 'bg-muted/50'
-                  }`}
-                >
-                  <Icon className="size-4" />
+              <span className="flex min-w-0 items-center gap-2">
+                <Icon className="size-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 flex-1 text-sm font-semibold">
+                  {index + 1}. {t(step.label)}
                 </span>
-                <span className="min-w-0">
-                  <span className="flex items-center gap-2 text-sm font-semibold">
-                    {index + 1}. {t(step.label)}
-                    {complete && <CheckCircle2 className="size-4 text-success" />}
-                  </span>
-                </span>
+                {complete && (
+                  <CheckCircle2
+                    className="size-4 shrink-0 text-success-foreground"
+                    aria-hidden="true"
+                  />
+                )}
               </span>
             </button>
           )

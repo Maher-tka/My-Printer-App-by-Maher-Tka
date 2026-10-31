@@ -359,306 +359,322 @@ export function CardMontagePage({
           {message}
         </p>
       )}
-      <fieldset
-        disabled={Boolean(busy)}
-        className="grid min-w-0 gap-4 md:grid-cols-2 disabled:opacity-70"
-      >
-        <CardArtworkPanel
-          side="front"
-          artwork={artwork}
-          busy={Boolean(busy)}
-          widthMm={layout.widthMm}
-          heightMm={layout.heightMm}
-          onImport={(file) => void importArtwork(file, 'front')}
-          onChangePage={(page) => void importArtwork(null, 'front', page)}
-          onLoadMore={(start) => void loadMorePages('front', start)}
-          onPreview={() => setPreviewSide('front')}
-        />
-        <CardArtworkPanel
-          side="back"
-          artwork={draft.back ?? null}
-          busy={Boolean(busy)}
-          widthMm={layout.widthMm}
-          heightMm={layout.heightMm}
-          onImport={(file) => void importArtwork(file, 'back')}
-          onChangePage={(page) => void importArtwork(null, 'back', page)}
-          onLoadMore={(start) => void loadMorePages('back', start)}
-          onPreview={() => setPreviewSide('back')}
-          onRemove={() => {
-            onDraftChange({ ...draft, back: null, settings: { ...settings, includeBack: false } })
-            setPreviewSide('front')
-          }}
-          onUseFrontPage={
-            artwork?.kind === 'pdf' && artwork.pageCount > 1
-              ? () => void importArtwork(null, 'back', 2, artwork)
-              : undefined
-          }
-          includeBack={settings.includeBack}
-          onIncludeBack={(value) =>
-            updateSettings({
-              includeBack: value,
-              exportAllPdfPages: value ? false : settings.exportAllPdfPages
-            })
-          }
-        />
-        {!settings.includeBack && artwork?.kind === 'pdf' && artwork.pageCount > 2 && (
-          <label className="flex items-start gap-2 rounded-xl border bg-card p-3 text-xs">
-            <input
-              className="mt-0.5 accent-primary"
-              type="checkbox"
-              checked={Boolean(settings.exportAllPdfPages)}
-              onChange={(event) => updateSettings({ exportAllPdfPages: event.target.checked })}
-            />
-            {t('Export all')} {artwork.pageCount} pages in one PDF
-          </label>
-        )}
-      </fieldset>
       <div className="grid items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
-        <fieldset disabled={Boolean(busy)} className="min-w-0 space-y-4 disabled:opacity-70">
-          <ToolSettingsTabs
-            label={t('Card montage settings')}
-            advanced={
-              <section className="space-y-3 rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4">
-                <h2 className="text-sm font-semibold">
-                  {t(
-                    settings.mode === 'auto'
-                      ? 'Margins'
-                      : settings.mode === 'zero'
-                        ? 'Margins & cutting lines'
-                        : 'Margins & crop crosses'
-                  )}
-                </h2>
-                <NumericField
-                  label={t('Minimum sheet margin (mm)')}
-                  value={settings.marginMm}
-                  onChange={(value) => updateSettings({ marginMm: value })}
+        <div className="min-w-0 space-y-4">
+          <fieldset disabled={Boolean(busy)} className="grid min-w-0 gap-4 disabled:opacity-70">
+            <CardArtworkPanel
+              side="front"
+              artwork={artwork}
+              busy={Boolean(busy)}
+              widthMm={layout.widthMm}
+              heightMm={layout.heightMm}
+              onImport={(file) => void importArtwork(file, 'front')}
+              onChangePage={(page) => void importArtwork(null, 'front', page)}
+              onLoadMore={(start) => void loadMorePages('front', start)}
+              onPreview={() => setPreviewSide('front')}
+            />
+            <CardArtworkPanel
+              side="back"
+              artwork={draft.back ?? null}
+              busy={Boolean(busy)}
+              widthMm={layout.widthMm}
+              heightMm={layout.heightMm}
+              onImport={(file) => void importArtwork(file, 'back')}
+              onChangePage={(page) => void importArtwork(null, 'back', page)}
+              onLoadMore={(start) => void loadMorePages('back', start)}
+              onPreview={() => setPreviewSide('back')}
+              onRemove={() => {
+                onDraftChange({
+                  ...draft,
+                  back: null,
+                  settings: { ...settings, includeBack: false }
+                })
+                setPreviewSide('front')
+              }}
+              onUseFrontPage={
+                artwork?.kind === 'pdf' && artwork.pageCount > 1
+                  ? () => void importArtwork(null, 'back', 2, artwork)
+                  : undefined
+              }
+              includeBack={settings.includeBack}
+              onIncludeBack={(value) =>
+                updateSettings({
+                  includeBack: value,
+                  exportAllPdfPages: value ? false : settings.exportAllPdfPages
+                })
+              }
+            />
+            {!settings.includeBack && artwork?.kind === 'pdf' && artwork.pageCount > 2 && (
+              <label className="flex items-start gap-2 rounded-xl border bg-card p-3 text-xs">
+                <input
+                  className="mt-0.5 accent-primary"
+                  type="checkbox"
+                  checked={Boolean(settings.exportAllPdfPages)}
+                  onChange={(event) => updateSettings({ exportAllPdfPages: event.target.checked })}
                 />
-                {settings.mode !== 'auto' && (
-                  <>
-                    <label className="flex items-center gap-2 text-sm">
+                {t('Export all')} {artwork.pageCount} pages in one PDF
+              </label>
+            )}
+          </fieldset>
+          <fieldset disabled={Boolean(busy)} className="min-w-0 space-y-4 disabled:opacity-70">
+            <ToolSettingsTabs
+              label={t('Card montage settings')}
+              advanced={
+                <section className="space-y-3 ui-glass-panel rounded-[var(--ui-radius-lg)] border p-4">
+                  <h2 className="text-sm font-semibold">
+                    {t(
+                      settings.mode === 'auto'
+                        ? 'Margins'
+                        : settings.mode === 'zero'
+                          ? 'Margins & cutting lines'
+                          : 'Margins & crop crosses'
+                    )}
+                  </h2>
+                  <NumericField
+                    label={t('Minimum sheet margin (mm)')}
+                    value={settings.marginMm}
+                    onChange={(value) => updateSettings({ marginMm: value })}
+                  />
+                  {settings.mode !== 'auto' && (
+                    <>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={settings.cutMarks}
+                          onChange={(event) => updateSettings({ cutMarks: event.target.checked })}
+                          className="accent-primary"
+                        />
+                        {t(
+                          settings.mode === 'zero'
+                            ? 'Cutting lines on front only (0.25 px)'
+                            : 'Crop crosses (0.25 px)'
+                        )}
+                      </label>
+                      <label className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
+                        {t(settings.mode === 'zero' ? 'Cutting line color' : 'Crop cross color')}
+                        <span className="flex items-center gap-2">
+                          <span>{layout.lineColor}</span>
+                          <input
+                            type="color"
+                            aria-label={t(
+                              settings.mode === 'zero' ? 'Cutting line color' : 'Crop cross color'
+                            )}
+                            value={layout.lineColor}
+                            disabled={!settings.cutMarks}
+                            onChange={(event) =>
+                              updateSettings({ cropMarkColor: event.target.value })
+                            }
+                            className="h-9 w-12 cursor-pointer rounded-md border bg-background p-1"
+                          />
+                        </span>
+                      </label>
+                    </>
+                  )}
+                </section>
+              }
+            >
+              <section className="space-y-3 ui-glass-panel rounded-[var(--ui-radius-lg)] border p-4">
+                <h2 className="text-sm font-semibold">{t('2. Choose montage')}</h2>
+                <fieldset className="space-y-2" aria-label={t('2. Choose montage')}>
+                  {modes.map((mode) => (
+                    <label
+                      key={mode.value}
+                      className={`flex cursor-pointer items-start gap-3 rounded-[var(--ui-radius-md)] border p-3 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ${settings.mode === mode.value ? 'border-primary bg-primary/5' : 'hover:bg-muted/40'}`}
+                    >
+                      <input
+                        type="radio"
+                        name="card-montage-mode"
+                        value={mode.value}
+                        checked={settings.mode === mode.value}
+                        onChange={() => updateSettings({ mode: mode.value })}
+                        className="mt-1 accent-primary"
+                      />
+                      <span>
+                        <span className="block text-sm font-medium">{t(mode.title)}</span>
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {t(mode.description)}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
+                {settings.mode === 'auto' && (
+                  <div className="space-y-3">
+                    <label className="flex items-start gap-2 text-[13px] font-medium">
                       <input
                         type="checkbox"
-                        checked={settings.cutMarks}
-                        onChange={(event) => updateSettings({ cutMarks: event.target.checked })}
-                        className="accent-primary"
+                        className="mt-0.5 accent-primary"
+                        checked={Boolean(settings.cardOutline)}
+                        onChange={(event) => updateSettings({ cardOutline: event.target.checked })}
                       />
-                      {t(
-                        settings.mode === 'zero'
-                          ? 'Cutting lines on front only (0.25 px)'
-                          : 'Crop crosses (0.25 px)'
-                      )}
+                      {t('Cutting rectangle on front only (0.25 px)')}
                     </label>
-                    <label className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
-                      {t(settings.mode === 'zero' ? 'Cutting line color' : 'Crop cross color')}
-                      <span className="flex items-center gap-2">
-                        <span>{layout.lineColor}</span>
+                    <label className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+                      {t('Outline color')}
+                      <span className="flex items-center gap-2" dir="ltr">
+                        <span>{getCardOutlineColor(settings.cardOutlineColor)}</span>
                         <input
                           type="color"
-                          aria-label={t(
-                            settings.mode === 'zero' ? 'Cutting line color' : 'Crop cross color'
-                          )}
-                          value={layout.lineColor}
-                          disabled={!settings.cutMarks}
+                          aria-label={t('Outline color')}
+                          value={getCardOutlineColor(settings.cardOutlineColor)}
+                          disabled={!settings.cardOutline}
                           onChange={(event) =>
-                            updateSettings({ cropMarkColor: event.target.value })
+                            updateSettings({
+                              cardOutlineColor: getCardOutlineColor(event.target.value)
+                            })
                           }
-                          className="h-9 w-12 cursor-pointer rounded-md border bg-background p-1"
+                          className="h-9 w-12 cursor-pointer rounded-[var(--ui-radius-md)] border border-input bg-background p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         />
                       </span>
                     </label>
-                  </>
+                  </div>
+                )}
+                {settings.mode !== 'auto' && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {t('Choose card size or enter your own below')}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {STANDARD_CARD_SIZES.map((size) => (
+                        <Button
+                          key={size.label}
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            updateSettings({ widthMm: size.widthMm, heightMm: size.heightMm })
+                          }
+                        >
+                          {size.label}
+                        </Button>
+                      ))}
+                      {artwork && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            updateSettings({ widthMm: artwork.widthMm, heightMm: artwork.heightMm })
+                          }
+                        >
+                          {t('Use original size')}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <NumericField
+                    label={t('Card width (cm)')}
+                    value={layout.widthMm / 10}
+                    min={0.5}
+                    max={29.7}
+                    disabled={settings.mode === 'auto'}
+                    onChange={(value) => updateSettings({ widthMm: value * 10 })}
+                  />
+                  <NumericField
+                    label={t('Card height (cm)')}
+                    value={layout.heightMm / 10}
+                    min={0.5}
+                    max={29.7}
+                    disabled={settings.mode === 'auto'}
+                    onChange={(value) => updateSettings({ heightMm: value * 10 })}
+                  />
+                  {settings.mode === 'spaced' && (
+                    <>
+                      <NumericField
+                        label={t('Horizontal gap (mm)')}
+                        value={settings.horizontalGapMm}
+                        onChange={(value) => updateSettings({ horizontalGapMm: value })}
+                      />
+                      <NumericField
+                        label={t('Vertical gap (mm)')}
+                        value={settings.verticalGapMm}
+                        onChange={(value) => updateSettings({ verticalGapMm: value })}
+                      />
+                    </>
+                  )}
+                  {settings.mode === 'auto' && (
+                    <NumericField
+                      label={t('Space between columns (cm)')}
+                      value={(settings.autoHorizontalGapMm ?? 10) / 10}
+                      max={10}
+                      onChange={(value) => updateSettings({ autoHorizontalGapMm: value * 10 })}
+                    />
+                  )}
+                </div>
+                {settings.mode !== 'auto' && (
+                  <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+                    {t('Artwork sizing')}
+                    <select
+                      className={inputClass}
+                      value={settings.artworkFit}
+                      onChange={(event) =>
+                        updateSettings({
+                          artworkFit: event.target.value as CardMontageSettings['artworkFit']
+                        })
+                      }
+                    >
+                      <option value="stretch">{t('Resize to exact card size')}</option>
+                      <option value="contain">
+                        {t('Keep proportions (may leave white borders)')}
+                      </option>
+                    </select>
+                  </label>
                 )}
               </section>
-            }
-          >
-            <section className="space-y-3 rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4">
-              <h2 className="text-sm font-semibold">{t('2. Choose montage')}</h2>
-              <div className="space-y-2">
-                {modes.map((mode) => (
-                  <label
-                    key={mode.value}
-                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${settings.mode === mode.value ? 'border-primary bg-primary/5' : 'hover:bg-muted/40'}`}
-                  >
-                    <input
-                      type="radio"
-                      name="card-montage-mode"
-                      value={mode.value}
-                      checked={settings.mode === mode.value}
-                      onChange={() => updateSettings({ mode: mode.value })}
-                      className="mt-1 accent-primary"
-                    />
-                    <span>
-                      <span className="block text-sm font-medium">{mode.title}</span>
-                      <span className="mt-1 block text-xs text-muted-foreground">
-                        {mode.description}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {settings.mode === 'auto' && (
-                <div className="space-y-3">
-                  <label className="flex items-start gap-2 text-[13px] font-medium">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 accent-primary"
-                      checked={Boolean(settings.cardOutline)}
-                      onChange={(event) => updateSettings({ cardOutline: event.target.checked })}
-                    />
-                    {t('Cutting rectangle on front only (0.25 px)')}
-                  </label>
-                  <label className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
-                    {t('Outline color')}
-                    <span className="flex items-center gap-2" dir="ltr">
-                      <span>{getCardOutlineColor(settings.cardOutlineColor)}</span>
-                      <input
-                        type="color"
-                        aria-label={t('Outline color')}
-                        value={getCardOutlineColor(settings.cardOutlineColor)}
-                        disabled={!settings.cardOutline}
-                        onChange={(event) =>
-                          updateSettings({
-                            cardOutlineColor: getCardOutlineColor(event.target.value)
-                          })
-                        }
-                        className="h-9 w-12 cursor-pointer rounded-[var(--ui-radius-md)] border border-input bg-background p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      />
-                    </span>
-                  </label>
-                </div>
-              )}
-              {settings.mode !== 'auto' && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {t('Choose card size or enter your own below')}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {STANDARD_CARD_SIZES.map((size) => (
-                      <Button
-                        key={size.label}
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          updateSettings({ widthMm: size.widthMm, heightMm: size.heightMm })
-                        }
-                      >
-                        {size.label}
-                      </Button>
-                    ))}
-                    {artwork && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          updateSettings({ widthMm: artwork.widthMm, heightMm: artwork.heightMm })
-                        }
-                      >
-                        {t('Use original size')}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-3">
-                <NumericField
-                  label={t('Card width (cm)')}
-                  value={layout.widthMm / 10}
-                  min={0.5}
-                  max={29.7}
-                  disabled={settings.mode === 'auto'}
-                  onChange={(value) => updateSettings({ widthMm: value * 10 })}
-                />
-                <NumericField
-                  label={t('Card height (cm)')}
-                  value={layout.heightMm / 10}
-                  min={0.5}
-                  max={29.7}
-                  disabled={settings.mode === 'auto'}
-                  onChange={(value) => updateSettings({ heightMm: value * 10 })}
-                />
-                {settings.mode === 'spaced' && (
-                  <>
-                    <NumericField
-                      label={t('Horizontal gap (mm)')}
-                      value={settings.horizontalGapMm}
-                      onChange={(value) => updateSettings({ horizontalGapMm: value })}
-                    />
-                    <NumericField
-                      label={t('Vertical gap (mm)')}
-                      value={settings.verticalGapMm}
-                      onChange={(value) => updateSettings({ verticalGapMm: value })}
-                    />
-                  </>
-                )}
-                {settings.mode === 'auto' && (
-                  <NumericField
-                    label={t('Space between columns (cm)')}
-                    value={(settings.autoHorizontalGapMm ?? 10) / 10}
-                    max={10}
-                    onChange={(value) => updateSettings({ autoHorizontalGapMm: value * 10 })}
-                  />
-                )}
-              </div>
-              {settings.mode !== 'auto' && (
+              <section className="space-y-3 ui-glass-panel rounded-[var(--ui-radius-lg)] border p-4">
+                <h2 className="text-sm font-semibold">{t('3. A4 sheet setup')}</h2>
                 <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
-                  {t('Artwork sizing')}
+                  {t('Orientation')}
                   <select
                     className={inputClass}
-                    value={settings.artworkFit}
+                    value={settings.orientation}
                     onChange={(event) =>
                       updateSettings({
-                        artworkFit: event.target.value as CardMontageSettings['artworkFit']
+                        orientation: event.target.value as CardMontageSettings['orientation']
                       })
                     }
                   >
-                    <option value="stretch">{t('Resize to exact card size')}</option>
-                    <option value="contain">
-                      {t('Keep proportions (may leave white borders)')}
-                    </option>
+                    <option value="portrait">{t('Portrait · 21 × 29.7 cm')}</option>
+                    <option value="landscape">{t('Landscape · 29.7 × 21 cm')}</option>
                   </select>
                 </label>
-              )}
-            </section>
-            <section className="space-y-3 rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4">
-              <h2 className="text-sm font-semibold">{t('3. A4 sheet setup')}</h2>
-              <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
-                {t('Orientation')}
-                <select
-                  className={inputClass}
-                  value={settings.orientation}
-                  onChange={(event) =>
-                    updateSettings({
-                      orientation: event.target.value as CardMontageSettings['orientation']
-                    })
-                  }
-                >
-                  <option value="portrait">{t('Portrait · 21 × 29.7 cm')}</option>
-                  <option value="landscape">{t('Landscape · 29.7 × 21 cm')}</option>
-                </select>
-              </label>
-            </section>
-          </ToolSettingsTabs>
-        </fieldset>
-        <section className="min-w-0 space-y-4 rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4 lg:sticky lg:top-4">
+              </section>
+            </ToolSettingsTabs>
+          </fieldset>
+        </div>
+        <section className="min-w-0 space-y-4 ui-glass-panel rounded-[var(--ui-radius-lg)] border p-4 lg:sticky lg:top-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold">
-                {previewSide === 'both'
-                  ? 'Front and back A4 previews'
-                  : `${previewSide === 'front' ? 'Front' : 'Back'} A4 sheet preview`}
+                {t(
+                  previewSide === 'both'
+                    ? 'Front and back A4 previews'
+                    : previewSide === 'front'
+                      ? 'Front A4 sheet preview'
+                      : 'Back A4 sheet preview'
+                )}
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Centered layout · {(layout.widthMm / 10).toFixed(2)} ×{' '}
-                {(layout.heightMm / 10).toFixed(2)} cm cards
+                {t('Centered layout')}{' '}
+                <bdi dir="ltr">
+                  {(layout.widthMm / 10).toFixed(2)} × {(layout.heightMm / 10).toFixed(2)} cm
+                </bdi>
               </p>
             </div>
             <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
-              {layout.errors.length
-                ? 'Check settings'
-                : `${layout.capacity} cards · ${layout.columns} × ${layout.rows}`}
+              {layout.errors.length ? (
+                t('Check settings')
+              ) : (
+                <>
+                  {t('Cards')}:{' '}
+                  <bdi dir="ltr">
+                    {layout.capacity} ({layout.columns} × {layout.rows})
+                  </bdi>
+                </>
+              )}
             </span>
           </div>
-          <div className="flex gap-2" role="group" aria-label={t('Side to preview')}>
+          <div className="flex flex-wrap gap-2" role="group" aria-label={t('Side to preview')}>
             <Button
               size="sm"
               variant={previewSide === 'front' ? 'selected' : 'outline'}
@@ -715,7 +731,9 @@ export function CardMontagePage({
             />
           )}
           <p className="text-xs text-muted-foreground">
-            {layout.horizontalGapMm} mm horizontal · {layout.verticalGapMm} mm vertical.
+            {t('Horizontal gap')}: <bdi dir="ltr">{layout.horizontalGapMm} mm</bdi>{' '}
+            <span aria-hidden="true">·</span> {t('Vertical gap')}:{' '}
+            <bdi dir="ltr">{layout.verticalGapMm} mm</bdi>
           </p>
         </section>
       </div>

@@ -64,11 +64,9 @@ export function PieceEditor(props: PieceEditorProps): JSX.Element {
     return (
       <section className="grid h-full min-h-64 place-items-center rounded-[var(--ui-radius-lg)] border border-dashed bg-muted/25 p-8 text-center">
         <div className="max-w-md">
-          <h3 className="text-lg font-semibold">{t('Start with your artwork')}</h3>
+          <h3 className="text-lg font-semibold text-foreground">{t('Start with your artwork')}</h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            {t(
-              'Import a design using the button on the left, then prepare its artwork and cut line.'
-            )}
+            {t('Import a design, then prepare its artwork and cut line.')}
           </p>
         </div>
       </section>

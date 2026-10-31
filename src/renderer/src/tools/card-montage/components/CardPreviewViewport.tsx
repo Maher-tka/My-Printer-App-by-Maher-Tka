@@ -122,7 +122,7 @@ export function CardPreviewViewport({
         dir="ltr"
         tabIndex={0}
         role="region"
-        aria-label="Scrollable card sheet preview"
+        aria-label={t('Scrollable card sheet preview')}
         className="h-[calc(100vh-340px)] min-h-[260px] max-h-[750px] overflow-auto overscroll-contain rounded-xl border bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         style={{ overflowAnchor: 'none' }}
       >

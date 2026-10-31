@@ -33,9 +33,8 @@ export function ToolHeader({
 
   return (
     <header
-      dir="ltr"
       className={cn(
-        'grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4',
+        'ui-glass-surface grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-[var(--ui-radius-lg)] border p-4',
         className
       )}
       data-tool-header
@@ -45,11 +44,16 @@ export function ToolHeader({
           <ArrowLeft aria-hidden="true" />
           {t(backLabel)}
         </Button>
-        <h1 className="mt-1 text-lg font-semibold tracking-tight">{t(title)}</h1>
-        {projectName && <p className="mt-1 text-xs text-muted-foreground">{projectName}</p>}
+        <h1 className="mt-1 min-w-0 break-words text-lg font-semibold tracking-tight">
+          {t(title)}
+        </h1>
+        {projectName && (
+          <p className="mt-1 break-words text-xs text-muted-foreground">{projectName}</p>
+        )}
       </div>
       <div
-        className="flex flex-col items-end justify-self-end gap-2 sm:flex-row sm:items-start"
+        className="flex min-w-0 max-w-full flex-col items-end justify-self-end gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-end"
+        role="group"
         aria-label={t('Output actions')}
       >
         {exportPdf && (

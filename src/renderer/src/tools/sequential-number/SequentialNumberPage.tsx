@@ -93,15 +93,16 @@ function Card({
   title: string
   children: ReactNode
 }): JSX.Element {
+  const { t } = useLanguage()
   return (
-    <section className="rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4">
+    <section className="ui-glass-panel rounded-[var(--ui-radius-lg)] border p-4">
       <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold">
         {step && (
           <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-xs text-primary">
             {step}
           </span>
         )}
-        {title}
+        {t(title)}
       </h2>
       <div className="space-y-4">{children}</div>
     </section>
@@ -369,19 +370,25 @@ export function SequentialNumberPage({
     return (
       <div className="space-y-2">
         <label
-          className={`flex cursor-pointer items-center gap-3 rounded-xl border border-dashed p-4 hover:bg-muted/40 ${busy ? 'pointer-events-none opacity-60' : ''}`}
+          className={`flex cursor-pointer items-center gap-3 rounded-xl border border-dashed p-4 hover:bg-muted/40 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ${busy ? 'pointer-events-none opacity-60' : ''}`}
         >
           <ActionIcon action="import" className="size-5 shrink-0 text-primary" />
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium">
-              {artwork?.name ?? `Import ${target} design`}
+              {artwork?.name ?? t(target === 'front' ? 'Import artwork' : 'Import back design')}
             </span>
             <span className="text-xs text-muted-foreground">
-              PDF, PNG or JPEG · click to {artwork ? 'replace' : 'browse'}
+              {t('Choose PDF, PNG or JPEG files.')}
             </span>
           </span>
           <input
-            aria-label={`Import ${target} design`}
+            aria-label={t(
+              artwork
+                ? 'Replace artwork'
+                : target === 'front'
+                  ? 'Import artwork'
+                  : 'Import back design'
+            )}
             className="sr-only"
             type="file"
             accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"
@@ -403,7 +410,9 @@ export function SequentialNumberPage({
             >
               {Array.from({ length: artwork.pageCount }, (_, i) => (
                 <option key={i + 1} value={i + 1}>
-                  {t('Page')} {i + 1} of {artwork.pageCount}
+                  {t('Page {current} of {total}')
+                    .replace('{current}', String(i + 1))
+                    .replace('{total}', String(artwork.pageCount))}
                 </option>
               ))}
             </select>
@@ -475,7 +484,7 @@ export function SequentialNumberPage({
       <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)]">
         <fieldset
           disabled={busy}
-          aria-label="Numbering setup"
+          aria-label={t('Numbering settings')}
           className="min-w-0 space-y-4 disabled:opacity-70 lg:sticky lg:top-4 lg:max-h-[calc(100vh-180px)] lg:overflow-y-auto"
         >
           <ToolSettingsTabs
@@ -621,6 +630,7 @@ export function SequentialNumberPage({
                     type="button"
                     className="flex-1"
                     variant={settings.sheetPreset === preset ? 'selected' : 'outline'}
+                    aria-pressed={settings.sheetPreset === preset}
                     onClick={() =>
                       patchSettings({
                         sheetPreset: preset,
@@ -632,7 +642,7 @@ export function SequentialNumberPage({
                       })
                     }
                   >
-                    {preset === 'custom' ? 'Custom' : preset.toUpperCase()}
+                    {preset === 'custom' ? t('Custom') : preset.toUpperCase()}
                   </Button>
                 ))}
               </div>
@@ -743,7 +753,7 @@ export function SequentialNumberPage({
                     type="button"
                     disabled={busy}
                     aria-pressed={settings.order === choice.id}
-                    className={`rounded-[14px] border p-3 text-left transition-colors ${settings.order === choice.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
+                    className={`rounded-[var(--ui-radius-md)] border p-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${settings.order === choice.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
                     onClick={() => patchSettings({ order: choice.id })}
                   >
                     <div className="mb-2 flex items-center gap-2">
@@ -760,9 +770,9 @@ export function SequentialNumberPage({
                           </span>
                         ))}
                       </div>
-                      <span className="font-semibold">{choice.title}</span>
+                      <span className="font-semibold">{t(choice.title)}</span>
                     </div>
-                    <p className="text-xs leading-5 text-muted-foreground">{choice.subtitle}</p>
+                    <p className="text-xs leading-5 text-muted-foreground">{t(choice.subtitle)}</p>
                   </button>
                 ))}
               </div>
@@ -778,8 +788,8 @@ export function SequentialNumberPage({
         </fieldset>
         <div className="min-w-0 space-y-4">
           <div
-            className="flex items-center gap-2 rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-2"
-            aria-label="Numbering workspace views"
+            className="flex flex-wrap items-center gap-2 ui-glass-panel rounded-[var(--ui-radius-lg)] border p-2"
+            aria-label={t('Workspace views')}
           >
             <Button
               type="button"
@@ -964,27 +974,34 @@ export function SequentialNumberPage({
             </Card>
           )}
           {workspaceTab === 'sheet' && (
-            <section className="overflow-hidden rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)]">
+            <section className="overflow-hidden ui-glass-panel rounded-[var(--ui-radius-lg)] border">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
                 <div>
                   <h2 className="flex items-center gap-2 font-semibold">
                     <Layers className="size-4" />
                     {t('Sheet preview')}
                   </h2>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {layout.capacity} items per sheet · {layout.sheetCount} physical sheets ·{' '}
-                    {layout.pdfPageCount} {t('PDF pages')}
+                  <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span>
+                      <bdi>{layout.capacity}</bdi> {t('items per sheet')}
+                    </span>
+                    <span>
+                      <bdi>{layout.sheetCount}</bdi> {t('physical sheets')}
+                    </span>
+                    <span>
+                      <bdi>{layout.pdfPageCount}</bdi> {t('PDF pages')}
+                    </span>
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="icon"
-                    aria-label="Previous sheet"
+                    aria-label={t('Previous sheet')}
                     disabled={safeSheet === 0}
                     onClick={() => setSheetIndex(safeSheet - 1)}
                   >
-                    <ChevronLeft className="size-4" />
+                    <ChevronLeft className="size-4 rtl:rotate-180" />
                   </Button>
                   <span className="text-xs tabular-nums">
                     {t('Sheet')} {layout.sheetCount ? safeSheet + 1 : 0} / {layout.sheetCount}
@@ -992,11 +1009,11 @@ export function SequentialNumberPage({
                   <Button
                     variant="outline"
                     size="icon"
-                    aria-label="Next sheet"
+                    aria-label={t('Next sheet')}
                     disabled={safeSheet >= layout.sheetCount - 1}
                     onClick={() => setSheetIndex(safeSheet + 1)}
                   >
-                    <ChevronRight className="size-4" />
+                    <ChevronRight className="size-4 rtl:rotate-180" />
                   </Button>
                 </div>
               </div>
@@ -1005,6 +1022,7 @@ export function SequentialNumberPage({
                   <Button
                     size="sm"
                     variant={side === 'front' ? 'selected' : 'outline'}
+                    aria-pressed={side === 'front'}
                     onClick={() => setSide('front')}
                   >
                     {t('Front')}
@@ -1013,6 +1031,7 @@ export function SequentialNumberPage({
                     <Button
                       size="sm"
                       variant={side === 'back' ? 'selected' : 'outline'}
+                      aria-pressed={side === 'back'}
                       onClick={() => setSide('back')}
                     >
                       {t('Back')}
@@ -1027,7 +1046,7 @@ export function SequentialNumberPage({
               <div className="m-4 flex max-h-[calc(100vh-360px)] min-h-80 justify-center overflow-auto rounded-[14px] bg-muted/50 p-4">
                 <svg
                   role="img"
-                  aria-label={`${side} of sheet ${safeSheet + 1}`}
+                  aria-label={`${t(side === 'front' ? 'Front' : 'Back')}, ${t('Sheet')} ${safeSheet + 1}`}
                   viewBox={`0 0 ${Math.max(1, settings.sheetWidthMm)} ${Math.max(1, settings.sheetHeightMm)}`}
                   className="h-auto max-w-full shrink-0 bg-white shadow-sm"
                   style={{

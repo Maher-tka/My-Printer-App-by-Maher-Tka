@@ -1,6 +1,6 @@
 import { useLanguage } from '@/i18n/useLanguage'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -178,16 +178,16 @@ export function JobsPage({ openRequest }: { openRequest?: JobOpenRequest | null 
     return (
       <div className="workspace-shell mx-auto flex max-w-[1500px] flex-col gap-5">
         {header}
-        <Card>
+        <Card className="ui-glass-surface">
           <CardHeader className="border-b bg-muted/25">
             <CardTitle>{t('Customer database')}</CardTitle>
-            <CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <p className="mb-4 text-sm text-muted-foreground">
               {t(
                 'Customer details, order history, and outstanding balances stay on this computer.'
               )}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-6">
+            </p>
             <CustomerDatabase jobs={jobs} />
           </CardContent>
         </Card>
@@ -246,7 +246,7 @@ export function JobsPage({ openRequest }: { openRequest?: JobOpenRequest | null 
           />
         </div>
 
-        <Card className="min-w-0 overflow-hidden">
+        <Card className="ui-glass-surface min-w-0 overflow-hidden">
           <CardHeader className="border-b bg-muted/25">
             <CardTitle>
               {view === 'board'
@@ -255,9 +255,6 @@ export function JobsPage({ openRequest }: { openRequest?: JobOpenRequest | null 
                   ? 'Deadline calendar'
                   : 'Shop job list'}
             </CardTitle>
-            <CardDescription>
-              {jobs.length} local jobs · {overdueCount} overdue · {dueTodayCount} due today
-            </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
             {view === 'board' ? (

@@ -45,7 +45,7 @@ export function StickerLibraryRail({
       className="flex min-h-0 flex-col overflow-hidden rounded-[var(--ui-radius-lg)] border bg-card/80"
     >
       <div className="flex items-center justify-between border-b px-3 py-3">
-        <strong className="text-sm font-semibold">{t('Artwork / stickers')}</strong>
+        <strong className="text-sm font-semibold text-foreground">{t('Artwork / stickers')}</strong>
         <span className="rounded-md bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
           {pieces.length}
         </span>
@@ -63,7 +63,7 @@ export function StickerLibraryRail({
         <Button
           size="sm"
           variant="outline"
-          className="mx-2 mb-2 shrink-0"
+          className="mx-2 mb-2 h-auto min-h-8 shrink-0 whitespace-normal py-1 text-center"
           onClick={onOpenStickerMaker}
         >
           <Sparkles aria-hidden="true" /> {t('AI Sticker Maker')}
@@ -74,7 +74,7 @@ export function StickerLibraryRail({
           type="button"
           size="sm"
           variant="outline"
-          className="mx-2 mb-2 shrink-0 whitespace-normal"
+          className="mx-2 mb-2 h-auto min-h-8 shrink-0 whitespace-normal py-1 text-center"
           onClick={onOpenPngContours}
         >
           {t('PNG white contour')}
@@ -101,7 +101,8 @@ export function StickerLibraryRail({
             className={`border-b ${activeId === piece.id ? 'bg-primary/10' : ''}`}
           >
             <button
-              className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-accent/40"
+              type="button"
+              className="flex w-full items-center gap-3 p-3 text-start transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               aria-pressed={activeId === piece.id}
               onClick={() => onSelect(piece.id)}
             >

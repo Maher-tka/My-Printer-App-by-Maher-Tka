@@ -161,7 +161,7 @@ export function ActiveProduction({
           <span className="dashboard-empty-mark">
             <Layers3 aria-hidden="true" />
           </span>
-          <h3>{t('A clear view of your work.')}</h3>
+          <h3>{t('No active jobs')}</h3>
           <p>{t('Track customer orders and see their real production stage here.')}</p>
           <Button type="button" variant="ghost" onClick={onOpenJobs}>
             {t('Open Shop Jobs')} <ArrowUpRight aria-hidden="true" />

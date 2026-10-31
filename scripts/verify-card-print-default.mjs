@@ -16,6 +16,7 @@ if (!process.versions.electron) {
     resolve('tmp/card-print-default.tsx'),
     `
 import React,{useState} from 'react';import{createRoot}from'react-dom/client';
+import{AppLayout}from'/src/renderer/src/components/layout/AppLayout';
 import{CardMontagePage}from'/src/renderer/src/tools/card-montage/CardMontagePage';
 import{DEFAULT_CARD_SETTINGS}from'/src/renderer/src/tools/card-montage/types';
 import{setLanguage,translate}from'/src/renderer/src/i18n/language';
@@ -31,7 +32,7 @@ const proof={id,a3,initial,read,write,setLanguage,setThemePreference,setPerforma
 Object.assign(window,{cardProof:proof,printerApp:{printers:{get:async()=>{if(proof.failLoad)throw Error('load failed');return read()},save:async preferences=>{await new Promise(r=>setTimeout(r,80));if(proof.failSave)throw Error('Could not save printer preset. Choose it again to retry.');const next={...read(),preferences};write(next);return next}},printPdf:async request=>{const snapshot=read(),printer=preferredPrinter(snapshot.preferences,'tool:card-montage'),profile=printer&&preferredProfile(snapshot.preferences,printer,'tool:card-montage');proof.prints.push({printer,profile,copies:request.copies,bytes:request.bytes.length});return{ok:true,printerName:printer}}}});
 const canvas=document.createElement('canvas');canvas.width=160;canvas.height=100;const ctx=canvas.getContext('2d');ctx.fillStyle='#335c99';ctx.fillRect(0,0,160,100);ctx.fillStyle='white';ctx.font='22px sans-serif';ctx.fillText('CARD',35,55);const image=canvas.toDataURL('image/png');
 const artwork={name:'test-card.png',kind:'png',bytesBase64:image.split(',')[1],previewDataUrl:image,widthMm:85,heightMm:55,pageNumber:1,pageCount:1};
-function App(){const[draft,setDraft]=useState({artwork,back:artwork,settings:DEFAULT_CARD_SETTINGS});return <div className="h-screen overflow-auto bg-background p-4 text-foreground"><CardMontagePage draft={draft} onDraftChange={setDraft} onNavigate={()=>{}}/></div>}
+function App(){const[draft,setDraft]=useState({artwork,back:artwork,settings:DEFAULT_CARD_SETTINGS});const noop=()=>{};return <AppLayout activeRoute="card-montage" pageMeta={{title:'Card Montage',subtitle:''}} onNavigate={noop} onSignOut={noop} onOpenProject={noop} onOpenImageFile={noop} onOpenJob={noop}><CardMontagePage draft={draft} onDraftChange={setDraft} onNavigate={noop}/></AppLayout>}
 createRoot(document.getElementById('root')).render(<App/>);`
   )
   const { createServer } = await import('vite'),
@@ -74,8 +75,15 @@ createRoot(document.getElementById('root')).render(<App/>);`
       height: 768,
       webPreferences: { sandbox: true, offscreen: true, backgroundThrottling: false }
     })
-    const run = (fn, ...args) =>
-      win.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`)
+    const run = async (fn, ...args) => {
+      try {
+        return await win.webContents.executeJavaScript(
+          `(${fn.toString()})(...${JSON.stringify(args)})`
+        )
+      } catch (error) {
+        throw new Error(`Card proof operation failed: ${fn.toString()}\n${error.message}`)
+      }
+    }
     const wait = async (fn, ...args) => {
       for (let index = 0; index < 400; index++) {
         if (await run(fn, ...args)) return
@@ -87,6 +95,11 @@ createRoot(document.getElementById('root')).render(<App/>);`
       if (!value) throw Error(message)
     }
     const open = async () => {
+      await wait(() =>
+        [...document.querySelectorAll('[data-tool-header] button')].some(
+          (button) => button.textContent.trim() === cardProof.translate('Print') && !button.disabled
+        )
+      )
       await run(() =>
         [...document.querySelectorAll('[data-tool-header] button')]
           .find((button) => button.textContent.trim() === cardProof.translate('Print'))
@@ -161,6 +174,7 @@ createRoot(document.getElementById('root')).render(<App/>);`
             cardProof.setLanguage(language)
             cardProof.setThemePreference(theme)
             cardProof.setPerformancePreset(preset)
+            document.querySelector('main.app-canvas')?.scrollTo(0, 0)
           },
           language,
           theme,
@@ -267,6 +281,68 @@ createRoot(document.getElementById('root')).render(<App/>);`
             !cardProof.read().preferences.optionPrinters['tool:card-montage']
         ),
         'Save failure permitted printing or changed the default'
+      )
+      await cancel()
+      for (const [width, height, language, theme, preset] of [
+        [1366, 768, 'en', 'light', 'balanced'],
+        [1366, 768, 'ar', 'dark', 'low-end'],
+        [1920, 1080, 'fr', 'dark', 'balanced'],
+        [1920, 1080, 'ar', 'light', 'low-end']
+      ]) {
+        win.setContentSize(width, height)
+        await run(
+          (language, theme, preset) => {
+            cardProof.setLanguage(language)
+            cardProof.setThemePreference(theme)
+            cardProof.setPerformancePreset(preset)
+            document.querySelector('main.app-canvas')?.scrollTo(0, 0)
+          },
+          language,
+          theme,
+          preset
+        )
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        check(
+          await run(() => {
+            const workspace = document.querySelector('.workspace-shell')
+            return workspace && workspace.scrollWidth <= workspace.clientWidth + 1
+          }),
+          `Card workspace overflow at ${width} in ${language}`
+        )
+        check(
+          await run(() => {
+            const preview = document.querySelector('[role="region"][tabindex="0"]')
+            return preview && preview.getBoundingClientRect().top < innerHeight - 150
+          }),
+          `Card sheet preview is not visible at ${width} in ${language}`
+        )
+        check(
+          await run(() => {
+            const header = document.querySelector('[data-tool-header]')
+            const labels = [...header.querySelectorAll('button')].map((button) =>
+              button.textContent.trim()
+            )
+            return (
+              labels.includes(cardProof.translate('Export PDF')) &&
+              labels.includes(cardProof.translate('Clear'))
+            )
+          }),
+          `Shared action labels did not update in ${language}`
+        )
+        await writeFile(
+          resolve(output, `workspace-${width}-${language}-${theme}.png`),
+          (await win.webContents.capturePage()).toPNG()
+        )
+      }
+      await run(() => {
+        const mode = document.querySelector('input[name="card-montage-mode"][value="spaced"]')
+        mode.click()
+      })
+      check(
+        await run(
+          () => document.querySelector('input[name="card-montage-mode"][value="spaced"]').checked
+        ),
+        'Choosing a montage mode did not update the selection'
       )
       await writeFile(
         resolve(output, 'results.json'),

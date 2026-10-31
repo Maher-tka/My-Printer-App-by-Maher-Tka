@@ -37,16 +37,18 @@ export function CardArtworkPanel({
   const { t } = useLanguage()
 
   const label = side === 'front' ? 'Front' : 'Back'
+  const sideLabel = t(side === 'front' ? 'Front side' : 'Back side')
+  const importLabel = t(side === 'front' ? 'Import front design' : 'Import back design')
   const fonts =
     artwork?.pdfInfo?.pages.find((page) => page.pageNumber === artwork.pageNumber)?.fonts ?? []
   const missing = fonts.filter((font) => !font.embedded)
   return (
     <section
-      className="space-y-3 rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4"
-      aria-label={`${label} side panel`}
+      className="space-y-3 ui-glass-panel rounded-[var(--ui-radius-lg)] border p-4"
+      aria-label={sideLabel}
     >
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">{t(label)} side</h2>
+        <h2 className="text-sm font-semibold">{sideLabel}</h2>
         {onRemove && artwork && (
           <Button size="sm" variant="ghost" onClick={onRemove}>
             {t('Remove back')}
@@ -54,7 +56,7 @@ export function CardArtworkPanel({
         )}
       </div>
       <label
-        className={`flex cursor-pointer items-center gap-3 rounded-xl border border-dashed p-4 hover:bg-muted/40 ${busy ? 'pointer-events-none' : ''}`}
+        className={`flex cursor-pointer items-center gap-3 rounded-xl border border-dashed p-4 hover:bg-muted/40 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ${busy ? 'pointer-events-none' : ''}`}
         onDragOver={(event) => {
           event.preventDefault()
           event.dataTransfer.dropEffect = 'copy'
@@ -71,9 +73,7 @@ export function CardArtworkPanel({
           <ActionIcon action="import" className="size-5 shrink-0 text-primary" />
         )}
         <span className="min-w-0">
-          <span className="block truncate text-sm font-medium">
-            {artwork?.name ?? `Import ${side} design`}
-          </span>
+          <span className="block truncate text-sm font-medium">{artwork?.name ?? importLabel}</span>
           <span
             className="text-xs text-muted-foreground"
             title={t('EPS import requires Adobe Illustrator. Use installed or outlined fonts.')}
@@ -84,7 +84,7 @@ export function CardArtworkPanel({
         <input
           className="sr-only"
           type="file"
-          aria-label={`Import ${side} design`}
+          aria-label={importLabel}
           accept="application/pdf,application/postscript,image/png,image/jpeg,.ai,.eps,.pdf,.png,.jpg,.jpeg"
           disabled={busy}
           onChange={(event) => {
@@ -112,32 +112,38 @@ export function CardArtworkPanel({
       )}
       {artwork ? (
         <>
-          <button
-            className="block w-full overflow-hidden rounded-xl border bg-white p-2"
-            type="button"
-            onClick={onPreview}
-            aria-label={`Preview ${side} sheet`}
-          >
-            <img
-              src={artwork.previewDataUrl}
-              alt={`${label} card design`}
-              className="mx-auto h-24 max-w-full object-contain"
-            />
-          </button>
-          <div className="space-y-1 rounded-xl bg-secondary/60 p-3 text-xs">
-            <p>
-              <span className="font-semibold">{t('Original file size:')}</span>{' '}
-              {(artwork.widthMm / 10).toFixed(2)} × {(artwork.heightMm / 10).toFixed(2)} cm
-            </p>
-            <p>
-              <span className="font-semibold">{t('Printed card size:')}</span>{' '}
-              {(widthMm / 10).toFixed(2)} × {(heightMm / 10).toFixed(2)} cm
-            </p>
-            {artwork.kind !== 'pdf' && (
-              <p className="text-muted-foreground">
-                {t('Original image size estimated at 300 dpi.')}
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+            <button
+              className="block min-w-0 overflow-hidden rounded-xl border bg-white p-2"
+              type="button"
+              onClick={onPreview}
+              aria-label={t(side === 'front' ? 'Preview front sheet' : 'Preview back sheet')}
+            >
+              <img
+                src={artwork.previewDataUrl}
+                alt={t(side === 'front' ? 'Front card design' : 'Back card design')}
+                className="mx-auto h-24 max-w-full object-contain"
+              />
+            </button>
+            <div className="space-y-1 rounded-xl bg-secondary/60 p-3 text-xs">
+              <p>
+                <span className="font-semibold">{t('Original file size:')}</span>{' '}
+                <bdi dir="ltr" className="whitespace-nowrap">
+                  {(artwork.widthMm / 10).toFixed(2)} × {(artwork.heightMm / 10).toFixed(2)} cm
+                </bdi>
               </p>
-            )}
+              <p>
+                <span className="font-semibold">{t('Printed card size:')}</span>{' '}
+                <bdi dir="ltr" className="whitespace-nowrap">
+                  {(widthMm / 10).toFixed(2)} × {(heightMm / 10).toFixed(2)} cm
+                </bdi>
+              </p>
+              {artwork.kind !== 'pdf' && (
+                <p className="text-muted-foreground">
+                  {t('Original image size estimated at 300 dpi.')}
+                </p>
+              )}
+            </div>
           </div>
           {artwork.pdfInfo && (
             <div className="space-y-1 rounded-xl border p-3 text-xs">
@@ -192,9 +198,11 @@ export function CardArtworkPanel({
         </>
       ) : (
         <p className="text-xs text-muted-foreground">
-          {side === 'back'
-            ? 'Add a separate back file, or use the second page/artboard from the front file.'
-            : 'Choose the front of your business card.'}
+          {t(
+            side === 'back'
+              ? 'Add a separate back file, or use the second page/artboard from the front file.'
+              : 'Choose the front of your business card.'
+          )}
         </p>
       )}
     </section>

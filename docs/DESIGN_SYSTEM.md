@@ -42,6 +42,8 @@ If a pattern is missing, extend a shared component and demonstrate it in Storybo
 - Allow settings panels and the page to scroll when space is limited. Avoid accidental horizontal page scrolling. Intentional canvas panning and table scrolling belong in their own bounded containers.
 - Wrap action groups as groups at narrow widths. Preserve their order and labels; do not solve overflow by shrinking text or hiding the main action.
 - Treat the dashboard's existing glass surfaces and circular navigation as established shell patterns. Tool settings use the shared neutral surfaces and button shapes.
+- Keep the shared blue-green navigation and softly layered surfaces consistent across the dashboard and production tools. Reserve stronger color for navigation, selection, and primary actions; keep artwork and sheet previews neutral and legible.
+- Use the shared translucent glass surfaces for app chrome and controls. Low-end mode keeps the translucent tint but disables backdrop blur and expensive shadows. Keep text and control edges clear against the backdrop.
 
 ## Button hierarchy
 

@@ -527,17 +527,25 @@ export function CutterMontagePage({
               className="flex min-h-0 flex-1 flex-col gap-2"
             >
               <TabsList
-                className="grid h-9 w-full shrink-0 grid-cols-4"
-                aria-label="Cutter workflow steps"
+                className="flex h-auto min-h-9 w-full shrink-0 justify-start overflow-x-auto"
+                aria-label={t('Cutter workflow steps')}
               >
-                <TabsTrigger value="prepare">{t('1. Prepare artwork')}</TabsTrigger>
-                <TabsTrigger value="cut">{t('2. Cut lines')}</TabsTrigger>
-                <TabsTrigger value="quantity">{t('3. Quantities')}</TabsTrigger>
-                <TabsTrigger value="layout">{t('4. Layout & export')}</TabsTrigger>
+                <TabsTrigger className="min-w-max flex-1" value="prepare">
+                  {t('1. Prepare artwork')}
+                </TabsTrigger>
+                <TabsTrigger className="min-w-max flex-1" value="cut">
+                  {t('2. Cut lines')}
+                </TabsTrigger>
+                <TabsTrigger className="min-w-max flex-1" value="quantity">
+                  {t('3. Quantities')}
+                </TabsTrigger>
+                <TabsTrigger className="min-w-max flex-1" value="layout">
+                  {t('4. Layout & export')}
+                </TabsTrigger>
               </TabsList>
               <WorkflowHint className="shrink-0 px-1">
                 {!cutter.pieces.length
-                  ? 'Start by importing artwork using the button on the left.'
+                  ? 'Start by importing artwork.'
                   : step === 'prepare'
                     ? 'Review your artwork, then continue to cut lines.'
                     : step === 'cut'
@@ -563,7 +571,7 @@ export function CutterMontagePage({
 
               <div
                 className="flex shrink-0 flex-wrap items-center gap-2 border-b pb-1"
-                aria-label="Workspace panels"
+                aria-label={t('Workspace panels')}
               >
                 {step === 'layout' && (
                   <CutterToolbar
@@ -595,18 +603,18 @@ export function CutterMontagePage({
                     aria-controls="cutter-workspace-panel"
                     onClick={() => setPanel(panel === item ? null : item)}
                   >
-                    {
+                    {t(
                       {
                         view: 'View',
                         export: 'Export',
                         checks: 'Checks'
                       }[item]
-                    }
+                    )}
                   </Button>
                 ))}
 
                 <span
-                  className="ml-auto min-w-0 max-w-full truncate text-xs text-muted-foreground"
+                  className="ms-auto min-w-0 max-w-full truncate text-xs text-muted-foreground"
                   role="status"
                   aria-live="polite"
                 >
@@ -639,16 +647,29 @@ export function CutterMontagePage({
                   {panel && (
                     <aside
                       id="cutter-workspace-panel"
-                      aria-label={`${panel} panel`}
+                      aria-label={t(
+                        { designs: 'Designs', view: 'View', export: 'Export', checks: 'Checks' }[
+                          panel
+                        ]
+                      )}
                       className="order-last flex w-[280px] shrink-0 flex-col overflow-hidden rounded-[var(--ui-radius-lg)] border bg-card/80 2xl:w-[304px]"
                     >
                       <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
-                        <strong className="text-sm capitalize">{panel}</strong>
+                        <strong className="text-sm">
+                          {t(
+                            {
+                              designs: 'Designs',
+                              view: 'View',
+                              export: 'Export',
+                              checks: 'Checks'
+                            }[panel]
+                          )}
+                        </strong>
                         <Button
-                          size="icon"
+                          type="button"
+                          size="icon-sm"
                           variant="ghost"
-                          className="size-7"
-                          aria-label="Close workspace panel"
+                          aria-label={t('Close workspace panel')}
                           onClick={() => setPanel(null)}
                         >
                           <X />

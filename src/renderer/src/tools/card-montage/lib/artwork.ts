@@ -7,6 +7,7 @@ import {
 import type { CardArtwork } from '../types'
 import { inspectCardPageFonts } from './pdfFonts'
 import { loadCardJpegArtwork } from './jpegArtwork'
+import { cardPdfPreviewBytes } from './pdfBounds'
 import { getPerformanceSettingsSnapshot } from '../../../performance/performanceSettings'
 import {
   assertEpsImportRequest,
@@ -67,7 +68,16 @@ export async function loadCardArtwork(file: File): Promise<CardArtwork> {
   const header = new Uint8Array(await prepared.slice(0, 1024).arrayBuffer())
   assertCardFileSupported(header, prepared.name)
   if (header[0] === 0xff && header[1] === 0xd8) return loadCardJpegArtwork(prepared)
-  const artwork = await addPdfInfo(await loadNumberArtwork(prepared))
+  let artwork: CardArtwork
+  if (String.fromCharCode(...header).includes('%PDF-')) {
+    const original = new Uint8Array(await prepared.arrayBuffer())
+    const preview = await cardPdfPreviewBytes(original)
+    const rendered = await loadNumberArtwork(new File([new Uint8Array(preview)], prepared.name))
+    let binary = ''
+    for (let offset = 0; offset < original.length; offset += 8192)
+      binary += String.fromCharCode(...original.subarray(offset, offset + 8192))
+    artwork = await addPdfInfo({ ...rendered, bytesBase64: btoa(binary) })
+  } else artwork = await addPdfInfo(await loadNumberArtwork(prepared))
   return artwork.kind === 'pdf' && artwork.pageCount > 1
     ? loadCardPagePreviews(artwork, 1)
     : artwork
@@ -77,7 +87,16 @@ export async function changeCardArtworkPage(
   artwork: CardArtwork,
   pageNumber: number
 ): Promise<CardArtwork> {
-  const next = await addPdfInfo(await changeNumberArtworkPage(artwork, pageNumber))
+  if (artwork.kind !== 'pdf') return artwork
+  const previewBytes = await cardPdfPreviewBytes(artworkBytes(artwork.bytesBase64))
+  let binary = ''
+  for (let offset = 0; offset < previewBytes.length; offset += 8192)
+    binary += String.fromCharCode(...previewBytes.subarray(offset, offset + 8192))
+  const rendered = await changeNumberArtworkPage(
+    { ...artwork, bytesBase64: btoa(binary) },
+    pageNumber
+  )
+  const next = await addPdfInfo({ ...rendered, bytesBase64: artwork.bytesBase64 })
   return {
     ...next,
     pagePreviews: [
@@ -98,7 +117,7 @@ export async function loadCardPagePreviews(
     await import('../../booklet-montage/lib/pdfWorker')
   const settings = getPerformanceSettingsSnapshot()
   const batchSize = Math.min(8, settings.render.pdfImportBatchSize)
-  const pdf = await loadPdfDocument(artworkBytes(artwork.bytesBase64))
+  const pdf = await loadPdfDocument(await cardPdfPreviewBytes(artworkBytes(artwork.bytesBase64)))
   const previews = new Map((artwork.pagePreviews ?? []).map((page) => [page.pageNumber, page]))
   try {
     for (

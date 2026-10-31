@@ -167,7 +167,7 @@ export const PageManager = memo(function PageManager({
       aria-label={t('Booklet pages')}
       data-page-order-panel="true"
       data-page-carousel-expanded={expanded}
-      className="min-w-0 rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface)] p-3"
+      className="min-w-0 ui-glass-panel rounded-[var(--ui-radius-lg)] border p-3"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
