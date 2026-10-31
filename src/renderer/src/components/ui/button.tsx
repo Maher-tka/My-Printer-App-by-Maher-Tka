@@ -9,7 +9,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground',
+          'ui-primary-action bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground',
         selected:
           'border border-primary/20 bg-primary/10 text-primary shadow-[inset_0_1px_0_var(--ui-glass-highlight)] hover:bg-primary/20',
         secondary:

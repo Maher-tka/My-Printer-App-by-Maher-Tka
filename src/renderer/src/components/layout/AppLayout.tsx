@@ -82,6 +82,8 @@ export function AppLayout({
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <TopBar
             isDashboard={activeRoute === 'dashboard'}
+            activeRoute={activeRoute}
+            onNavigate={onNavigate}
             pageMeta={pageMeta}
             account={account}
             onSignOut={onSignOut}

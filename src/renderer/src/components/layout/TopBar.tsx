@@ -1,12 +1,20 @@
 import { ActionIcon } from '@/components/ui/action-button'
 import { useLanguage } from '@/i18n/useLanguage'
-import { ChevronDown, ChevronRight, LogOut, Search } from 'lucide-react'
+import {
+  BriefcaseBusiness,
+  ChevronDown,
+  ChevronRight,
+  History,
+  LogOut,
+  Search,
+  Settings
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/appearance/ThemeToggle'
 import { LanguageSwitcher } from '@/i18n/LanguageSwitcher'
-import type { PageMeta } from '@/types/navigation'
+import type { AppRoute, PageMeta } from '@/types/navigation'
 import type { AccountProfile } from '../../../../shared/account-types'
 
 interface TopBarProps {
@@ -16,6 +24,8 @@ interface TopBarProps {
   onSignOut: () => void
   onOpenCommandCenter: () => void
   onOpenImageFile: () => void
+  activeRoute: AppRoute
+  onNavigate: (route: AppRoute) => void
   isDashboard?: boolean
 }
 
@@ -26,6 +36,8 @@ export function TopBar({
   onSignOut,
   onOpenCommandCenter,
   onOpenImageFile,
+  activeRoute,
+  onNavigate,
   isDashboard = false
 }: TopBarProps): JSX.Element {
   const { t } = useLanguage()
@@ -89,6 +101,32 @@ export function TopBar({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        {(
+          [
+            { route: 'jobs', label: 'Shop Jobs', icon: BriefcaseBusiness },
+            { route: 'exports', label: 'Export Center', icon: History },
+            { route: 'settings', label: 'Settings', icon: Settings }
+          ] as const
+        ).map(({ route, label, icon: Icon }) => (
+          <Button
+            key={route}
+            type="button"
+            variant={
+              activeRoute === route ||
+              (route === 'settings' &&
+                ['license', 'app-health', 'quality-lab'].includes(activeRoute))
+                ? 'selected'
+                : 'outline'
+            }
+            size="icon"
+            aria-label={t(label)}
+            aria-current={activeRoute === route ? 'page' : undefined}
+            title={t(label)}
+            onClick={() => onNavigate(route)}
+          >
+            <Icon className="size-4" aria-hidden="true" />
+          </Button>
+        ))}
         <button
           type="button"
           onClick={onOpenCommandCenter}

@@ -219,7 +219,7 @@ internal class PrintButtonControl : Button {
     if(hover&&Enabled)background=PrintTheme.Blend(PrintTheme.Accent,background,.08f);
     var foreground=!Enabled?PrintTheme.Muted:Primary||Selected&&SystemInformation.HighContrast?PrintTheme.PrimaryText:Selected?PrintTheme.Accent:PrintTheme.Text;
     var top=SystemInformation.HighContrast||Primary?background:PrintTheme.Blend(Color.White,background,PrintTheme.Dark?.07f:.30f);
-    var bottom=SystemInformation.HighContrast||Primary?background:PrintTheme.Blend(PrintTheme.Background,background,PrintTheme.Dark?.10f:.18f);
+    var bottom=SystemInformation.HighContrast?background:Primary?PrintTheme.Blend(PrintTheme.Background,background,PrintTheme.Dark?.06f:.12f):PrintTheme.Blend(PrintTheme.Background,background,PrintTheme.Dark?.10f:.18f);
     using(var path=PrintTheme.Round(rect,PrintTheme.Radius))using(var brush=new LinearGradientBrush(rect,top,bottom,90f))using(var pen=new Pen(Focused&&ShowFocusCues||Selected?PrintTheme.Accent:PrintTheme.Border,Focused&&ShowFocusCues||Selected?2:1)){e.Graphics.FillPath(brush,path);if(!Quiet||Focused||Selected)e.Graphics.DrawPath(pen,path);}
     PaintContent(e.Graphics,foreground);
   }

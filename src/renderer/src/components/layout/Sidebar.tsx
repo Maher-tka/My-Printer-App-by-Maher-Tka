@@ -3,12 +3,9 @@ import {
   BookOpen,
   Files,
   CreditCard,
-  BriefcaseBusiness,
-  History,
   Hash,
   Home,
   PenLine,
-  Settings,
   PanelLeftOpen,
   PanelLeftClose,
   Printer,
@@ -42,11 +39,6 @@ const productionItems: NavItem[] = [
   { route: 'sequential-number', label: 'Sequential Number', icon: Hash },
   { route: 'pdf-tools', label: 'PDF Tools', icon: Files }
 ]
-const operationsItems: NavItem[] = [
-  { route: 'jobs', label: 'Shop Jobs', icon: BriefcaseBusiness },
-  { route: 'exports', label: 'Export Center', icon: History }
-]
-const settingsRoutes = new Set<AppRoute>(['settings', 'license', 'app-health', 'quality-lab'])
 
 export function Sidebar({
   activeRoute,
@@ -119,7 +111,7 @@ export function Sidebar({
                 onDropToolFiles?.(dropTool, Array.from(event.dataTransfer.files))
             }}
             className={cn(
-              'sidebar-navigation-button group relative flex min-h-11 items-center gap-3 rounded-full px-3 py-2 text-start text-[13px] transition-colors ui-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+              'sidebar-navigation-button group relative flex min-h-11 shrink-0 items-center gap-3 rounded-full px-3 py-2 text-start text-[13px] transition-colors ui-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
               expanded ? 'w-full' : 'size-11 justify-center',
               active
                 ? 'bg-primary/10 text-primary before:absolute before:inset-y-3 before:start-0 before:w-0.5 before:rounded-full before:bg-primary'
@@ -184,17 +176,8 @@ export function Sidebar({
           <div className={cn('flex flex-col gap-2', expanded && 'w-full')}>
             {productionItems.map((item) => renderItem(item))}
           </div>
-          <div className={cn('pt-4', expanded && 'w-full')}>
-            <div className="flex flex-col gap-2">
-              {operationsItems.map((item) => renderItem(item))}
-            </div>
-          </div>
         </nav>
         <div className={cn('flex shrink-0 flex-col items-center gap-2 pb-4', expanded && 'w-full')}>
-          {renderItem(
-            { route: 'settings', label: 'Settings', icon: Settings },
-            settingsRoutes.has(activeRoute)
-          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <button

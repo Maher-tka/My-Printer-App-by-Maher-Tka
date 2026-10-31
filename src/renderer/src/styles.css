@@ -130,6 +130,7 @@
     padding: 12px;
     overflow: hidden;
     background:
+      radial-gradient(ellipse at 85% 12%, var(--ui-shell-glow), transparent 48%),
       linear-gradient(
         118deg,
         transparent 32%,
@@ -166,8 +167,6 @@
     background: transparent;
   }
   .application-frame[data-route='dashboard'] {
-    --ui-sidebar-width: 68px;
-    --ui-header-height: 80px;
     border-color: var(--ui-shell-edge);
     background: var(--ui-shell-frame);
     box-shadow: var(--ui-shadow-overlay);
@@ -183,9 +182,6 @@
   html[data-performance-preset='low-end'] .application-frame[data-route='dashboard'] {
     background: var(--ui-shell-frame);
     box-shadow: none;
-  }
-  .application-frame[data-route='dashboard'] .floating-navigation-items {
-    padding-top: 64px;
   }
   .floating-navigation {
     margin-block: var(--ui-space-2);
@@ -230,7 +226,7 @@
     box-shadow: none;
   }
   .dashboard-topbar {
-    height: 80px;
+    height: var(--ui-header-height);
     background: transparent;
   }
   .dashboard-brand-name {
@@ -266,19 +262,19 @@
       padding: 24px 32px;
     }
   }
-  @media (max-width: 1500px) {
-    .application-frame[data-route='dashboard'] {
-      --ui-header-height: 68px;
-    }
-    .dashboard-topbar {
-      height: 68px;
-    }
-    .application-frame[data-route='dashboard'] .floating-navigation-items {
-      padding-top: 40px;
-    }
-  }
   .ui-transition {
     transition-duration: var(--ui-transition);
+  }
+  .ui-primary-action:not(:disabled) {
+    background-image: var(--ui-primary-gradient);
+  }
+  .ui-primary-action:not(:disabled):hover {
+    background-image: none;
+  }
+  @media (forced-colors: active) {
+    .ui-primary-action {
+      background-image: none;
+    }
   }
   .app-canvas {
     background-color: hsl(var(--background));

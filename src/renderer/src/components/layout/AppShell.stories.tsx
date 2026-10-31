@@ -57,6 +57,8 @@ function ShellPreview({
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar
           pageMeta={{ title: 'Production Dashboard', subtitle: 'Printer shop automation hub' }}
+          activeRoute={route}
+          onNavigate={setRoute}
           isDeveloperMode
           onSignOut={() => undefined}
           onOpenCommandCenter={() => undefined}

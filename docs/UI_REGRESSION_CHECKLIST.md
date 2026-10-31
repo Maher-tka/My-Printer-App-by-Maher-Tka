@@ -3242,3 +3242,31 @@ Usage: [FAST_PRINT_MONTAGE.md](FAST_PRINT_MONTAGE.md).
 - Hidden dashboard and shell proofs covered the required window sizes, themes,
   Arabic RTL, low-end mode, and keyboard navigation. Live low-end performance
   and a full screen-reader review remain pending.
+
+## 2026-10-31 — Sidebar navigation correction
+
+- Dashboard and production tools remain in the sidebar; Shop Jobs, Export
+  Center, and Settings are accessible from the top bar. The sidebar uses the
+  same dimensions on Dashboard and tool screens.
+- Hidden Electron shell proofs covered 1366×768, 1600×900, and 1920×1080,
+  light and dark themes, Arabic RTL, low-end mode, and keyboard tabs. Each
+  selected sidebar button and icon was checked for consistent dimensions and
+  clipping; representative light, dark, and RTL captures were inspected.
+  No hardware print jobs or desktop control were used.
+- Pending: comparison with the user's reference images, which were not available
+  in this workspace, and a full screen-reader review.
+
+## 2026-10-31 — Reference colors across the app and Fast Print
+
+- Introduced a soft blue-violet glow and shared primary-button gradients while
+  retaining the teal navigation, neutral production previews, and existing
+  workflow. Native Fast Print uses the shared background and a subtle gradient
+  for its primary action.
+- Hidden shell checks passed at 1366×768, 1600×900, and 1920×1080, including
+  themes, Arabic RTL, low-end mode, and keyboard tabs. Inspected the 1366 light
+  and 1920 Arabic dark low-end shell proofs. Native Fast Print checks passed in
+  English, French, and Arabic; inspected 1366 light and 1920 Arabic dark proofs.
+  No hardware print jobs were sent.
+- Pending: visual review of every populated production workspace and dashboard
+  in both themes at the required sizes, a full screen-reader review, and live
+  performance on a low-end PC. The shell proof uses representative content.

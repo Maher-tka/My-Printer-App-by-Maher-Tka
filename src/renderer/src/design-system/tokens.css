@@ -1,16 +1,18 @@
 /* Shared with MY PRINTER APP UI SYSTEM in Figma. Windows-native font; no network load. */
 :root {
-  --ui-background: #edf4f3;
+  --ui-background: #edf3f8;
   --ui-surface: rgba(255, 255, 255, 0.3);
   --ui-surface-secondary: rgba(243, 248, 247, 0.94);
   --ui-surface-strong: #ffffff;
   --ui-accent: #064f5a;
   --ui-accent-hover: #063f48;
-  --ui-shell-ground: #a9d2cf;
+  --ui-shell-ground: #b8d6df;
   --ui-shell-frame: rgba(235, 247, 245, 0.22);
   --ui-shell-edge: rgba(255, 255, 255, 0.88);
-  --ui-shell-highlight: #d5f1e9;
-  --ui-shell-tint: #74b6b7;
+  --ui-shell-highlight: #e1f5f1;
+  --ui-shell-tint: #9aadd4;
+  --ui-shell-glow: rgba(190, 167, 235, 0.42);
+  --ui-primary-gradient: linear-gradient(115deg, #075664, #405ba8);
   --ui-shell-reflection: rgba(255, 255, 255, 0.24);
   --ui-shell-sheen: rgba(255, 255, 255, 0.12);
   --ui-glass-control: rgba(255, 255, 255, 0.38);
@@ -117,6 +119,8 @@
   --ui-shell-edge: rgba(171, 220, 215, 0.18);
   --ui-shell-highlight: #477473;
   --ui-shell-tint: #164f52;
+  --ui-shell-glow: rgba(83, 77, 138, 0.28);
+  --ui-primary-gradient: linear-gradient(115deg, #b9f0eb, #b9c9f7);
   --ui-shell-reflection: rgba(180, 235, 221, 0.08);
   --ui-shell-sheen: rgba(214, 250, 240, 0.07);
   --ui-glass-control: rgba(41, 68, 70, 0.7);
