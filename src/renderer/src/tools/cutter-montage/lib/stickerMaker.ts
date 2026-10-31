@@ -126,20 +126,57 @@ async function loadImage(file: File): Promise<HTMLImageElement> {
   }
 }
 
-function simplify(points: Array<{ X: number; Y: number }>, epsilon: number) {
-  if (points.length < 4) return points
-  const result: typeof points = []
-  for (let i = 0; i < points.length; i += 1) {
-    const previous = points[(i + points.length - 1) % points.length]
-    const current = points[i]
-    const next = points[(i + 1) % points.length]
-    const cross = Math.abs(
-      (current.X - previous.X) * (next.Y - current.Y) -
-        (current.Y - previous.Y) * (next.X - current.X)
+function simplify(points: Array<{ X: number; Y: number }>, tolerance: number) {
+  if (points.length < 4 || tolerance <= 0) return points
+  // Split the ring at a distant point so neither half has coincident endpoints.
+  const start = points[0]
+  let opposite = 1
+  for (let i = 2; i < points.length; i += 1) {
+    if (
+      (points[i].X - start.X) ** 2 + (points[i].Y - start.Y) ** 2 >
+      (points[opposite].X - start.X) ** 2 + (points[opposite].Y - start.Y) ** 2
     )
-    if (cross > epsilon) result.push(current)
+      opposite = i
   }
-  return result.length >= 3 ? result : points
+  const ring = [...points, start]
+  const keep = new Set([0, opposite, points.length])
+  const segments: Array<[number, number]> = [
+    [0, opposite],
+    [opposite, points.length]
+  ]
+  while (segments.length) {
+    const [first, last] = segments.pop()!
+    const a = ring[first],
+      b = ring[last]
+    const dx = b.X - a.X,
+      dy = b.Y - a.Y
+    const lengthSquared = dx * dx + dy * dy
+    let furthest = -1,
+      maxDistance = tolerance * tolerance
+    for (let i = first + 1; i < last; i += 1) {
+      const p = ring[i]
+      const t = lengthSquared
+        ? Math.max(0, Math.min(1, ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / lengthSquared))
+        : 0
+      const distance = (p.X - a.X - t * dx) ** 2 + (p.Y - a.Y - t * dy) ** 2
+      if (distance > maxDistance) {
+        maxDistance = distance
+        furthest = i
+      }
+    }
+    if (furthest >= 0) {
+      keep.add(furthest)
+      segments.push([first, furthest], [furthest, last])
+    }
+  }
+  const result = points.filter((_, index) => keep.has(index))
+  if (result.length < 3 || ClipperLib.Clipper.Area(result) <= 0) return points
+  // Reject shortcuts that turn a single outline into intersecting contours.
+  const cleaned = ClipperLib.Clipper.SimplifyPolygon(result, ClipperLib.PolyFillType.pftNonZero)
+  return cleaned.length === 1 &&
+    Math.abs(ClipperLib.Clipper.Area(cleaned[0]) - ClipperLib.Clipper.Area(result)) < 0.01
+    ? result
+    : points
 }
 
 /** Trace the outside of a thresholded mask on a bounded preview grid. */
@@ -221,7 +258,10 @@ export function makeOffsetPath(
   const totalH = height + 2 * offsetPx
   const pathData = outer
     .map((path) => {
-      const nodes = simplify(path, settings.smoothing)
+      // Values are in millimetres at the chosen artwork width, independent of
+      // the resolution of the mask used for tracing.
+      const toleranceMm = settings.smoothing === 0 ? 0.05 : settings.smoothing <= 1 ? 0.25 : 0.6
+      const nodes = simplify(path, (toleranceMm * width) / settings.widthMm)
       return (
         nodes
           .map(

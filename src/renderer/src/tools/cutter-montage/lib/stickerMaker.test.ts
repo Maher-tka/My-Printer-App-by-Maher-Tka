@@ -78,6 +78,31 @@ const smoothCircle = makeOffsetPath(circle, 100, 100, {
 })
 assert.ok((smoothCircle.pathData.match(/ L/g) ?? []).length < 200, 'cutter path stays compact')
 
+// Repeated one-pixel dents should not send the knife back and forth, while a
+// much deeper intentional notch remains in the contour.
+const jagged = new Uint8Array(200 * 120)
+for (let y = 20; y < 100; y += 1) {
+  for (let x = 20; x < 180; x += 1) {
+    if (y < 21 && x % 4 < 2) continue
+    if (x >= 90 && x < 110 && y < 40) continue
+    jagged[y * 200 + x] = 255
+  }
+}
+const traceAt = (smoothing: number) =>
+  makeOffsetPath(jagged, 200, 120, {
+    offsetMm: 0,
+    threshold: 128,
+    smoothing,
+    widthMm: 100
+  }).pathData
+const lowTrace = traceAt(0)
+const highTrace = traceAt(3)
+assert.ok(
+  (highTrace.match(/ L/g) ?? []).length < (lowTrace.match(/ L/g) ?? []).length / 2,
+  'high smoothing removes repeated small dents'
+)
+assert.match(highTrace, /0\.333333/, 'deep notch is retained')
+
 const editable = new Uint8Array(100).fill(255)
 paintStickerMaskStroke(editable, 10, 10, { x: 5, y: 5 }, { x: 5, y: 5 }, 4, 1, 'erase')
 assert.equal(editable[5 * 10 + 5], 0)
