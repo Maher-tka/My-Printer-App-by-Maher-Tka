@@ -3393,3 +3393,35 @@ Usage: [FAST_PRINT_MONTAGE.md](FAST_PRINT_MONTAGE.md).
 - Pending: visual review of every populated production workspace and dashboard
   in both themes at the required sizes, a full screen-reader review, and live
   performance on a low-end PC. The shell proof uses representative content.
+
+## 2026-11-02 — Fast Print saved-preset printer groups
+
+- Strengthened the separator between printer groups and gave Konica preset rows
+  a blue laser-copier icon using the existing theme colors. High-contrast mode
+  retains system colors.
+- Hidden native paint checks passed in English, French and Arabic in light and
+  dark themes; inspected the preset rows and representative 1366×768 and
+  1920×1080 window captures. The preset-picker behavior checks and typecheck
+  passed. No hardware print jobs were sent.
+- Interactive keyboard and low-end mode visual checks remain pending; the
+  owner-drawn list retains its existing controls and interaction logic.
+
+## 2026-11-02 — Printer icons and preset-list scrolling
+
+- Follow-up: each saved preset can also have its own image in the paper/color
+  badge, independent of its printer icon and other presets on the same printer.
+  The selected preset has change/reset commands in the saved-preset list.
+- Hidden preset checks cover separate images on two presets, cache reload,
+  rename, invalid input, replacement, independent reset and preserved original
+  files and driver data. Inspected light/dark image proofs; native file-dialog
+  interaction and physical mouse-wheel feel remain pending.
+- Users can select or reset an image for the current printer from the saved
+  preset list. Icons are stored separately from printer profiles; originals,
+  driver snapshots and existing preset order are unchanged.
+- Mouse-wheel scrolling moves one row per notch and accumulates high-resolution
+  wheel input without changing selection. Keyboard navigation stays native.
+- Hidden native tests cover icon copying, reload, replacement, invalid images,
+  reset, independent printers, preset selection and wheel input. The UI and paint
+  proofs cover English, French and Arabic in both themes at desktop sizes. Live
+  file-dialog use, real-device scrolling feel, high contrast and low-end visual
+  review remain pending; no print jobs were sent.

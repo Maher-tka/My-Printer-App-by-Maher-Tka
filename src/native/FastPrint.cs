@@ -208,7 +208,7 @@ internal sealed class Options {
 }
 internal sealed class Entry {
   internal string Id, Label; internal object Value;
-  internal string PresetPrinter, PresetPaper, PresetColor;
+  internal string PresetPrinter, PresetPaper, PresetColor; internal Bitmap PresetIcon,PaperIcon;
   internal Entry(string id, string label, object value = null) { Id = id; Label = label; Value = value; }
   public override string ToString() { return Label; }
 }
@@ -375,6 +375,16 @@ internal sealed class PrintWindow : Form {
     ,{"Dark appearance",new[]{"Apparence sombre","مظهر داكن"}}
     ,{"System appearance",new[]{"Apparence du système","مظهر النظام"}}
     ,{"Could not save appearance.",new[]{"Impossible d’enregistrer l’apparence.","تعذر حفظ المظهر."}}
+    ,{"Change printer icon…",new[]{"Changer l’icône de l’imprimante…","تغيير رمز الطابعة…"}}
+    ,{"Reset printer icon",new[]{"Rétablir l’icône de l’imprimante","إعادة رمز الطابعة"}}
+    ,{"Choose a printer first.",new[]{"Choisissez d’abord une imprimante.","اختر طابعة أولاً."}}
+    ,{"Choose an image smaller than 16 MB.",new[]{"Choisissez une image de moins de 16 Mo.","اختر صورة أصغر من 16 ميغابايت."}}
+    ,{"Choose an image up to 16 megapixels.",new[]{"Choisissez une image de 16 mégapixels maximum.","اختر صورة لا تتجاوز 16 ميغابكسل."}}
+    ,{"Could not update the printer icon.",new[]{"Impossible de modifier l’icône de l’imprimante.","تعذر تغيير رمز الطابعة."}}
+    ,{"Change preset icon…",new[]{"Changer l’icône du préréglage…","تغيير رمز الإعداد…"}}
+    ,{"Reset preset icon",new[]{"Rétablir l’icône du préréglage","إعادة رمز الإعداد"}}
+    ,{"Choose a saved preset first.",new[]{"Choisissez d’abord un préréglage enregistré.","اختر إعداداً محفوظاً أولاً."}}
+    ,{"Could not update the preset icon.",new[]{"Impossible de modifier l’icône du préréglage.","تعذر تغيير رمز الإعداد."}}
     ,{"Preparing Polaroid sheets…",new[]{"Préparation des feuilles Polaroid…","جارٍ تحضير أوراق البولارويد…"}}
     ,{"photos",new[]{"photos","صور"}}
     ,{"sheets",new[]{"feuilles","أوراق"}}
@@ -484,7 +494,7 @@ internal sealed class PrintWindow : Form {
     brightnessValue.AutoSize=true;brightnessValue.Text="0%";brightnessValue.Margin=new Padding(0,10,8,0);brightnessValue.AccessibleName=L("Brightness");brightnessControls.Controls.Add(brightnessDown);brightnessControls.Controls.Add(brightnessValue);brightnessControls.Controls.Add(brightnessUp);tips.SetToolTip(brightnessControls,L("Brightness is available for regular print layouts."));
     var setup=new PrintGlassPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Padding=new Padding(8),Margin=new Padding(0,0,0,8)};setup.RowStyles.Add(new RowStyle(SizeType.Absolute,56));setup.RowStyles.Add(new RowStyle(SizeType.Absolute,56));setup.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.Controls.Add(setup,0,1);
     var top = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 1,TabIndex=0,Margin=Padding.Empty };
-    ((PrintComboBox)profiles).CompactSelection=true;profiles.DrawMode=DrawMode.OwnerDrawVariable;profiles.MeasureItem+=delegate(object sender,MeasureItemEventArgs e){e.ItemHeight=48;};
+    ((PrintComboBox)profiles).CompactSelection=true;((PrintComboBox)profiles).ControlledPresetScrolling=true;profiles.DrawMode=DrawMode.OwnerDrawVariable;profiles.MeasureItem+=delegate(object sender,MeasureItemEventArgs e){e.ItemHeight=48;};
     top.RowStyles.Add(new RowStyle(SizeType.Percent,100));
     top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
     top.Controls.Add(Field("Saved preset", profiles), 0, 0); setup.Controls.Add(top, 0, 0);
@@ -581,7 +591,7 @@ internal sealed class PrintWindow : Form {
     orientation.Items.AddRange(new object[] {new Entry("auto",L("Original orientation")), new Entry("portrait", L("Portrait")), new Entry("landscape", L("Landscape")) }); orientation.SelectedIndex = 0;
     printer.SelectedIndexChanged += async delegate { if (!updating) await SelectPrinter(); };
     paper.SelectedIndexChanged += delegate { if (!updating) { explicitProfile = null; UpdateProfiles(); ApplyAutomaticProfile(); Changed(); } };
-    profiles.SelectedIndexChanged += async delegate { if (!updating) { string id=Selected(profiles);if(id=="manage"){UpdateProfiles();await ManagePresets();return;}if(id=="arrange"){UpdateProfiles();ArrangePresets();return;}if(id=="save"){UpdateProfiles();SavePrinterPreset();return;}await ChooseSavedProfile(id); } };
+    profiles.SelectedIndexChanged += async delegate { if (!updating) { string id=Selected(profiles);if(id=="preset-icon"){UpdateProfiles();ChangePresetIcon();return;}if(id=="preset-icon-reset"){UpdateProfiles();ResetPresetIcon();return;}if(id=="icon"){UpdateProfiles();ChangePrinterIcon();return;}if(id=="icon-reset"){UpdateProfiles();ResetPrinterIcon();return;}if(id=="manage"){UpdateProfiles();await ManagePresets();return;}if(id=="arrange"){UpdateProfiles();ArrangePresets();return;}if(id=="save"){UpdateProfiles();SavePrinterPreset();return;}await ChooseSavedProfile(id); } };
     profiles.DropDown+=delegate{if(settingsReady&&!updating)RefreshSavedPresetChoices();};
     color.SelectedIndexChanged += delegate { if (!updating) { ApplyAutomaticProfile(); Changed(); } };
     orientation.SelectedIndexChanged += delegate { if (!updating) Changed(); }; fill.CheckedChanged += delegate { if (!updating) {if(!Special){generalFill=fill.Checked;fillEdited=true;}Changed();} };
@@ -748,12 +758,18 @@ internal sealed class PrintWindow : Form {
   void UpdateProfiles() {
     updating = true; profiles.Items.Clear(); profiles.Items.Add(new Entry("auto", saved.Count==0?L("Automatic")+" — "+L("No saved printer presets"):L("Automatic")));
     if(explicitProfile=="current")profiles.Items.Add(new Entry("current",L("Current printer options")));
+    var presetIcons=PrinterIconStore.GetPresetIcons(new HashSet<string>(saved.Select(item=>NativePrint.Text(item,"id")),StringComparer.Ordinal));var selectedPreset=saved.FirstOrDefault(item=>NativePrint.Text(item,"id")==explicitProfile);
+    if(selectedPreset!=null){profiles.Items.Add(new Entry("preset-icon",L("Change preset icon…")+" · "+NativePrint.Text(selectedPreset,"name")));if(presetIcons.ContainsKey(explicitProfile))profiles.Items.Add(new Entry("preset-icon-reset",L("Reset preset icon")));}
+    profiles.Items.Add(new Entry("icon",L("Change printer icon…")));if(PrinterIconStore.Get(Selected(printer))!=null)profiles.Items.Add(new Entry("icon-reset",L("Reset printer icon")));
     var positions=NativePresetOrder.AllPositions();
+    var icons=new Dictionary<string,Bitmap>(StringComparer.OrdinalIgnoreCase);
     Func<Dictionary<string,object>,int> rank=profile=>{Dictionary<string,int> order;int index;return positions.TryGetValue(NativePrint.Text(profile,"printer"),out order)&&order.TryGetValue(NativePrint.Text(profile,"id"),out index)?index:int.MaxValue;};
     foreach (var profile in saved.Where(p => !IsPolaroid || NativePrint.Text(p,"paper")=="A4"&&NativePrint.Flag(p,"color")).OrderBy(p=>NativePrint.Text(p,"printer")==Selected(printer)?0:1).ThenBy(p=>NativePrint.Text(p,"printer")).ThenBy(rank).ThenBy(p=>NativePrint.Text(p,"name")).ThenBy(p=>NativePrint.Text(p,"id"),StringComparer.Ordinal)) {
       string name=NativePrint.Text(profile,"name"),owner=NativePrint.Text(profile,"printer"),stock=NativePrint.Text(profile,"paper");
       object colorValue;string colorLabel=profile.TryGetValue("color",out colorValue)&&colorValue is bool?L((bool)colorValue?"Color":"Black & white"):"";
-      profiles.Items.Add(new Entry(NativePrint.Text(profile,"id"),name+" · "+owner+" · "+stock+" · "+colorLabel+" · "+NativePrint.Text(profile,"tray"),name){PresetPrinter=owner,PresetPaper=stock,PresetColor=colorLabel});
+      Bitmap icon;if(!icons.TryGetValue(owner,out icon)){icon=PrinterIconStore.Get(owner);icons[owner]=icon;}
+      string profileId=NativePrint.Text(profile,"id");Bitmap paperIcon;presetIcons.TryGetValue(profileId,out paperIcon);
+      profiles.Items.Add(new Entry(profileId,name+" · "+owner+" · "+stock+" · "+colorLabel+" · "+NativePrint.Text(profile,"tray"),name){PresetPrinter=owner,PresetPaper=stock,PresetColor=colorLabel,PresetIcon=icon,PaperIcon=paperIcon});
     }
     profiles.DropDownWidth=Math.Max(520,profiles.Width);
     profiles.Items.Add(new Entry("save",L("Save printer preset…")));profiles.Items.Add(new Entry("arrange",L("Arrange presets…")));profiles.Items.Add(new Entry("manage",L("Manage saved presets…")));
@@ -761,6 +777,22 @@ internal sealed class PrintWindow : Form {
     tips.SetToolTip(profiles,profiles.SelectedItem==null?"":profiles.SelectedItem.ToString());
     updating = false;
   }
+  void ChangePrinterIcon(){
+    try{string owner=Selected(printer);if(String.IsNullOrWhiteSpace(owner))throw new InvalidOperationException("Choose a printer first.");
+      using(var dialog=new OpenFileDialog{Title=L("Change printer icon…"),Filter="Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif",CheckFileExists=true,Multiselect=false}){
+        if(dialog.ShowDialog(this)!=DialogResult.OK)return;PrinterIconStore.Set(owner,dialog.FileName);UpdateProfiles();
+      }
+    }catch(Exception error){Trace.WriteLine("Fast Print printer icon: "+error.Message);MessageBox.Show(this,L("Could not update the printer icon.")+" "+L(error.Message),L("Fast Print"),MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+  void ResetPrinterIcon(){try{PrinterIconStore.Reset(Selected(printer));UpdateProfiles();}catch(Exception error){Trace.WriteLine("Fast Print printer icon: "+error.Message);MessageBox.Show(this,L("Could not update the printer icon."),L("Fast Print"),MessageBoxButtons.OK,MessageBoxIcon.Error);}}
+  void ChangePresetIcon(){
+    try{var selected=saved.FirstOrDefault(item=>NativePrint.Text(item,"id")==explicitProfile);if(selected==null)throw new InvalidOperationException("Choose a saved preset first.");
+      using(var dialog=new OpenFileDialog{Title=L("Change preset icon…")+" — "+NativePrint.Text(selected,"name"),Filter="Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif",CheckFileExists=true,Multiselect=false}){
+        if(dialog.ShowDialog(this)!=DialogResult.OK)return;PrinterIconStore.SetPreset(explicitProfile,dialog.FileName);UpdateProfiles();
+      }
+    }catch(Exception error){Trace.WriteLine("Fast Print preset icon: "+error.Message);MessageBox.Show(this,L("Could not update the preset icon.")+" "+L(error.Message),L("Fast Print"),MessageBoxButtons.OK,MessageBoxIcon.Error);}
+  }
+  void ResetPresetIcon(){try{PrinterIconStore.ResetPreset(explicitProfile);UpdateProfiles();}catch(Exception error){Trace.WriteLine("Fast Print preset icon: "+error.Message);MessageBox.Show(this,L("Could not update the preset icon."),L("Fast Print"),MessageBoxButtons.OK,MessageBoxIcon.Error);}}
   async Task ChooseSavedProfile(string id){
     try{
       var profile=saved.FirstOrDefault(item=>NativePrint.Text(item,"id")==id);
@@ -1595,7 +1627,7 @@ internal sealed class PrintWindow : Form {
     Directory.CreateDirectory(args.Verify);
     try{
       AuditCheck(Path.GetFullPath(NativePrint.LocalRoot)==Path.GetFullPath(Path.Combine(args.Verify,"settings")),"Preset picker checks require an isolated settings folder.");
-      await LoadPrinters();await PresetReady();
+      PrintComboBox.VerifyPresetWheel();await LoadPrinters();await PresetReady();
       var pdfPrinter=printer.Items.Cast<Entry>().First(item=>item.Id=="Microsoft Print to PDF");
       updating=true;printer.SelectedItem=pdfPrinter;updating=false;await SelectPrinter();await PresetReady();
       AuditCheck(profiles.Items.Cast<Entry>().First().Label.Contains(L("No saved printer presets")),"Empty preset list has no explanation.");
@@ -1609,6 +1641,27 @@ internal sealed class PrintWindow : Form {
       updating=true;layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id=="4");SetOrientation(true);fill.Checked=true;generalFill=true;fillEdited=true;copies.Value=5;sourceRotations[0]=1;updating=false;Changed();await PresetReady();
       await ChooseSavedProfile(id);await PresetReady();
       AuditCheck(Selected(printer)==alternate.Id&&Selected(profiles)==id&&appliedProfile==id,"Choosing the preset did not select its owning printer and driver snapshot.");
+      var sourceBytes=File.ReadAllBytes(args.Files[0]);string otherOwner="Second printer — icon test";
+      PrinterIconStore.Set(alternate.Id,args.Files[0]);PrinterIconStore.Set(otherOwner,args.Files[0]);PrinterIconStore.Invalidate(alternate.Id);
+      AuditCheck(PrinterIconStore.Get(alternate.Id.ToUpperInvariant())!=null&&PrinterIconStore.Get(otherOwner)!=null,"Printer icon did not survive cache reload or case differences.");
+      UpdateProfiles();AuditCheck(Selected(profiles)==id&&profiles.Items.Cast<Entry>().Single(item=>item.Id==id).PresetIcon!=null,"Adding an icon changed the preset selection or failed to attach it.");
+      string otherPresetId=new string('e',32);var otherPreset=new Dictionary<string,object>(profile);otherPreset["id"]=otherPresetId;otherPreset["name"]="Other paper";saved.Add(otherPreset);
+      string paperSource=Path.Combine(args.Verify,"paper-icon.png");using(var image=new Bitmap(20,20))using(var graphics=Graphics.FromImage(image)){graphics.Clear(Color.LimeGreen);image.Save(paperSource,ImageFormat.Png);}
+      PrinterIconStore.SetPreset(id,paperSource);PrinterIconStore.SetPreset(otherPresetId,args.Files[0]);PrinterIconStore.InvalidatePreset(id);UpdateProfiles();
+      var paperEntry=profiles.Items.Cast<Entry>().Single(item=>item.Id==id);var otherPaperEntry=profiles.Items.Cast<Entry>().Single(item=>item.Id==otherPresetId);
+      AuditCheck(Selected(profiles)==id&&paperEntry.PresetIcon!=null&&paperEntry.PaperIcon!=null&&otherPaperEntry.PaperIcon!=null&&paperEntry.PaperIcon.GetPixel(32,32).G>100&&paperEntry.PaperIcon.GetPixel(32,32).G>paperEntry.PaperIcon.GetPixel(32,32).B,"Independent printer and paper icons did not persist.");
+      AuditCheck(profiles.Items.Cast<Entry>().Any(item=>item.Id=="preset-icon")&&profiles.Items.Cast<Entry>().Any(item=>item.Id=="preset-icon-reset"),"Preset icon commands are unavailable for the selected saved preset.");
+      bool invalidPreset=false;try{PrinterIconStore.SetPreset("../invalid",paperSource);}catch{invalidPreset=true;}AuditCheck(invalidPreset,"Invalid preset identifier was accepted.");
+      string originalName=NativePrint.Text(profile,"name");profile["name"]="Renamed for icon test";UpdateProfiles();AuditCheck(profiles.Items.Cast<Entry>().Single(item=>item.Id==id).PaperIcon!=null,"Renaming the preset lost its icon.");profile["name"]=originalName;UpdateProfiles();
+      bool priorDark=PrintTheme.Dark;foreach(bool dark in new[]{false,true}){PrintTheme.Initialize(dark);using(var proof=new Bitmap(520,48))using(var graphics=Graphics.FromImage(proof)){int iconIndex=profiles.Items.Cast<Entry>().ToList().FindIndex(item=>item.Id==id);((PrintComboBox)profiles).DrawListRow(graphics,new Rectangle(0,0,520,48),iconIndex,false);proof.Save(Path.Combine(args.Verify,(dark?"dark":"light")+"-custom-printer-icon.png"),ImageFormat.Png);}}PrintTheme.Initialize(priorDark);
+      string invalidIcon=Path.Combine(args.Verify,"invalid-icon.png");File.WriteAllText(invalidIcon,"not an image");bool invalidRejected=false;try{PrinterIconStore.Set(alternate.Id,invalidIcon);}catch{invalidRejected=true;}
+      AuditCheck(invalidRejected&&PrinterIconStore.Get(alternate.Id)!=null,"An invalid icon replaced the existing image.");
+      invalidRejected=false;try{PrinterIconStore.SetPreset(id,invalidIcon);}catch{invalidRejected=true;}AuditCheck(invalidRejected&&PrinterIconStore.GetPreset(id)!=null,"An invalid paper icon replaced the existing image.");
+      string replacementIcon=Path.Combine(args.Verify,"replacement-icon.png");using(var image=new Bitmap(16,16))using(var graphics=Graphics.FromImage(image)){graphics.Clear(Color.Red);image.Save(replacementIcon,ImageFormat.Png);}PrinterIconStore.Set(alternate.Id,replacementIcon);PrinterIconStore.Invalidate(alternate.Id);AuditCheck(PrinterIconStore.Get(alternate.Id).GetPixel(32,32).R>200&&PrinterIconStore.Get(otherOwner)!=null,"Icon replacement did not persist or changed another printer.");
+      PrinterIconStore.SetPreset(id,replacementIcon);PrinterIconStore.InvalidatePreset(id);AuditCheck(PrinterIconStore.GetPreset(id).GetPixel(32,32).R>200&&PrinterIconStore.GetPreset(otherPresetId)!=null,"Replacing one paper icon affected another preset.");
+      PrinterIconStore.ResetPreset(id);UpdateProfiles();AuditCheck(profiles.Items.Cast<Entry>().Single(item=>item.Id==id).PaperIcon==null&&profiles.Items.Cast<Entry>().Single(item=>item.Id==otherPresetId).PaperIcon!=null&&PrinterIconStore.Get(alternate.Id)!=null,"Resetting one paper icon affected another preset or the printer icon.");PrinterIconStore.ResetPreset(otherPresetId);saved.Remove(otherPreset);
+      PrinterIconStore.Reset(alternate.Id);UpdateProfiles();AuditCheck(PrinterIconStore.Get(alternate.Id)==null&&PrinterIconStore.Get(otherOwner)!=null&&profiles.Items.Cast<Entry>().Single(item=>item.Id==id).PresetIcon==null,"Resetting an icon affected another printer or did not restore the default.");
+      PrinterIconStore.Reset(otherOwner);AuditCheck(sourceBytes.SequenceEqual(File.ReadAllBytes(args.Files[0]))&&File.ReadAllText(profilePath)==original,"Icon changes modified original images or printer settings.");
       AuditCheck(((PrintComboBox)profiles).FaceText()==NativePrint.Text(profile,"name")&&profiles.SelectedItem.ToString().Contains(alternate.Id),"Preset name was not concise or its owning printer was lost from the list.");
       AuditCheck(PerSheet==4&&Landscape&&fill.Checked&&copies.Value==5&&sourceRotations[0]==1,"Preset queue switching lost job layout, orientation, fill, copies or manual rotation.");
       AuditCheck(Selected(color)==(NativePrint.Flag(profile,"color")?"color":"mono")&&Selected(paper)==NativePrint.Text(profile,"paper"),"Saved paper or color was lost.");
@@ -2254,8 +2307,8 @@ internal sealed class PrintWindow : Form {
         using(var presetProof=new PrintComboBox{Font=Font,RightToLeft=RightToLeft,ItemHeight=48})using(var bitmap=new Bitmap(520,192))using(var graphics=Graphics.FromImage(bitmap)){
           presetProof.Items.Add(new Entry("a", "Office printer A · A4 · "+L("Color"), "Glossy stock"){PresetPrinter="Office printer A",PresetPaper="A4",PresetColor=L("Color")});
           presetProof.Items.Add(new Entry("b", "Office printer A · A3 · "+L("Black & white"), "Plain paper"){PresetPrinter="Office printer A",PresetPaper="A3",PresetColor=L("Black & white")});
-          presetProof.Items.Add(new Entry("c", "Production printer B · A3 · "+L("Color"), "Heavy paper"){PresetPrinter="Production printer B",PresetPaper="A3",PresetColor=L("Color")});
-          presetProof.Items.Add(new Entry("d", "Production printer B · A4 · "+L("Black & white"), "Draft"){PresetPrinter="Production printer B",PresetPaper="A4",PresetColor=L("Black & white")});
+          presetProof.Items.Add(new Entry("c", "Konica C4065 · A3 · "+L("Color"), "Heavy paper"){PresetPrinter="Konica C4065",PresetPaper="A3",PresetColor=L("Color")});
+          presetProof.Items.Add(new Entry("d", "Konica C4065 · A4 · "+L("Black & white"), "Draft"){PresetPrinter="Konica C4065",PresetPaper="A4",PresetColor=L("Black & white")});
           for(int index=0;index<presetProof.Items.Count;index++)presetProof.DrawListRow(graphics,new Rectangle(0,index*48,520,48),index,index==1);
           bitmap.Save(Path.Combine(args.Verify,(dark?"dark":"light")+"-preset-list.png"),ImageFormat.Png);
         }

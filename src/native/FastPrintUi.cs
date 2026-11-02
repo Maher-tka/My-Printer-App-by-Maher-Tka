@@ -29,6 +29,64 @@ internal static class PrintAppearance {
     Apply(preference);
   }
 }
+// Printer and preset icons are independent of driver snapshots and source images.
+internal static class PrinterIconStore {
+  sealed class CachedIcon {internal DateTime Modified;internal long Length;internal Bitmap Image;}
+  static readonly Dictionary<string,CachedIcon> cache=new Dictionary<string,CachedIcon>(StringComparer.OrdinalIgnoreCase);
+  static string IconPath(string printer){
+    using(var hash=System.Security.Cryptography.SHA256.Create()){
+      string name=BitConverter.ToString(hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes(printer.ToUpperInvariant()))).Replace("-","").ToLowerInvariant();
+      return Path.Combine(NativePrint.LocalRoot,"printer-icons",name+".png");
+    }
+  }
+  static string PresetPath(string id){if(!Regex.IsMatch(id??"",@"^[a-f0-9]{32}$"))throw new InvalidOperationException("Choose a saved preset first.");return Path.Combine(NativePrint.LocalRoot,"preset-icons",id+".png");}
+  static void Forget(string path){CachedIcon old;if(cache.TryGetValue(path,out old)){cache.Remove(path);old.Image.Dispose();}}
+  internal static void Invalidate(string printer){if(!String.IsNullOrWhiteSpace(printer))Forget(IconPath(printer));}
+  internal static Bitmap Get(string printer){
+    if(String.IsNullOrWhiteSpace(printer))return null;
+    return GetPath(IconPath(printer));
+  }
+  internal static Bitmap GetPreset(string id){return Regex.IsMatch(id??"",@"^[a-f0-9]{32}$")?GetPath(PresetPath(id)):null;}
+  internal static Dictionary<string,Bitmap> GetPresetIcons(HashSet<string> savedIds){
+    var icons=new Dictionary<string,Bitmap>(StringComparer.Ordinal);string folder=Path.Combine(NativePrint.LocalRoot,"preset-icons");
+    try{if(Directory.Exists(folder))foreach(string file in Directory.GetFiles(folder,"*.png")){string id=Path.GetFileNameWithoutExtension(file);if(savedIds.Contains(id)&&Regex.IsMatch(id,@"^[a-f0-9]{32}$")){var icon=GetPath(file);if(icon!=null)icons[id]=icon;}}}
+    catch(Exception error){System.Diagnostics.Trace.WriteLine("Fast Print preset icons unavailable: "+error.Message);}return icons;
+  }
+  static Bitmap GetPath(string path){
+    try{
+      var file=new FileInfo(path);if(!file.Exists){Forget(path);return null;}
+      CachedIcon old;if(cache.TryGetValue(path,out old)&&old.Modified==file.LastWriteTimeUtc&&old.Length==file.Length)return old.Image;
+      Forget(path);if(file.Length>1024*1024)return null;
+      using(var stream=File.OpenRead(path))using(var image=Image.FromStream(stream,true,true)){
+        if(image.Width!=64||image.Height!=64)return null;
+        var bitmap=new Bitmap(image);cache[path]=new CachedIcon{Image=bitmap,Length=file.Length,Modified=file.LastWriteTimeUtc};return bitmap;
+      }
+    }catch(Exception error){System.Diagnostics.Trace.WriteLine("Fast Print icon unavailable: "+error.Message);return null;}
+  }
+  internal static void Set(string printer,string source){
+    if(String.IsNullOrWhiteSpace(printer))throw new InvalidOperationException("Choose a printer first.");
+    SetPath(IconPath(printer),source);
+  }
+  internal static void SetPreset(string id,string source){SetPath(PresetPath(id),source);}
+  static void SetPath(string path,string source){
+    var input=new FileInfo(source);if(!input.Exists||input.Length<1||input.Length>16*1024*1024)throw new InvalidOperationException("Choose an image smaller than 16 MB.");
+    Directory.CreateDirectory(Path.GetDirectoryName(path));string temporary=path+"."+Guid.NewGuid().ToString("N")+".tmp";
+    try{
+      using(var stream=File.OpenRead(source))using(var image=Image.FromStream(stream,true,true)){
+        if(image.Width<1||image.Height<1||(long)image.Width*image.Height>16000000)throw new InvalidOperationException("Choose an image up to 16 megapixels.");
+        using(var bitmap=new Bitmap(64,64,System.Drawing.Imaging.PixelFormat.Format32bppArgb))using(var graphics=Graphics.FromImage(bitmap)){
+          graphics.Clear(Color.Transparent);graphics.InterpolationMode=InterpolationMode.HighQualityBicubic;float scale=Math.Min(64f/image.Width,64f/image.Height);float width=image.Width*scale,height=image.Height*scale;
+          graphics.DrawImage(image,new RectangleF((64-width)/2,(64-height)/2,width,height));bitmap.Save(temporary,System.Drawing.Imaging.ImageFormat.Png);
+        }
+      }
+      if(File.Exists(path))File.Replace(temporary,path,null);else File.Move(temporary,path);
+      Forget(path);
+    }finally{if(File.Exists(temporary))File.Delete(temporary);}
+  }
+  internal static void Reset(string printer){if(String.IsNullOrWhiteSpace(printer))throw new InvalidOperationException("Choose a printer first.");string path=IconPath(printer);if(File.Exists(path))File.Delete(path);Forget(path);}
+  internal static void ResetPreset(string id){string path=PresetPath(id);if(File.Exists(path))File.Delete(path);Forget(path);}
+  internal static void InvalidatePreset(string id){Forget(PresetPath(id));}
+}
 internal sealed class NativeLayout {
   public int count { get; set; }
   public int columns { get; set; }
@@ -148,6 +206,15 @@ internal static class PrintTheme {
   }
 }
 internal sealed class PrintComboBox : ComboBox {
+  [StructLayout(LayoutKind.Sequential)]struct ComboInfo {internal int size;internal RectangleInfo item,button;internal int buttonState;internal IntPtr combo,itemWindow,listWindow;}
+  [StructLayout(LayoutKind.Sequential)]struct RectangleInfo {internal int left,top,right,bottom;}
+  [DllImport("user32.dll")]static extern bool GetComboBoxInfo(IntPtr combo,ref ComboInfo info);
+  [DllImport("user32.dll")]static extern IntPtr SendMessage(IntPtr window,int message,IntPtr wParam,IntPtr lParam);
+  sealed class PresetListWindow : NativeWindow {
+    readonly PrintComboBox owner;
+    internal PresetListWindow(PrintComboBox owner){this.owner=owner;}
+    protected override void WndProc(ref Message message){if(message.Msg==0x020A&&owner.ScrollPresetWheel(message.WParam)){message.Result=IntPtr.Zero;return;}base.WndProc(ref message);}
+  }
   [StructLayout(LayoutKind.Sequential)]struct PaintData {
     internal IntPtr dc;internal int erase;internal int left,top,right,bottom;internal int restore,update;
     [MarshalAs(UnmanagedType.ByValArray,SizeConst=32)]internal byte[] reserved;
@@ -156,6 +223,8 @@ internal sealed class PrintComboBox : ComboBox {
   [DllImport("user32.dll")]static extern bool EndPaint(IntPtr window,ref PaintData paint);
   internal int BufferedPaints;
   internal bool CompactSelection;
+  internal bool ControlledPresetScrolling;
+  PresetListWindow presetListWindow;IntPtr presetListHandle;int wheelRemainder;
   internal PrintComboBox(){DrawMode=DrawMode.OwnerDrawFixed;DropDownStyle=ComboBoxStyle.DropDownList;ItemHeight=28;FlatStyle=FlatStyle.Standard;IntegralHeight=false;}
   protected override CreateParams CreateParams {get{var value=base.CreateParams;value.Style&=~0x00800000;value.ExStyle&=~0x00000200;return value;}}
   protected override void OnDrawItem(DrawItemEventArgs e){
@@ -173,10 +242,17 @@ internal sealed class PrintComboBox : ComboBox {
       TextRenderer.DrawText(graphics,Items[index].ToString(),Font,Rectangle.Inflate(bounds,-10,0),foreground,flags);return;
     }
     var previous=index>0?Items[index-1] as Entry:null;
-    if(previous==null||previous.PresetPrinter!=entry.PresetPrinter)using(var separator=new Pen(PrintTheme.ControlBorder))graphics.DrawLine(separator,bounds.Left+8,bounds.Top,bounds.Right-8,bounds.Top);
+    if(previous!=null&&!String.Equals(previous.PresetPrinter,entry.PresetPrinter,StringComparison.OrdinalIgnoreCase))
+      using(var separator=new Pen(SystemInformation.HighContrast?foreground:PrintTheme.Blend(PrintTheme.Text,PrintTheme.Surface,PrintTheme.Dark?.48f:.42f),2f))graphics.DrawLine(separator,bounds.Left+8,bounds.Top+1,bounds.Right-8,bounds.Top+1);
     int iconX=rtl?bounds.Right-28:bounds.Left+10, iconY=bounds.Top+17;
-    using(var pen=new Pen(foreground,1.4f)){
-      graphics.DrawRectangle(pen,iconX,iconY+4,16,9);graphics.DrawRectangle(pen,iconX+3,iconY,10,5);graphics.DrawRectangle(pen,iconX+3,iconY+9,10,6);
+    bool konica=entry.PresetPrinter.IndexOf("konica",StringComparison.OrdinalIgnoreCase)>=0;
+    if(entry.PresetIcon!=null){var state=graphics.Save();graphics.InterpolationMode=InterpolationMode.HighQualityBicubic;graphics.DrawImage(entry.PresetIcon,new Rectangle(iconX-3,iconY-4,24,24));graphics.Restore(state);}
+    else using(var pen=new Pen(konica&&!SystemInformation.HighContrast?PrintTheme.PrimaryEnd:foreground,1.4f)){
+      if(konica){
+        // Floor-standing laser copier: scanner, output tray, cabinet and paper drawers.
+        graphics.DrawRectangle(pen,iconX+2,iconY-2,12,3);graphics.DrawRectangle(pen,iconX,iconY+1,16,13);
+        graphics.DrawLine(pen,iconX+2,iconY+5,iconX+14,iconY+5);graphics.DrawLine(pen,iconX+4,iconY+9,iconX+12,iconY+9);graphics.DrawLine(pen,iconX+4,iconY+12,iconX+12,iconY+12);
+      }else{graphics.DrawRectangle(pen,iconX,iconY+4,16,9);graphics.DrawRectangle(pen,iconX+3,iconY,10,5);graphics.DrawRectangle(pen,iconX+3,iconY+9,10,6);}
     }
     int badgeWidth=Math.Min(180,Math.Max(0,bounds.Width-170));int textLeft=rtl?bounds.Left+badgeWidth+10:bounds.Left+34;
     int textWidth=Math.Max(1,bounds.Width-badgeWidth-44);
@@ -187,7 +263,9 @@ internal sealed class PrintComboBox : ComboBox {
     var badges=String.Join("  ·  ",new[]{entry.PresetPaper,entry.PresetColor}.Where(value=>!String.IsNullOrEmpty(value)).ToArray());
     var badgeRect=new Rectangle(rtl?bounds.Left+8:bounds.Right-badgeWidth-8,bounds.Top+6,badgeWidth,bounds.Height-12);
     using(var outline=new Pen(selected&&SystemInformation.HighContrast?foreground:PrintTheme.ControlBorder))using(var shape=PrintTheme.Round(new RectangleF(badgeRect.X,badgeRect.Y,badgeRect.Width-1,badgeRect.Height-1),PrintTheme.Radius))graphics.DrawPath(outline,shape);
-    TextRenderer.DrawText(graphics,badges,Font,Rectangle.Inflate(badgeRect,-6,0),foreground,TextFormatFlags.VerticalCenter|TextFormatFlags.HorizontalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix|(rtl?TextFormatFlags.RightToLeft:0));
+    var badgeText=Rectangle.Inflate(badgeRect,-6,0);
+    if(entry.PaperIcon!=null){int x=rtl?badgeRect.Right-29:badgeRect.Left+5;var state=graphics.Save();graphics.InterpolationMode=InterpolationMode.HighQualityBicubic;graphics.DrawImage(entry.PaperIcon,new Rectangle(x,badgeRect.Top+(badgeRect.Height-24)/2,24,24));graphics.Restore(state);if(!rtl)badgeText.X+=28;badgeText.Width=Math.Max(1,badgeText.Width-28);}
+    TextRenderer.DrawText(graphics,badges,Font,badgeText,foreground,TextFormatFlags.VerticalCenter|TextFormatFlags.HorizontalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix|(rtl?TextFormatFlags.RightToLeft:0));
   }
   void Face(Graphics graphics,Size size){
     graphics.SmoothingMode=SmoothingMode.None;
@@ -205,12 +283,26 @@ internal sealed class PrintComboBox : ComboBox {
     TextRenderer.DrawText(graphics,label,Font,text,Enabled?PrintTheme.Text:PrintTheme.Muted,TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix|(rtl?TextFormatFlags.RightToLeft|TextFormatFlags.Right:TextFormatFlags.Left));
   }
   internal string FaceText(){var entry=SelectedItem as Entry;return CompactSelection&&entry!=null&&entry.Value is string?(string)entry.Value:SelectedItem==null?Text:SelectedItem.ToString();}
+  bool ScrollPresetWheel(IntPtr parameter){
+    if(!ControlledPresetScrolling||presetListHandle==IntPtr.Zero)return false;
+    int delta=unchecked((short)((parameter.ToInt64()>>16)&0xffff));wheelRemainder+=delta;
+    int steps=wheelRemainder/120;wheelRemainder%=120;
+    if(steps!=0){int first=SendMessage(presetListHandle,0x018e,IntPtr.Zero,IntPtr.Zero).ToInt32();if(first>=0)SendMessage(presetListHandle,0x0197,new IntPtr(Math.Max(0,Math.Min(Items.Count-1,first-steps))),IntPtr.Zero);}
+    return true;
+  }
+  protected override void OnDropDown(EventArgs e){
+    base.OnDropDown(e);wheelRemainder=0;
+    if(!ControlledPresetScrolling)return;
+    var info=new ComboInfo{size=Marshal.SizeOf(typeof(ComboInfo))};
+    if(GetComboBoxInfo(Handle,ref info)&&info.listWindow!=IntPtr.Zero){presetListHandle=info.listWindow;presetListWindow=new PresetListWindow(this);presetListWindow.AssignHandle(presetListHandle);}
+  }
   protected override void WndProc(ref Message message){
     // Own the complete face: never paint the native box underneath the rounded one.
     // WM_NCCALCSIZE returning zero makes the entire face client area; WM_PAINT
     // must validate its region with BeginPaint/EndPaint, not draw through GetWindowDC.
     if(message.Msg==0x0083||message.Msg==0x0085){message.Result=IntPtr.Zero;return;}
     if(message.Msg==0x0014){message.Result=new IntPtr(1);return;}
+    if(message.Msg==0x020A&&ScrollPresetWheel(message.WParam)){message.Result=IntPtr.Zero;return;}
     if(message.Msg==0x000F){
       PaintData paint;var dc=BeginPaint(Handle,out paint);
       try{if(dc!=IntPtr.Zero)using(var graphics=Graphics.FromHdc(dc)){PrintPaint.Frame(graphics,ClientSize,target=>Face(target,ClientSize));BufferedPaints++;}}
@@ -224,7 +316,22 @@ internal sealed class PrintComboBox : ComboBox {
   protected override void OnGotFocus(EventArgs e){base.OnGotFocus(e);Invalidate();}
   protected override void OnLostFocus(EventArgs e){base.OnLostFocus(e);Invalidate();}
   protected override void OnEnabledChanged(EventArgs e){base.OnEnabledChanged(e);Invalidate();}
-  protected override void OnDropDownClosed(EventArgs e){base.OnDropDownClosed(e);Invalidate();}
+  protected override void OnDropDownClosed(EventArgs e){if(presetListWindow!=null){presetListWindow.ReleaseHandle();presetListWindow=null;}presetListHandle=IntPtr.Zero;wheelRemainder=0;base.OnDropDownClosed(e);Invalidate();}
+  protected override void OnHandleDestroyed(EventArgs e){if(presetListWindow!=null){presetListWindow.ReleaseHandle();presetListWindow=null;}presetListHandle=IntPtr.Zero;wheelRemainder=0;base.OnHandleDestroyed(e);}
+  internal static void VerifyPresetWheel(){
+    using(var combo=new PrintComboBox{ControlledPresetScrolling=true})using(var list=new ListBox{Height=100,Width=260}){
+      for(int index=0;index<40;index++){combo.Items.Add(index.ToString());list.Items.Add(index.ToString());}
+      var handle=list.Handle;list.SelectedIndex=0;combo.presetListHandle=handle;
+      var hook=new PresetListWindow(combo);hook.AssignHandle(handle);
+      try{
+        Action<int> wheel=delta=>SendMessage(handle,0x020A,new IntPtr((long)(ushort)(short)delta<<16),IntPtr.Zero);
+        Func<int> top=()=>SendMessage(handle,0x018e,IntPtr.Zero,IntPtr.Zero).ToInt32();
+        wheel(-120);if(top()!=1||list.SelectedIndex!=0)throw new InvalidOperationException("Preset scrolling skipped rows or changed selection.");
+        wheel(-30);wheel(-30);wheel(-30);if(top()!=1)throw new InvalidOperationException("Partial wheel input moved too early.");wheel(-30);if(top()!=2)throw new InvalidOperationException("Precision wheel input was lost.");
+        wheel(120);if(top()!=1||list.SelectedIndex!=0)throw new InvalidOperationException("Reverse scrolling changed the selected preset.");
+      }finally{hook.ReleaseHandle();combo.presetListHandle=IntPtr.Zero;}
+    }
+  }
 }
 internal static class PrintPaint {
   internal static void Frame(Graphics target,Size size,Action<Graphics> draw){
