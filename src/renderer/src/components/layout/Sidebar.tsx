@@ -114,7 +114,11 @@ export function Sidebar({
               'sidebar-navigation-button group relative flex min-h-11 shrink-0 items-center gap-3 rounded-full px-3 py-2 text-start text-[13px] transition-colors ui-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
               expanded ? 'w-full' : 'size-11 justify-center',
               active
-                ? 'bg-primary/10 text-primary before:absolute before:inset-y-3 before:start-0 before:w-0.5 before:rounded-full before:bg-primary'
+                ? cn(
+                    'bg-primary/10 text-primary',
+                    expanded &&
+                      'before:absolute before:inset-y-3 before:start-2 before:w-0.5 before:rounded-full before:bg-primary'
+                  )
                 : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
               dragRoute === item.route &&
                 'bg-primary/10 text-primary ring-2 ring-inset ring-primary'

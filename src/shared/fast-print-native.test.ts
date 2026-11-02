@@ -27,6 +27,21 @@ const request = {
 }
 assert.equal(parseNativePrintRequest(JSON.stringify(request)).preset.fitToFrame, true)
 assert.equal(parseNativePrintRequest(JSON.stringify(request)).copies, 3)
+const idRequest = { ...request, preset: { ...request.preset, pagesPerSheet: 1, mode: 'id-card' } }
+for (const appearance of ['light', 'dark'])
+  assert.equal(
+    parseNativePrintRequest(JSON.stringify({ ...idRequest, appearance })).appearance,
+    appearance
+  )
+for (const appearance of ['system', 'unexpected', null, 42])
+  assert.throws(
+    () => parseNativePrintRequest(JSON.stringify({ ...idRequest, appearance })),
+    /appearance/
+  )
+assert.throws(
+  () => parseNativePrintRequest(JSON.stringify({ ...request, appearance: 'light' })),
+  /appearance/
+)
 assert.equal(
   parseNativePrintRequest(
     JSON.stringify({

@@ -1,5 +1,128 @@
 # UI regression checklist
 
+## 2026-10-31 — ID review follows Fast Print appearance
+
+- The native Fast Print window passes its resolved light/dark appearance to ID
+  review. The review applies it only for that session, without writing the main
+  app's saved appearance; requests from older helpers retain the existing app
+  preference fallback. Windows System mode passes the currently resolved theme.
+- Native request validation, appearance tests, Fast Print tests, typecheck and
+  production build passed. The hidden ID workflow tests launch review with the
+  main app preference deliberately set to the opposite theme and check it stays
+  unchanged across returns to printer settings. Light/dark, French and Arabic
+  RTL/low-end and 1366×768, 1600×900 and 1920×1080 are covered; English dark
+  and French light 1366×768 captures were inspected. Hardware printing and live
+  high-contrast verification remain pending.
+
+## 2026-10-31 — Compact Fast Print footer
+
+- Removed the filename from the footer; slot size and rotation now sit beside
+  Cancel and Print. Status/errors and both lines of page totals remain visible.
+  The footer is 16 px shorter, giving the preview more height.
+- Native compilation, typecheck, Fast Print tests, and hidden UI/paint checks
+  passed in English, French and Arabic, light and dark, at 1366×768, 1600×900,
+  1920×1080 and 820×640. Inspected English light and Arabic dark 1366×768
+  captures, including page totals and selection details. No hardware jobs were
+  sent. Live high-contrast and keyboard focus checks remain pending.
+
+## 2026-10-31 — Remember Fast Print appearance
+
+- Fast Print saves Light, Dark or System separately from printer and job settings,
+  and restores that choice on launch. A
+  missing or invalid preference falls back to System; a command-line appearance
+  override remains temporary. A failed save reports an error and keeps the
+  previous choice.
+- Hidden multi-process checks exercised light, dark and system persistence,
+  temporary overrides and invalid-file fallback with isolated settings. Native
+  UI and paint checks, typecheck and Fast Print tests passed. No hardware print
+  jobs were sent. Live appearance-menu keyboard/visual checks remain pending.
+
+## 2026-10-31 — Fast Print brightness and selection details
+
+- Follow-up: brightness controls are beside page selection, in the marked area.
+  Each new Fast Print window starts at 0%, including after restoring the last
+  printer settings. Page-range mode uses a full-width row to avoid clipping.
+- Regular Fast Print image and PDF jobs have −5%/+5% brightness controls, from
+  −15% through +15%. Both the native preview and generated output adjust the
+  artwork, leaving blank sheet areas and separator lines unchanged. ID and
+  Polaroid use separate output workflows and show brightness as unavailable.
+- Slot size, rotation and filename appear at the bottom right, separately from
+  status and error messages; the full details remain available in a tooltip.
+- Native compilation, production build, typecheck, Fast Print tests and hidden
+  UI checks passed. `node scripts/verify-fast-print-brightness.mjs` compared
+  native previews with validate-only output for PNG, PDF and monochrome at
+  −15%, 0% and +15%, checked both limits and preserved source hashes. The UI
+  proof covers light/dark, English/French/Arabic and four window sizes; English
+  light and Arabic dark 1366×768 captures were inspected.
+- Live printer output, high contrast and direct keyboard traversal of the new
+  buttons remain pending. No hardware print jobs were sent.
+
+## 2026-10-31 — Fast Print preset list and preview space
+
+- Saved presets retain the selected printer first and each printer's saved order.
+  The list now separates printer groups and shows a printer icon, preset name,
+  printer name, paper size and translated color mode. Missing color metadata is
+  left blank. Saved printer snapshots and selection behavior are unchanged.
+- The saved preset is on the first row, with printer and print settings below.
+  Wide windows share a row for file and page selection, increasing preview
+  height by 48 px; narrower windows retain separate rows for the controls.
+- Native build, typecheck, Fast Print and hidden preset-picker, UI and paint
+  tests passed in English, French and Arabic with both themes and desktop sizes
+  1366×768, 1600×900 and 1920×1080 plus 820×640. UI checks include the page
+  range at wide and compact widths. Inspected English light and Arabic dark
+  preset-row proofs and 1366×768 shell captures.
+- Actual open-dropdown keyboard traversal, live Windows visuals, high contrast,
+  and main-app low-end mode remain pending. No hardware jobs were submitted.
+
+## 2026-10-31 — Polaroid controls below ID
+
+- Moved the existing 8 PIC and 9 PIC controls below the ID card option in the
+  native layout panel. Their selection logic, A4/color requirements, framing and
+  output are unchanged. The printer settings now fill the freed space above.
+- Native compilation, typecheck, Fast Print tests, and hidden UI/paint checks
+  passed for light and dark themes, English, French and Arabic, at 1366×768,
+  1600×900, 1920×1080 and 820×640. Inspected English light and Arabic dark
+  1366×768 captures. Smaller-window options remain reachable by scrolling.
+- Direct keyboard traversal to the moved Polaroid controls and live Windows
+  rendering remain pending. No hardware print jobs were sent.
+
+## 2026-10-31 — Fast Print light and dark appearance
+
+- Follow-up: native buttons, dropdown faces and list surfaces now composite the
+  shared glass-control tint instead of using opaque white. Hidden native UI and
+  paint checks passed in both themes and English, French and Arabic; light and
+  dark 1366×768 captures were inspected. Windows-drawn spin arrows and scrollbars
+  remain native. The development Fast Print executable was updated.
+- Follow-up: the native shell now paints a continuous gradient using the main
+  app's shell highlight, ground, tint and frame tokens across nested controls;
+  quiet buttons no longer paint an opaque rectangle over it. Inspected refreshed
+  light 1366×768 and dark 1920×1080 native captures and repeated the hidden UI
+  and paint checks in all three languages and both themes.
+- Native Fast Print derives its shell tint, outlined-control borders and primary
+  action gradient from the shared UI tokens. The native glass panels remain
+  opaque composites for predictable painting and low-end performance; artwork
+  and print output are unchanged. Windows high-contrast colors remain supported.
+- Native compilation, typecheck, Fast Print and appearance suites passed. Hidden
+  native UI and paint checks passed in English, French and Arabic, at 1366×768,
+  1600×900, 1920×1080 and 820×640 in both themes, including layout selection,
+  keyboard navigation, retained previews and repaint resource checks. Inspected
+  light 1366×768, dark 1920×1080 and Arabic dark 1366×768 paint captures.
+- Live Windows title-bar appearance, high-contrast mode and real printer output
+  were not visually tested. No hardware print jobs were sent. These changes are
+  local and require a rebuilt Fast Print executable or a future app release.
+
+## 2026-10-31 — Sidebar selection edge
+
+- Removed the edge marker from compact selected icons and inset it in expanded
+  navigation, preserving the selected background and accessible current-page state.
+- The hidden shell proof passed at 1366×768, 1600×900, and 1920×1080 with light,
+  dark, French, Arabic RTL, and low-end configurations. It checked every compact
+  icon's bounds and absence of the edge marker, expanded English labels, and
+  keyboard tab navigation. Light 1366×768 and Arabic dark low-end 1920×1080
+  screenshots were visually inspected.
+- Visual inspection of expanded navigation in RTL and direct keyboard focus on
+  the sidebar remain pending. No printing or project data was involved.
+
 ## 2026-10-28 — Missing PDF IPC handler recovery
 
 - Memory detection is advisory and no longer blocks file import when a running

@@ -10,6 +10,25 @@ using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 // The native view consumes the same layout definitions and visual tokens as the app.
+internal static class PrintAppearance {
+  internal static string Preference="system";
+  internal static string Read(){
+    string file=Path.Combine(NativePrint.LocalRoot,"appearance.json");
+    try{if(!File.Exists(file)||new FileInfo(file).Length>4096)return "system";var data=NativePrint.Read(file);string value=NativePrint.Text(data,"preference");return NativePrint.Text(data,"version")=="1"&&new[]{"light","dark","system"}.Contains(value)?value:"system";}catch{return "system";}
+  }
+  internal static void Apply(string preference){
+    if(!new[]{"light","dark","system"}.Contains(preference))throw new ArgumentException("Invalid appearance preference.");
+    Preference=preference;PrintTheme.Initialize(preference=="dark"?(bool?)true:preference=="light"?(bool?)false:null);
+  }
+  internal static void Start(string overridePreference){Apply(overridePreference??Read());}
+  internal static void Save(string preference){
+    if(!new[]{"light","dark","system"}.Contains(preference))throw new ArgumentException("Invalid appearance preference.");
+    Directory.CreateDirectory(NativePrint.LocalRoot);string file=Path.Combine(NativePrint.LocalRoot,"appearance.json"),temporary=file+"."+Guid.NewGuid().ToString("N")+".tmp";
+    try{File.WriteAllText(temporary,NativePrint.Json.Serialize(new{version=1,preference=preference}),new System.Text.UTF8Encoding(false));if(File.Exists(file))File.Replace(temporary,file,null);else File.Move(temporary,file);}
+    finally{if(File.Exists(temporary))File.Delete(temporary);}
+    Apply(preference);
+  }
+}
 internal sealed class NativeLayout {
   public int count { get; set; }
   public int columns { get; set; }
@@ -63,7 +82,7 @@ internal sealed class NativeLayout {
 }
 internal static class PrintTheme {
   internal static bool Dark;
-  internal static Color Background,Surface,Glass,Text,Muted,Accent,Border,Selected,Stage,PrimaryText;
+  internal static Color Background,Surface,Glass,Text,Muted,Accent,Border,ControlBorder,Selected,Stage,PrimaryText,PrimaryStart,PrimaryEnd,ShellStart,ShellMiddle,ShellEnd;
   internal static int Radius=14,PanelRadius=18;
   [DllImport("dwmapi.dll")]static extern int DwmSetWindowAttribute(IntPtr window,int attribute,ref int value,int size);
   internal static void Initialize(bool? dark=null){
@@ -73,14 +92,45 @@ internal static class PrintTheme {
     string light=css.Substring(css.IndexOf(":root {",StringComparison.Ordinal));light=light.Substring(0,light.IndexOf('}'));
     string block=Dark?css.Substring(css.IndexOf(":root.dark",StringComparison.Ordinal)):light;
     Func<string,string> token=name=>{var match=Regex.Match(block,@"--"+Regex.Escape(name)+@":\s*([^;]+);");if(!match.Success)match=Regex.Match(light,@"--"+Regex.Escape(name)+@":\s*([^;]+);");return match.Groups[1].Value.Trim();};
-    Background=ColorTranslator.FromHtml(token("ui-background"));Surface=ColorTranslator.FromHtml(token("ui-surface-strong"));Text=ColorTranslator.FromHtml(token("ui-text"));Muted=ColorTranslator.FromHtml(token("ui-text-secondary"));Accent=ColorTranslator.FromHtml(token("ui-accent"));
-    Glass=Blend(Surface,Background,Dark?.72f:.80f);Border=Blend(Text,Surface,Dark?.17f:.13f);Selected=Blend(Accent,Surface,Dark?.22f:.13f);Stage=Blend(Text,Background,Dark?.07f:.035f);
-    PrimaryText=Dark?Background:ColorTranslator.FromHtml(Regex.Match(light,@"--ui-surface-strong:\s*([^;]+)").Groups[1].Value.Trim());
+    var baseBackground=ColorTranslator.FromHtml(token("ui-background"));
+    var shellGround=ColorTranslator.FromHtml(token("ui-shell-ground"));var shellTint=ColorTranslator.FromHtml(token("ui-shell-tint"));
+    Background=Blend(baseBackground,Blend(shellTint,shellGround,.35f),Dark?.65f:.50f);
+    var shellHighlight=ColorTranslator.FromHtml(token("ui-shell-highlight"));
+    var shellFrame=Regex.Match(token("ui-shell-frame"),@"rgba\(\s*(\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\s*\)");
+    if(!shellFrame.Success)throw new InvalidOperationException("Invalid shell frame in shared UI tokens.");
+    var frame=Color.FromArgb(int.Parse(shellFrame.Groups[1].Value),int.Parse(shellFrame.Groups[2].Value),int.Parse(shellFrame.Groups[3].Value));
+    float frameAlpha=float.Parse(shellFrame.Groups[4].Value,System.Globalization.CultureInfo.InvariantCulture);
+    ShellStart=Blend(frame,shellHighlight,frameAlpha);ShellMiddle=Blend(frame,shellGround,frameAlpha);ShellEnd=Blend(frame,shellTint,frameAlpha);
+    var strongSurface=ColorTranslator.FromHtml(token("ui-surface-strong"));Text=ColorTranslator.FromHtml(token("ui-text"));Muted=ColorTranslator.FromHtml(token("ui-text-secondary"));Accent=ColorTranslator.FromHtml(token("ui-accent"));
+    Glass=Blend(strongSurface,Background,Dark?.62f:.55f);
+    var control=Regex.Match(token("ui-glass-control"),@"rgba\(\s*(\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\s*\)");
+    if(!control.Success)throw new InvalidOperationException("Invalid glass control in shared UI tokens.");
+    var controlTint=Color.FromArgb(int.Parse(control.Groups[1].Value),int.Parse(control.Groups[2].Value),int.Parse(control.Groups[3].Value));
+    Surface=Blend(controlTint,Glass,float.Parse(control.Groups[4].Value,System.Globalization.CultureInfo.InvariantCulture));
+    Border=Blend(Text,Glass,Dark?.17f:.13f);ControlBorder=ColorTranslator.FromHtml(token("ui-control-border"));Selected=Blend(Accent,Glass,Dark?.22f:.13f);Stage=Blend(Text,Background,Dark?.07f:.035f);
+    var gradient=Regex.Matches(token("ui-primary-gradient"),@"#[0-9a-fA-F]{6}");
+    if(gradient.Count!=2)throw new InvalidOperationException("Invalid primary gradient in shared UI tokens.");
+    PrimaryStart=ColorTranslator.FromHtml(gradient[0].Value);PrimaryEnd=ColorTranslator.FromHtml(gradient[1].Value);
+    PrimaryText=Dark?ColorTranslator.FromHtml(token("ui-nav-active-foreground")):ColorTranslator.FromHtml(Regex.Match(light,@"--ui-surface-strong:\s*([^;]+)").Groups[1].Value.Trim());
     Radius=int.Parse(Regex.Match(token("ui-radius-md"),@"\d+").Value);
     PanelRadius=int.Parse(Regex.Match(token("ui-radius-lg"),@"\d+").Value);
-    if(SystemInformation.HighContrast){Background=SystemColors.Control;Surface=Glass=SystemColors.Window;Text=SystemColors.WindowText;Muted=SystemColors.ControlText;Accent=SystemColors.Highlight;Border=SystemColors.WindowText;Selected=SystemColors.Highlight;PrimaryText=SystemColors.HighlightText;Stage=Background;}
+    if(SystemInformation.HighContrast){Background=ShellStart=ShellMiddle=ShellEnd=SystemColors.Control;Surface=Glass=SystemColors.Window;Text=SystemColors.WindowText;Muted=SystemColors.ControlText;Accent=PrimaryStart=PrimaryEnd=SystemColors.Highlight;Border=ControlBorder=SystemColors.WindowText;Selected=SystemColors.Highlight;PrimaryText=SystemColors.HighlightText;Stage=Background;}
   }
   internal static Color Blend(Color top,Color bottom,float alpha){return Color.FromArgb((int)(top.R*alpha+bottom.R*(1-alpha)),(int)(top.G*alpha+bottom.G*(1-alpha)),(int)(top.B*alpha+bottom.B*(1-alpha)));}
+  // Paint one shared shell gradient in window coordinates, including behind
+  // nested native controls, so panels do not interrupt the background.
+  internal static void PaintBackground(Control control,Graphics graphics){
+    for(Control ancestor=control.Parent;ancestor!=null;ancestor=ancestor.Parent)
+      if(ancestor is PrintGlassPanel){using(var fill=new SolidBrush(Glass))graphics.FillRectangle(fill,control.ClientRectangle);return;}
+    Control root=control;int x=0,y=0;
+    while(root.Parent!=null&&!(root.Parent is Form)){x+=root.Left;y+=root.Top;root=root.Parent;}
+    if(root.Width<1||root.Height<1){using(var fill=new SolidBrush(Background))graphics.FillRectangle(fill,control.ClientRectangle);return;}
+    var bounds=new Rectangle(-x,-y,root.Width,root.Height);
+    using(var fill=new LinearGradientBrush(bounds,ShellStart,ShellEnd,45f)){
+      fill.InterpolationColors=new ColorBlend{Colors=new[]{ShellStart,ShellMiddle,ShellEnd},Positions=new[]{0f,.52f,1f}};
+      graphics.FillRectangle(fill,control.ClientRectangle);
+    }
+  }
   internal static GraphicsPath Round(RectangleF r,float radius){var path=new GraphicsPath();float d=Math.Min(radius*2,Math.Min(r.Width,r.Height));if(d<=0)return path;path.AddArc(r.X,r.Y,d,d,180,90);path.AddArc(r.Right-d,r.Y,d,d,270,90);path.AddArc(r.Right-d,r.Bottom-d,d,d,0,90);path.AddArc(r.X,r.Bottom-d,d,d,90,90);path.CloseFigure();return path;}
   internal static void Apply(Control root){
     root.ForeColor=Text;
@@ -111,19 +161,43 @@ internal sealed class PrintComboBox : ComboBox {
   protected override void OnDrawItem(DrawItemEventArgs e){
     if((e.State&DrawItemState.ComboBoxEdit)!=0){PrintPaint.Frame(e.Graphics,ClientSize,graphics=>Face(graphics,ClientSize));return;}
     if(e.Index<0)return;bool selected=(e.State&DrawItemState.Selected)!=0;
-    using(var brush=new SolidBrush(selected?PrintTheme.Selected:PrintTheme.Surface))e.Graphics.FillRectangle(brush,e.Bounds);
-    TextRenderer.DrawText(e.Graphics,Items[e.Index].ToString(),Font,new Rectangle(e.Bounds.X+10,e.Bounds.Y,e.Bounds.Width-20,e.Bounds.Height),selected&&SystemInformation.HighContrast?SystemColors.HighlightText:PrintTheme.Text,TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);
+    DrawListRow(e.Graphics,e.Bounds,e.Index,selected);
     if((e.State&DrawItemState.Focus)!=0)e.DrawFocusRectangle();
+  }
+  internal void DrawListRow(Graphics graphics,Rectangle bounds,int index,bool selected){
+    var entry=Items[index] as Entry;var foreground=selected&&SystemInformation.HighContrast?SystemColors.HighlightText:PrintTheme.Text;
+    using(var brush=new SolidBrush(selected?PrintTheme.Selected:PrintTheme.Surface))graphics.FillRectangle(brush,bounds);
+    bool rtl=RightToLeft==RightToLeft.Yes;
+    var flags=TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix|(rtl?TextFormatFlags.RightToLeft|TextFormatFlags.Right:TextFormatFlags.Left);
+    if(entry==null||String.IsNullOrEmpty(entry.PresetPrinter)){
+      TextRenderer.DrawText(graphics,Items[index].ToString(),Font,Rectangle.Inflate(bounds,-10,0),foreground,flags);return;
+    }
+    var previous=index>0?Items[index-1] as Entry:null;
+    if(previous==null||previous.PresetPrinter!=entry.PresetPrinter)using(var separator=new Pen(PrintTheme.ControlBorder))graphics.DrawLine(separator,bounds.Left+8,bounds.Top,bounds.Right-8,bounds.Top);
+    int iconX=rtl?bounds.Right-28:bounds.Left+10, iconY=bounds.Top+17;
+    using(var pen=new Pen(foreground,1.4f)){
+      graphics.DrawRectangle(pen,iconX,iconY+4,16,9);graphics.DrawRectangle(pen,iconX+3,iconY,10,5);graphics.DrawRectangle(pen,iconX+3,iconY+9,10,6);
+    }
+    int badgeWidth=Math.Min(180,Math.Max(0,bounds.Width-170));int textLeft=rtl?bounds.Left+badgeWidth+10:bounds.Left+34;
+    int textWidth=Math.Max(1,bounds.Width-badgeWidth-44);
+    using(var small=new Font(Font.FontFamily,Math.Max(7.5f,Font.Size-1f),FontStyle.Regular)){
+      TextRenderer.DrawText(graphics,Convert.ToString(entry.Value),Font,new Rectangle(textLeft,bounds.Top+4,textWidth,21),foreground,flags);
+      TextRenderer.DrawText(graphics,entry.PresetPrinter,small,new Rectangle(textLeft,bounds.Top+24,textWidth,19),selected&&SystemInformation.HighContrast?foreground:PrintTheme.Muted,flags);
+    }
+    var badges=String.Join("  ·  ",new[]{entry.PresetPaper,entry.PresetColor}.Where(value=>!String.IsNullOrEmpty(value)).ToArray());
+    var badgeRect=new Rectangle(rtl?bounds.Left+8:bounds.Right-badgeWidth-8,bounds.Top+6,badgeWidth,bounds.Height-12);
+    using(var outline=new Pen(selected&&SystemInformation.HighContrast?foreground:PrintTheme.ControlBorder))using(var shape=PrintTheme.Round(new RectangleF(badgeRect.X,badgeRect.Y,badgeRect.Width-1,badgeRect.Height-1),PrintTheme.Radius))graphics.DrawPath(outline,shape);
+    TextRenderer.DrawText(graphics,badges,Font,Rectangle.Inflate(badgeRect,-6,0),foreground,TextFormatFlags.VerticalCenter|TextFormatFlags.HorizontalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix|(rtl?TextFormatFlags.RightToLeft:0));
   }
   void Face(Graphics graphics,Size size){
     graphics.SmoothingMode=SmoothingMode.None;
-    using(var background=new SolidBrush(Parent==null?PrintTheme.Background:Parent.BackColor))graphics.FillRectangle(background,new Rectangle(Point.Empty,size));
+    PrintTheme.PaintBackground(this,graphics);
     graphics.SmoothingMode=SmoothingMode.AntiAlias;
     var rect=new RectangleF(1,1,size.Width-3,size.Height-3);
     if(rect.Width<=0||rect.Height<=0)return;
-    var top=SystemInformation.HighContrast?PrintTheme.Surface:PrintTheme.Blend(Color.White,PrintTheme.Surface,PrintTheme.Dark?.07f:.35f);
-    var bottom=SystemInformation.HighContrast?PrintTheme.Surface:PrintTheme.Blend(PrintTheme.Background,PrintTheme.Surface,PrintTheme.Dark?.10f:.22f);
-    using(var path=PrintTheme.Round(rect,PrintTheme.Radius))using(var brush=new LinearGradientBrush(rect,top,bottom,90f))using(var pen=new Pen(Focused?PrintTheme.Accent:PrintTheme.Border)){graphics.FillPath(brush,path);graphics.DrawPath(pen,path);}
+    var top=SystemInformation.HighContrast?PrintTheme.Surface:PrintTheme.Blend(Color.White,PrintTheme.Surface,PrintTheme.Dark?.03f:.08f);
+    var bottom=SystemInformation.HighContrast?PrintTheme.Surface:PrintTheme.Blend(PrintTheme.Background,PrintTheme.Surface,PrintTheme.Dark?.05f:.06f);
+    using(var path=PrintTheme.Round(rect,PrintTheme.Radius))using(var brush=new LinearGradientBrush(rect,top,bottom,90f))using(var pen=new Pen(Focused?PrintTheme.Accent:PrintTheme.ControlBorder)){graphics.FillPath(brush,path);graphics.DrawPath(pen,path);}
     bool rtl=RightToLeft==RightToLeft.Yes;int arrow=rtl?18:size.Width-18;
     using(var pen=new Pen(Enabled?PrintTheme.Muted:PrintTheme.Border,1.5f)){graphics.DrawLines(pen,new[]{new Point(arrow-4,size.Height/2-2),new Point(arrow,size.Height/2+2),new Point(arrow+4,size.Height/2-2)});}
     string label=FaceText();
@@ -159,14 +233,15 @@ internal static class PrintPaint {
   }
 }
 internal sealed class PrintTableLayoutPanel : TableLayoutPanel {
-  internal PrintTableLayoutPanel(){SetStyle(ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint|ControlStyles.ResizeRedraw,true);}
+  internal PrintTableLayoutPanel(){SetStyle(ControlStyles.UserPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint|ControlStyles.ResizeRedraw,true);}
+  protected override void OnPaintBackground(PaintEventArgs e){PrintTheme.PaintBackground(this,e.Graphics);}
 }
 // A calm, token-based glass-inspired surface. It avoids desktop blur and stays
 // legible in high contrast and on low-end PCs.
 internal sealed class PrintGlassPanel : TableLayoutPanel {
   internal PrintGlassPanel(){SetStyle(ControlStyles.UserPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint|ControlStyles.ResizeRedraw,true);}
   protected override void OnPaintBackground(PaintEventArgs e){
-    using(var background=new SolidBrush(Parent==null?PrintTheme.Background:Parent.BackColor))e.Graphics.FillRectangle(background,ClientRectangle);
+    PrintTheme.PaintBackground(this,e.Graphics);
     if(Width<=3||Height<=3)return;
     e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
     var rect=new RectangleF(1,1,Math.Max(0,Width-3),Math.Max(0,Height-3));
@@ -175,7 +250,12 @@ internal sealed class PrintGlassPanel : TableLayoutPanel {
   }
 }
 internal sealed class PrintFlowLayoutPanel : FlowLayoutPanel {
-  internal PrintFlowLayoutPanel(){SetStyle(ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint|ControlStyles.ResizeRedraw,true);}
+  internal PrintFlowLayoutPanel(){SetStyle(ControlStyles.UserPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint|ControlStyles.ResizeRedraw,true);}
+  protected override void OnPaintBackground(PaintEventArgs e){PrintTheme.PaintBackground(this,e.Graphics);}
+}
+internal sealed class PrintShellPanel : Panel {
+  internal PrintShellPanel(){SetStyle(ControlStyles.UserPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint|ControlStyles.ResizeRedraw,true);}
+  protected override void OnPaintBackground(PaintEventArgs e){PrintTheme.PaintBackground(this,e.Graphics);}
 }
 internal sealed class PrintContextMenu : ContextMenuStrip {
   internal PrintContextMenu(){DoubleBuffered=true;Renderer=new MenuRenderer();ShowImageMargin=false;Padding=new Padding(4);}
@@ -213,14 +293,16 @@ internal class PrintButtonControl : Button {
   }
   protected override void OnPaint(PaintEventArgs e){
     e.Graphics.SmoothingMode=SmoothingMode.None;
-    using(var brush=new SolidBrush(Parent==null?PrintTheme.Background:Parent.BackColor))e.Graphics.FillRectangle(brush,ClientRectangle);
+    PrintTheme.PaintBackground(this,e.Graphics);
     e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;var rect=new RectangleF(1,1,Width-3,Height-3);if(rect.Width<=0||rect.Height<=0)return;
     var background=Primary&&Enabled?PrintTheme.Accent:Selected?PrintTheme.Selected:Quiet?(Parent==null?PrintTheme.Background:Parent.BackColor):PrintTheme.Surface;
     if(hover&&Enabled)background=PrintTheme.Blend(PrintTheme.Accent,background,.08f);
     var foreground=!Enabled?PrintTheme.Muted:Primary||Selected&&SystemInformation.HighContrast?PrintTheme.PrimaryText:Selected?PrintTheme.Accent:PrintTheme.Text;
-    var top=SystemInformation.HighContrast||Primary?background:PrintTheme.Blend(Color.White,background,PrintTheme.Dark?.07f:.30f);
-    var bottom=SystemInformation.HighContrast?background:Primary?PrintTheme.Blend(PrintTheme.Background,background,PrintTheme.Dark?.06f:.12f):PrintTheme.Blend(PrintTheme.Background,background,PrintTheme.Dark?.10f:.18f);
-    using(var path=PrintTheme.Round(rect,PrintTheme.Radius))using(var brush=new LinearGradientBrush(rect,top,bottom,90f))using(var pen=new Pen(Focused&&ShowFocusCues||Selected?PrintTheme.Accent:PrintTheme.Border,Focused&&ShowFocusCues||Selected?2:1)){e.Graphics.FillPath(brush,path);if(!Quiet||Focused||Selected)e.Graphics.DrawPath(pen,path);}
+    var primary=Primary&&Enabled;
+    var top=primary?PrintTheme.PrimaryStart:SystemInformation.HighContrast?background:PrintTheme.Blend(Color.White,background,PrintTheme.Dark?.03f:.08f);
+    var bottom=primary?PrintTheme.PrimaryEnd:SystemInformation.HighContrast?background:PrintTheme.Blend(PrintTheme.Background,background,PrintTheme.Dark?.05f:.06f);
+    if(primary&&hover&&!SystemInformation.HighContrast){top=PrintTheme.Blend(PrintTheme.Text,top,.06f);bottom=PrintTheme.Blend(PrintTheme.Text,bottom,.06f);}
+    using(var path=PrintTheme.Round(rect,PrintTheme.Radius))using(var brush=new LinearGradientBrush(rect,top,bottom,primary?25f:90f))using(var pen=new Pen(Focused&&ShowFocusCues||Selected?PrintTheme.Accent:PrintTheme.ControlBorder,Focused&&ShowFocusCues||Selected?2:1)){if(!Quiet||hover||Selected)e.Graphics.FillPath(brush,path);if(!Quiet||Focused||Selected)e.Graphics.DrawPath(pen,path);}
     PaintContent(e.Graphics,foreground);
   }
   protected virtual void PaintContent(Graphics graphics,Color foreground){TextRenderer.DrawText(graphics,Text,Font,ClientRectangle,foreground,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);}

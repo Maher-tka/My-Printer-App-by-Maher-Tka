@@ -478,20 +478,44 @@ for (const [language, theme, performance, labels] of [
   const selection = join(folder, 'selection.json')
   await writeFile(selection, JSON.stringify({ version: 1, files }))
   const bootstrap = join(folder, 'worker.cjs')
+  const accessBootstrap = join(folder, 'signed-out-worker.cjs')
+  await writeFile(
+    accessBootstrap,
+    `const {app}=require('electron');const path=require('node:path');
+app.setPath('userData',path.join(${JSON.stringify(folder)},'signed-out-user-data'));
+app.setAppPath(${JSON.stringify(root)});
+app.on('browser-window-created',(_,window)=>window.webContents.once('did-finish-load',async()=>{
+try {
+const result=await window.webContents.executeJavaScript("(async()=>{const source=await window.fastPrint.source();let error='';try{await window.fastPrint.submit()}catch(e){error=e.message}return {mode:source.preset.mode,error}})()");
+if(result.mode!=='id-card'||!/Request access|Sign in|Online accounts are not configured/.test(result.error))throw new Error('Signed-out review or print gate failed: '+JSON.stringify(result));
+console.log('Signed-out ID review opened; print was denied.');
+await window.webContents.executeJavaScript('window.fastPrint.finish()');
+}catch(error){console.error(error);app.exit(1)}
+}));
+import(${JSON.stringify(pathToFileURL(join(root, 'out/main/index.js')).href)}).catch(error=>{console.error(error);app.exit(1)});`
+  )
   const code = `const { app, BrowserWindow }=require('electron');const fs=require('node:fs/promises');const path=require('node:path');
 const root=${JSON.stringify(root)},folder=${JSON.stringify(folder)};
 app.setPath('userData',path.join(folder,'user-data'));
 app.setAppPath(root);
 app.whenReady().then(async()=>{
+if(process.env.ID_VERIFY_SIGNED_OUT==='1' && ${JSON.stringify(language)}==='en' && Number(await fs.readFile(path.join(folder,'stage.txt'),'utf8'))===1){
+const env={...process.env};delete env.PRINTER_ACCOUNT_MODE;delete env.ELECTRON_RUN_AS_NODE;delete env.ELECTRON_RENDERER_URL;
+const {stdout}=await require('node:util').promisify(require('node:child_process').execFile)(process.execPath,[${JSON.stringify(accessBootstrap)},...process.argv.slice(2)],{env,windowsHide:true,timeout:60000});
+if(!stdout.includes('Signed-out ID review opened; print was denied.'))throw new Error('Signed-out ID access regression did not complete');
+await fs.writeFile(path.join(folder,'signed-out-access.txt'),stdout);
+}
 const seed=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true}});
 await seed.loadFile(path.join(root,'out/renderer/fast-print.html'));
-await seed.webContents.executeJavaScript(${JSON.stringify(`localStorage.setItem('my-printer-app.language.v1',${JSON.stringify(language)});localStorage.setItem('my-printer-app.appearance.v1',${JSON.stringify(theme)});localStorage.setItem('my-printer-app.performance-preset',${JSON.stringify(performance)})`)});
+await seed.webContents.executeJavaScript(${JSON.stringify(`localStorage.setItem('my-printer-app.language.v1',${JSON.stringify(language)});localStorage.setItem('my-printer-app.appearance.v1',${JSON.stringify(theme === 'light' ? 'dark' : 'light')});localStorage.setItem('my-printer-app.performance-preset',${JSON.stringify(performance)})`)});
 app.on('browser-window-created',(_,window)=>{window.webContents.setBackgroundThrottling(false);window.webContents.once('did-finish-load',async()=>{
 try{
 if(!seed.isDestroyed())seed.destroy();
 const stage=Number(await fs.readFile(path.join(folder,'stage.txt'),'utf8'));
 const expected=stage>1?JSON.parse(await fs.readFile(path.join(folder,'expected-'+(stage-1)+'.json'),'utf8')):null;
 const report=await window.webContents.executeJavaScript('('+${JSON.stringify(exerciseEditor.toString())}+')('+stage+','+JSON.stringify(expected)+','+${JSON.stringify(JSON.stringify(labels))}+')');
+if(report.theme!==${JSON.stringify(theme)})throw new Error('ID review did not match native Fast Print appearance');
+if(await window.webContents.executeJavaScript("localStorage.getItem('my-printer-app.appearance.v1')")!==${JSON.stringify(theme === 'light' ? 'dark' : 'light')})throw new Error('ID review changed the main app appearance preference');
 if(stage<3){
 for(const [width,height] of [[1366,768],[1920,1080],[1600,900]]){window.setContentSize(width,height);await window.webContents.executeJavaScript("(async()=>{await document.fonts.ready;await Promise.all([...document.images].map(image=>image.decode().catch(()=>{})));await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))})()");if(!await window.webContents.executeJavaScript('document.documentElement.scrollWidth<=innerWidth+1'))throw new Error('Horizontal overflow at '+width+'x'+height);let image,matched=false;for(let attempt=0;attempt<8;attempt++){image=await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});matched=await window.webContents.executeJavaScript('('+${JSON.stringify(screenshotMatchesSource.toString())}+')('+JSON.stringify(image.toDataURL())+')');if(matched)break;await new Promise(resolve=>setTimeout(resolve,150));}if(!matched)throw new Error('Screenshot retained a stale source frame');await fs.writeFile(path.join(folder,'stage-'+stage+'-'+width+'x'+height+'.png'),image.toPNG());const metrics=await window.webContents.executeJavaScript('({width:innerWidth,height:innerHeight,stage:document.querySelector("section img").getBoundingClientRect().toJSON()})');await fs.writeFile(path.join(folder,'stage-'+stage+'-'+width+'x'+height+'.json'),JSON.stringify(metrics));}
 await fs.writeFile(path.join(folder,'ui-state-'+stage+'.json'),JSON.stringify(report.snapshot));

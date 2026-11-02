@@ -260,7 +260,8 @@ async function run(): Promise<void> {
               : Math.max(1, Math.floor(rotatedHeight * scale))
             const x = cell.x + (cell.width - width) / 2,
               y = cell.y + (cell.height - height) / 2
-            context.filter = preset.color ? 'none' : 'grayscale(1)'
+            const brightness = 1 + (preset.brightnessPercent ?? 0) / 100
+            context.filter = `${preset.color ? '' : 'grayscale(1) '}brightness(${brightness})`
             context.save()
             context.beginPath()
             context.rect(cell.x, cell.y, cell.width, cell.height)

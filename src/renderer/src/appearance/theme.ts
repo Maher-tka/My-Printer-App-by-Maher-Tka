@@ -26,19 +26,21 @@ function applyTheme(): void {
   listeners.forEach((listener) => listener())
 }
 
-export function initializeTheme(): void {
+export function initializeTheme(sessionOverride?: ResolvedTheme): void {
   if (initialized || typeof window === 'undefined') return
   initialized = true
   try {
-    preference = normalizeThemePreference(window.localStorage.getItem(THEME_STORAGE_KEY))
+    preference =
+      sessionOverride ?? normalizeThemePreference(window.localStorage.getItem(THEME_STORAGE_KEY))
   } catch {
-    preference = 'system'
+    preference = sessionOverride ?? 'system'
   }
   media = window.matchMedia('(prefers-color-scheme: dark)')
   media.addEventListener('change', () => {
     if (preference === 'system') applyTheme()
   })
   window.addEventListener('storage', (event) => {
+    if (sessionOverride) return
     if (event.key !== null && event.key !== THEME_STORAGE_KEY) return
     preference = normalizeThemePreference(event.newValue)
     applyTheme()

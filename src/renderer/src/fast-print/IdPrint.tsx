@@ -927,7 +927,7 @@ export function openIdPrint(batch: FastPrintBatchSource): void {
   const root = document.createElement('div')
   root.id = 'root'
   document.body.replaceChildren(root)
-  initializeTheme()
+  initializeTheme(batch.appearance)
   initializeLanguage()
   document.documentElement.dataset.performancePreset = getPerformancePreset()
   createRoot(root).render(<IdPrint batch={batch} />)

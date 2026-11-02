@@ -137,12 +137,13 @@ createRoot(document.getElementById('root')).render(<Proof/>);`
         )
         await js(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`)
         const geometry = await js(
-          `(()=>{const b=document.querySelector('aside button[aria-current=page]');const n=b.closest('nav').getBoundingClientRect(),r=b.getBoundingClientRect(),i=b.querySelector('svg').getBoundingClientRect();return {width:r.width,height:r.height,iconWidth:i.width,iconHeight:i.height,visible:r.left>=n.left-1&&r.right<=n.right+1&&i.left>=r.left&&i.right<=r.right}})()`
+          `(()=>{const b=document.querySelector('aside button[aria-current=page]');const n=b.closest('nav').getBoundingClientRect(),r=b.getBoundingClientRect(),i=b.querySelector('svg').getBoundingClientRect();return {width:r.width,height:r.height,iconWidth:i.width,iconHeight:i.height,marker:getComputedStyle(b,'::before').content,visible:r.left>=n.left-1&&r.right<=n.right+1&&i.left>=r.left&&i.right<=r.right}})()`
         )
         assert.equal(geometry.width, 44, `${label}: selected width changed`)
         assert.equal(geometry.height, 44, `${label}: selected height changed`)
         assert.equal(geometry.iconWidth, 20, `${label}: icon width changed`)
         assert.equal(geometry.iconHeight, 20, `${label}: icon height changed`)
+        assert.ok(['none', 'normal'].includes(geometry.marker), `${label}: marker cuts into circle`)
         assert.ok(geometry.visible, `${label}: selected icon or background clipped`)
       }
       await js(`document.querySelector('[aria-label="Expand navigation"]').click()`)

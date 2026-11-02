@@ -16,6 +16,40 @@ import {
   FAST_PRINT_SEPARATOR_PX
 } from './fast-print-montage.js'
 
+for (const brightnessPercent of [-15, -10, -5, 0, 5, 10, 15]) {
+  assert.equal(
+    validateFastPrintPreset({
+      printer: 'P',
+      paper: 'A4',
+      color: true,
+      pagesPerSheet: 1,
+      brightnessPercent
+    }).brightnessPercent,
+    brightnessPercent
+  )
+}
+for (const brightnessPercent of [-20, -1, 2, 16, 20, NaN]) {
+  assert.throws(() =>
+    validateFastPrintPreset({
+      printer: 'P',
+      paper: 'A4',
+      color: true,
+      pagesPerSheet: 1,
+      brightnessPercent
+    })
+  )
+}
+assert.throws(() =>
+  validateFastPrintPreset({
+    printer: 'P',
+    paper: 'A4',
+    color: true,
+    pagesPerSheet: 1,
+    mode: 'polaroid-8',
+    brightnessPercent: 5
+  })
+)
+
 const rotations = {
   printer: 'P',
   paper: 'A4' as const,

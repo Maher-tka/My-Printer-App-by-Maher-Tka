@@ -75,19 +75,20 @@ internal static class NativePrint {
       Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
       if (args.Length == 3 && args[0] == "--convert-docx") { ConvertWord(args[1], args[2]); return 0; }
       var options=new Options(args);
-      PrintTheme.Initialize(options.Appearance=="dark"?(bool?)true:options.Appearance=="light"?(bool?)false:null);
       if(options.Verify!=null){
         VerificationSettingsRoot=Environment.GetEnvironmentVariable("FAST_PRINT_TEST_SETTINGS");
         if(Environment.GetEnvironmentVariable("FAST_PRINT_TEST_SINGLE_CORE")=="1")using(var current=Process.GetCurrentProcess()){long mask=current.ProcessorAffinity.ToInt64();current.ProcessorAffinity=new IntPtr(mask&-mask);}
       }
+      PrintAppearance.Start(options.Appearance);
       using (var form = new PrintWindow(options)) {
         if(options.VerifyPolaroid||options.VerifyPaint||options.VerifyAudit||options.VerifyId||options.VerifyCounts){
           using(var context=new ApplicationContext()){
             form.FormClosed+=delegate{context.ExitThread();};
             var handle=form.Handle;
-            if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_LAST_SETTINGS")=="1")form.BeginInvoke(new Action(async delegate{await form.VerifyLastSettings();}));
+            if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_APPEARANCE")=="1")form.BeginInvoke(new Action(delegate{form.VerifyAppearance();}));
+            else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_LAST_SETTINGS")=="1")form.BeginInvoke(new Action(async delegate{await form.VerifyLastSettings();}));
             else
-            form.BeginInvoke(new Action(async delegate{if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PICKER")=="1")await form.VerifyPresetPicker();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_ORDER")=="1")await form.VerifyPresetOrder();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SELECTION")=="1")await form.VerifyPageSelection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PERFORMANCE")=="1")await form.VerifyPerformance();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_COMBINED")=="1")await form.VerifyCombined();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_DIRECTION")=="1")await form.VerifyDirection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SOURCE")=="1")await form.VerifySource();else if(options.VerifyCounts)await form.VerifyPageCounts();else if(options.VerifyId)await form.VerifyId();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PRESETS")=="1")await form.VerifyPresets();else if(options.VerifyAudit)await form.VerifyAudit();else if(options.VerifyPaint)await form.VerifyPaint();else await form.VerifyPolaroid();}));
+            form.BeginInvoke(new Action(async delegate{if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_BRIGHTNESS")=="1")await form.VerifyBrightness();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PICKER")=="1")await form.VerifyPresetPicker();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_ORDER")=="1")await form.VerifyPresetOrder();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SELECTION")=="1")await form.VerifyPageSelection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PERFORMANCE")=="1")await form.VerifyPerformance();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_COMBINED")=="1")await form.VerifyCombined();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_DIRECTION")=="1")await form.VerifyDirection();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_SOURCE")=="1")await form.VerifySource();else if(options.VerifyCounts)await form.VerifyPageCounts();else if(options.VerifyId)await form.VerifyId();else if(options.VerifyAudit&&Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_PRESETS")=="1")await form.VerifyPresets();else if(options.VerifyAudit)await form.VerifyAudit();else if(options.VerifyPaint)await form.VerifyPaint();else await form.VerifyPolaroid();}));
             Application.Run(context);
           }
         }else Application.Run(form);
@@ -207,6 +208,7 @@ internal sealed class Options {
 }
 internal sealed class Entry {
   internal string Id, Label; internal object Value;
+  internal string PresetPrinter, PresetPaper, PresetColor;
   internal Entry(string id, string label, object value = null) { Id = id; Label = label; Value = value; }
   public override string ToString() { return Label; }
 }
@@ -234,7 +236,7 @@ internal sealed class PreviewSurface : Control {
   protected override void OnPaintBackground(PaintEventArgs e){}
   protected override void OnPaint(PaintEventArgs e) {
     e.Graphics.SmoothingMode=SmoothingMode.None;
-    using(var background=new SolidBrush(Parent==null?PrintTheme.Background:Parent.BackColor))e.Graphics.FillRectangle(background,ClientRectangle);
+    PrintTheme.PaintBackground(this,e.Graphics);
     if(Width<=3||Height<=3)return;
     e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
     using(var shape=PrintTheme.Round(new RectangleF(1,1,Math.Max(0,Width-3),Math.Max(0,Height-3)),PrintTheme.PanelRadius)){
@@ -278,6 +280,9 @@ internal sealed class PrintWindow : Form {
   readonly CheckBox combineFiles = new CheckBox();
   readonly CheckBox compact = new CheckBox(), actualSize = new CheckBox(), separatorLines = new CheckBox();
   readonly Button separatorColorButton = new PrintButtonControl();
+  readonly Button brightnessDown = new PrintButtonControl(), brightnessUp = new PrintButtonControl();
+  readonly Label brightnessValue = new Label();
+  int brightnessPercent;
   Color separatorColor=Color.Black;
   readonly Button rotateSelected = new PrintButtonControl();
   readonly int[] sourceRotations;
@@ -288,7 +293,7 @@ internal sealed class PrintWindow : Form {
   bool fillEdited;int orientationLayout;
   bool originalLandscape;
   readonly Button print = new PrintButtonControl(), previous = new PrintButtonControl(), next = new PrintButtonControl(), polaroid8 = new PrintButtonControl(), polaroid9 = new PrintButtonControl();
-  readonly Label status = new Label(), count = new Label(), jobSummary = new Label();
+  readonly Label status = new Label(), count = new Label(), jobSummary = new Label(), selectionInfo = new Label();
   readonly ToolTip tips = new ToolTip();
   readonly Dictionary<string, string> converted = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
   readonly Dictionary<string, Task<string>> preparing = new Dictionary<string, Task<string>>(StringComparer.OrdinalIgnoreCase);
@@ -361,10 +366,15 @@ internal sealed class PrintWindow : Form {
     ,{"Margins",new[]{"Marges","الهوامش"}}
     ,{"Cutting gap",new[]{"Espace de coupe","مسافة القص"}}
     ,{"Slot size",new[]{"Format des cases","حجم الخانة"}}
+    ,{"Brightness",new[]{"Luminosité","السطوع"}}
+    ,{"Decrease brightness",new[]{"Réduire la luminosité","تقليل السطوع"}}
+    ,{"Increase brightness",new[]{"Augmenter la luminosité","زيادة السطوع"}}
+    ,{"Brightness is available for regular print layouts.",new[]{"La luminosité est disponible pour les mises en page standard.","السطوع متاح لتخطيطات الطباعة العادية."}}
     ,{"Rotation",new[]{"Rotation","التدوير"}}
     ,{"Light appearance",new[]{"Apparence claire","مظهر فاتح"}}
     ,{"Dark appearance",new[]{"Apparence sombre","مظهر داكن"}}
     ,{"System appearance",new[]{"Apparence du système","مظهر النظام"}}
+    ,{"Could not save appearance.",new[]{"Impossible d’enregistrer l’apparence.","تعذر حفظ المظهر."}}
     ,{"Preparing Polaroid sheets…",new[]{"Préparation des feuilles Polaroid…","جارٍ تحضير أوراق البولارويد…"}}
     ,{"photos",new[]{"photos","صور"}}
     ,{"sheets",new[]{"feuilles","أوراق"}}
@@ -463,24 +473,29 @@ internal sealed class PrintWindow : Form {
     DoubleBuffered=true;
     if (args.Language == "ar") { RightToLeft = RightToLeft.Yes; RightToLeftLayout = true; }
     var root = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(12) };
-    root.RowStyles.Add(new RowStyle(SizeType.Absolute,44));root.RowStyles.Add(new RowStyle(SizeType.Absolute,224));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,116));
+    root.RowStyles.Add(new RowStyle(SizeType.Absolute,44));root.RowStyles.Add(new RowStyle(SizeType.Absolute,216));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,100));
     Controls.Add(root);
     var header=new PrintTableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,TabIndex=9};header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
     header.Controls.Add(new Label { Text = L("Fast Print"), Font = new Font(Font.FontFamily, 16f,FontStyle.Bold), Dock = DockStyle.Fill, AutoEllipsis = true },0,0);root.Controls.Add(header,0,0);
-    var setup=new PrintGlassPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Padding=new Padding(8),Margin=new Padding(0,0,0,8)};setup.RowStyles.Add(new RowStyle(SizeType.Absolute,60));setup.RowStyles.Add(new RowStyle(SizeType.Absolute,60));setup.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.Controls.Add(setup,0,1);
-    var top = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,TabIndex=0,Margin=Padding.Empty };
-    ((PrintComboBox)profiles).CompactSelection=true;
+    var brightnessControls=new PrintFlowLayoutPanel{AutoSize=true,WrapContents=false,Dock=DockStyle.Fill,Margin=Padding.Empty};
+    brightnessControls.Controls.Add(new Label{Text=L("Brightness"),AutoSize=true,Margin=new Padding(0,10,8,0)});
+    SetButton(brightnessDown,"−5%",delegate{if(brightnessPercent>-15){brightnessPercent-=5;Changed();}});brightnessDown.MinimumSize=new Size(48,36);brightnessDown.AccessibleName=L("Decrease brightness");
+    SetButton(brightnessUp,"+5%",delegate{if(brightnessPercent<15){brightnessPercent+=5;Changed();}});brightnessUp.MinimumSize=new Size(48,36);brightnessUp.AccessibleName=L("Increase brightness");
+    brightnessValue.AutoSize=true;brightnessValue.Text="0%";brightnessValue.Margin=new Padding(0,10,8,0);brightnessValue.AccessibleName=L("Brightness");brightnessControls.Controls.Add(brightnessDown);brightnessControls.Controls.Add(brightnessValue);brightnessControls.Controls.Add(brightnessUp);tips.SetToolTip(brightnessControls,L("Brightness is available for regular print layouts."));
+    var setup=new PrintGlassPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Padding=new Padding(8),Margin=new Padding(0,0,0,8)};setup.RowStyles.Add(new RowStyle(SizeType.Absolute,56));setup.RowStyles.Add(new RowStyle(SizeType.Absolute,56));setup.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.Controls.Add(setup,0,1);
+    var top = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 1,TabIndex=0,Margin=Padding.Empty };
+    ((PrintComboBox)profiles).CompactSelection=true;profiles.DrawMode=DrawMode.OwnerDrawVariable;profiles.MeasureItem+=delegate(object sender,MeasureItemEventArgs e){e.ItemHeight=48;};
     top.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-    top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,60));
-    top.Controls.Add(Field("Printer", printer), 0, 0); top.Controls.Add(Field("Saved preset", profiles), 1, 0); setup.Controls.Add(top, 0, 0);
-    var middle = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,TabIndex=1,Margin=Padding.Empty };
+    top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    top.Controls.Add(Field("Saved preset", profiles), 0, 0); setup.Controls.Add(top, 0, 0);
+    var middle = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 1,TabIndex=1,Margin=Padding.Empty };
     middle.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-    middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,60));
-    var photos = new PrintFlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true }; photos.Controls.Add(new Label { Text = L("Polaroid"), AutoSize = true, Margin = new Padding(0, 8, 8, 0) });
+    middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    var photos = new PrintFlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true, Margin=Padding.Empty }; photos.Controls.Add(new Label { Text = L("Polaroid"), AutoSize = true, Margin = new Padding(0, 8, 8, 0) });
     SetButton(polaroid8, "8 PIC", delegate { ChoosePolaroid(8); }); SetButton(polaroid9, "9 PIC", delegate { ChoosePolaroid(9); }); photos.Controls.Add(polaroid8); photos.Controls.Add(polaroid9);
-    var sheetSettings=new PrintTableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=1,Margin=Padding.Empty};sheetSettings.RowStyles.Add(new RowStyle(SizeType.Percent,100));foreach(int width in new[]{22,20,32,26})sheetSettings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,width));
-    sheetSettings.Controls.Add(Field("Paper size",paper),0,0);sheetSettings.Controls.Add(Field("Color",color),1,0);sheetSettings.Controls.Add(Field("Orientation",orientation),2,0);sheetSettings.Controls.Add(Field("Quality",quality),3,0);
-    middle.Controls.Add(photos, 0, 0);middle.Controls.Add(sheetSettings,1,0);setup.Controls.Add(middle,0,1);
+    var sheetSettings=new PrintTableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=5,RowCount=1,Margin=Padding.Empty};sheetSettings.RowStyles.Add(new RowStyle(SizeType.Percent,100));foreach(int width in new[]{28,14,16,24,18})sheetSettings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,width));
+    sheetSettings.Controls.Add(Field("Printer",printer),0,0);sheetSettings.Controls.Add(Field("Paper size",paper),1,0);sheetSettings.Controls.Add(Field("Color",color),2,0);sheetSettings.Controls.Add(Field("Orientation",orientation),3,0);sheetSettings.Controls.Add(Field("Quality",quality),4,0);
+    middle.Controls.Add(sheetSettings,0,0);setup.Controls.Add(middle,0,1);
     fileList.Dock = DockStyle.Fill; fileList.DropDownStyle = ComboBoxStyle.DropDownList; fileList.AccessibleName = L("Selected files");
     for (int i = 0; i < args.Files.Count; i++) fileList.Items.Add(new Entry(i.ToString(), (i + 1) + " / " + args.Files.Count + " · " + Path.GetFileName(args.Files[i])));
     fileList.SelectedIndex = 0;
@@ -496,7 +511,18 @@ internal sealed class PrintWindow : Form {
     pageFilter.Items.AddRange(new object[]{new Entry("all",L("All pages")),new Entry("odd",L("Odd pages")),new Entry("even",L("Even pages")),new Entry("range",L("Page range"))});pageFilter.SelectedIndex=0;pageControls.Controls.Add(pageFilter,1,0);
     pageRangeLabel.Text=L("Range (1-5, 8, 12)");pageRangeLabel.AutoSize=true;pageRangeLabel.Visible=false;pageRangeLabel.Margin=new Padding(12,8,8,0);pageControls.Controls.Add(pageRangeLabel,2,0);
     pageRange.Dock=DockStyle.Fill;pageRange.Margin=new Padding(0,6,0,0);pageRange.RightToLeft=RightToLeft.No;pageRange.AccessibleName=L("Range (1-5, 8, 12)");pageRange.Enabled=false;pageRange.Visible=false;pageControls.Controls.Add(pageRange,3,0);tips.SetToolTip(pageRange,L("Enter pages such as 1-5, 8, 12."));
-    sources.Controls.Add(pageControls,0,1);setup.Controls.Add(sources,0,2);
+    var sourceBottom=new PrintTableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty};sourceBottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));sourceBottom.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));sourceBottom.RowStyles.Add(new RowStyle(SizeType.Percent,100));sourceBottom.Controls.Add(pageControls,0,0);sourceBottom.Controls.Add(brightnessControls,1,0);
+    sources.Controls.Add(sourceBottom,0,1);setup.Controls.Add(sources,0,2);
+    bool wideSources=false;Action arrangeSources=delegate{
+      bool range=Selected(pageFilter)=="range"&&!Special;pageControls.ColumnStyles[1].Width=range?35:100;pageControls.ColumnStyles[3].Width=range?65:0;
+      bool wide=root.ClientSize.Width>=1120&&!range;if(wide==wideSources)return;wideSources=wide;
+      sources.SuspendLayout();try{
+        sources.ColumnCount=wide?2:1;sources.RowCount=wide?1:2;sources.ColumnStyles.Clear();sources.RowStyles.Clear();
+        if(wide){sources.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));sources.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));sources.RowStyles.Add(new RowStyle(SizeType.Percent,100));sources.SetCellPosition(sourceBottom,new TableLayoutPanelCellPosition(1,0));}
+        else{sources.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));sources.RowStyles.Add(new RowStyle(SizeType.Absolute,40));sources.RowStyles.Add(new RowStyle(SizeType.Percent,100));sources.SetCellPosition(sourceBottom,new TableLayoutPanelCellPosition(0,1));}
+        root.RowStyles[1].Height=wide?176:216;
+      }finally{sources.ResumeLayout(true);}
+    };root.SizeChanged+=delegate{arrangeSources();};pageFilter.SelectedIndexChanged+=delegate{arrangeSources();};arrangeSources();
     var work = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2,TabIndex=3 };
     work.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); work.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300)); work.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); work.RowStyles.Add(new RowStyle(SizeType.AutoSize));
     preview.Dock = DockStyle.Fill; work.Controls.Add(preview, 0, 0);
@@ -505,20 +531,21 @@ internal sealed class PrintWindow : Form {
     layouts.Dock = DockStyle.Fill;
     layouts.Items.AddRange(NativeLayout.All.Select(item=>new Entry(item.count.ToString(),item.count==1?L("Full page"):item.count+" "+L("per sheet"))));
     layouts.Items.Add(new Entry("id-card",L("ID card — 9 cm")));layouts.Reload();layouts.SelectedIndex = 0;
-    var layoutPanel=new PrintGlassPanel{Dock=DockStyle.Top,Height=208,ColumnCount=1,RowCount=2,Padding=new Padding(8),Margin=new Padding(8,0,0,0)};layoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute,26));layoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent,100));layoutPanel.Controls.Add(new Label{Text=L("Pages per sheet"),Font=new Font(Font,FontStyle.Bold),Dock=DockStyle.Fill,AutoEllipsis=true},0,0);
+    var layoutPanel=new PrintGlassPanel{Dock=DockStyle.Top,Height=252,ColumnCount=1,RowCount=3,Padding=new Padding(8),Margin=new Padding(8,0,0,0)};layoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute,26));layoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent,100));layoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute,44));layoutPanel.Controls.Add(new Label{Text=L("Pages per sheet"),Font=new Font(Font,FontStyle.Bold),Dock=DockStyle.Fill,AutoEllipsis=true},0,0);
     layouts.AccessibleName = L("Layout");layouts.Margin=Padding.Empty;layoutPanel.Controls.Add(layouts,0,1);
+    layoutPanel.Controls.Add(photos,0,2);
     var montagePanel=new PrintFlowLayoutPanel{Dock=DockStyle.Top,Height=152,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(12,8,8,8)};
     foreach(var item in new[]{compact,actualSize,separatorLines}){item.AutoSize=true;item.Margin=new Padding(0,4,0,4);montagePanel.Controls.Add(item);}
     compact.Text=L("Compact layout");compact.AccessibleName=compact.Text;actualSize.Text=L("Preserve actual size");actualSize.AccessibleName=actualSize.Text;separatorLines.Text=L("Separation lines · 0.25 px");separatorLines.AccessibleName=separatorLines.Text;
     tips.SetToolTip(actualSize,L("Uses PDF page size or image DPI (96 DPI when missing)."));
     SetButton(separatorColorButton,L("Line color…"),delegate{using(var dialog=new ColorDialog{Color=separatorColor,FullOpen=true})if(dialog.ShowDialog(this)==DialogResult.OK){separatorColor=dialog.Color;Changed();}});separatorColorButton.AccessibleName=L("Line color…");montagePanel.Controls.Add(separatorColorButton);
-    var layoutScroll=new Panel{Dock=DockStyle.Fill,AutoScroll=true,Margin=Padding.Empty};layoutScroll.Controls.Add(montagePanel);layoutScroll.Controls.Add(layoutPanel);work.Controls.Add(layoutScroll,1,0);work.SetRowSpan(layoutScroll,2);
+    var layoutScroll=new PrintShellPanel{Dock=DockStyle.Fill,AutoScroll=true,Margin=Padding.Empty};layoutScroll.Controls.Add(montagePanel);layoutScroll.Controls.Add(layoutPanel);work.Controls.Add(layoutScroll,1,0);work.SetRowSpan(layoutScroll,2);
     var navigation = new PrintFlowLayoutPanel { Dock=DockStyle.Fill,WrapContents=true,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Margin=new Padding(0,8,0,0) };
     SetButton(previous, "◀", delegate { if (sheetIndex > 0) { sheetIndex--; QueuePreview(); } }); SetButton(next, "▶", delegate { if ((sheetIndex + 1) * (Special ? 1 : PerSheet) < pageCount) { sheetIndex++; QueuePreview(); } }); previous.AccessibleName = L("Previous sheet"); next.AccessibleName = L("Next sheet"); previous.MinimumSize = next.MinimumSize = new Size(40, 28); previous.Width = next.Width = 40;
     count.AutoSize = true; count.Margin = new Padding(8); navigation.Controls.Add(count); navigation.Controls.Add(previous); navigation.Controls.Add(next); work.Controls.Add(navigation, 0, 1); root.Controls.Add(work, 0, 2);
-    var bottom = new PrintGlassPanel { Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,TabIndex=4,Padding=new Padding(8),Margin=new Padding(0,8,0,0) };bottom.RowStyles.Add(new RowStyle(SizeType.Absolute,48));bottom.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-    var totalsRow=new PrintTableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1};totalsRow.RowStyles.Add(new RowStyle(SizeType.Percent,100));totalsRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));totalsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-    var copiesGroup=new PrintFlowLayoutPanel{Dock=DockStyle.Fill,AutoSize=true,WrapContents=false,Margin=new Padding(0,8,24,0)};copiesGroup.Controls.Add(new Label{Text=L("Copies"),AutoSize=true,Margin=new Padding(0,6,8,0)});copies.Minimum=1;copies.Maximum=999;copies.Value=1;copies.Width=64;copies.AccessibleName=L("Copies");copiesGroup.Controls.Add(copies);totalsRow.Controls.Add(copiesGroup,0,0);
+    var bottom = new PrintGlassPanel { Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,TabIndex=4,Padding=new Padding(8),Margin=new Padding(0,8,0,0) };bottom.RowStyles.Add(new RowStyle(SizeType.Absolute,38));bottom.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+    var totalsRow=new PrintTableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty};totalsRow.RowStyles.Add(new RowStyle(SizeType.Percent,100));totalsRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));totalsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+    var copiesGroup=new PrintFlowLayoutPanel{Dock=DockStyle.Fill,AutoSize=true,WrapContents=false,Margin=new Padding(0,0,24,0)};copiesGroup.Controls.Add(new Label{Text=L("Copies"),AutoSize=true,Margin=new Padding(0,6,8,0)});copies.Minimum=1;copies.Maximum=999;copies.Value=1;copies.Width=64;copies.AccessibleName=L("Copies");copiesGroup.Controls.Add(copies);totalsRow.Controls.Add(copiesGroup,0,0);
     SetButton(rotateSelected,L("Rotate selected"),RotateSelectedSource);navigation.Controls.Add(rotateSelected);tips.SetToolTip(rotateSelected,L("Rotate only the selected page or image."));
     imageCopiesGroup.AutoSize=true;imageCopiesGroup.WrapContents=false;imageCopiesGroup.Margin=new Padding(8,0,8,0);imageCopiesGroup.Controls.Add(new Label{Text=L("Image copies"),AutoSize=true,Margin=new Padding(0,8,6,0)});imageCopies.Minimum=1;imageCopies.Maximum=999;imageCopies.Value=1;imageCopies.Width=64;imageCopies.RightToLeft=RightToLeft.No;imageCopies.AccessibleName=L("Image copies");imageCopies.AccessibleDescription=L("Repeat the selected image in the print job.");tips.SetToolTip(imageCopies,imageCopies.AccessibleDescription);imageCopiesGroup.Controls.Add(imageCopies);navigation.Controls.Add(imageCopiesGroup);
     fill.Text=L("Fit to frame");fill.AutoSize=true;fill.Margin=new Padding(8,8,8,0);navigation.Controls.Add(fill);
@@ -533,16 +560,19 @@ internal sealed class PrintWindow : Form {
     var gaps=new ToolStripMenuItem(L("Cutting gap"));menu.Items.Add(gaps);
     foreach(int size in new[]{0,1,2,3,5,8,10}){int selectedSize=size;var item=new ToolStripMenuItem(size+" mm");item.Click+=delegate{gapMm=selectedSize;Changed();};gaps.DropDownItems.Add(item);}
     menu.Opening+=delegate{rotateAll.Enabled=margins.Enabled=gaps.Enabled=settingsReady&&!Special;foreach(ToolStripMenuItem item in rotateAll.DropDownItems)item.Checked=sourceRotations.All(turn=>item.Text==(turn*90)+"°")&&pageRotations.Values.All(turn=>item.Text==(turn*90)+"°");foreach(ToolStripMenuItem item in margins.DropDownItems)item.Checked=item.Text==marginMm+" mm";foreach(ToolStripMenuItem item in gaps.DropDownItems)item.Checked=item.Text==gapMm+" mm";};
-    menu.Items.Add(L("Light appearance"),null,delegate{PrintTheme.Initialize(false);PrintTheme.Apply(this);});
-    menu.Items.Add(L("Dark appearance"),null,delegate{PrintTheme.Initialize(true);PrintTheme.Apply(this);});
-    menu.Items.Add(L("System appearance"),null,delegate{PrintTheme.Initialize();PrintTheme.Apply(this);});
+    var lightAppearance=new ToolStripMenuItem(L("Light appearance"));var darkAppearance=new ToolStripMenuItem(L("Dark appearance"));var systemAppearance=new ToolStripMenuItem(L("System appearance"));
+    lightAppearance.Click+=delegate{SetAppearance("light");};darkAppearance.Click+=delegate{SetAppearance("dark");};systemAppearance.Click+=delegate{SetAppearance("system");};
+    menu.Items.Add(lightAppearance);menu.Items.Add(darkAppearance);menu.Items.Add(systemAppearance);
+    menu.Opening+=delegate{lightAppearance.Checked=PrintAppearance.Preference=="light";darkAppearance.Checked=PrintAppearance.Preference=="dark";systemAppearance.Checked=PrintAppearance.Preference=="system";};
     SetButton(driver, L("Options…"), delegate { menu.Show(driver, new Point(0,driver.Height)); });header.Controls.Add(driver,1,0);
     var refresh = new PrintButtonControl{Quiet=true}; SetButton(refresh, L("Refresh printers"), async delegate { await LoadPrinters(true); });header.Controls.Add(refresh,2,0);
-    jobSummary.Dock=DockStyle.Fill;jobSummary.UseMnemonic=false;jobSummary.AccessibleRole=AccessibleRole.StaticText;jobSummary.AccessibleName=L("Page totals");jobSummary.Text=L("Counting pages…");jobSummary.Margin=new Padding(0,4,0,0);totalsRow.Controls.Add(jobSummary,1,0);bottom.Controls.Add(totalsRow,0,0);
-    var footer = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1,Margin=Padding.Empty }; footer.RowStyles.Add(new RowStyle(SizeType.Percent,100));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+    jobSummary.Dock=DockStyle.Fill;jobSummary.UseMnemonic=false;jobSummary.AccessibleRole=AccessibleRole.StaticText;jobSummary.AccessibleName=L("Page totals");jobSummary.Text=L("Counting pages…");jobSummary.Margin=Padding.Empty;totalsRow.Controls.Add(jobSummary,1,0);
+    bottom.Controls.Add(totalsRow,0,0);
+    var footer = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1,Margin=Padding.Empty }; footer.RowStyles.Add(new RowStyle(SizeType.Percent,100));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,45));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,55));footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
     status.Dock = DockStyle.Fill; status.AutoEllipsis = true;status.UseMnemonic=false; status.AccessibleRole = AccessibleRole.StaticText; footer.Controls.Add(status, 0, 0);
+    selectionInfo.Dock=DockStyle.Fill;selectionInfo.AutoEllipsis=true;selectionInfo.UseMnemonic=false;selectionInfo.AccessibleRole=AccessibleRole.StaticText;selectionInfo.TextAlign=ContentAlignment.MiddleRight;selectionInfo.Margin=new Padding(8,0,8,0);footer.Controls.Add(selectionInfo,1,0);
     SetButton(print, L("Print"), async delegate { await Submit(); });((PrintButtonControl)print).Primary=true; print.Enabled = false; var cancel = new PrintButtonControl{Quiet=true}; SetButton(cancel, L("Cancel"), delegate { Close(); }); cancel.DialogResult = DialogResult.Cancel;
-    footer.Controls.Add(cancel, 1, 0); footer.Controls.Add(print, 2, 0); bottom.Controls.Add(footer, 0, 1); root.Controls.Add(bottom, 0, 3);
+    footer.Controls.Add(cancel, 2, 0); footer.Controls.Add(print, 3, 0); bottom.Controls.Add(footer, 0, 1); root.Controls.Add(bottom, 0, 3);
     AcceptButton = print; CancelButton = cancel;
     count.RightToLeft=RightToLeft.No;copies.RightToLeft=RightToLeft.No;polaroid8.RightToLeft=polaroid9.RightToLeft=RightToLeft.No;
     copies.ValueChanged += delegate { if (!updating) QueuePageSummary(); };
@@ -583,11 +613,12 @@ internal sealed class PrintWindow : Form {
   Control Field(string name, ComboBox combo) {
     var field = new PrintTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0, 0, 12, 0) };
     field.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-    field.RowStyles.Add(new RowStyle(SizeType.Absolute, 22)); field.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+    field.RowStyles.Add(new RowStyle(SizeType.Absolute, 20)); field.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
     field.Controls.Add(new Label { Text = L(name), Dock = DockStyle.Fill, AutoEllipsis = true }, 0, 0);
-    combo.Dock = DockStyle.Top; combo.DropDownStyle = ComboBoxStyle.DropDownList; combo.AccessibleName = L(name); combo.DropDownWidth = 340; combo.Margin=new Padding(0,4,0,0);field.Controls.Add(combo, 0, 1); return field;
+    combo.Dock = DockStyle.Top; combo.DropDownStyle = ComboBoxStyle.DropDownList; combo.AccessibleName = L(name); combo.DropDownWidth = 340; combo.Margin=new Padding(0,2,0,0);field.Controls.Add(combo, 0, 1); return field;
   }
   void SetButton(Button button, string label, EventHandler handler) { button.Text = label; button.AutoSize = true; button.MinimumSize = new Size(80,36);button.Margin=new Padding(0,0,8,0); button.Click += handler; }
+  void SetAppearance(string preference){try{PrintAppearance.Save(preference);PrintTheme.Apply(this);}catch(Exception error){Trace.WriteLine("Fast Print appearance could not be saved: "+error.Message);MessageBox.Show(this,L("Could not save appearance."),L("Fast Print"),MessageBoxButtons.OK,MessageBoxIcon.Error);}}
   sealed class PrinterCapture {
     internal byte[] Bytes;internal PrintDocument Prepared;internal PaperSize[] Papers;internal PrinterResolution[] Resolutions;internal bool Color,Duplex;
   }
@@ -695,7 +726,7 @@ internal sealed class PrintWindow : Form {
       explicitProfile=profileId;appliedProfile=profile==null?null:profileId;profileError=null;updating=false;UpdateProfiles();return true;
     }catch{updating=false;return false;}
   }
-  void SetPrinterControlsEnabled(bool enabled){paper.Enabled=quality.Enabled=color.Enabled=profiles.Enabled=orientation.Enabled=fill.Enabled=rotateSelected.Enabled=sameDirection.Enabled=combineFiles.Enabled=imageCopies.Enabled=enabled;layouts.Enabled=enabled;polaroid8.Enabled=polaroid9.Enabled=enabled;}
+  void SetPrinterControlsEnabled(bool enabled){paper.Enabled=quality.Enabled=color.Enabled=profiles.Enabled=orientation.Enabled=fill.Enabled=rotateSelected.Enabled=sameDirection.Enabled=combineFiles.Enabled=imageCopies.Enabled=enabled;layouts.Enabled=enabled;polaroid8.Enabled=polaroid9.Enabled=enabled;if(!enabled)brightnessDown.Enabled=brightnessUp.Enabled=false;}
   void ReloadSavedProfiles(){
     var loaded=new List<Dictionary<string,object>>();string directory=Path.Combine(NativePrint.LocalRoot,"profiles");
     if(Directory.Exists(directory))foreach(string file in Directory.GetFiles(directory,"*.json"))try{
@@ -719,7 +750,11 @@ internal sealed class PrintWindow : Form {
     if(explicitProfile=="current")profiles.Items.Add(new Entry("current",L("Current printer options")));
     var positions=NativePresetOrder.AllPositions();
     Func<Dictionary<string,object>,int> rank=profile=>{Dictionary<string,int> order;int index;return positions.TryGetValue(NativePrint.Text(profile,"printer"),out order)&&order.TryGetValue(NativePrint.Text(profile,"id"),out index)?index:int.MaxValue;};
-    foreach (var profile in saved.Where(p => !IsPolaroid || NativePrint.Text(p,"paper")=="A4"&&NativePrint.Flag(p,"color")).OrderBy(p=>NativePrint.Text(p,"printer")==Selected(printer)?0:1).ThenBy(p=>NativePrint.Text(p,"printer")).ThenBy(rank).ThenBy(p=>NativePrint.Text(p,"name")).ThenBy(p=>NativePrint.Text(p,"id"),StringComparer.Ordinal)) profiles.Items.Add(new Entry(NativePrint.Text(profile, "id"), NativePrint.Text(profile, "name")+" · "+NativePrint.Text(profile,"printer")+" · "+NativePrint.Text(profile,"paper")+" · "+NativePrint.Text(profile,"tray"),NativePrint.Text(profile,"name")));
+    foreach (var profile in saved.Where(p => !IsPolaroid || NativePrint.Text(p,"paper")=="A4"&&NativePrint.Flag(p,"color")).OrderBy(p=>NativePrint.Text(p,"printer")==Selected(printer)?0:1).ThenBy(p=>NativePrint.Text(p,"printer")).ThenBy(rank).ThenBy(p=>NativePrint.Text(p,"name")).ThenBy(p=>NativePrint.Text(p,"id"),StringComparer.Ordinal)) {
+      string name=NativePrint.Text(profile,"name"),owner=NativePrint.Text(profile,"printer"),stock=NativePrint.Text(profile,"paper");
+      object colorValue;string colorLabel=profile.TryGetValue("color",out colorValue)&&colorValue is bool?L((bool)colorValue?"Color":"Black & white"):"";
+      profiles.Items.Add(new Entry(NativePrint.Text(profile,"id"),name+" · "+owner+" · "+stock+" · "+colorLabel+" · "+NativePrint.Text(profile,"tray"),name){PresetPrinter=owner,PresetPaper=stock,PresetColor=colorLabel});
+    }
     profiles.DropDownWidth=Math.Max(520,profiles.Width);
     profiles.Items.Add(new Entry("save",L("Save printer preset…")));profiles.Items.Add(new Entry("arrange",L("Arrange presets…")));profiles.Items.Add(new Entry("manage",L("Manage saved presets…")));
     profiles.SelectedIndex = 0; if (explicitProfile != null) for (int i = 1; i < profiles.Items.Count; i++) if (((Entry)profiles.Items[i]).Id == explicitProfile) profiles.SelectedIndex = i;
@@ -830,14 +865,13 @@ internal sealed class PrintWindow : Form {
   }
   void UpdateSelectionStatus(){
     if(Special||preview.Sheet==null||preview.SelectedItem<0||preview.SelectedItem>=preview.Items.Length)return;
-    var item=preview.Items[preview.SelectedItem];status.Text=appliedProfile=="invalid"?profileError:Path.GetFileName(args.Files[item.Source]);
+    var item=preview.Items[preview.SelectedItem];selectionInfo.Text="";
     if(appliedProfile!="invalid"){
-      if(!IsImage(args.Files[item.Source]))status.Text+=" · "+L("page")+" "+(item.Page+1);
       float physicalWidth=Selected(paper)=="A3"?(Landscape?420:297):(Landscape?297:210);
       float physicalHeight=Selected(paper)=="A3"?(Landscape?297:420):(Landscape?210:297);
-      status.Text+=" · "+L("Slot size")+": "+(item.Bounds.Width*physicalWidth/preview.Sheet.Width).ToString("0.0",CultureInfo.InvariantCulture)+" × "+(item.Bounds.Height*physicalHeight/preview.Sheet.Height).ToString("0.0",CultureInfo.InvariantCulture)+" mm · "+L("Rotation")+": "+(item.Turns*90)+"°";
+      selectionInfo.Text=L("Slot size")+": "+(item.Bounds.Width*physicalWidth/preview.Sheet.Width).ToString("0.0",CultureInfo.InvariantCulture)+" × "+(item.Bounds.Height*physicalHeight/preview.Sheet.Height).ToString("0.0",CultureInfo.InvariantCulture)+" mm · "+L("Rotation")+": "+(item.Turns*90)+"°";
     }
-    tips.SetToolTip(status,status.Text);
+    tips.SetToolTip(selectionInfo,selectionInfo.Text);
   }
   void Changed() {
     SyncPageControls();
@@ -848,6 +882,7 @@ internal sealed class PrintWindow : Form {
     }else if(Special)orientationLayout=0;
     if(!Special&&actualSize.Checked&&fill.Checked){updating=true;fill.Checked=false;updating=false;}
     bool compatible = settingsReady && settings != null && canColor && paper.Items.Cast<Entry>().Any(e => e.Id == "A4");
+    brightnessDown.Enabled=settingsReady&&!Special&&brightnessPercent>-15;brightnessUp.Enabled=settingsReady&&!Special&&brightnessPercent<15;brightnessValue.Text=Special?"—":(brightnessPercent>0?"+":"")+brightnessPercent+"%";
     compact.Enabled=actualSize.Enabled=separatorLines.Enabled=settingsReady&&!Special;
     separatorColorButton.Enabled=settingsReady&&!Special&&separatorLines.Checked;
     separatorColorButton.Text=L("Line color…")+" "+ColorTranslator.ToHtml(separatorColor);
@@ -1125,6 +1160,7 @@ internal sealed class PrintWindow : Form {
     return log.ToString();
   }
   void ShowPolaroid(PolaroidSheets prepared){
+    selectionInfo.Text="";
     activePolaroid=prepared;pageCount=prepared.Files.Length;sheetIndex=Math.Max(0,Math.Min(sheetIndex,pageCount-1));
     if(sheetIndex<prepared.FileSheets[fileList.SelectedIndex]||sheetIndex>prepared.FileLastSheets[fileList.SelectedIndex]){updating=true;fileList.SelectedIndex=Array.FindIndex(prepared.FileLastSheets,last=>last>=sheetIndex);updating=false;}
     string file=prepared.Files[sheetIndex];Bitmap thumbnail;
@@ -1143,7 +1179,7 @@ internal sealed class PrintWindow : Form {
   }
   string PreviewKey(string sources){
     int selectedPage=preview.SelectedItem>=0&&preview.SelectedItem<preview.Items.Length?preview.Items[preview.SelectedItem].Page:-1;
-    return PageSelectionKey()+"|"+sources+"|"+Selected(printer)+"|"+Selected(paper)+"|"+Selected(color)+"|"+Selected(orientation)+"|"+PerSheet+"|"+fileList.SelectedIndex+"|"+selectedPage+"|"+sheetIndex+"|"+preview.ClientSize+"|"+fill.Checked+"|"+sameDirection.Checked+"|"+combineFiles.Checked+"|"+marginMm+"|"+gapMm+"|"+compact.Checked+"|"+actualSize.Checked+"|"+separatorLines.Checked+"|"+SeparatorHex+"|"+RotationKey()+"|"+appliedProfile+"|"+profileError;
+    return PageSelectionKey()+"|"+sources+"|"+Selected(printer)+"|"+Selected(paper)+"|"+Selected(color)+"|"+Selected(orientation)+"|"+PerSheet+"|"+fileList.SelectedIndex+"|"+selectedPage+"|"+sheetIndex+"|"+preview.ClientSize+"|"+fill.Checked+"|"+sameDirection.Checked+"|"+combineFiles.Checked+"|"+marginMm+"|"+gapMm+"|"+compact.Checked+"|"+actualSize.Checked+"|"+separatorLines.Checked+"|"+SeparatorHex+"|"+brightnessPercent+"|"+RotationKey()+"|"+appliedProfile+"|"+profileError;
   }
   async Task RenderPreview() {
     int generation=++rendering;print.Enabled=false;preview.Interactive=false;preview.Invalidate();
@@ -1230,7 +1266,9 @@ internal sealed class PrintWindow : Form {
             var target = new RectangleF(cell.X + (cw - image.Width * scale) / 2, cell.Y + (ch - image.Height * scale) / 2, image.Width * scale, image.Height * scale);
             if(!Special&&actualSize.Checked)target=cell;
             using (var attributes = new ImageAttributes()) {
-              if (Selected(color) == "mono") attributes.SetColorMatrix(new ColorMatrix(new float[][] { new[]{.2126f,.2126f,.2126f,0,0},new[]{.7152f,.7152f,.7152f,0,0},new[]{.0722f,.0722f,.0722f,0,0},new[]{0f,0,0,1,0},new[]{0f,0,0,0,1} }));
+              float level=1f+(Special?0:brightnessPercent)/100f;
+              if (Selected(color) == "mono") attributes.SetColorMatrix(new ColorMatrix(new float[][] { new[]{.2126f*level,.2126f*level,.2126f*level,0,0},new[]{.7152f*level,.7152f*level,.7152f*level,0,0},new[]{.0722f*level,.0722f*level,.0722f*level,0,0},new[]{0f,0,0,1,0},new[]{0f,0,0,0,1} }));
+              else if(!Special&&brightnessPercent!=0)attributes.SetColorMatrix(new ColorMatrix(new float[][] {new[]{level,0,0,0,0},new[]{0,level,0,0,0},new[]{0,0,level,0,0},new[]{0f,0,0,1,0},new[]{0f,0,0,0,1}}));
               g.DrawImage(image, Rectangle.Round(target), 0, 0, image.Width, image.Height, GraphicsUnit.Pixel, attributes);
             }
             g.Restore(state);
@@ -1249,7 +1287,8 @@ internal sealed class PrintWindow : Form {
       if(previousItem>=0&&previousItem<previousItems.Length&&previousItems[previousItem].Source==fileList.SelectedIndex){var previousSelection=previousItems[previousItem];int retained=Array.FindIndex(preview.Items,item=>item.Source==previousSelection.Source&&item.Page==previousSelection.Page);if(retained>=0)preview.SelectedItem=retained;}
       preview.Interactive=!Special;preview.AccessibleName=L("Source preview")+(preview.SelectedItem>=0?" · "+preview.Items[preview.SelectedItem].Name:"");preview.Invalidate();
       previous.Enabled = sheetIndex > 0; next.Enabled = (sheetIndex + 1) * per < pages;
-      status.Text = appliedProfile=="invalid"?profileError:mode == "id-card" ? L("Choose a back image in the ID editor before printing.") : Path.GetFileName(args.Files[fileList.SelectedIndex]);
+      status.Text = appliedProfile=="invalid"?profileError:mode == "id-card" ? L("Choose a back image in the ID editor before printing.") : "";
+      if(Special)selectionInfo.Text="";
       if(!Special)UpdateSelectionStatus();
       tips.SetToolTip(status, status.Text); print.Enabled = appliedProfile != "invalid"; if(previewReady==0)previewReady = NativePrint.Clock.ElapsedMilliseconds;
       if(!Special){retainedPreviewKey=PreviewKey(sources);retainedPreviewStatus=status.Text;}
@@ -1317,6 +1356,7 @@ internal sealed class PrintWindow : Form {
     // Grayscale is rendered into the artwork even when a color-only driver resets dmColor.
     var preset = new Dictionary<string, object> { {"printer",Selected(printer)},{"paper",Selected(paper)},{"color",outputColor},{"pagesPerSheet",Special?1:PerSheet},{"profileId",id},{"landscape",Landscape},{"duplex",canDuplex && (settings.PrinterSettings.Duplex == Duplex.Vertical || settings.PrinterSettings.Duplex == Duplex.Horizontal)},{"fitToFrame",fill.Checked && !Special},{"combineImages",!Special} }; if (Special) preset["mode"]=mode; else {preset["combineFiles"]=combineFiles.Checked;preset["marginMm"]=marginMm;preset["gapMm"]=gapMm;preset["sourceRotations"]=sourceRotations;preset["autoOrientation"]=SourceOrientation;preset["matchLayoutOrientation"]=sameDirection.Checked&&PerSheet>1;}
     if(!Special){
+      preset["brightnessPercent"]=brightnessPercent;
       preset["compact"]=compact.Checked;preset["preserveActualSize"]=actualSize.Checked;preset["separatorLines"]=separatorLines.Checked;preset["separatorColor"]=SeparatorHex;
       if(actualSize.Checked){
         var imageSizes=new object[args.Files.Count];
@@ -1345,7 +1385,7 @@ internal sealed class PrintWindow : Form {
       });
       if(key!=PolaroidKey())throw new InvalidOperationException(L("Files changed while preparing. Refresh the preview."));
     }
-    var payload=new Dictionary<string,object>{{"version",1},{"files",files},{"preset",preset},{"copies",selectedCopies}};if(reviewed)payload["preparedPolaroid"]=true;
+    var payload=new Dictionary<string,object>{{"version",1},{"files",files},{"preset",preset},{"copies",selectedCopies}};if(mode=="id-card")payload["appearance"]=PrintTheme.Dark?"dark":"light";if(reviewed)payload["preparedPolaroid"]=true;
     string request = Path.Combine(directory,"request.json"); File.WriteAllText(request,NativePrint.Json.Serialize(payload),new UTF8Encoding(false)); return request;
   }
   async Task Submit() {
@@ -1777,6 +1817,39 @@ internal sealed class PrintWindow : Form {
       File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,preferred=preferred,compact=compact,desktop=desktop,secondary=secondary,tiny=tiny,compactWork=compactWork,desktopWork=desktopWork,secondaryWork=secondaryWork,tinyWork=tinyWork,compactPreview=compactPreview,desktopPreview=desktopPreview,placementApplied=true,captures=captures,cleanupDirectory=session}),new UTF8Encoding(false));
     }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
   }
+  internal void VerifyAppearance(){
+    Directory.CreateDirectory(args.Verify);
+    try{
+      AuditCheck(Path.GetFullPath(NativePrint.LocalRoot)==Path.GetFullPath(Environment.GetEnvironmentVariable("FAST_PRINT_TEST_SETTINGS")),"Appearance checks require isolated settings.");
+      string expected=Environment.GetEnvironmentVariable("FAST_PRINT_EXPECT_APPEARANCE");
+      AuditCheck(PrintAppearance.Preference==expected,"Incorrect appearance on launch: "+PrintAppearance.Preference);
+      if(expected!="system")AuditCheck(PrintTheme.Dark==(expected=="dark"),"Saved appearance did not set the theme.");
+      string save=Environment.GetEnvironmentVariable("FAST_PRINT_SAVE_APPEARANCE");if(!String.IsNullOrEmpty(save)){SetAppearance(save);AuditCheck(PrintAppearance.Read()==save&&PrintAppearance.Preference==save,"Appearance choice was not saved.");}
+      File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,launched=expected,saved=save,dark=PrintTheme.Dark}),new UTF8Encoding(false));
+    }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
+  }
+  internal async Task VerifyBrightness(){
+    Directory.CreateDirectory(args.Verify);
+    try{
+      await LoadPrinters();await PresetReady();AuditCheck(args.Files.Count==1,"Brightness proof requires one input.");
+      if(Environment.GetEnvironmentVariable("FAST_PRINT_VERIFY_MONO")=="1"){color.SelectedIndex=color.Items.Count-1;await PresetReady();AuditCheck(Selected(color)=="mono","Monochrome proof did not select black and white.");}
+      var cases=new List<object>();
+      Action<Button> click=button=>typeof(Control).GetMethod("OnClick",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(button,new object[]{EventArgs.Empty});
+      for(int i=0;i<4;i++){click(brightnessDown);await PresetReady();}AuditCheck(brightnessPercent==-15&&!brightnessDown.Enabled,"Minimum brightness was not enforced.");
+      foreach(int level in new[]{-15,0,15}){
+        while(brightnessPercent<level){click(brightnessUp);await PresetReady();}
+        AuditCheck(brightnessPercent==level&&brightnessValue.Text==(level>0?"+":"")+level+"%","Brightness step or label is incorrect.");
+        string proof=Path.Combine(args.Verify,"preview-"+level+".png");preview.Sheet.Save(proof,ImageFormat.Png);
+        string request=await Request(Path.Combine(Path.GetTempPath(),"maher-fast-print-native",Guid.NewGuid().ToString("N")));
+        cases.Add(new{level=level,proof=proof,request=request});
+      }
+      click(brightnessUp);AuditCheck(brightnessPercent==15&&!brightnessUp.Enabled,"Maximum brightness was not enforced.");
+      RememberPrinterSettings();
+      using(var fresh=new PrintWindow(new Options(new[]{"--",args.Files[0]}))){var handle=fresh.Handle;await fresh.LoadPrinters();await fresh.PresetReady();AuditCheck(fresh.brightnessPercent==0&&fresh.brightnessValue.Text=="0%","A new Fast Print job inherited brightness from the previous window.");fresh.Close();}
+      layouts.SelectedIndex=layouts.Items.FindIndex(item=>item.Id=="id-card");await PresetReady();AuditCheck(!brightnessDown.Enabled&&!brightnessUp.Enabled&&brightnessValue.Text=="—","Unsupported ID brightness appeared active.");
+      File.WriteAllText(Path.Combine(args.Verify,"result.json"),NativePrint.Json.Serialize(new{headless=!Visible,cases=cases,cleanupDirectory=session}),new UTF8Encoding(false));
+    }catch(Exception error){File.WriteAllText(Path.Combine(args.Verify,"error.txt"),error.ToString());}finally{Close();}
+  }
   internal async Task VerifyFastPrintUi(){
     Directory.CreateDirectory(args.Verify);
     try{
@@ -1785,18 +1858,22 @@ internal sealed class PrintWindow : Form {
       var surface=Controls[0];surface.Dock=DockStyle.None;surface.Location=Point.Empty;var captures=new List<object>();
       foreach(bool dark in new[]{false,true}){PrintTheme.Initialize(dark);PrintTheme.Apply(this);foreach(var size in new[]{new Size(1366,768),new Size(1600,900),new Size(1920,1080),new Size(820,640)}){
         surface.Size=size;NativePrint.CaptureLayout(surface);await RenderPreview();await PresetReady();NativePrint.CaptureLayout(surface);
-        foreach(var control in new Control[]{printer,profiles,paper,color,orientation,quality,fileList,pageFilter,rotateSelected,fill,sameDirection,combineFiles,copies,print,previous,next}){
+        foreach(var control in new Control[]{printer,profiles,paper,color,orientation,quality,fileList,pageFilter,brightnessDown,brightnessUp,brightnessValue,rotateSelected,fill,sameDirection,combineFiles,copies,jobSummary,selectionInfo,status,print,previous,next}){
           for(Control current=control;current!=surface&&current.Parent!=null;current=current.Parent)AuditCheck(current.Parent.ClientRectangle.Contains(current.Bounds),"Control clipped: "+control.AccessibleName+" / "+control.Text+" at "+size+" bounds "+current.Bounds+" parent "+current.Parent.ClientRectangle);
         }
         AuditCheck(preview.Width>=300&&preview.Height>=140,"Preview lost its working area at "+size+": "+preview.Size);
         AuditCheck(layouts.Controls.Cast<Control>().All(tile=>layouts.ClientRectangle.Contains(tile.Bounds)),"A quick layout needs scrolling or is clipped at "+size);
-        AuditCheck(profiles.Parent.Top==printer.Parent.Top&&profiles.Parent.Parent==printer.Parent.Parent,"Printer and saved preset are not grouped together.");
+        AuditCheck(profiles.Parent.Parent.Top<printer.Parent.Parent.Parent.Top,"Saved presets must appear above printer settings.");
+        AuditCheck(selectionInfo.Parent==print.Parent&&selectionInfo.Bottom<=selectionInfo.Parent.ClientSize.Height,"Slot details are not beside print or are clipped.");
+        AuditCheck(selectionInfo.Text.Contains(L("Slot size"))&&selectionInfo.Text.Contains(L("Rotation"))&&!selectionInfo.Text.Contains(Path.GetFileName(args.Files[fileList.SelectedIndex])),"Slot details are missing or include the filename.");
         AuditCheck(rotateSelected.Parent==previous.Parent&&fill.Parent==rotateSelected.Parent,"Preview editing commands are not grouped together.");
         AuditCheck(!NativePrint.ControlVisible(pageRange),"The unused range entry should be hidden.");
         var before=preview.Sheet;int compositions=previewCompositions;bool ready=print.Enabled;preview.SelectItem(1);AuditCheck(previewCompositions==compositions&&object.ReferenceEquals(before,preview.Sheet)&&print.Enabled==ready,"Selection recomposed the preview or changed print readiness.");
         string name=(dark?"dark":"light")+"-"+size.Width+"x"+size.Height;NativePrint.CaptureContent(surface,Path.Combine(args.Verify,name+".png"));captures.Add(new{dark=dark,width=size.Width,height=size.Height,previewWidth=preview.Width,previewHeight=preview.Height});
       }}
-      pageFilter.SelectedIndex=3;pageRange.Text="1";await PresetReady();AuditCheck(NativePrint.ControlVisible(pageRange)&&pageRange.Enabled,"Choosing Page range did not reveal its editor.");pageFilter.SelectedIndex=0;await PresetReady();
+      pageFilter.SelectedIndex=3;pageRange.Text="1";await PresetReady();AuditCheck(NativePrint.ControlVisible(pageRange)&&pageRange.Enabled,"Choosing Page range did not reveal its editor.");
+      foreach(var size in new[]{new Size(1366,768),new Size(820,640)}){surface.Size=size;NativePrint.CaptureLayout(surface);foreach(var control in new Control[]{fileList,pageFilter,pageRange}){for(Control current=control;current!=surface&&current.Parent!=null;current=current.Parent)AuditCheck(current.Parent.ClientRectangle.Contains(current.Bounds),"Page range controls clipped at "+size+": "+control.AccessibleName);AuditCheck(control.Width>=80,"Page range control too narrow at "+size+": "+control.AccessibleName);}}
+      pageFilter.SelectedIndex=0;await PresetReady();
       var counts=new[]{"1","2","4","5","6","7","8","9","12","16","id-card"};AuditCheck(layouts.Items.Select(item=>item.Id).SequenceEqual(counts),"Quick layouts lost or reordered an option.");
       for(int i=0;i<counts.Length;i++){var tile=layouts.Controls[i];AuditCheck(tile.AccessibleName==layouts.Items[i].Label&&tile.AccessibilityObject.Role==AccessibleRole.RadioButton,"A layout option lost its accessible name or role.");}
       layouts.SelectedIndex=3;await PresetReady();var key=new KeyEventArgs(Keys.Right);typeof(Control).GetMethod("OnKeyDown",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(layouts.Controls[3],new object[]{key});int target=args.Language=="ar"?2:4;AuditCheck(key.Handled&&layouts.SelectedIndex==target&&(layouts.Controls[target].AccessibilityObject.State&AccessibleStates.Checked)!=0,"Keyboard navigation or the selected layout state failed.");
@@ -1820,7 +1897,7 @@ internal sealed class PrintWindow : Form {
         int slot=Array.FindIndex(preview.Items,item=>item.Source==0&&item.Page==1);AuditCheck(slot>=0,"Second page missing from preview.");click(slot);await PresetReady();RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();
         AuditCheck(PageTurns(0,1)==1&&PageTurns(0,0)==0&&sourceRotations.All(turn=>turn==0)&&pageRotations.Count==1,"Rotating the second page changed its sibling or another file.");AuditCheck(preview.Items[preview.SelectedItem].Page==1,"Rotation moved selection to the document's first page.");
         var active=preview.Items[preview.SelectedItem];AuditCheck(active.Turns==1,"Preview did not apply the selected page's rotation.");
-        if(per>1){click(Array.FindIndex(preview.Items,item=>item.Source==0&&item.Page==0));await PresetReady();AuditCheck(status.Text.Contains(L("page")+" 1")&&status.Text.Contains(L("Rotation")+": 0°"),"Selecting another page kept the previous page's status.");RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();AuditCheck(PageTurns(0,0)==2&&PageTurns(0,1)==1,"Selecting the first page overwrote the second page's rotation.");
+        if(per>1){click(Array.FindIndex(preview.Items,item=>item.Source==0&&item.Page==0));await PresetReady();AuditCheck(preview.Items[preview.SelectedItem].Page==0&&selectionInfo.Text.Contains(L("Rotation")+": 0°"),"Selecting another page kept the previous page's status.");RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();RotateSelectedSource(rotateSelected,EventArgs.Empty);await PresetReady();AuditCheck(PageTurns(0,0)==2&&PageTurns(0,1)==1,"Selecting the first page overwrote the second page's rotation.");
           updating=true;pageFilters[0]="even";sheetIndex=0;updating=false;await RenderPreview();await PresetReady();AuditCheck(preview.Items[0].Source==0&&preview.Items[0].Page==1&&preview.Items[0].Turns==1,"Filtering renumbered page rotations.");
           updating=true;pageFilters[0]="all";sheetIndex=0;updating=false;await RenderPreview();await PresetReady();
         }
@@ -2174,6 +2251,14 @@ internal sealed class PrintWindow : Form {
       var reports=new List<object>();
       foreach(bool dark in new[]{false,true}){
         PrintTheme.Initialize(dark);PrintTheme.Apply(this);
+        using(var presetProof=new PrintComboBox{Font=Font,RightToLeft=RightToLeft,ItemHeight=48})using(var bitmap=new Bitmap(520,192))using(var graphics=Graphics.FromImage(bitmap)){
+          presetProof.Items.Add(new Entry("a", "Office printer A · A4 · "+L("Color"), "Glossy stock"){PresetPrinter="Office printer A",PresetPaper="A4",PresetColor=L("Color")});
+          presetProof.Items.Add(new Entry("b", "Office printer A · A3 · "+L("Black & white"), "Plain paper"){PresetPrinter="Office printer A",PresetPaper="A3",PresetColor=L("Black & white")});
+          presetProof.Items.Add(new Entry("c", "Production printer B · A3 · "+L("Color"), "Heavy paper"){PresetPrinter="Production printer B",PresetPaper="A3",PresetColor=L("Color")});
+          presetProof.Items.Add(new Entry("d", "Production printer B · A4 · "+L("Black & white"), "Draft"){PresetPrinter="Production printer B",PresetPaper="A4",PresetColor=L("Black & white")});
+          for(int index=0;index<presetProof.Items.Count;index++)presetProof.DrawListRow(graphics,new Rectangle(0,index*48,520,48),index,index==1);
+          bitmap.Save(Path.Combine(args.Verify,(dark?"dark":"light")+"-preset-list.png"),ImageFormat.Png);
+        }
         foreach(var size in new[]{new Size(1366,768),new Size(1920,1080),new Size(1600,900),new Size(820,640)}){Size=size;NativePrint.Capture(this,Path.Combine(args.Verify,(dark?"dark":"light")+"-"+Width+"x"+Height+".png"));}
         var combo=(PrintComboBox)printer;
         if(combo.ClientSize!=combo.Size)throw new InvalidOperationException("A legacy combo frame remains under the custom face.");

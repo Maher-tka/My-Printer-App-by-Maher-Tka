@@ -79,7 +79,6 @@ export async function runFastPrintCommand(): Promise<void> {
       await powershell('fast-print-menu.ps1', ['-Action', 'Remove'])
     } else if (args.includes('--fast-print-request') || args.includes('--fast-print-preview')) {
       const previewOnly = args.includes('--fast-print-preview')
-      if (!previewOnly) await assertOnlineProductionAccess('paid-tools', 'fast-print')
       const requestPath =
         args[args.indexOf(previewOnly ? '--fast-print-preview' : '--fast-print-request') + 1]
       if (!requestPath) throw new Error('Missing native Fast Print request.')
@@ -91,11 +90,16 @@ export async function runFastPrintCommand(): Promise<void> {
           throw new Error('The print request is too large.')
         const request = parseNativePrintRequest(await readFile(requestPath, 'utf8'))
         nativeIdSession = request.preset.mode === 'id-card'
+        // Opening ID review does not submit a job. Its Print action checks access
+        // separately, including after returning from native printer settings.
+        if (!previewOnly && !nativeIdSession)
+          await assertOnlineProductionAccess('paid-tools', 'fast-print')
         if (previewOnly && !request.preset.mode?.startsWith('polaroid-'))
           throw new Error('Only Polaroid sheets use background preparation.')
         const result = await runJob(request.files, request.preset, {
           toolId: 'fast-print',
           copies: request.copies,
+          appearance: request.appearance,
           profileDirectory: directory,
           preparedPolaroid: !previewOnly && request.preparedPolaroid,
           ...(previewOnly ? { previewDirectory: join(directory, 'preview') } : {})
@@ -274,6 +278,7 @@ async function runJob(
   jobOptions: {
     toolId?: string
     copies?: number
+    appearance?: 'light' | 'dark'
     profileDirectory?: string
     previewDirectory?: string
     preparedPolaroid?: boolean
@@ -419,7 +424,7 @@ async function runJob(
     resizable: preset.mode === 'id-card',
     autoHideMenuBar: true,
     title: 'Fast Print',
-    backgroundColor: '#f5f7fb',
+    backgroundColor: jobOptions.appearance === 'dark' ? '#101f23' : '#f5f7fb',
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/fast-print.cjs'),
@@ -427,7 +432,7 @@ async function runJob(
       contextIsolation: true,
       nodeIntegration: false,
       backgroundThrottling: !backgroundPreparation,
-      // ID setup uses the app's saved language, theme and performance preferences.
+      // ID setup shares language and performance preferences with the app.
       ...(preset.mode !== 'id-card' ? { partition: 'fast-print-' + basename(temp) } : {})
     }
   })
@@ -494,6 +499,9 @@ async function runJob(
         extension: extname(filePath).toLowerCase()
       })),
       preset,
+      ...(preset.mode === 'id-card' && jobOptions.appearance
+        ? { appearance: jobOptions.appearance }
+        : {}),
       ...(preset.mode === 'id-card' ? { printers } : {}),
       ...(driverPresets ? { driverPresets } : {}),
       canReturnToSettings,

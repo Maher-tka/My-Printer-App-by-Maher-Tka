@@ -30,6 +30,7 @@ export interface FastPrintPreset {
   preserveActualSize?: boolean
   separatorLines?: boolean
   separatorColor?: string
+  brightnessPercent?: number
   /** EXIF-oriented image dimensions from the native metadata reader; PDFs use page points. */
   imageSizesMm?: Array<{ widthMm: number; heightMm: number } | null>
   combineImages?: boolean
@@ -48,6 +49,7 @@ export interface FastPrintPreset {
 }
 
 export interface FastPrintBatchSource {
+  appearance?: 'light' | 'dark'
   printers?: FastPrintPrinter[]
   driverPresets?: DriverPresetSummary[]
   canReturnToSettings?: boolean
@@ -110,6 +112,12 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     (p.separatorLines !== undefined && typeof p.separatorLines !== 'boolean') ||
     (p.separatorColor !== undefined &&
       (typeof p.separatorColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(p.separatorColor))) ||
+    (p.brightnessPercent !== undefined &&
+      (p.mode !== undefined ||
+        !Number.isInteger(p.brightnessPercent) ||
+        p.brightnessPercent < -15 ||
+        p.brightnessPercent > 15 ||
+        p.brightnessPercent % 5 !== 0)) ||
     (p.imageSizesMm !== undefined &&
       (!Array.isArray(p.imageSizesMm) ||
         p.imageSizesMm.length > 1000 ||
@@ -220,6 +228,7 @@ export function validateFastPrintPreset(value: unknown): FastPrintPreset {
     ...(p.preserveActualSize !== undefined ? { preserveActualSize: p.preserveActualSize } : {}),
     ...(p.separatorLines !== undefined ? { separatorLines: p.separatorLines } : {}),
     ...(p.separatorColor !== undefined ? { separatorColor: p.separatorColor } : {}),
+    ...(p.brightnessPercent !== undefined ? { brightnessPercent: p.brightnessPercent } : {}),
     ...(p.imageSizesMm !== undefined
       ? { imageSizesMm: p.imageSizesMm.map((size) => (size ? { ...size } : null)) }
       : {}),

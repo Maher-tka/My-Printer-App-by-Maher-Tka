@@ -7,6 +7,7 @@ export interface NativePrintRequest {
   files: string[]
   preset: FastPrintPreset
   copies: number
+  appearance?: 'light' | 'dark'
   preparedPolaroid?: boolean
 }
 
@@ -34,6 +35,11 @@ export function parseNativePrintRequest(text: string): NativePrintRequest {
   )
     throw new Error('Invalid native Fast Print request.')
   const preset = validateFastPrintPreset(data.preset)
+  if (
+    data.appearance !== undefined &&
+    (preset.mode !== 'id-card' || !['light', 'dark'].includes(data.appearance))
+  )
+    throw new Error('Invalid native Fast Print appearance.')
   if (
     data.preparedPolaroid !== undefined &&
     (typeof data.preparedPolaroid !== 'boolean' || !preset.mode?.startsWith('polaroid-'))
@@ -66,6 +72,7 @@ export function parseNativePrintRequest(text: string): NativePrintRequest {
     files,
     preset,
     copies: data.copies,
+    ...(data.appearance ? { appearance: data.appearance } : {}),
     ...(data.preparedPolaroid ? { preparedPolaroid: true } : {})
   }
 }
