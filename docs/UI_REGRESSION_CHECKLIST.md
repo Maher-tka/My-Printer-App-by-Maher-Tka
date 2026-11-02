@@ -1,5 +1,18 @@
 # UI regression checklist
 
+## 2026-11-02 — Icon actions in preset management
+
+- Removed printer and preset icon commands from the saved-preset dropdown. The
+  existing Manage saved presets window now owns both icon controls; a saved
+  preset must be selected to change its paper icon.
+- Hidden manager proofs cover English, French and Arabic labels and exercise
+  reset commands with isolated settings. Native preset checks verify icons made
+  by the manager can be read by Fast Print and vice versa, while preserving image
+  originals, driver snapshots, preset selection and unrelated icons.
+- Native UI checks cover desktop sizes and both themes. The existing management
+  window remains light and is not fully translated or RTL-aware; live file-dialog
+  and keyboard testing remain pending. No hardware print jobs were sent.
+
 ## 2026-10-31 — ID review follows Fast Print appearance
 
 - The native Fast Print window passes its resolved light/dark appearance to ID

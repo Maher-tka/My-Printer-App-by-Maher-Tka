@@ -1,6 +1,6 @@
 {
   "name": "my-printer-app-by-maher-tka",
-  "version": "0.2.37",
+  "version": "0.2.38",
   "description": "Local-first printer-shop hub desktop app by Maher Tka.",
   "author": "Maher Tka",
   "private": true,
@@ -201,6 +201,7 @@
           "fast-print-menu.ps1",
           "fast-print-job.ps1",
           "fast-print-settings.ps1",
+          "fast-print-icons.ps1",
           "fast-print-profiles.ps1",
           "printer-preferences.ps1",
           "FastPrintDriver.cs",

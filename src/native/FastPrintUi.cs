@@ -41,6 +41,7 @@ internal static class PrinterIconStore {
   }
   static string PresetPath(string id){if(!Regex.IsMatch(id??"",@"^[a-f0-9]{32}$"))throw new InvalidOperationException("Choose a saved preset first.");return Path.Combine(NativePrint.LocalRoot,"preset-icons",id+".png");}
   static void Forget(string path){CachedIcon old;if(cache.TryGetValue(path,out old)){cache.Remove(path);old.Image.Dispose();}}
+  internal static void ClearCache(){foreach(var icon in cache.Values)icon.Image.Dispose();cache.Clear();}
   internal static void Invalidate(string printer){if(!String.IsNullOrWhiteSpace(printer))Forget(IconPath(printer));}
   internal static Bitmap Get(string printer){
     if(String.IsNullOrWhiteSpace(printer))return null;

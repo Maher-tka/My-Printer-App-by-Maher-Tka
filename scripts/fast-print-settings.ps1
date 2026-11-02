@@ -1,4 +1,4 @@
-param([ValidateSet('Manage','Resolve','List')][string]$Action = 'Manage', [string]$ProfileId, [string]$PreviewPath, [string]$ProfileDirectory)
+﻿param([ValidateSet('Manage','Resolve','List')][string]$Action = 'Manage', [string]$ProfileId, [string]$PreviewPath, [string]$ProfileDirectory, [ValidateSet('en','fr','ar')][string]$Language = 'en')
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 . (Join-Path $PSScriptRoot 'fast-print-profiles.ps1')
@@ -17,6 +17,7 @@ if ($Action -eq 'Resolve') {
   exit 0
 }
 
+. (Join-Path $PSScriptRoot 'fast-print-icons.ps1')
 Add-Type -AssemblyName System.Windows.Forms
 [Windows.Forms.Application]::EnableVisualStyles()
 $script:fpState = @{ id=''; bytes=$null; fingerprint=''; loading=$false; changed=$false }
@@ -45,6 +46,16 @@ function Show-FastPrintError($Failure) {
 
 $title=Add-Label 'Printer presets' 24 20 700 36
 $title.Font=[Drawing.Font]::new('Segoe UI',21,[Drawing.FontStyle]::Bold)
+$iconText = switch ($Language) {
+  'fr' { @{ Printer="Icône de l’imprimante…"; Preset="Icône du préréglage…"; Choose="Choisir une image…"; Reset="Rétablir l’icône"; Saved="Icône mise à jour."; Removed="Icône rétablie." } }
+  'ar' { @{ Printer='رمز الطابعة…'; Preset='رمز الإعداد…'; Choose='اختيار صورة…'; Reset='إعادة الرمز'; Saved='تم تحديث الرمز.'; Removed='تمت إعادة الرمز.' } }
+  default { @{ Printer='Printer icon…'; Preset='Preset icon…'; Choose='Choose image…'; Reset='Reset icon'; Saved='Icon updated.'; Removed='Icon reset.' } }
+}
+$iconRoot=Split-Path -Parent (Get-FastPrintProfileDirectory)
+if ($env:FAST_PRINT_SETTINGS_HIDDEN_PROOF -eq '1' -and $PreviewPath) { $iconRoot=Join-Path (Split-Path -Parent $PreviewPath) ('settings-proof-'+$Language) }
+$printerIcon=Add-Button $iconText.Printer 332 68 260
+$presetIcon=Add-Button $iconText.Preset 606 68 286
+$printerIcon.AccessibleName=$iconText.Printer; $presetIcon.AccessibleName=$iconText.Preset
 $null=Add-Label 'SAVED PRESETS' 24 116 270
 $list=[Windows.Forms.ListBox]::new(); $list.Location=[Drawing.Point]::new(24,146); $list.Size=[Drawing.Size]::new(280,404)
 $list.DisplayMember='display'; $form.Controls.Add($list)
@@ -77,6 +88,46 @@ $close=Add-Button 'Done' 730 614 162
 $status=Add-Label 'Saved settings stay on this Windows account. Printer defaults are unchanged.' 332 626 390 32
 $status.Font=[Drawing.Font]::new('Segoe UI',9)
 
+function Update-FastPrintIconButtons {
+  $printerIcon.Enabled=![string]::IsNullOrWhiteSpace([string]$printerBox.SelectedItem)
+  $presetIcon.Enabled=$null -ne $list.SelectedItem
+}
+function Select-FastPrintIconFile([string]$Title) {
+  if ($env:FAST_PRINT_SETTINGS_HIDDEN_PROOF -eq '1' -and $PreviewPath -and $script:iconProofSource) { return $script:iconProofSource }
+  $dialog=[Windows.Forms.OpenFileDialog]::new()
+  try {
+    $dialog.Title=$Title; $dialog.Filter='Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif'; $dialog.CheckFileExists=$true
+    if ($dialog.ShowDialog($form) -eq [Windows.Forms.DialogResult]::OK) { return $dialog.FileName }
+    return $null
+  } finally { $dialog.Dispose() }
+}
+function New-FastPrintIconMenu([string]$Kind, [Windows.Forms.Button]$Button) {
+  $key=if ($Kind -eq 'Printer') { [string]$printerBox.SelectedItem } elseif ($list.SelectedItem) { [string]$list.SelectedItem.profile.id } else { '' }
+  try { $path=Get-FastPrintIconPath -Kind $Kind -Key $key -Root $iconRoot }
+  catch { Show-FastPrintError $_; return $null }
+  $menu=[Windows.Forms.ContextMenuStrip]::new()
+  $choose=[Windows.Forms.ToolStripMenuItem]::new($iconText.Choose)
+  $reset=[Windows.Forms.ToolStripMenuItem]::new($iconText.Reset)
+  $reset.Enabled=[IO.File]::Exists($path)
+  $choose.add_Click({
+    try {
+      $source=Select-FastPrintIconFile $Button.Text
+      if ($source) { Set-FastPrintIcon -Kind $Kind -Key $key -Source $source -Root $iconRoot; $status.Text=$iconText.Saved }
+    } catch { Show-FastPrintError $_ }
+  }.GetNewClosure())
+  $reset.add_Click({ try { Remove-FastPrintIcon -Kind $Kind -Key $key -Root $iconRoot; $status.Text=$iconText.Removed } catch { Show-FastPrintError $_ } }.GetNewClosure())
+  $menu.Items.Add($choose) | Out-Null; $menu.Items.Add($reset) | Out-Null
+  return ,$menu
+}
+function Show-FastPrintIconMenu([string]$Kind, [Windows.Forms.Button]$Button) {
+  $menu=New-FastPrintIconMenu $Kind $Button
+  if (!$menu) { return }
+  $menu.add_Closed({ $menu.Dispose() }.GetNewClosure())
+  $menu.Show($Button,[Drawing.Point]::new(0,$Button.Height))
+}
+$printerIcon.add_Click({ Show-FastPrintIconMenu 'Printer' $printerIcon })
+$presetIcon.add_Click({ Show-FastPrintIconMenu 'Preset' $presetIcon })
+
 function Refresh-FastPrintList {
   $script:fpState.loading=$true
   try {
@@ -85,6 +136,7 @@ function Refresh-FastPrintList {
       $list.Items.Add([PSCustomObject]@{ display=($profile.name + '  |  ' + $profile.printer); profile=$profile }) | Out-Null
     }
   } finally { $script:fpState.loading=$false }
+  Update-FastPrintIconButtons
 }
 function Refresh-FastPrintPrinters {
   $selected=[string]$printerBox.SelectedItem
@@ -96,6 +148,7 @@ function Refresh-FastPrintPrinters {
     elseif ($printerBox.Items.Count -gt 0) { $printerBox.SelectedIndex=0 }
   } finally { $script:fpState.loading=$false }
   $script:fpState.bytes=$null; $save.Enabled=$false
+  Update-FastPrintIconButtons
 }
 function Show-CapturedSummary {
   $info = Get-FastPrintProfileSummary ([string]$printerBox.SelectedItem) $script:fpState.bytes
@@ -110,12 +163,14 @@ $new.add_Click({
   $nameBox.Clear(); $notes.Clear(); $save.Enabled=$false
   $defaultBypass.Checked=$false
   $summary.Text='No settings captured. Configure the driver before saving.'; $nameBox.Focus()
+  Update-FastPrintIconButtons
 })
 $printerBox.add_SelectedIndexChanged({
   if ($script:fpState.loading) { return }
   $defaultBypass.Checked=$false
   $script:fpState.id=''; $script:fpState.bytes=$null; $script:fpState.fingerprint=''; $save.Enabled=$false
   $summary.Text='Printer changed. Capture its settings before saving.'
+  Update-FastPrintIconButtons
 })
 $list.add_SelectedIndexChanged({
   if ($script:fpState.loading -or !$list.SelectedItem) { return }
@@ -133,7 +188,7 @@ $list.add_SelectedIndexChanged({
       Show-CapturedSummary
     } catch { $summary.Text=$_.Exception.Message }
   } catch { Show-FastPrintError $_ }
-  finally { $script:fpState.loading=$false }
+  finally { $script:fpState.loading=$false; Update-FastPrintIconButtons }
 })
 $capture.add_Click({
   try {
@@ -192,10 +247,33 @@ Live tray-data refresh is driver-specific; it is available during setup, not aut
 })
 $close.add_Click({ $form.Close() })
 Refresh-FastPrintPrinters
-Refresh-FastPrintList
+if ($env:FAST_PRINT_SETTINGS_HIDDEN_PROOF -eq '1' -and $PreviewPath) {
+  $fakePrinter=if ($printerBox.Items.Count -gt 0) { [string]$printerBox.Items[0] } else { 'Proof printer' }
+  $list.Items.Add([PSCustomObject]@{ display='Proof preset | Proof printer'; profile=[PSCustomObject]@{ id=('d'*32); name='Proof preset'; printer=$fakePrinter; notes=''; defaultBypassFaceUp=$false; driverFingerprint='' } }) | Out-Null
+  $list.SelectedIndex=0
+} else { Refresh-FastPrintList }
 try {
   if ($PreviewPath) {
-    $form.Show(); [Windows.Forms.Application]::DoEvents()
+    if ($env:FAST_PRINT_SETTINGS_HIDDEN_PROOF -eq '1') {
+      $null=$form.Handle; foreach ($control in $form.Controls) { $null=$control.Handle }
+      if (!$printerIcon.Enabled -or !$presetIcon.Enabled -or $printerIcon.Right -gt $presetIcon.Left -or $presetIcon.Right -gt $form.ClientSize.Width) { throw 'Icon management controls are unavailable or clipped.' }
+      $list.ClearSelected(); Update-FastPrintIconButtons
+      if ($presetIcon.Enabled) { throw 'Preset icon command must be disabled without a saved preset.' }
+      $list.SelectedIndex=0; Update-FastPrintIconButtons
+      if (!$presetIcon.Enabled) { throw 'Preset icon command did not enable for a saved preset.' }
+      [IO.Directory]::CreateDirectory($iconRoot) | Out-Null
+      $source=Join-Path $iconRoot 'source.png'; $sample=[Drawing.Bitmap]::new(16,16)
+      try { $sample.Save($source,[Drawing.Imaging.ImageFormat]::Png) } finally { $sample.Dispose() }
+      $script:iconProofSource=$source
+      foreach ($test in @(@('Printer',$printerIcon,[string]$printerBox.SelectedItem),@('Preset',$presetIcon,[string]$list.SelectedItem.profile.id))) {
+        $testMenu=New-FastPrintIconMenu $test[0] $test[1]
+        try { $testMenu.Items[0].PerformClick() } finally { $testMenu.Dispose() }
+        if (![IO.File]::Exists((Get-FastPrintIconPath -Kind $test[0] -Key $test[2] -Root $iconRoot))) { throw 'Icon selection did not save the chosen icon.' }
+        $testMenu=New-FastPrintIconMenu $test[0] $test[1]
+        try { if (!$testMenu.Items[1].Enabled) { throw 'Icon reset command is unavailable.' }; $testMenu.Items[1].PerformClick() } finally { $testMenu.Dispose() }
+        if ([IO.File]::Exists((Get-FastPrintIconPath -Kind $test[0] -Key $test[2] -Root $iconRoot))) { throw 'Icon reset did not remove the selected icon.' }
+      }
+    } else { $form.Show(); [Windows.Forms.Application]::DoEvents() }
     $bitmap=[Drawing.Bitmap]::new($form.Width,$form.Height)
     try { $form.DrawToBitmap($bitmap,[Drawing.Rectangle]::new(0,0,$form.Width,$form.Height)); $bitmap.Save($PreviewPath,[Drawing.Imaging.ImageFormat]::Png) }
     finally { $bitmap.Dispose(); $form.Close() }

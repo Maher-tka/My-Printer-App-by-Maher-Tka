@@ -26,11 +26,30 @@ for (const language of ['en', 'fr', 'ar']) {
   const env = {
     ...process.env,
     FAST_PRINT_VERIFY_PICKER: '1',
+    FAST_PRINT_VERIFY_ICON_INTEROP: '1',
     FAST_PRINT_TEST_SETTINGS: join(folder, 'settings'),
     FAST_PRINT_TEST_SINGLE_CORE: '1'
   }
   delete env.ELECTRON_RUN_AS_NODE
   delete env.ELECTRON_RENDERER_URL
+  const powershell = join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe')
+  const iconTest = join(root, 'scripts/test-fast-print-icons.ps1')
+  await run(
+    powershell,
+    [
+      '-NoProfile',
+      '-STA',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      iconTest,
+      '-Root',
+      env.FAST_PRINT_TEST_SETTINGS,
+      '-Source',
+      fixture
+    ],
+    { cwd: root, env, windowsHide: true, timeout: 30000 }
+  )
   await run(
     native,
     [
@@ -78,6 +97,23 @@ for (const language of ['en', 'fr', 'ar']) {
     assert.equal(image.height, capture.requestedHeight)
   }
   assert.ok(report.choices.every((choice) => choice.label.includes(report.presetPrinter)))
+  await run(
+    powershell,
+    [
+      '-NoProfile',
+      '-STA',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      iconTest,
+      '-Root',
+      env.FAST_PRINT_TEST_SETTINGS,
+      '-Source',
+      fixture,
+      '-VerifyNative'
+    ],
+    { cwd: root, env, windowsHide: true, timeout: 30000 }
+  )
   const session = resolve(report.cleanupDirectory)
   assert.equal(
     dirname(session).toLowerCase(),
