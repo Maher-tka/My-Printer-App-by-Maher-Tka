@@ -1,5 +1,17 @@
 # UI regression checklist
 
+## 2026-11-02 — Preset icon menu lifetime
+
+- The preset manager now reuses each icon menu until its window closes. Closing
+  a menu while the image picker opens no longer disposes an object that Windows
+  is still using; each reused menu updates its printer or preset target.
+- `npm run test:fast-print:icon-manager` exercises close-event re-entry, menu
+  handle access, choosing and cancelling an image, reset, and changing targets
+  for both icon types in English, French and Arabic with isolated icon files.
+  Typecheck and Fast Print tests passed; no hardware print jobs were sent.
+- Live file-dialog interaction and released-build verification remain pending.
+  The existing management window remains light and is not fully RTL-aware.
+
 ## 2026-11-02 — Icon actions in preset management
 
 - Removed printer and preset icon commands from the saved-preset dropdown. The

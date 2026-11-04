@@ -38,6 +38,7 @@ export interface PrinterPreferences {
   defaultPrinter: string | null
   optionPrinters: Record<string, string>
   profiles: Record<string, Record<string, string>>
+  idDefaultPreset?: string
 }
 export function emptyPrinterPreferences(): PrinterPreferences {
   return { version: 1, defaultPrinter: null, optionPrinters: {}, profiles: {} }
@@ -55,7 +56,9 @@ export function validatePrinterPreferences(value: unknown): PrinterPreferences {
     value.version !== 1 ||
     (value.defaultPrinter !== null && !printerName(value.defaultPrinter)) ||
     !record(value.optionPrinters) ||
-    !record(value.profiles)
+    !record(value.profiles) ||
+    (value.idDefaultPreset !== undefined &&
+      (typeof value.idDefaultPreset !== 'string' || !/^[a-f0-9]{32}$/.test(value.idDefaultPreset)))
   )
     throw new Error('Invalid printing preferences.')
   const options = new Set(PRINTING_OPTIONS.map((option) => option.id))

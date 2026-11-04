@@ -35,6 +35,11 @@ preferences.profiles.Epson = {
   'fast:A4:color:1': 'c'.repeat(32)
 }
 assert.deepEqual(validatePrinterPreferences(preferences), preferences)
+assert.equal(
+  validatePrinterPreferences({ ...preferences, idDefaultPreset: 'a'.repeat(32) }).idDefaultPreset,
+  'a'.repeat(32)
+)
+assert.throws(() => validatePrinterPreferences({ ...preferences, idDefaultPreset: '../invalid' }))
 assert.equal(preferredPrinter(preferences, 'polaroid-8'), 'Epson')
 assert.equal(preferredPrinter(preferences, 'tool:booklet-montage'), 'Konica')
 assert.equal(preferredProfile(preferences, 'Konica', 'polaroid-8'), undefined)

@@ -1,4 +1,16 @@
 export const printerPreferencesMessages: Record<string, { fr: string; ar: string }> = {
+  'Default ID printer preset': {
+    fr: 'Préréglage par défaut pour les cartes d’identité',
+    ar: 'إعداد الطابعة الافتراضي لبطاقات الهوية'
+  },
+  'Use current printer settings': {
+    fr: 'Utiliser les réglages actuels de l’imprimante',
+    ar: 'استخدام إعدادات الطابعة الحالية'
+  },
+  'Choose an available A4 or A3 driver preset for ID cards.': {
+    fr: 'Choisissez un préréglage A4 ou A3 disponible pour les cartes.',
+    ar: 'اختر إعداد طابعة A4 أو A3 متاحًا لبطاقات الهوية.'
+  },
   'Choose a printer preset, sides and copies.': {
     fr: 'Choisissez un préréglage, les faces et le nombre de copies.',
     ar: 'اختر إعداد الطابعة والأوجه وعدد النسخ.'

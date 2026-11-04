@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import {
   idReviewDuplex,
   initialIdReviewDuplex,
+  selectDefaultIdPreset,
   selectIdDriverPreset
 } from './fast-print-id-preset.js'
 import type { FastPrintPreset } from './fast-print.js'
@@ -24,6 +25,29 @@ const profile = {
   duplex: 'Vertical'
 }
 const selected = selectIdDriverPreset(current, profile, device)
+const saved = {
+  ...profile,
+  usable: true,
+  tray: 'Auto',
+  paperWidthMm: 210,
+  paperHeightMm: 297,
+  copies: 1,
+  savedAt: ''
+}
+const defaultSelection = selectDefaultIdPreset(
+  { ...current, printer: 'Another printer' },
+  profile.id,
+  [saved],
+  [device]
+)
+assert.equal(defaultSelection.preset.printer, device.name)
+assert.equal(defaultSelection.preset.profileId, profile.id)
+assert.equal(defaultSelection.preset.color, false)
+assert.throws(() => selectDefaultIdPreset(current, profile.id, [saved], []), /unavailable/)
+assert.throws(
+  () => selectDefaultIdPreset(current, profile.id, [{ ...saved, usable: false }], [device]),
+  /unavailable/
+)
 assert.equal(selected.preset.color, false)
 assert.equal(selected.preset.duplex, true)
 assert.equal(selected.preset.profileId, profile.id)

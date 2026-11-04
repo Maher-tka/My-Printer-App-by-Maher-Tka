@@ -214,6 +214,41 @@ export function PrinterSettings({
                 ]
               )
             )}
+            {field(
+              'Default ID printer preset',
+              choices(
+                snapshot.preferences.idDefaultPreset ?? 'automatic',
+                (value) =>
+                  void save((p) => {
+                    if (value === 'automatic') delete p.idDefaultPreset
+                    else p.idDefaultPreset = value
+                  }),
+                'Default ID printer preset',
+                [
+                  { value: 'automatic', label: t('Use current printer settings') },
+                  ...savedPresets.map((profile) => ({
+                    value: profile.id,
+                    label: `${profile.name} · ${profile.printer}`,
+                    disabled:
+                      !profile.usable ||
+                      !['A4', 'A3'].includes(profile.paper) ||
+                      !snapshot.devices.some((device) => device.name === profile.printer)
+                  })),
+                  ...(snapshot.preferences.idDefaultPreset &&
+                  !savedPresets.some(
+                    (profile) => profile.id === snapshot.preferences.idDefaultPreset
+                  )
+                    ? [
+                        {
+                          value: snapshot.preferences.idDefaultPreset,
+                          label: t('Unavailable saved preset'),
+                          disabled: true
+                        }
+                      ]
+                    : [])
+                ]
+              )
+            )}
           </section>
           <section className="space-y-4 border-t pt-5" aria-label={t('Driver presets')}>
             <div className="flex flex-wrap items-center justify-between gap-3">

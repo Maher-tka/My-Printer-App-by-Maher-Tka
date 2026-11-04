@@ -21,6 +21,7 @@ if ($Action -eq 'Resolve') {
 Add-Type -AssemblyName System.Windows.Forms
 [Windows.Forms.Application]::EnableVisualStyles()
 $script:fpState = @{ id=''; bytes=$null; fingerprint=''; loading=$false; changed=$false }
+$script:fpIconMenus = @{}
 $form = [Windows.Forms.Form]::new()
 $form.Text = 'Fast Print - Printer presets'
 $form.Size = [Drawing.Size]::new(950,710)
@@ -93,7 +94,7 @@ function Update-FastPrintIconButtons {
   $presetIcon.Enabled=$null -ne $list.SelectedItem
 }
 function Select-FastPrintIconFile([string]$Title) {
-  if ($env:FAST_PRINT_SETTINGS_HIDDEN_PROOF -eq '1' -and $PreviewPath -and $script:iconProofSource) { return $script:iconProofSource }
+  if ($env:FAST_PRINT_SETTINGS_HIDDEN_PROOF -eq '1' -and $PreviewPath) { return $script:iconProofSource }
   $dialog=[Windows.Forms.OpenFileDialog]::new()
   try {
     $dialog.Title=$Title; $dialog.Filter='Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif'; $dialog.CheckFileExists=$true
@@ -106,23 +107,37 @@ function New-FastPrintIconMenu([string]$Kind, [Windows.Forms.Button]$Button) {
   try { $path=Get-FastPrintIconPath -Kind $Kind -Key $key -Root $iconRoot }
   catch { Show-FastPrintError $_; return $null }
   $menu=[Windows.Forms.ContextMenuStrip]::new()
+  $targetState=@{ Key=$key }
+  $menu.Tag=$targetState
   $choose=[Windows.Forms.ToolStripMenuItem]::new($iconText.Choose)
   $reset=[Windows.Forms.ToolStripMenuItem]::new($iconText.Reset)
   $reset.Enabled=[IO.File]::Exists($path)
   $choose.add_Click({
     try {
       $source=Select-FastPrintIconFile $Button.Text
-      if ($source) { Set-FastPrintIcon -Kind $Kind -Key $key -Source $source -Root $iconRoot; $status.Text=$iconText.Saved }
+      if ($source) { Set-FastPrintIcon -Kind $Kind -Key $targetState.Key -Source $source -Root $iconRoot; $status.Text=$iconText.Saved }
     } catch { Show-FastPrintError $_ }
   }.GetNewClosure())
-  $reset.add_Click({ try { Remove-FastPrintIcon -Kind $Kind -Key $key -Root $iconRoot; $status.Text=$iconText.Removed } catch { Show-FastPrintError $_ } }.GetNewClosure())
+  $reset.add_Click({ try { Remove-FastPrintIcon -Kind $Kind -Key $targetState.Key -Root $iconRoot; $status.Text=$iconText.Removed } catch { Show-FastPrintError $_ } }.GetNewClosure())
   $menu.Items.Add($choose) | Out-Null; $menu.Items.Add($reset) | Out-Null
   return ,$menu
 }
+function Prepare-FastPrintIconMenu([string]$Kind, [Windows.Forms.Button]$Button) {
+  $menu=$script:fpIconMenus[$Kind]
+  if (!$menu -or $menu.IsDisposed) { $menu=New-FastPrintIconMenu $Kind $Button; if ($menu) { $script:fpIconMenus[$Kind]=$menu } }
+  if ($menu) {
+    $key=if ($Kind -eq 'Printer') { [string]$printerBox.SelectedItem } elseif ($list.SelectedItem) { [string]$list.SelectedItem.profile.id } else { '' }
+    try { $path=Get-FastPrintIconPath -Kind $Kind -Key $key -Root $iconRoot }
+    catch { Show-FastPrintError $_; return $null }
+    $menu.Tag.Key=$key; $menu.Items[1].Enabled=[IO.File]::Exists($path)
+  }
+  return ,$menu
+}
 function Show-FastPrintIconMenu([string]$Kind, [Windows.Forms.Button]$Button) {
-  $menu=New-FastPrintIconMenu $Kind $Button
+  $menu=Prepare-FastPrintIconMenu $Kind $Button
   if (!$menu) { return }
-  $menu.add_Closed({ $menu.Dispose() }.GetNewClosure())
+  # WinForms may still access a closed menu while a modal file dialog opens.
+  # Reuse it and keep it alive until the form closes.
   $menu.Show($Button,[Drawing.Point]::new(0,$Button.Height))
 }
 $printerIcon.add_Click({ Show-FastPrintIconMenu 'Printer' $printerIcon })
@@ -265,19 +280,40 @@ try {
       $source=Join-Path $iconRoot 'source.png'; $sample=[Drawing.Bitmap]::new(16,16)
       try { $sample.Save($source,[Drawing.Imaging.ImageFormat]::Png) } finally { $sample.Dispose() }
       $script:iconProofSource=$source
+      $onClosed=[Windows.Forms.ToolStripDropDown].GetMethod('OnClosed',[Reflection.BindingFlags]'Instance,NonPublic')
+      $closed=[Windows.Forms.ToolStripDropDownClosedEventArgs]::new([Windows.Forms.ToolStripDropDownCloseReason]::ItemClicked)
       foreach ($test in @(@('Printer',$printerIcon,[string]$printerBox.SelectedItem),@('Preset',$presetIcon,[string]$list.SelectedItem.profile.id))) {
-        $testMenu=New-FastPrintIconMenu $test[0] $test[1]
-        try { $testMenu.Items[0].PerformClick() } finally { $testMenu.Dispose() }
+        $testMenu=Prepare-FastPrintIconMenu $test[0] $test[1]
+        $onClosed.Invoke($testMenu,@($closed)) | Out-Null
+        if ($testMenu.IsDisposed) { throw 'Closing the icon menu disposed it before its owner finished.' }
+        $null=$testMenu.Handle; $testMenu.Items[0].PerformClick(); $null=$testMenu.Handle
         if (![IO.File]::Exists((Get-FastPrintIconPath -Kind $test[0] -Key $test[2] -Root $iconRoot))) { throw 'Icon selection did not save the chosen icon.' }
-        $testMenu=New-FastPrintIconMenu $test[0] $test[1]
-        try { if (!$testMenu.Items[1].Enabled) { throw 'Icon reset command is unavailable.' }; $testMenu.Items[1].PerformClick() } finally { $testMenu.Dispose() }
+        $storedPath=Get-FastPrintIconPath -Kind $test[0] -Key $test[2] -Root $iconRoot
+        $beforeCancel=[Convert]::ToBase64String([IO.File]::ReadAllBytes($storedPath)); $script:iconProofSource=$null
+        $testMenu.Items[0].PerformClick(); $null=$testMenu.Handle; $script:iconProofSource=$source
+        if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($storedPath)) -cne $beforeCancel) { throw 'Cancelling icon selection changed the saved icon.' }
+        $previous=$testMenu; $testMenu=Prepare-FastPrintIconMenu $test[0] $test[1]
+        if (![object]::ReferenceEquals($previous,$testMenu) -or $previous.IsDisposed -or !$testMenu.Items[1].Enabled) { throw 'The icon menu was not safely reused or reset is unavailable.' }
+        $onClosed.Invoke($testMenu,@($closed)) | Out-Null
+        if ($testMenu.IsDisposed) { throw 'The reset menu was disposed while still in use.' }
+        $null=$testMenu.Handle; $testMenu.Items[1].PerformClick(); $null=$testMenu.Handle
         if ([IO.File]::Exists((Get-FastPrintIconPath -Kind $test[0] -Key $test[2] -Root $iconRoot))) { throw 'Icon reset did not remove the selected icon.' }
       }
+      $otherPrinter='Other proof printer'; if (!$printerBox.Items.Contains($otherPrinter)) { $printerBox.Items.Add($otherPrinter) | Out-Null }; $printerBox.SelectedItem=$otherPrinter
+      $menu=Prepare-FastPrintIconMenu 'Printer' $printerIcon; $menu.Items[0].PerformClick()
+      $otherPath=Get-FastPrintIconPath -Kind Printer -Key $otherPrinter -Root $iconRoot
+      if (![IO.File]::Exists($otherPath)) { throw 'Reused printer menu retained the previous printer.' }
+      $menu=Prepare-FastPrintIconMenu 'Printer' $printerIcon; $menu.Items[1].PerformClick()
+      $list.Items.Add([PSCustomObject]@{ display='Other preset'; profile=[PSCustomObject]@{ id=('e'*32); name='Other preset'; printer=$fakePrinter; notes=''; defaultBypassFaceUp=$false; driverFingerprint='' } }) | Out-Null
+      $list.SelectedIndex=1; $menu=Prepare-FastPrintIconMenu 'Preset' $presetIcon; $menu.Items[0].PerformClick()
+      $otherPath=Get-FastPrintIconPath -Kind Preset -Key ('e'*32) -Root $iconRoot
+      if (![IO.File]::Exists($otherPath)) { throw 'Reused preset menu retained the previous preset.' }
+      $menu=Prepare-FastPrintIconMenu 'Preset' $presetIcon; $menu.Items[1].PerformClick(); $list.SelectedIndex=0
     } else { $form.Show(); [Windows.Forms.Application]::DoEvents() }
     $bitmap=[Drawing.Bitmap]::new($form.Width,$form.Height)
     try { $form.DrawToBitmap($bitmap,[Drawing.Rectangle]::new(0,0,$form.Width,$form.Height)); $bitmap.Save($PreviewPath,[Drawing.Imaging.ImageFormat]::Png) }
     finally { $bitmap.Dispose(); $form.Close() }
   } else { $form.ShowDialog() | Out-Null }
 }
-finally { $form.Dispose() }
+finally { foreach ($menu in $script:fpIconMenus.Values) { if ($menu -and !$menu.IsDisposed) { $menu.Dispose() } }; $form.Dispose() }
 Write-Output 'Printer preset setup closed.'

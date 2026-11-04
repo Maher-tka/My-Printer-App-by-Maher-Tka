@@ -9,6 +9,7 @@ import { MAX_IDS_PER_SHEET } from '../shared/fast-print-id.js'
 import {
   idReviewDuplex,
   initialIdReviewDuplex,
+  selectDefaultIdPreset,
   selectIdDriverPreset
 } from '../shared/fast-print-id-preset.js'
 import {
@@ -298,8 +299,33 @@ async function runJob(
     : (JSON.parse(
         await powershell('fast-print-menu.ps1', ['-Action', 'List'])
       ) as FastPrintPrinter[])
+  const preferences = await printerPreferencesStore().read()
+  // A returning ID draft contains the user's choices for this job; only apply the
+  // configured default when opening a fresh review.
+  if (canReturnToSettings && !idDraft && preferences.idDefaultPreset) {
+    const settingsRoot =
+      !app.isPackaged &&
+      process.env.FAST_PRINT_NONINTERACTIVE === '1' &&
+      process.env.FAST_PRINT_TEST_SETTINGS
+        ? process.env.FAST_PRINT_TEST_SETTINGS
+        : dirname(printerPreferencesStore().path)
+    const id = preferences.idDefaultPreset
+    const profiles = JSON.parse(
+      await powershell('printer-preferences.ps1', [
+        '-Action',
+        'List',
+        '-ProfileDirectory',
+        join(settingsRoot, 'profiles')
+      ])
+    ) as DriverPresetSummary[]
+    const selected = selectDefaultIdPreset(preset, id, profiles, printers)
+    await copyFile(
+      join(settingsRoot, 'profiles', id + '.json'),
+      join(jobOptions.profileDirectory!, id + '.json')
+    )
+    preset = selected.preset
+  }
   if (!preset.profileId) {
-    const preferences = await printerPreferencesStore().read()
     const stocks = JSON.parse(
       await powershell('fast-print-settings.ps1', ['-Action', 'List'])
     ) as FastPrintSavedStock[]

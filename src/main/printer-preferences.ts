@@ -41,6 +41,11 @@ function validateAssignments(
   presets: DriverPresetSummary[],
   previous: PrinterPreferences
 ): void {
+  if (preferences.idDefaultPreset && preferences.idDefaultPreset !== previous.idDefaultPreset) {
+    const preset = presets.find((item) => item.id === preferences.idDefaultPreset)
+    if (!preset || !preset.usable || !['A4', 'A3'].includes(preset.paper))
+      throw new Error('Choose an available A4 or A3 driver preset for ID cards.')
+  }
   for (const [printer, assignments] of Object.entries(preferences.profiles))
     for (const [optionId, id] of Object.entries(assignments)) {
       const preset = presets.find((item) => item.id === id)
@@ -143,6 +148,7 @@ export function registerPrinterPreferenceHandlers(): void {
     if (typeof id !== 'string' || !/^[a-f0-9]{32}$/.test(id))
       throw new Error('Invalid driver preset.')
     const preferences = await printerPreferencesStore().read()
+    if (preferences.idDefaultPreset === id) delete preferences.idDefaultPreset
     for (const assignments of Object.values(preferences.profiles))
       for (const [key, value] of Object.entries(assignments))
         if (value === id) delete assignments[key]

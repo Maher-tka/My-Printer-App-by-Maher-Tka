@@ -19,6 +19,26 @@ export function initialIdReviewDuplex(
   )
 }
 
+/** Resolve the configured ID default across printers, failing visibly if it disappeared. */
+export function selectDefaultIdPreset(
+  current: FastPrintPreset,
+  id: string,
+  profiles: DriverPresetSummary[],
+  devices: FastPrintPrinter[]
+): IdPrinterSelection {
+  const profile = profiles.find((item) => item.id === id)
+  const device = profile && devices.find((item) => item.name === profile.printer)
+  if (!profile || !profile.usable || !device)
+    throw new Error(
+      'The default ID printer preset is unavailable. Choose another preset in printing settings.'
+    )
+  return selectIdDriverPreset(
+    { ...current, printer: profile.printer, duplex: undefined },
+    profile,
+    device
+  )
+}
+
 /** Apply a resolved driver snapshot without changing ID artwork or sheet settings. */
 export function selectIdDriverPreset(
   current: FastPrintPreset,
